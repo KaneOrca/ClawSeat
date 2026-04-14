@@ -47,6 +47,12 @@ class TemplateHandlers:
     ) -> dict[str, str]:
         repo_root = project.repo_root
         engineer = engineer_override or self.hooks.load_engineer(session.engineer_id)
+        session.project_record = project
+        session.project_engineers = project_engineers or {}
+        session.engineer_order = engineer_order or []
+        engineer._project_record = project
+        engineer._project_engineers = project_engineers or {}
+        engineer._engineer_order = engineer_order or []
         authority_lines = self.hooks.render_authority_lines(engineer)
         read_first_lines = self.hooks.render_read_first_lines(session, project, engineer)
         harness_runtime_lines = self.hooks.render_harness_runtime_lines(engineer)

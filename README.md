@@ -24,6 +24,17 @@ ClawSeat provides:
 - transport helpers for seat-to-seat notification
 - adapters for consumer projects
 
+For new projects, the default seat naming model is role-first:
+
+- `koder`
+- `planner`
+- `builder-1`
+- `reviewer-1`
+
+New dynamic-roster projects should bootstrap only `koder` first. Legacy
+`engineer-*` seats remain available through `compat_legacy_seats = true` for
+migrated projects.
+
 ## Boundaries
 
 ClawSeat core should contain only framework concerns:

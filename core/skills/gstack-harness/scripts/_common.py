@@ -57,6 +57,13 @@ class HarnessProfile:
     heartbeat_seats: list[str]
     seat_roles: dict[str, str]
     seat_overrides: dict[str, dict[str, str]]
+    dynamic_roster_enabled: bool = False
+    session_root: Path = Path()
+    bootstrap_seats: list[str] | None = None
+    default_start_seats: list[str] | None = None
+    compat_legacy_seats: bool = False
+    legacy_seats: list[str] | None = None
+    legacy_seat_roles: dict[str, str] | None = None
 
     def todo_path(self, seat: str) -> Path:
         return self.tasks_root / seat / "TODO.md"
@@ -105,9 +112,118 @@ def expand_profile_value(value: str) -> Path:
     return Path(PLACEHOLDER_RE.sub(replace, value)).expanduser()
 
 
+def normalize_role(role: str) -> str:
+    if role in {"planner", "planner-dispatcher"}:
+        return "planner"
+    return role or "specialist"
+
+
+def role_sort_key(seat: str, role: str) -> tuple[int, str]:
+    normalized = normalize_role(role)
+    priority = {
+        "frontstage-supervisor": 0,
+        "planner": 1,
+        "builder": 2,
+        "reviewer": 3,
+        "qa": 4,
+        "designer": 5,
+        "specialist": 50,
+    }
+    if seat == "koder":
+        return (0, seat)
+    return (priority.get(normalized, 50), seat)
+
+
+def discovered_session_data(session_root: Path, project_name: str) -> dict[str, dict[str, Any]]:
+    project_root = session_root / project_name
+    if not project_root.exists():
+        return {}
+    discovered: dict[str, dict[str, Any]] = {}
+    for session_path in sorted(project_root.glob("*/session.toml")):
+        session = load_toml(session_path) or {}
+        seat = str(session.get("engineer_id", session_path.parent.name)).strip() or session_path.parent.name
+        discovered[seat] = session
+    return discovered
+
+
+def infer_role_from_seat_id(seat: str, fallback: str = "") -> str:
+    if fallback:
+        return fallback
+    if seat == "koder":
+        return "frontstage-supervisor"
+    if seat == "planner":
+        return "planner"
+    if re.match(r"^[a-z0-9-]+-\d+$", seat):
+        return seat.rsplit("-", 1)[0]
+    return "specialist"
+
+
+def resolve_dynamic_seats(
+    *,
+    heartbeat_owner: str,
+    bootstrap_seats: list[str],
+    compat_legacy_seats: bool,
+    legacy_seats: list[str],
+    discovered_sessions: dict[str, dict[str, Any]],
+    seat_roles: dict[str, str],
+) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    groups = [
+        [heartbeat_owner],
+        bootstrap_seats,
+        legacy_seats if compat_legacy_seats else [],
+        sorted(
+            discovered_sessions.keys(),
+            key=lambda seat: role_sort_key(seat, seat_roles.get(seat, "")),
+        ),
+    ]
+    for group in groups:
+        for seat in group:
+            if not seat or seat in seen:
+                continue
+            seen.add(seat)
+            ordered.append(seat)
+    return ordered
+
+
 def load_profile(path: str | Path) -> HarnessProfile:
     profile_path = Path(path).expanduser().resolve()
     data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+    dynamic = data.get("dynamic_roster", {})
+    if not isinstance(dynamic, dict):
+        dynamic = {}
+    dynamic_enabled = bool(dynamic.get("enabled", False))
+    session_root = expand_profile_value(str(dynamic.get("session_root", AGENTS_ROOT / "sessions")))
+    heartbeat_owner = str(data["heartbeat_owner"])
+    legacy_seat_roles = {
+        str(key): str(value)
+        for key, value in data.get("legacy_seat_roles", {}).items()
+    }
+    legacy_seats = [str(item) for item in data.get("legacy_seats", list(legacy_seat_roles.keys()))]
+    bootstrap_seats = [str(item) for item in dynamic.get("bootstrap_seats", data.get("seats", []))]
+    default_start_seats = [
+        str(item) for item in dynamic.get("default_start_seats", bootstrap_seats)
+    ]
+    compat_legacy_seats = bool(dynamic.get("compat_legacy_seats", False))
+    discovered = discovered_session_data(session_root, str(data["project_name"])) if dynamic_enabled else {}
+    seat_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items()}
+    seat_roles.update(legacy_seat_roles)
+    for seat, session in discovered.items():
+        role = str(session.get("role", "")).strip()
+        seat_roles[seat] = infer_role_from_seat_id(seat, fallback=role or seat_roles.get(seat, ""))
+    seats = (
+        resolve_dynamic_seats(
+            heartbeat_owner=heartbeat_owner,
+            bootstrap_seats=bootstrap_seats,
+            compat_legacy_seats=compat_legacy_seats,
+            legacy_seats=legacy_seats,
+            discovered_sessions=discovered,
+            seat_roles=seat_roles,
+        )
+        if dynamic_enabled
+        else [str(item) for item in data.get("seats", [])]
+    )
     return HarnessProfile(
         profile_path=profile_path,
         profile_name=str(data["profile_name"]),
@@ -124,17 +240,24 @@ def load_profile(path: str | Path) -> HarnessProfile:
         agent_admin=expand_profile_value(str(data["agent_admin"])),
         workspace_root=expand_profile_value(str(data["workspace_root"])),
         handoff_dir=expand_profile_value(str(data["handoff_dir"])),
-        heartbeat_owner=str(data["heartbeat_owner"]),
+        heartbeat_owner=heartbeat_owner,
         active_loop_owner=str(data["active_loop_owner"]),
         default_notify_target=str(data["default_notify_target"]),
         heartbeat_receipt=expand_profile_value(str(data["heartbeat_receipt"])),
-        seats=[str(item) for item in data.get("seats", [])],
+        seats=seats,
         heartbeat_seats=[str(item) for item in data.get("heartbeat_seats", [])],
-        seat_roles={str(k): str(v) for k, v in data.get("seat_roles", {}).items()},
+        seat_roles=seat_roles,
         seat_overrides={
             str(seat_id): {str(k): str(v) for k, v in values.items()}
             for seat_id, values in data.get("seat_overrides", {}).items()
         },
+        dynamic_roster_enabled=dynamic_enabled,
+        session_root=session_root,
+        bootstrap_seats=bootstrap_seats,
+        default_start_seats=default_start_seats,
+        compat_legacy_seats=compat_legacy_seats,
+        legacy_seats=legacy_seats,
+        legacy_seat_roles=legacy_seat_roles,
     )
 
 
@@ -466,12 +589,14 @@ def heartbeat_state(profile: HarnessProfile, seat: str) -> dict[str, Any]:
 
 
 def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
+    bootstrap_seats = list(profile.bootstrap_seats or profile.seats)
     lines = [
         "version = 1",
         "",
         f'project_name = "{project_name}"',
         f'repo_root = "{repo_root}"',
-        f"seat_order = {json.dumps(profile.seats)}",
+        f"seat_order = {json.dumps(bootstrap_seats)}",
+        f"bootstrap_seats = {json.dumps(bootstrap_seats)}",
     ]
     for seat_id, override in profile.seat_overrides.items():
         if not override:
@@ -498,7 +623,7 @@ def executable_command(path: Path, *extra_args: str) -> list[str]:
 
 
 def tracked_runtime_seats(profile: HarnessProfile) -> list[str]:
-    return [seat for seat in profile.seats if seat.startswith("engineer-")]
+    return [seat for seat in profile.seats if seat != profile.heartbeat_owner]
 
 
 def heartbeat_manifest_path(profile: HarnessProfile, seat: str) -> Path:
@@ -551,13 +676,19 @@ def render_project_doc(profile: HarnessProfile) -> str:
     for seat in profile.seats:
         role = profile.seat_roles.get(seat, "specialist")
         role_lines.append(f"- `{seat}` = `{role}`")
+    chain_owner = profile.active_loop_owner if profile.active_loop_owner in profile.seats else "planner"
     return (
         f"# {profile.project_name} Harness Project\n\n"
         "This project is managed by `gstack-harness`.\n\n"
         "## Seats\n\n"
         + "\n".join(role_lines)
         + "\n\n## Chain\n\n"
-        "`user -> koder -> engineer-b -> specialist -> engineer-b -> ... -> koder -> user`\n"
+        + (
+            f"`user -> {profile.heartbeat_owner} -> {chain_owner} -> specialist -> "
+            f"{chain_owner} -> ... -> {profile.heartbeat_owner} -> user`\n"
+            if chain_owner != profile.heartbeat_owner
+            else f"`user -> {profile.heartbeat_owner} -> specialist -> {profile.heartbeat_owner} -> user`\n"
+        )
     )
 
 
@@ -670,7 +801,7 @@ def render_heartbeat_manifest(profile: HarnessProfile, seat: str) -> str:
 def materialize_profile_runtime(profile: HarnessProfile) -> None:
     ensure_dir(profile.tasks_root)
     ensure_dir(profile.handoff_dir)
-    for seat in profile.seats:
+    for seat in (profile.bootstrap_seats or profile.seats):
         ensure_dir(profile.tasks_root / seat)
     if not profile.project_doc.exists():
         write_text(profile.project_doc, render_project_doc(profile))

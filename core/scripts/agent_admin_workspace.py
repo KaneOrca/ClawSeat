@@ -153,6 +153,46 @@ def render_role_scope_summary(engineer: Any) -> str:
     return "assigned seat responsibilities"
 
 
+def role_matches(role: str, expected: str) -> bool:
+    normalized = role.strip()
+    if expected == "planner":
+        return normalized in {"planner", "planner-dispatcher"}
+    return normalized == expected
+
+
+def preferred_seat_for_role(
+    project: Any | None,
+    expected_role: str,
+    *,
+    project_engineers: dict[str, Any] | None = None,
+    engineer_order: list[str] | None = None,
+    exclude: set[str] | None = None,
+) -> str | None:
+    if project is None:
+        return None
+    engineers = project_engineers or {}
+    ordered_engineer_ids = list(engineer_order or project.engineers or engineers.keys())
+    blocked = exclude or set()
+    candidates = [
+        engineer_id
+        for engineer_id in ordered_engineer_ids
+        if engineer_id not in blocked
+        and role_matches(getattr(engineers.get(engineer_id), "role", ""), expected_role)
+    ]
+    preferred = {
+        "planner": "planner",
+        "builder": "builder-1",
+        "reviewer": "reviewer-1",
+        "qa": "qa-1",
+        "designer": "designer-1",
+    }.get(expected_role)
+    if preferred in candidates:
+        return preferred
+    if candidates:
+        return candidates[0]
+    return None
+
+
 def render_project_seat_map_lines(
     session: Any,
     project: Any,
@@ -190,16 +230,25 @@ def render_project_seat_map_lines(
 
 def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
     seat_name = session.engineer_id
+    planner_seat = (
+        preferred_seat_for_role(
+            getattr(session, "project_record", None),
+            "planner",
+            project_engineers=getattr(session, "project_engineers", None),
+            engineer_order=getattr(session, "engineer_order", None),
+        )
+        or "engineer-b"
+    )
     lines = ["## Seat Boundary", ""]
     if engineer.role == "frontstage-supervisor":
         lines.extend(
             [
                 f"- `{seat_name}` owns intake framing, seat launch orchestration, patrol, unblock, and escalations.",
-                "- do intake framing and scope clarification before handing active work to engineer-b",
-                "- do not own execution planning or next-hop routing; that belongs to engineer-b",
-                "- use document-first dispatch helpers when handing work to engineer-b; do not hand-write task chain state unless the helper path is unavailable",
+                f"- do intake framing and scope clarification before handing active work to `{planner_seat}`",
+                f"- do not own execution planning or next-hop routing; that belongs to `{planner_seat}`",
+                f"- use document-first dispatch helpers when handing work to `{planner_seat}`; do not hand-write task chain state unless the helper path is unavailable",
                 "- before launching any non-frontstage seat, summarize harness/profile, seat/role, tool/runtime, and auth/provider to the user and wait for confirmation",
-                "- remind engineer-b when drift appears; do not silently reroute specialists yourself",
+                f"- remind `{planner_seat}` when drift appears; do not silently reroute specialists yourself",
                 "- do not absorb builder, reviewer, QA, or designer specialist work",
             ]
         )
@@ -207,7 +256,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
         lines.extend(
             [
                 f"- `{seat_name}` owns execution decisions, next-hop routing, and durable consumption of specialist completions.",
-                "- expect A/C/D/E specialists to return completion to engineer-b, not directly to koder",
+                f"- expect specialists to return completion to `{seat_name}`, not directly to koder",
                 "- use `gstack-harness/scripts/dispatch_task.py` as the default path for planner -> specialist dispatch; do not hand-write TODO/TASKS/STATUS unless the helper is unavailable",
                 "- use document-first dispatch helpers; treat raw `tmux send-keys` as a protocol violation",
                 "- escalate back to koder only when direction, seat boundaries, or model/auth choices need frontstage help",
@@ -216,8 +265,8 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
     else:
         lines.extend(
             [
-                f"- `{seat_name}` is a specialist seat. Execute the assigned work from TODO.md and return completion to engineer-b.",
-                "- do not bypass engineer-b for normal completion handoffs",
+                f"- `{seat_name}` is a specialist seat. Execute the assigned work from TODO.md and return completion to `{planner_seat}`.",
+                f"- do not bypass `{planner_seat}` for normal completion handoffs",
                 "- do not become an ad hoc frontstage or planner seat",
             ]
         )
@@ -227,6 +276,15 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
 def render_communication_protocol_lines(engineer: Any, project_name: str) -> list[str]:
     send_script = str(SEND_AND_VERIFY_SH)
     notify_script = str(HARNESS_SCRIPTS_ROOT / "notify_seat.py")
+    planner_seat = (
+        preferred_seat_for_role(
+            getattr(engineer, "_project_record", None),
+            "planner",
+            project_engineers=getattr(engineer, "_project_engineers", None),
+            engineer_order=getattr(engineer, "_engineer_order", None),
+        )
+        or "engineer-b"
+    )
     lines = [
         "## Communication Protocol",
         "",
@@ -241,11 +299,11 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
     if engineer.role == "frontstage-supervisor":
         lines.extend(
             [
-                "- when patrol finds waiting approvals or drift, unblock or remind engineer-b; do not replace engineer-b as planner",
-                "- when handing work to engineer-b, default to `gstack-harness/scripts/dispatch_task.py` so the dispatch leaves `source`, `reply_to`, and a receipt",
+                f"- when patrol finds waiting approvals or drift, unblock or remind `{planner_seat}`; do not replace `{planner_seat}` as planner",
+                f"- when handing work to `{planner_seat}`, default to `gstack-harness/scripts/dispatch_task.py` so the dispatch leaves `source`, `reply_to`, and a receipt",
                 "- after starting a seat, refresh the project window so tabs stay in canonical role order",
-                "- when engineer-b returns a planning memo or execution plan with `FrontstageDisposition: AUTO_ADVANCE`, convert it into downstream dispatch promptly instead of leaving it parked at frontstage",
-                "- when engineer-b returns a closeout receipt, summarize it for the user in plain language and auto-advance by default; only ask the user to decide when the receipt explicitly says `FrontstageDisposition: USER_DECISION_NEEDED`",
+                f"- when `{planner_seat}` returns a planning memo or execution plan with `FrontstageDisposition: AUTO_ADVANCE`, convert it into downstream dispatch promptly instead of leaving it parked at frontstage",
+                f"- when `{planner_seat}` returns a closeout receipt, summarize it for the user in plain language and auto-advance by default; only ask the user to decide when the receipt explicitly says `FrontstageDisposition: USER_DECISION_NEEDED`",
                 "- planner -> frontstage closeout should also refresh `koder/TODO.md` so frontstage keeps a durable current-task anchor across compaction or restarts",
             ]
         )
@@ -265,7 +323,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
     else:
         lines.extend(
             [
-                f"- when you complete assigned work, update `DELIVERY.md`, then notify engineer-b with `send-and-verify.sh --project {project_name} engineer-b ...` or the `complete_handoff.py` helper",
+                f"- when you complete assigned work, update `DELIVERY.md`, then notify `{planner_seat}` with `send-and-verify.sh --project {project_name} {planner_seat} ...` or the `complete_handoff.py` helper",
                 "- if you are reviewing work, include a canonical `Verdict:` field in `DELIVERY.md`",
             ]
         )
@@ -277,6 +335,24 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
     profile_ref = str(profile_path) if profile_path.exists() else "<profile-path>"
     root = str(HARNESS_SCRIPTS_ROOT)
     lines: list[str] = []
+    planner_seat = (
+        preferred_seat_for_role(
+            project,
+            "planner",
+            project_engineers=getattr(session, "project_engineers", None),
+            engineer_order=getattr(session, "engineer_order", None),
+        )
+        or "engineer-b"
+    )
+    builder_seat = (
+        preferred_seat_for_role(
+            project,
+            "builder",
+            project_engineers=getattr(session, "project_engineers", None),
+            engineer_order=getattr(session, "engineer_order", None),
+        )
+        or "engineer-a"
+    )
 
     if engineer.role == "frontstage-supervisor":
         lines = [
@@ -284,24 +360,24 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "",
             "Use these canonical commands instead of hand-writing task-chain state:",
             "",
-            "Dispatch work to engineer-b:",
+            f"Dispatch work to `{planner_seat}`:",
             "```bash",
             f"python3 {root}/dispatch_task.py \\",
             f"  --profile {profile_ref} \\",
             "  --source koder \\",
-            "  --target engineer-b \\",
+            f"  --target {planner_seat} \\",
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --objective '<OBJECTIVE>' \\",
             "  --reply-to koder",
             "```",
             "",
-            "Send a one-off unblock/reminder to engineer-b:",
+            f"Send a one-off unblock/reminder to `{planner_seat}`:",
             "```bash",
             f"python3 {root}/notify_seat.py \\",
             f"  --profile {profile_ref} \\",
             "  --source koder \\",
-            "  --target engineer-b \\",
+            f"  --target {planner_seat} \\",
             "  --task-id <TASK_ID> \\",
             "  --kind unblock \\",
             "  --reply-to koder \\",
@@ -318,20 +394,20 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "```bash",
             f"python3 {root}/dispatch_task.py \\",
             f"  --profile {profile_ref} \\",
-            "  --source engineer-b \\",
-            "  --target engineer-a \\",
+            f"  --source {planner_seat} \\",
+            f"  --target {builder_seat} \\",
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --objective '<OBJECTIVE>' \\",
-            "  --reply-to engineer-b",
+            f"  --reply-to {planner_seat}",
             "```",
             "",
             "After reading a specialist delivery, stamp the durable ACK before routing onward:",
             "```bash",
             f"python3 {root}/complete_handoff.py \\",
             f"  --profile {profile_ref} \\",
-            "  --source engineer-a \\",
-            "  --target engineer-b \\",
+            f"  --source {builder_seat} \\",
+            f"  --target {planner_seat} \\",
             "  --task-id <TASK_ID> \\",
             "  --ack-only",
             "```",
@@ -340,7 +416,7 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "```bash",
             f"python3 {root}/complete_handoff.py \\",
             f"  --profile {profile_ref} \\",
-            "  --source engineer-b \\",
+            f"  --source {planner_seat} \\",
             "  --target koder \\",
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
@@ -353,12 +429,12 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
         lines = [
             "## Dispatch Playbook",
             "",
-            "When your assigned work is complete, return it to engineer-b with the helper:",
+            f"When your assigned work is complete, return it to `{planner_seat}` with the helper:",
             "```bash",
             f"python3 {root}/complete_handoff.py \\",
             f"  --profile {profile_ref} \\",
             f"  --source {session.engineer_id} \\",
-            "  --target engineer-b \\",
+            f"  --target {planner_seat} \\",
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --summary '<DELIVERY_SUMMARY>'",
@@ -373,7 +449,7 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
                     f"python3 {root}/complete_handoff.py \\",
                     f"  --profile {profile_ref} \\",
                     f"  --source {session.engineer_id} \\",
-                    "  --target engineer-b \\",
+                    f"  --target {planner_seat} \\",
                     "  --task-id <TASK_ID> \\",
                     "  --title '<TITLE>' \\",
                     "  --summary '<DELIVERY_SUMMARY>' \\",

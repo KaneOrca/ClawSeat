@@ -1,6 +1,6 @@
 version = 1
 template_name = "cartooner"
-description = "Six-seat frontend project: koder frontstage + ABCDE specialist crew"
+description = "Role-first frontend harness template: koder + planner/builder/reviewer/qa/designer crew"
 
 [defaults]
 window_mode = "tabs-1up"
@@ -33,14 +33,34 @@ skills = [
 role_details = [
   "runtime seat id remains koder; canonical framework role is frontstage-supervisor",
   "user-facing intake and product clarification",
-  "do intake framing and scope clarification before handing active work to engineer-b; do not own execution planning or next-hop routing",
+  "do intake framing and scope clarification before handing active work to planner; do not own execution planning or next-hop routing",
   "patrol the chain state and summarize progress for the user",
-  "receive escalations from engineer-b and reframe when needed",
+  "receive escalations from planner and reframe when needed",
   "do not absorb builder, reviewer, QA, or designer specialist work",
 ]
 
 [[engineers]]
-id = "engineer-a"
+id = "planner"
+role = "planner-dispatcher"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+monitor = true
+aliases = ["dispatcher"]
+human_facing = false
+active_loop_owner = true
+dispatch_authority = true
+patrol_authority = false
+unblock_authority = false
+escalation_authority = true
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = ["{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md"]
+
+[[engineers]]
+id = "builder-1"
 role = "builder"
 tool = "codex"
 auth_mode = "api"
@@ -59,27 +79,7 @@ design_authority = false
 skills = ["{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md"]
 
 [[engineers]]
-id = "engineer-b"
-role = "planner-dispatcher"
-tool = "claude"
-auth_mode = "oauth"
-provider = "anthropic"
-monitor = true
-aliases = ["planner", "dispatcher"]
-human_facing = false
-active_loop_owner = true
-dispatch_authority = true
-patrol_authority = false
-unblock_authority = false
-escalation_authority = true
-remind_active_loop_owner = false
-review_authority = false
-qa_authority = false
-design_authority = false
-skills = ["{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md"]
-
-[[engineers]]
-id = "engineer-c"
+id = "reviewer-1"
 role = "reviewer"
 tool = "codex"
 auth_mode = "api"
@@ -98,7 +98,7 @@ design_authority = false
 skills = ["{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md"]
 
 [[engineers]]
-id = "engineer-d"
+id = "qa-1"
 role = "qa"
 tool = "claude"
 auth_mode = "api"
@@ -121,7 +121,7 @@ role_details = [
 ]
 
 [[engineers]]
-id = "engineer-e"
+id = "designer-1"
 role = "designer"
 tool = "gemini"
 auth_mode = "api"

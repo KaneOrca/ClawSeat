@@ -24,6 +24,24 @@ Typical example:
 export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 ```
 
+## Role-First Bootstrap
+
+New projects should default to role-first seat ids such as `planner`,
+`builder-1`, and `reviewer-1`.
+
+For dynamic-roster profiles, keep bootstrap minimal:
+
+```toml
+[dynamic_roster]
+enabled = true
+bootstrap_seats = ["koder"]
+default_start_seats = ["koder"]
+compat_legacy_seats = true
+```
+
+This makes fresh bootstraps frontstage-only while preserving legacy
+`engineer-*` seats for migrated projects.
+
 ## Expansion Rules
 
 - `{CLAWSEAT_ROOT}` is expanded by the profile loader in

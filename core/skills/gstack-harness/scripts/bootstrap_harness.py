@@ -53,6 +53,13 @@ def with_overrides(profile: HarnessProfile, *, project_name: str, repo_root: Pat
         heartbeat_seats=list(profile.heartbeat_seats),
         seat_roles=dict(profile.seat_roles),
         seat_overrides={seat: dict(values) for seat, values in profile.seat_overrides.items()},
+        dynamic_roster_enabled=profile.dynamic_roster_enabled,
+        session_root=profile.session_root,
+        bootstrap_seats=list(profile.bootstrap_seats or []),
+        default_start_seats=list(profile.default_start_seats or []),
+        compat_legacy_seats=profile.compat_legacy_seats,
+        legacy_seats=list(profile.legacy_seats or []),
+        legacy_seat_roles=dict(profile.legacy_seat_roles or {}),
     )
 
 
@@ -77,7 +84,7 @@ def main() -> int:
         result = run_command(cmd, cwd=profile.repo_root)
         require_success(result, "bootstrap_harness")
         materialize_profile_runtime(effective_profile)
-        for seat in effective_profile.seats:
+        for seat in (effective_profile.bootstrap_seats or effective_profile.seats):
             seed_empty_secret_from_peer(effective_profile, seat)
             seed_empty_oauth_runtime_from_peer(effective_profile, seat)
         if args.start:

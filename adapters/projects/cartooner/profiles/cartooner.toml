@@ -1,4 +1,4 @@
-version = 1
+version = 2
 profile_name = "cartooner"
 description = "Cartooner adapter profile for the ClawSeat harness runtime"
 template_name = "cartooner"
@@ -15,14 +15,25 @@ agent_admin = "{CLAWSEAT_ROOT}/core/scripts/agent_admin.py"
 workspace_root = "~/.agents/workspaces/cartooner"
 handoff_dir = "~/coding/cartooner/.tasks/patrol/handoffs"
 heartbeat_owner = "koder"
-active_loop_owner = "engineer-b"
-default_notify_target = "engineer-b"
+active_loop_owner = "planner"
+default_notify_target = "planner"
 heartbeat_receipt = "~/.agents/workspaces/cartooner/koder/HEARTBEAT_RECEIPT.toml"
-seats = ["koder", "engineer-b", "engineer-a", "engineer-c", "engineer-d", "engineer-e"]
+seats = ["koder"]
 heartbeat_seats = ["koder"]
 
 [seat_roles]
 koder = "frontstage-supervisor"
+
+[dynamic_roster]
+enabled = true
+session_root = "{AGENTS_ROOT}/sessions"
+bootstrap_seats = ["koder"]
+default_start_seats = ["koder"]
+compat_legacy_seats = true
+
+legacy_seats = ["engineer-b", "engineer-a", "engineer-c", "engineer-d", "engineer-e"]
+
+[legacy_seat_roles]
 engineer-b = "planner-dispatcher"
 engineer-a = "builder"
 engineer-c = "reviewer"
