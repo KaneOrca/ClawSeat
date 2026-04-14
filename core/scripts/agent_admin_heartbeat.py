@@ -132,7 +132,7 @@ def verify_heartbeat_install_from_pane(session: Any, previous_text: str) -> dict
 def build_claude_loop_command(manifest: dict) -> str:
     interval = int(manifest.get("interval_minutes", 10))
     workspace = str(manifest.get("workspace", "")).strip()
-    active_loop_owner = str(manifest.get("active_loop_owner", "engineer-b")).strip() or "engineer-b"
+    active_loop_owner = str(manifest.get("active_loop_owner", "planner")).strip() or "planner"
     heartbeat_md = f"{workspace}/HEARTBEAT.md" if workspace else "HEARTBEAT.md"
     heartbeat_manifest = (
         f"{workspace}/HEARTBEAT_MANIFEST.toml" if workspace else "HEARTBEAT_MANIFEST.toml"
@@ -273,6 +273,8 @@ class HeartbeatHandlers:
             return None
         if project.name != "cartooner":
             return None
+        active_loop_owner = self.hooks.find_active_loop_owner(project) or "planner"
+        frontstage_seat = session.engineer_id or "koder"
         check_script = str(CARTOONER_CHECK_SCRIPT)
         supervisor_script = str(CARTOONER_SUPERVISOR_SCRIPT)
         send_script = str(SEND_AND_VERIFY_SH)
@@ -297,9 +299,9 @@ class HeartbeatHandlers:
                 "1. Stay in lightweight patrol mode; do not enter plan mode for a routine heartbeat run.",
                 "2. Do not re-read `KODER.md` or broad project strategy docs unless the classifier or patrol script returns an ambiguous contradiction that cannot be resolved from the scripted facts.",
                 f"3. Run `{check_script}` as the first-pass classifier.",
-                f"4. Use `{supervisor_script}` to decide whether `engineer-b` actually needs a reminder.",
+                f"4. Use `{supervisor_script}` to decide whether `{active_loop_owner}` actually needs a reminder.",
                 "5. If patrol shows no meaningful state change or no real stall, reply exactly `HEARTBEAT_OK`.",
-                "6. If patrol shows a real delivery-not-consumed or stalled-seat condition, use `koder`'s unblock authority to clear the procedural wait and remind `engineer-b` if needed; do not take over dispatch or next-hop planning.",
+                f"6. If patrol shows a real delivery-not-consumed or stalled-seat condition, use `{frontstage_seat}`'s unblock authority to clear the procedural wait and remind `{active_loop_owner}` if needed; do not take over dispatch or next-hop planning.",
                 "7. Only if the scripts fail or disagree, read the smallest necessary project docs (`TASKS.md` / `STATUS.md` first) and return a short blocker summary instead of loading the full frontstage context.",
                 "",
                 "Reliable handoff model:",
@@ -311,12 +313,12 @@ class HeartbeatHandlers:
                 "",
                 "Review verdict routing matrix:",
                 "",
-                "- `APPROVED` -> `engineer-d`",
-                "- `APPROVED_WITH_NITS` -> `engineer-d`",
-                "- `CHANGES_REQUESTED` -> `engineer-a`",
-                "- `BLOCKED` -> `koder`",
-                "- `DECISION_NEEDED` -> `koder`",
-                "- `engineer-c` only delivers the verdict; `engineer-b` still chooses the next hop",
+                f"- `APPROVED` -> `{frontstage_seat}`",
+                f"- `APPROVED_WITH_NITS` -> `{frontstage_seat}`",
+                "- `CHANGES_REQUESTED` -> builder seat",
+                f"- `BLOCKED` -> `{frontstage_seat}`",
+                f"- `DECISION_NEEDED` -> `{frontstage_seat}`",
+                f"- Reviewer seat only delivers the verdict; `{active_loop_owner}` still chooses the next hop",
                 "",
                 "Default heartbeat commands:",
                 "",
@@ -327,8 +329,8 @@ class HeartbeatHandlers:
                 "",
                 "Guardrails:",
                 "",
-                "- `engineer-b` remains the active loop owner and decision owner.",
-                "- `koder` owns confirmations, approvals, reminders, and other procedural unblock actions.",
+                f"- `{active_loop_owner}` remains the active loop owner and decision owner.",
+                f"- `{frontstage_seat}` owns confirmations, approvals, reminders, and other procedural unblock actions.",
                 "- Do not write downstream specialist TODOs from a heartbeat run.",
                 "- Do not change TASKS.md or STATUS.md unless the patrol protocol explicitly requires a supervision note.",
                 "- Keep heartbeat replies short and factual; avoid restating full project context on every poll.",
@@ -357,7 +359,7 @@ class HeartbeatHandlers:
                 project_engineers=project_engineers,
                 engineer_order=engineer_order,
             )
-            or "engineer-b"
+            or "planner"
         )
         commands = [
             f"python {CARTOONER_SUPERVISOR_SCRIPT}",

@@ -237,7 +237,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
             project_engineers=getattr(session, "project_engineers", None),
             engineer_order=getattr(session, "engineer_order", None),
         )
-        or "engineer-b"
+        or "planner"
     )
     lines = ["## Seat Boundary", ""]
     if engineer.role == "frontstage-supervisor":
@@ -248,6 +248,9 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
                 f"- do not own execution planning or next-hop routing; that belongs to `{planner_seat}`",
                 f"- use document-first dispatch helpers when handing work to `{planner_seat}`; do not hand-write task chain state unless the helper path is unavailable",
                 "- before launching any non-frontstage seat, summarize harness/profile, seat/role, tool/runtime, and auth/provider to the user and wait for confirmation",
+                "- once planner is live in an OpenClaw/Feishu setup, proactively ask the user for the target Feishu group ID; do not wait for the user to request group wiring",
+                "- in that bridge flow, keep `main` mention-gated and keep `warden`/koder non-mention-gated for the target group",
+                f"- once the group ID arrives, immediately hand the Feishu smoke test to `{planner_seat}`, tell the user “收到测试消息即可回复希望完成什么任务”, and bring up `reviewer-1` in parallel when that seat exists",
                 f"- remind `{planner_seat}` when drift appears; do not silently reroute specialists yourself",
                 "- do not absorb builder, reviewer, QA, or designer specialist work",
             ]
@@ -257,6 +260,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
             [
                 f"- `{seat_name}` owns execution decisions, next-hop routing, and durable consumption of specialist completions.",
                 f"- expect specialists to return completion to `{seat_name}`, not directly to koder",
+                "- when planner has just been initialized for an OpenClaw/Feishu workflow, return a short ready signal so frontstage can finish the group bridge and planner-ready broadcast",
                 "- use `gstack-harness/scripts/dispatch_task.py` as the default path for planner -> specialist dispatch; do not hand-write TODO/TASKS/STATUS unless the helper is unavailable",
                 "- use document-first dispatch helpers; treat raw `tmux send-keys` as a protocol violation",
                 "- escalate back to koder only when direction, seat boundaries, or model/auth choices need frontstage help",
@@ -283,7 +287,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
             project_engineers=getattr(engineer, "_project_engineers", None),
             engineer_order=getattr(engineer, "_engineer_order", None),
         )
-        or "engineer-b"
+        or "planner"
     )
     lines = [
         "## Communication Protocol",
@@ -302,6 +306,10 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
                 f"- when patrol finds waiting approvals or drift, unblock or remind `{planner_seat}`; do not replace `{planner_seat}` as planner",
                 f"- when handing work to `{planner_seat}`, default to `gstack-harness/scripts/dispatch_task.py` so the dispatch leaves `source`, `reply_to`, and a receipt",
                 "- after starting a seat, refresh the project window so tabs stay in canonical role order",
+                "- after planner startup in an OpenClaw/Feishu workflow, ask the user for the group ID, verify it from `~/.openclaw/agents/*/sessions/sessions.json` if possible, then complete group hookup before expecting unattended group traffic",
+                "- in that flow, require `main` to stay on `requireMention=true`; only `warden`/koder should be set to `requireMention=false` for the target group",
+                "- once the group ID is known and `warden` is present in the group, use the standard `feishu-send.sh --target group:<GROUP_ID>` path to announce planner initialization",
+                f"- after the group bridge is ready, dispatch the first smoke test to `{planner_seat}`, tell the user “收到测试消息即可回复希望完成什么任务”, and start `reviewer-1` in parallel when present",
                 f"- when `{planner_seat}` returns a planning memo or execution plan with `FrontstageDisposition: AUTO_ADVANCE`, convert it into downstream dispatch promptly instead of leaving it parked at frontstage",
                 f"- when `{planner_seat}` returns a closeout receipt, summarize it for the user in plain language and auto-advance by default; only ask the user to decide when the receipt explicitly says `FrontstageDisposition: USER_DECISION_NEEDED`",
                 "- planner -> frontstage closeout should also refresh `koder/TODO.md` so frontstage keeps a durable current-task anchor across compaction or restarts",
@@ -318,6 +326,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
                 "- planner closeout back to frontstage should also refresh the frontstage TODO so koder has a durable inbox item for the current chain result",
                 "- do not leave a normal planning result parked as 'awaiting koder decision' unless the task really created a frontstage decision gate; default to `AUTO_ADVANCE` for accepted-scope plans",
                 "- when returning a chain result to frontstage, include `FrontstageDisposition:` and `UserSummary:` in `DELIVERY.md`; default to `AUTO_ADVANCE` unless a real user decision is needed",
+                "- when frontstage supplies a Feishu group ID for install bring-up, first run the group smoke test, send the user-facing test prompt, and expect reviewer startup in parallel rather than waiting for a second nudge",
             ]
         )
     else:
@@ -342,7 +351,7 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             project_engineers=getattr(session, "project_engineers", None),
             engineer_order=getattr(session, "engineer_order", None),
         )
-        or "engineer-b"
+        or "planner"
     )
     builder_seat = (
         preferred_seat_for_role(
@@ -351,7 +360,7 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             project_engineers=getattr(session, "project_engineers", None),
             engineer_order=getattr(session, "engineer_order", None),
         )
-        or "engineer-a"
+        or "builder-1"
     )
 
     if engineer.role == "frontstage-supervisor":

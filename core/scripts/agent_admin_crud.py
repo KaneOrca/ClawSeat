@@ -187,6 +187,7 @@ class CrudHandlers:
                 project_engineers=template_profiles,
                 engineer_order=engineer_order,
             )
+            self.hooks.ensure_dir(Path(session.runtime_dir))
             if session.secret_file:
                 self.hooks.ensure_empty_env_file(Path(session.secret_file), self.hooks.ensure_dir, self.hooks.write_text)
             if session.engineer_id not in project.engineers:
@@ -316,6 +317,7 @@ class CrudHandlers:
         )
         self.hooks.write_session(session)
         self.hooks.apply_template(session, project)
+        self.hooks.ensure_dir(Path(session.runtime_dir))
         if session.secret_file:
             self.hooks.write_env_file(Path(session.secret_file), {}, self.hooks.ensure_dir, self.hooks.write_text)
         if session.engineer_id not in project.engineers:

@@ -28,6 +28,7 @@ auth_mode = "oauth"
 provider = "anthropic"
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
 ]
 role_details = [
   "runtime seat id remains koder; canonical framework role is frontstage-supervisor",
@@ -58,6 +59,7 @@ qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
 ]
 
 [[engineers]]

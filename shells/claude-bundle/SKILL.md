@@ -9,6 +9,10 @@ description: Thin Claude Code bundle for loading ClawSeat through the core gstac
 
 It does not implement ClawSeat protocol logic. It only wires Claude Code to:
 
+- first-run entry skill:
+  - `{CLAWSEAT_ROOT}/core/skills/cs/SKILL.md`
+- install/bootstrap entry skill:
+  - `{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`
 - core harness skill:
   - `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
 - optional project adapter skill:
@@ -19,9 +23,12 @@ It does not implement ClawSeat protocol logic. It only wires Claude Code to:
 ## Use
 
 1. Export `CLAWSEAT_ROOT=/path/to/ClawSeat`
-2. Load the core skill at `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
-3. Load the project adapter skill when the project has one
-4. Use `adapter_shim.py` only for minimal tmux-cli adapter bootstrap
+2. Install the entry skills with `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
+3. Tell the user to run `/cs` as the first post-install command
+4. For manual install/bootstrap requests, load `{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`
+5. Load the core skill at `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
+6. Load the project adapter skill when the project has one
+7. Use `adapter_shim.py` only for minimal tmux-cli adapter bootstrap
 
 ## Boundary
 

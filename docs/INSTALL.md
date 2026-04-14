@@ -29,6 +29,27 @@ export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 New projects should default to role-first seat ids such as `planner`,
 `builder-1`, and `reviewer-1`.
 
+Shipped starter profiles now come in three tiers:
+
+- `examples/starter/profiles/starter.toml`
+  - frontstage-only bootstrap
+  - creates a minimal `koder` entrypoint first
+- `examples/starter/profiles/install.toml`
+  - canonical `/cs` bootstrap profile
+  - creates `koder`, `planner`, `builder-1`, and `reviewer-1`
+  - intended for the first post-install `install` project
+- `examples/starter/profiles/full-team.toml`
+  - predeclares `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1`
+  - creates all six personal workspaces during bootstrap
+  - still defaults to `koder` as the only auto-start seat
+
+Recommended first-run path:
+
+1. install the entry skills with
+   `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
+2. run `/cs` inside the agent runtime
+3. let `/cs` create or resume the canonical `install` project and start `planner`
+
 For dynamic-roster profiles, keep bootstrap minimal:
 
 ```toml

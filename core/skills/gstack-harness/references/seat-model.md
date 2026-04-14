@@ -40,8 +40,8 @@ runtime surprise to discover later during launch.
 - the preferred place to record those differences is the project profile via
   `seat_overrides`, not ad hoc post-bootstrap edits
 - recommended heuristic:
-  - large / multi-surface projects: `engineer-b = claude`, `engineer-e = gemini`
-  - pure frontend projects: `engineer-b = gemini`, `engineer-e` stays optional
+  - large / multi-surface projects: `planner = claude`, `designer-1 = gemini`
+  - pure frontend projects: `planner = gemini`, `designer-1` stays optional
     unless design work is active
 
 ## Configuration workflow
@@ -139,7 +139,7 @@ Why this matters:
   reminders, closeout summaries, and user-facing handoff prose; preserve exact
   protocol keys, commands, file paths, API fields, and code identifiers as-is
 
-## Cartooner mapping
+## Legacy Cartooner Mapping
 
 - `koder` -> `frontstage-supervisor`
 - `engineer-b` -> `planner-dispatcher`
@@ -147,3 +147,18 @@ Why this matters:
 - `engineer-c` -> `reviewer`
 - `engineer-d` -> `qa`
 - `engineer-e` -> `designer`
+
+This mapping is kept only for legacy projects that still run the historic
+`engineer-*` roster, or for migration/debugging when you need to interpret old
+runtime artifacts.
+
+## Preferred Role-First Runtime IDs
+
+- `koder` -> `frontstage-supervisor`
+- `planner` -> `planner-dispatcher`
+- `builder-1` -> `builder`
+- `reviewer-1` -> `reviewer`
+- `qa-1` -> `qa`
+- `designer-1` -> `designer`
+
+Prefer these ids for all new profiles, examples, and starter templates.

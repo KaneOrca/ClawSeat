@@ -1,0 +1,5 @@
+interface:
+  display_name: "koder-frontstage"
+  short_description: "Wrapper skill for the user-facing koder seat in a ClawSeat project. Reads PLANNER_BRIEF, reacts to frontstage_disposition, consumes action schema, switches project context, and routes all execution work through planner plus transport helpers."
+policy:
+  allow_implicit_invocation: true

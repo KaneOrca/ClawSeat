@@ -1,0 +1,104 @@
+# ClawSeat Install Flow
+
+## Decision Tree
+
+1. First check whether there is already a workspace, seat, or TUI for the requested project/seat label.
+2. If one exists, reuse it and report that the install is a resume/recovery path, not a fresh bootstrap.
+3. If the user wants an agent runtime to load ClawSeat, use the relevant bundle first, then install the entry skills.
+4. If the user is following the default first-run path, have them execute `/cs`.
+5. If the user wants a new project outside the canonical install project, bootstrap a starter profile and run the harness.
+6. If the user wants OpenClaw integration, keep ClawSeat core logic in ClawSeat and use the OpenClaw plugin shell as the entrypoint.
+
+## Required Environment
+
+```sh
+export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+```
+
+If `CLAWSEAT_ROOT` is unset, check the current checkout before doing anything else.
+
+## Project Bootstrap
+
+```sh
+PROJECT=my-project
+PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/starter.toml"  # or install.toml / full-team.toml
+cp "$PROFILE_TEMPLATE" "/tmp/${PROJECT}-profile-dynamic.toml"
+python3 "$CLAWSEAT_ROOT/core/preflight.py" "$PROJECT"
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --project-name "$PROJECT" \
+  --start
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml"
+```
+
+- `starter.toml` creates a minimal frontstage entrypoint.
+- `install.toml` creates the canonical `install` workspace with `koder`, `planner`, `builder-1`, and `reviewer-1`.
+- `full-team.toml` creates `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1` workspaces in one bootstrap.
+- Even with `full-team.toml`, `--start` still only auto-starts `koder`; other seats require explicit confirmation and launch.
+- `/cs` is the exception path: invoking `/cs` counts as explicit approval to bootstrap or resume `install` and start `planner`.
+
+## Entry Skill Install
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
+```
+
+Then, inside Claude Code, run:
+
+```text
+/cs
+```
+
+`/cs` delegates to:
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/cs_init.py"
+```
+
+That wrapper will:
+
+- ensure `/tmp/install-profile-dynamic.toml` exists from `examples/starter/profiles/install.toml`
+- run preflight for `install`
+- bootstrap or repair the canonical `install` workspace
+- ensure every declared seat already has its managed scaffold (`session.toml`,
+  isolated `runtime_dir`, workspace guide, `WORKSPACE_CONTRACT.toml`, `repos/`,
+  and idle `TODO.md`) before dispatch begins
+- start or resume `koder`
+- start `planner`
+- render the install console state
+- then tell frontstage to finish the OpenClaw/Feishu bridge:
+  ask the user for the group ID, keep `main` on `requireMention=true`, keep
+  `warden`/koder on `requireMention=false`, then, once the group ID arrives,
+  delegate the smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`,
+  bring up review in parallel, and announce planner readiness to `group:<GROUP_ID>`
+
+## First-Launch Notes
+
+- Fresh Claude seats may ask for OAuth login, workspace trust, or permission confirmation.
+- Those prompts are normal onboarding, not install failures.
+- A pre-existing TUI is not "new install" state; do not create a second project when the first seat is already present.
+- For non-frontstage seats, require explicit confirmation before launching them.
+
+## User And Agent Interaction Mode
+
+- The agent should auto-run the deterministic setup steps: env check, preflight, starter profile preparation, bootstrap, and console verification.
+- The agent should pause only for real user actions: CLI login, workspace trust, permission prompts, or moving to a host terminal that supports PTY/tmux.
+- The agent should keep the user informed of which stage is active and whether `koder` is merely bootstrapped or already live.
+- The agent must not silently launch `planner` or specialist seats during manual installation.
+- `/cs` counts as an explicit user request to launch `planner` for the canonical `install` project.
+- once `planner` is up, the agent should proactively ask for the Feishu group ID
+  needed for the OpenClaw bridge; do not wait for the user to suggest group
+  wiring
+- once the user provides the group ID, the agent should immediately delegate the
+  bridge smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`,
+  and start `reviewer-1` in parallel when that seat exists
+
+## Common Failures
+
+| Symptom | Meaning | Action |
+|---|---|---|
+| `Device not configured` | Host PTY/tmux limitation | Tell the user to run in a real terminal session |
+| `CLAWSEAT_ROOT` missing | Environment not initialized | Export the repo root and rerun preflight |
+| `dynamic profile not found` | Project profile missing | Create `/tmp/{project}-profile-dynamic.toml` from the starter profile |
+| `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |

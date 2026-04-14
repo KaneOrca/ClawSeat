@@ -183,7 +183,7 @@ class TemplateHandlers:
 
         template_map = {
             "codex": {
-                "AGENTS.md": "\n".join(codex_lines) + "\n",
+                "CLAUDE.md": "\n".join(codex_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
@@ -207,7 +207,7 @@ class TemplateHandlers:
                 + "\n}\n",
             },
             "gemini": {
-                "GEMINI.md": "\n".join(gemini_lines) + "\n",
+                "CLAUDE.md": "\n".join(gemini_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
@@ -265,14 +265,20 @@ class TemplateHandlers:
             engineer_order = derived_context[1]
         workspace = Path(session.workspace)
         self.hooks.ensure_dir(workspace)
-        for relpath, content in self.render_template_text(
+        rendered = self.render_template_text(
             session.tool,
             session,
             project,
             engineer_override=engineer_override,
             project_engineers=project_engineers,
             engineer_order=engineer_order,
-        ).items():
+        )
+        for stale_name in ("AGENTS.md", "GEMINI.md"):
+            if stale_name not in rendered:
+                stale_path = workspace / stale_name
+                if stale_path.exists():
+                    stale_path.unlink()
+        for relpath, content in rendered.items():
             self.hooks.write_text(workspace / relpath, content)
         matching_optional_skills = [
             skill

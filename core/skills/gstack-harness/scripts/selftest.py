@@ -40,7 +40,7 @@ def main() -> int:
         repo_root = temp_root / "repo"
         tasks_root = repo_root / ".tasks"
         handoff_dir = tasks_root / "patrol" / "handoffs"
-        for seat in ("koder", "engineer-a", "engineer-b", "engineer-c", "engineer-d", "engineer-e"):
+        for seat in ("koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"):
             (tasks_root / seat).mkdir(parents=True, exist_ok=True)
         handoff_dir.mkdir(parents=True, exist_ok=True)
 
@@ -55,8 +55,8 @@ def main() -> int:
         write(
             status_script,
             "#!/bin/sh\n"
-            "echo \"engineer-b: WORKING\"\n"
-            "echo \"engineer-c: IDLE\"\n",
+            "echo \"planner: WORKING\"\n"
+            "echo \"reviewer-1: IDLE\"\n",
         )
         status_script.chmod(0o755)
 
@@ -87,19 +87,19 @@ def main() -> int:
                     f'workspace_root = "{temp_root / "workspaces" / "clawseat"}"',
                     f'handoff_dir = "{handoff_dir}"',
                     'heartbeat_owner = "koder"',
-                    'active_loop_owner = "engineer-b"',
-                    'default_notify_target = "engineer-b"',
+                    'active_loop_owner = "planner"',
+                    'default_notify_target = "planner"',
                     f'heartbeat_receipt = "{heartbeat_receipt}"',
-                    'seats = ["koder", "engineer-b", "engineer-a", "engineer-c", "engineer-d", "engineer-e"]',
+                    'seats = ["koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"]',
                     'heartbeat_seats = ["koder"]',
                     '',
                     '[seat_roles]',
                     'koder = "frontstage-supervisor"',
-                    'engineer-b = "planner-dispatcher"',
-                    'engineer-a = "builder"',
-                    'engineer-c = "reviewer"',
-                    'engineer-d = "qa"',
-                    'engineer-e = "designer"',
+                    'planner = "planner-dispatcher"',
+                    'builder-1 = "builder"',
+                    'reviewer-1 = "reviewer"',
+                    'qa-1 = "qa"',
+                    'designer-1 = "designer"',
                     '',
                 ]
             ),
@@ -135,9 +135,9 @@ def main() -> int:
             "--profile",
             str(profile),
             "--source",
-            "engineer-b",
+            "planner",
             "--target",
-            "engineer-c",
+            "reviewer-1",
             "--task-id",
             "FE-SMOKE",
             "--title",
@@ -145,8 +145,8 @@ def main() -> int:
             "--objective",
             "Review the change set",
         )
-        todo_text = (tasks_root / "engineer-c" / "TODO.md").read_text(encoding="utf-8")
-        if "source: engineer-b" not in todo_text or "reply_to: engineer-b" not in todo_text:
+        todo_text = (tasks_root / "reviewer-1" / "TODO.md").read_text(encoding="utf-8")
+        if "source: planner" not in todo_text or "reply_to: planner" not in todo_text:
             raise RuntimeError("dispatch TODO missing source/reply_to fields")
 
         run(
@@ -156,7 +156,7 @@ def main() -> int:
             "--source",
             "koder",
             "--target",
-            "engineer-b",
+            "planner",
             "--task-id",
             "FE-NOTICE",
             "--kind",
@@ -166,7 +166,7 @@ def main() -> int:
             "--message",
             "Resume the mainline and consume the repaired chain.",
         )
-        notice_receipt = json.loads((handoff_dir / "FE-NOTICE__koder__engineer-b.json").read_text(encoding="utf-8"))
+        notice_receipt = json.loads((handoff_dir / "FE-NOTICE__koder__planner.json").read_text(encoding="utf-8"))
         if notice_receipt["kind"] != "unblock":
             raise RuntimeError("notify_seat did not write the expected receipt kind")
 
@@ -192,9 +192,9 @@ def main() -> int:
             "--task-id",
             "FE-OTHER",
             "--source",
-            "engineer-b",
+            "planner",
             "--target",
-            "engineer-c",
+            "reviewer-1",
             "--json",
             expect=1,
         )
@@ -209,9 +209,9 @@ def main() -> int:
             "--task-id",
             "FE-SMOKE",
             "--source",
-            "engineer-b",
+            "planner",
             "--target",
-            "engineer-c",
+            "reviewer-1",
             expect=1,
         )
 
@@ -222,9 +222,9 @@ def main() -> int:
                 "--profile",
                 str(profile),
                 "--source",
-                "engineer-c",
+                "reviewer-1",
                 "--target",
-                "engineer-b",
+                "planner",
                 "--task-id",
                 "FE-SMOKE",
                 "--title",
@@ -237,16 +237,16 @@ def main() -> int:
             check=False,
         )
         if missing_verdict.returncode == 0:
-            raise RuntimeError("engineer-c completion unexpectedly succeeded without canonical verdict")
+            raise RuntimeError("reviewer-1 completion unexpectedly succeeded without canonical verdict")
 
         run(
             str(complete_handoff),
             "--profile",
             str(profile),
             "--source",
-            "engineer-c",
+            "reviewer-1",
             "--target",
-            "engineer-b",
+            "planner",
             "--task-id",
             "FE-SMOKE",
             "--title",
@@ -256,8 +256,8 @@ def main() -> int:
             "--verdict",
             "APPROVED",
         )
-        delivery_text = (tasks_root / "engineer-c" / "DELIVERY.md").read_text(encoding="utf-8")
-        if "owner: engineer-c" not in delivery_text or "target: engineer-b" not in delivery_text:
+        delivery_text = (tasks_root / "reviewer-1" / "DELIVERY.md").read_text(encoding="utf-8")
+        if "owner: reviewer-1" not in delivery_text or "target: planner" not in delivery_text:
             raise RuntimeError("delivery missing owner/target fields")
 
         missing_frontstage_disposition = subprocess.run(
@@ -267,7 +267,7 @@ def main() -> int:
                 "--profile",
                 str(profile),
                 "--source",
-                "engineer-b",
+                "planner",
                 "--target",
                 "koder",
                 "--task-id",
@@ -289,7 +289,7 @@ def main() -> int:
             "--profile",
             str(profile),
             "--source",
-            "engineer-b",
+            "planner",
             "--target",
             "koder",
             "--task-id",
@@ -303,7 +303,7 @@ def main() -> int:
             "--user-summary",
             "Review and QA passed. We can keep moving.",
         )
-        planner_delivery = (tasks_root / "engineer-b" / "DELIVERY.md").read_text(encoding="utf-8")
+        planner_delivery = (tasks_root / "planner" / "DELIVERY.md").read_text(encoding="utf-8")
         if "FrontstageDisposition: AUTO_ADVANCE" not in planner_delivery:
             raise RuntimeError("planner closeout missing FrontstageDisposition")
         if "UserSummary: Review and QA passed. We can keep moving." not in planner_delivery:
@@ -311,12 +311,12 @@ def main() -> int:
         frontstage_todo = (tasks_root / "koder" / "TODO.md").read_text(encoding="utf-8")
         if "task_id: FE-CLOSEOUT" not in frontstage_todo:
             raise RuntimeError("planner closeout did not refresh frontstage TODO")
-        if "reply_to: engineer-b" not in frontstage_todo:
+        if "reply_to: planner" not in frontstage_todo:
             raise RuntimeError("frontstage TODO missing reply_to for planner closeout")
         if "FrontstageDisposition: AUTO_ADVANCE" not in frontstage_todo:
             raise RuntimeError("frontstage TODO missing disposition summary")
         planner_receipt = json.loads(
-            (handoff_dir / "FE-CLOSEOUT__engineer-b__koder.json").read_text(encoding="utf-8")
+            (handoff_dir / "FE-CLOSEOUT__planner__koder.json").read_text(encoding="utf-8")
         )
         if planner_receipt.get("frontstage_disposition") != "AUTO_ADVANCE":
             raise RuntimeError("planner closeout receipt missing frontstage disposition")
@@ -332,9 +332,9 @@ def main() -> int:
             "--task-id",
             "FE-SMOKE",
             "--source",
-            "engineer-c",
+            "reviewer-1",
             "--target",
-            "engineer-b",
+            "planner",
             expect=1,
         )
 
@@ -343,9 +343,9 @@ def main() -> int:
             "--profile",
             str(profile),
             "--source",
-            "engineer-c",
+            "reviewer-1",
             "--target",
-            "engineer-b",
+            "planner",
             "--task-id",
             "FE-SMOKE",
             "--ack-only",
@@ -358,9 +358,9 @@ def main() -> int:
             "--task-id",
             "FE-SMOKE",
             "--source",
-            "engineer-c",
+            "reviewer-1",
             "--target",
-            "engineer-b",
+            "planner",
             "--json",
         )
         heartbeat_skip = run(
@@ -368,13 +368,17 @@ def main() -> int:
             "--profile",
             str(profile),
             "--seat",
-            "engineer-b",
+            "planner",
             "--dry-run",
         )
         console = run(str(render_console), "--profile", str(profile), "--json")
         console_payload = json.loads(console.stdout)
         if console_payload["heartbeat"]["configured"]:
             raise RuntimeError("render_console incorrectly treated an unverified heartbeat receipt as configured")
+        for seat in ("koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"):
+            todo_path = tasks_root / seat / "TODO.md"
+            if not todo_path.exists():
+                raise RuntimeError(f"materialize_profile_runtime did not seed TODO for {seat}")
 
         result = {
             "temp_root": str(temp_root),

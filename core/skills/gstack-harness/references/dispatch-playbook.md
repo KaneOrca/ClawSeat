@@ -8,9 +8,9 @@ edits.
 When you must use `<repo-root>/core/shell-scripts/send-and-verify.sh` directly in a
 multi-project environment:
 
-- prefer the canonical session name, for example `<project>-engineer-b-<tool>`
+- prefer the canonical session name, for example `<project>-planner-<tool>`
 - otherwise pass `--project <project>`
-- do not use a bare seat id like `engineer-b` without project context
+- do not use a bare seat id like `planner` without project context
 
 ## Frontstage -> planner
 
@@ -18,7 +18,7 @@ multi-project environment:
 python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
   --profile <project-profile.toml> \
   --source koder \
-  --target engineer-b \
+  --target planner \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --objective '<OBJECTIVE>' \
@@ -30,23 +30,23 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
 ```bash
 python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
   --profile <project-profile.toml> \
-  --source engineer-b \
-  --target engineer-a \
+  --source planner \
+  --target builder-1 \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --objective '<OBJECTIVE>' \
-  --reply-to engineer-b
+  --reply-to planner
 ```
 
-Swap `--target` for `engineer-c`, `engineer-d`, or `engineer-e` as needed.
+Swap `--target` for `reviewer-1`, `qa-1`, or `designer-1` as needed.
 
 ## Specialist -> planner completion
 
 ```bash
 python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
   --profile <project-profile.toml> \
-  --source engineer-a \
-  --target engineer-b \
+  --source builder-1 \
+  --target planner \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --summary '<DELIVERY_SUMMARY>'
@@ -63,8 +63,8 @@ next hop:
 ```bash
 python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
   --profile <project-profile.toml> \
-  --source engineer-a \
-  --target engineer-b \
+  --source builder-1 \
+  --target planner \
   --task-id <TASK_ID> \
   --ack-only
 ```
@@ -74,7 +74,7 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
 ```bash
 python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
   --profile <project-profile.toml> \
-  --source engineer-b \
+  --source planner \
   --target koder \
   --task-id <TASK_ID> \
   --title '<TITLE>' \

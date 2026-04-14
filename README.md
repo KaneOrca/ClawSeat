@@ -9,7 +9,8 @@ Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core s
 
 Externally, ClawSeat can be understood as a heavy skill:
 
-- install the ClawSeat entry skill on an agent
+- install the ClawSeat entry skills on an agent
+- have the user run `/cs` as the first post-install command
 - that agent becomes the frontstage `koder`
 - `koder` clarifies the request, recommends the team, and then instantiates seats
 

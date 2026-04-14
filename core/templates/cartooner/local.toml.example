@@ -8,13 +8,13 @@ repo_root = "/Users/ywf/coding/my-new-project"
 
 # Optional: per-seat overrides. Only specify fields that differ from template.toml.
 
-# Skip an optional engineer entirely for this project:
+# Skip an optional seat entirely for this project:
 # [[overrides]]
-# id = "engineer-e"
+# id = "designer-1"
 # active = false
 
 # Override auth/provider for one seat in this project only:
 # [[overrides]]
-# id = "engineer-a"
+# id = "builder-1"
 # auth_mode = "api"
 # provider = "openai-direct"

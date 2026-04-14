@@ -34,6 +34,10 @@ LEGACY_CONFIG_ROOT = REPO_ROOT / ".agent" / "config"
 LEGACY_ASSIGNMENTS_PATH = LEGACY_CONFIG_ROOT / "engineer-assignments.toml"
 LEGACY_IDENTITIES_PATH = LEGACY_CONFIG_ROOT / "auth-identities.toml"
 
+# Legacy compatibility defaults for the historical "coding" roster.
+# These are not the canonical role-first runtime model for new ClawSeat projects;
+# new projects should come from templates/profiles such as gstack-harness and use
+# `koder / planner / builder-1 / reviewer-1 / qa-1 / designer-1`.
 PROJECT_DEFAULTS = {
     "coding": {
         "repo_root": str(REPO_ROOT),
@@ -62,6 +66,9 @@ PROJECT_DEFAULTS = {
     }
 }
 
+# Historical engineer definitions kept only for migration, recovery, and old
+# project compatibility. Do not copy these ids into new profiles unless you are
+# explicitly operating a legacy engineer-* project.
 LEGACY_ENGINEERS = {
     "engineer-a": {
         "project": "coding",

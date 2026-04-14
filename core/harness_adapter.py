@@ -73,6 +73,16 @@ class AuthConfig:
     locator: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(slots=True)
+class SeatObservable:
+    """Extended observability fields for a seat session."""
+
+    current_task_id: str = ""
+    needs_input: bool = False
+    input_reason: str = ""  # rate_limit | auth_prompt | idle_prompt | user_question | ""
+    last_prompt_excerpt: str = ""
+
+
 class HarnessAdapter(ABC):
     @abstractmethod
     def materialize(self, plan: SeatPlan) -> SessionHandle:

@@ -1,6 +1,6 @@
 version = 1
 profile_name = "arena-pretext-ui"
-description = "Arena Pretext UI project profile for the gstack harness runtime"
+description = "Arena Pretext UI project profile for the role-first gstack harness runtime"
 template_name = "gstack-harness"
 project_name = "arena-pretext-ui"
 repo_root = "~/coding/arena-pretext-ui"
@@ -15,41 +15,41 @@ agent_admin = "{CLAWSEAT_ROOT}/core/scripts/agent_admin.py"
 workspace_root = "~/.agents/workspaces/arena-pretext-ui"
 handoff_dir = "~/coding/arena-pretext-ui/.tasks/patrol/handoffs"
 heartbeat_owner = "koder"
-active_loop_owner = "engineer-b"
-default_notify_target = "engineer-b"
+active_loop_owner = "planner"
+default_notify_target = "planner"
 heartbeat_receipt = "~/.agents/workspaces/arena-pretext-ui/koder/HEARTBEAT_RECEIPT.toml"
-seats = ["koder", "engineer-b", "engineer-a", "engineer-c", "engineer-d", "engineer-e"]
+seats = ["koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"]
 heartbeat_seats = ["koder"]
 
 [seat_roles]
 koder = "frontstage-supervisor"
-engineer-b = "planner-dispatcher"
-engineer-a = "builder"
-engineer-c = "reviewer"
-engineer-d = "qa"
-engineer-e = "designer"
+planner = "planner-dispatcher"
+builder-1 = "builder"
+reviewer-1 = "reviewer"
+qa-1 = "qa"
+designer-1 = "designer"
 
 [seat_overrides.koder]
 tool = "claude"
 auth_mode = "api"
 provider = "xcode-best"
 
-[seat_overrides.engineer-a]
+[seat_overrides.builder-1]
 tool = "claude"
 auth_mode = "oauth"
 provider = "anthropic"
 
-[seat_overrides.engineer-b]
+[seat_overrides.planner]
 tool = "gemini"
 auth_mode = "oauth"
 provider = "google"
 
-[seat_overrides.engineer-c]
+[seat_overrides.reviewer-1]
 tool = "codex"
 auth_mode = "api"
 provider = "xcode-best"
 
-[seat_overrides.engineer-d]
+[seat_overrides.qa-1]
 tool = "claude"
 auth_mode = "api"
 provider = "minimax"

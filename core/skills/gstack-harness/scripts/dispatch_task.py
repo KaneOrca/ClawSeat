@@ -19,7 +19,7 @@ from _common import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dispatch a task to a target seat.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
-    parser.add_argument("--source", default="engineer-b", help="Seat dispatching the task.")
+    parser.add_argument("--source", default="planner", help="Seat dispatching the task.")
     parser.add_argument("--target", required=True, help="Target seat.")
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")

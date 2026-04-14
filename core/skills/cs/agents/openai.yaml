@@ -1,0 +1,7 @@
+interface:
+  display_name: "ClawSeat Init"
+  short_description: "Bootstrap or resume the canonical install project and start planner"
+  default_prompt: "Use /cs as the first post-install ClawSeat command. Reuse or bootstrap the canonical install project, then start planner through the clawseat-install flow."
+
+policy:
+  allow_implicit_invocation: true

@@ -2,7 +2,37 @@
 
 ClawSeat 不依赖 cartooner 即可运行。用户只需 OpenClaw + Claude Code CLI + python3.11+ / tmux / 可选 iTerm2。
 
-如果你是在让 agent 自动帮忙安装 ClawSeat，优先加载 `clawseat-install` skill；它会按这份指南的标准流程执行 preflight、bootstrap 和首次启动。
+如果你是在让 agent 自动帮忙安装 ClawSeat，优先加载 `clawseat-install` skill；它会按这份指南的标准流程执行 preflight、bootstrap、入口 skill 安装和首次启动。
+
+## 安装后第一条指令：`/cs`
+
+ClawSeat 安装完成后，推荐用户执行的第一条指令就是 `/cs`。
+
+先在 shell 里把入口 skill 安装到本机 runtime：
+
+```bash
+export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py
+```
+
+然后在 Claude Code 里输入：
+
+```text
+/cs
+```
+
+如果当前 runtime 以技能名而不是 slash command 形式调用，就使用 `$cs`。
+
+`/cs` 会默认做这几件事：
+
+- 创建或复用 canonical 项目 `install`
+- 使用 `{CLAWSEAT_ROOT}/examples/starter/profiles/install.toml`
+- 初始化 `koder / planner / builder-1 / reviewer-1` 工作区
+- 自动恢复或拉起 `koder`
+- 直接拉起 `planner`，让它接任后续安装链
+- planner 就绪后，frontstage 会继续要求用户提供飞书群 `group ID`，用于 main / warden 的群联调；无需 `open_id`
+
+这条入口不替代 `clawseat-install`；它只是把默认安装路径压缩成一条稳定的第一指令。
 
 ## 用户与 Agent 交互模式
 
@@ -13,7 +43,8 @@ ClawSeat 不依赖 cartooner 即可运行。用户只需 OpenClaw + Claude Code 
   - workspace trust
   - permissions / bypass prompts
   - 当前宿主环境不支持 PTY/tmux，需要换到真实终端继续
-- 安装阶段默认只拉起 `koder`；`planner` 和其他 specialist seat 仍需按 frontstage 规则显式确认
+- 手工安装阶段默认只拉起 `koder`；`planner` 和其他 specialist seat 仍需按 frontstage 规则显式确认
+- `/cs` 是唯一例外：它本身就视为用户已明确要求创建 `install` 项目并拉起 `planner`
 
 ---
 
@@ -92,11 +123,12 @@ export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 
 ### 2. 选择 starter profile
 
-ClawSeat 现在提供两种通用 starter profile：
+ClawSeat 现在提供三种通用 starter profile：
 
 | Profile | 用途 |
 |---------|------|
 | `{CLAWSEAT_ROOT}/examples/starter/profiles/starter.toml` | 仅初始化 `koder`，适合先搭前台入口 |
+| `{CLAWSEAT_ROOT}/examples/starter/profiles/install.toml` | canonical `/cs` 安装项目：创建 `koder / planner / builder-1 / reviewer-1` 工作区 |
 | `{CLAWSEAT_ROOT}/examples/starter/profiles/full-team.toml` | 一次性创建 `koder / planner / builder-1 / reviewer-1 / qa-1 / designer-1` 六个个人工作区 |
 
 两者都不依赖 cartooner，都可以直接被 `bootstrap_harness.py` 使用。
@@ -106,6 +138,8 @@ ClawSeat 现在提供两种通用 starter profile：
 ```bash
 PROJECT_NAME=my-project
 PROFILE_TEMPLATE=$CLAWSEAT_ROOT/examples/starter/profiles/starter.toml
+# canonical /cs install 项目时改成：
+# PROFILE_TEMPLATE=$CLAWSEAT_ROOT/examples/starter/profiles/install.toml
 # 六席初始化时改成：
 # PROFILE_TEMPLATE=$CLAWSEAT_ROOT/examples/starter/profiles/full-team.toml
 
@@ -122,6 +156,8 @@ cp $PROFILE_TEMPLATE /tmp/$PROJECT_NAME-profile-dynamic.toml
 ```bash
 sed -i '' 's/my-project/YOUR_PROJECT_NAME/g' /tmp/my-project-profile-dynamic.toml
 ```
+
+> `install.toml` 是固定给 canonical `install` 项目用的，通常不需要替换项目名；`/cs` 会直接复用它生成 `/tmp/install-profile-dynamic.toml`。
 
 关键占位符：
 - `project_name`：项目标识
@@ -180,10 +216,34 @@ python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py \
 
 `--start` 参数：启动 `koder`（前台）seat 并打开项目窗口。
 
+如果 profile 使用的是 `install.toml`：
+- bootstrap 会创建 `koder / planner / builder-1 / reviewer-1` 四个工作区
+- `--start` 仍只自动启动 `koder`
+- bootstrap 阶段就应为这些 seat 生成完整模板：workspace guide、`WORKSPACE_CONTRACT.toml`、`repos/` 软链接、空 `TODO.md`
+- `/cs` 会在 bootstrap 之后继续显式启动 `planner`
+
 如果 profile 使用的是 `full-team.toml`：
 - bootstrap 会一次性创建六个 seat 的个人工作区
 - 但仍只自动启动 `koder`
+- 六个 seat 的 workspace 模板与空 inbox 也应在 bootstrap 阶段全部就绪，而不是等第一次派发任务时才补
 - `planner` 和其他 specialist seat 需要后续显式启动
+
+### `install` 项目快速初始化
+
+如果你的目标是直接进入默认安装链，最短路径就是：
+
+```bash
+export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py
+```
+
+随后在 Claude Code 中输入：
+
+```text
+/cs
+```
+
+这会复用或创建 canonical `install` 项目，并直接拉起 `planner`。
 
 ### 六人工位快速初始化
 
@@ -257,7 +317,7 @@ openclaw --version
 ls ~/.openclaw/workspace-koder/skills/clawseat-koder-frontstage/
 ```
 
-OpenClaw 启动后，koder seat 即为用户可见的前台入口。
+OpenClaw 启动后，koder seat 即为用户可见的前台入口。若当前环境已经装好 `cs` 入口 skill，仍推荐先让用户执行 `/cs` 来初始化 canonical `install` 项目。
 
 ---
 
@@ -268,6 +328,8 @@ ClawSeat 多 seat 采用渐进式启动：
 ```
 koder（前台）→ planner（规划）→ specialist（专家）
 ```
+
+canonical `/cs` 路径等价于：先确保 `koder` 可用，再直接推进到 `planner`。
 
 ### 仅启动 koder（前台）
 

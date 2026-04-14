@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-DEFAULT_AGENT_HOME=/Users/ywf
+DEFAULT_AGENT_HOME="$HOME"
 
 # Many seat runtimes execute inside isolated identity homes where `~/.agents`
 # does not point at the shared engineer/session records. Normalize HOME back to

@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Complete or consume a harness handoff.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
     parser.add_argument("--source", required=True, help="Source seat for the completion or ACK.")
-    parser.add_argument("--target", default="engineer-b", help="Target seat.")
+    parser.add_argument("--target", default="planner", help="Target seat.")
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", help="Delivery title.")
     parser.add_argument("--summary", help="Delivery summary text.")
@@ -90,6 +90,7 @@ def main() -> int:
         "source": args.source,
         "target": args.target,
     }
+    source_role = profile.seat_roles.get(args.source, "")
 
     if args.ack_only:
         ack_line = append_consumed_ack(profile.todo_path(args.target), task_id=args.task_id, source=args.source)
@@ -99,8 +100,11 @@ def main() -> int:
         print(ack_line)
         return 0
 
-    if args.source == "engineer-c" and args.verdict not in VALID_VERDICTS:
-        raise SystemExit("engineer-c delivery requires --verdict with a canonical value")
+    if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
+        raise SystemExit(
+            f"{args.source} delivery requires --verdict with a canonical value "
+            "because the source seat is a reviewer"
+        )
 
     if args.frontstage_disposition and args.frontstage_disposition not in VALID_FRONTSTAGE_DISPOSITIONS:
         raise SystemExit("invalid --frontstage-disposition; use AUTO_ADVANCE or USER_DECISION_NEEDED")

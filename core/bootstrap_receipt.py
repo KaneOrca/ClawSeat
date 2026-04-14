@@ -1,0 +1,253 @@
+"""
+bootstrap_receipt.py — ClawSeat bootstrap receipt read/write/validation.
+
+Writes BOOTSTRAP_RECEIPT.toml on successful bootstrap, reads it on restart,
+and validates whether a cached receipt is still valid.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+import tomllib
+
+
+# ---------------------------------------------------------------------------
+# Path resolution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_agents_root() -> Path:
+    agents = os.environ.get("AGENTS_ROOT", "")
+    if agents:
+        return Path(agents).expanduser()
+    home = Path.home()
+    if (home / ".agents").exists():
+        return home / ".agents"
+    return home / ".agents"
+
+
+def _resolve_clawseat_root() -> Path | None:
+    """Resolve CLAWSEAT_ROOT, trying env then filesystem inference."""
+    env_val = os.environ.get("CLAWSEAT_ROOT", "").strip()
+    if env_val:
+        p = Path(env_val).expanduser()
+        if p.exists():
+            return p
+
+    helpers = (
+        Path("core/scripts/agent_admin.py"),
+        Path("core/skills/gstack-harness/scripts/_common.py"),
+    )
+    candidates: list[Path] = []
+    script_path = Path(__file__).resolve()
+    for parent in script_path.parents:
+        candidates.append(parent)
+        candidates.append(parent / "ClawSeat")
+    candidates.append(Path.home() / "coding" / "ClawSeat")
+    candidates.append(Path.home() / "coding" / "ClawSeat")
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if all((candidate / m).exists() for m in helpers):
+            return candidate
+    return None
+
+
+def _receipt_path(project: str) -> Path:
+    """Return the path to BOOTSTRAP_RECEIPT.toml for the project."""
+    agents_root = _resolve_agents_root()
+    workspace = agents_root / "workspaces" / project / "koder"
+    workspace.mkdir(parents=True, exist_ok=True)
+    return workspace / "BOOTSTRAP_RECEIPT.toml"
+
+
+# ---------------------------------------------------------------------------
+# Receipt schema
+# ---------------------------------------------------------------------------
+
+RECEIPT_VERSION = 1
+RECEIPT_VALID_FOR_SECONDS = 3600 * 24  # 24 hours
+
+
+def write_receipt(
+    project: str,
+    preflight_result: "preflight.PreflightResult",
+    *,
+    python_version: str | None = None,
+    tmux_version: str | None = None,
+    seats_available: dict[str, bool] | None = None,
+    notes: dict[str, object] | None = None,
+) -> Path:
+    """
+    Write a BOOTSTRAP_RECEIPT.toml for the given project.
+
+    Returns the path the receipt was written to.
+    """
+    clawseat_root = _resolve_clawseat_root()
+    clawseat_root_str = str(clawseat_root) if clawseat_root else ""
+
+    # Resolve python version
+    if python_version is None:
+        try:
+            result = subprocess.run(
+                ["python3", "--version"],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            python_version = result.stdout.strip()
+        except Exception:
+            python_version = "unknown"
+
+    # Resolve tmux version
+    if tmux_version is None:
+        tmux_path = shutil.which("tmux")
+        if tmux_path:
+            try:
+                result = subprocess.run(
+                    ["tmux", "-V"],
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
+                tmux_version = result.stdout.strip()
+            except Exception:
+                tmux_version = "unknown"
+        else:
+            tmux_version = "not installed"
+
+    # Profile path
+    profile_path = f"/tmp/{project}-profile-dynamic.toml"
+    if not Path(profile_path).exists():
+        profile_path = f"/tmp/{project}-profile.toml"
+
+    preflight_section: dict[str, str] = {}
+    for item in preflight_result.items:
+        preflight_section[item.name] = item.status.value
+
+    seats_available = seats_available or {"claude": False, "codex": False, "gemini": False}
+    notes = notes or {}
+
+    now = datetime.now(timezone.utc)
+    iso_timestamp = now.isoformat()
+
+    receipt = {
+        "bootstrap": {
+            "version": RECEIPT_VERSION,
+            "project": project,
+            "bootstrapped_at": iso_timestamp,
+            "clawseat_root": clawseat_root_str,
+            "python_version": python_version,
+            "tmux_version": tmux_version,
+            "dynamic_profile": profile_path,
+            "adapter_type": "tmux-cli",
+        },
+        "preflight": preflight_section,
+        "seats_available": seats_available,
+        "notes": notes,
+    }
+
+    path = _receipt_path(project)
+    content = _render_toml(receipt)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def read_receipt(project: str) -> dict[str, object] | None:
+    """
+    Read the BOOTSTRAP_RECEIPT.toml for the given project.
+
+    Returns the receipt dict or None if it doesn't exist or can't be parsed.
+    """
+    path = _receipt_path(project)
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return None
+
+
+def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
+    """
+    Check whether a receipt is still valid.
+
+    Returns (is_valid, reason).
+    """
+    # Check version
+    bootstrap = receipt.get("bootstrap", {})
+    version = bootstrap.get("version", 0)
+    if version != RECEIPT_VERSION:
+        return False, f"receipt version {version} != expected {RECEIPT_VERSION}"
+
+    # Check clawseat_root hasn't changed
+    current_root = _resolve_clawseat_root()
+    receipt_root = bootstrap.get("clawseat_root", "")
+    if current_root and str(current_root) != receipt_root:
+        return False, f"clawseat_root changed: was {receipt_root}, now {current_root}"
+
+    # Check not expired
+    try:
+        raw_ts = bootstrap.get("bootstrapped_at", "")
+        if raw_ts:
+            ts = datetime.fromisoformat(raw_ts)
+            age = datetime.now(timezone.utc) - ts
+            if age.total_seconds() > RECEIPT_VALID_FOR_SECONDS:
+                return False, f"receipt expired ({age.days}d old)"
+    except Exception:
+        return False, "invalid timestamp in receipt"
+
+    return True, "valid"
+
+
+def _render_toml(data: dict[str, object], prefix: str = "") -> str:
+    """Render a dict to TOML string."""
+    lines: list[str] = []
+    simple: list[tuple[str, object]] = []
+    nested: list[tuple[str, dict[str, object]]] = []
+
+    for key, value in data.items():
+        if isinstance(value, dict):
+            nested.append((key, value))
+        else:
+            simple.append((key, value))
+
+    for key, value in simple:
+        if isinstance(value, bool):
+            lines.append(f"{key} = {'true' if value else 'false'}")
+        elif isinstance(value, int):
+            lines.append(f"{key} = {value}")
+        elif isinstance(value, float):
+            lines.append(f"{key} = {repr(value)}")
+        elif isinstance(value, str):
+            lines.append(f'{key} = "{value}"')
+        elif isinstance(value, list):
+            items = ", ".join(_toml_list_item(i) for i in value)
+            lines.append(f"{key} = [{items}]")
+        else:
+            lines.append(f'{key} = "{value}"')
+
+    for key, value in nested:
+        section = key if not prefix else f"{prefix}.{key}"
+        lines.append("")
+        lines.append(f"[{section}]")
+        lines.append(_render_toml(value, prefix=section))
+
+    return "\n".join(lines)
+
+
+def _toml_list_item(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return f'"{value}"'

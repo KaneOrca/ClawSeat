@@ -62,6 +62,9 @@ Keep those under:
   - bootstrap a project from a profile into the existing `agent_admin` runtime
   - with `--start`, only starts the frontstage / heartbeat owner first, then
     opens the project window; it does not eagerly launch every seat
+  - bootstrap must still pre-initialize every declared seat's managed scaffold:
+    session record, isolated runtime dir, workspace guide, `WORKSPACE_CONTRACT.toml`,
+    `repos/` symlink, and an idle `TODO.md` inbox entry
 - `scripts/start_seat.py`
   - start a seat and auto-provision heartbeat when the seat is the frontstage
   - for non-frontstage seats, first prints a launch summary and requires an
@@ -112,6 +115,10 @@ Keep those under:
 - if transport falls back to raw tmux, it must still honor the send contract: text, wait 1 second, `Enter`, then verify the message did not stay queued in the input buffer
 - frontstage and planner seats should prefer `scripts/notify_seat.py` for ad hoc reminders/unblocks rather than composing transport by hand
 - `gstack` specialist skills stay in place; this skill only orchestrates them.
+- Declared seats must be fully materialized at bootstrap time, not lazily on
+  first dispatch. If `planner`, `builder`, `reviewer`, `qa`, or `designer`
+  already belong to the roster, their session record, runtime home, workspace
+  scaffold, and empty inbox should already exist before the first task handoff.
 - The frontstage-supervisor seat owns seat startup and operator window layout.
   It is responsible for:
   - deciding when a seat should be launched
@@ -148,21 +155,8 @@ For Claude seats, recovery and fresh start are not the same operation.
 
 ## Runtime selection heuristic
 
-Keep runtime selection project-local.
-
-- Use the heuristic in [Seat model](references/seat-model.md) instead of
-  duplicating project/runtime policy here.
-- The supported CLI/runtime matrix is also defined in
-  [Seat model](references/seat-model.md). Treat unsupported combinations as
-  configuration errors:
-  - `claude`: `oauth/anthropic`, `api/xcode-best`, `api/minimax`
-  - `codex`: `oauth/openai`, `api/xcode-best`
-  - `gemini`: `oauth/google`
-- `xcode-best` is tool-specific, not one shared URL:
-  - `claude` xcode seats use `ANTHROPIC_BASE_URL=https://xcode.best`
-  - `codex` xcode seats use `https://api.xcode.best/v1`
-- Record the chosen tool/auth/provider in the project profile or
-  `seat_overrides`, not in ad hoc session edits.
+All runtime selection policy is defined in [Seat model](references/seat-model.md).
+Do not duplicate runtime matrix or provider details here.
 
 ## First-launch rule
 

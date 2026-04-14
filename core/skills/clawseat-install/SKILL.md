@@ -1,0 +1,59 @@
+---
+name: clawseat-install
+description: Install and bootstrap ClawSeat for Codex or Claude Code, including detecting and reusing existing workspaces or live TUIs. Use when a user asks to install ClawSeat, 安装 ClawSeat, wire a shell bundle, create a starter profile, run preflight/bootstrap, start `koder`, or troubleshoot first-launch and tmux/PTY failures.
+---
+
+# ClawSeat Install
+
+## Overview
+
+Use this skill to choose and run the standard ClawSeat installation path. Keep the flow narrow: confirm the target runtime, run preflight, bootstrap the project, and report the first-launch state clearly.
+Before creating anything new, resolve whether the target already has a workspace, project record, or live tmux/TUI seat. Reuse it if present.
+After the runtime-side install is in place, the preferred first user command is `/cs`. That entry skill should create or resume the canonical `install` project and start `planner`.
+
+## Choose The Install Path
+
+- First check for an existing canonical workspace/TUI for the requested project or seat label. If one exists, treat it as the source of truth instead of creating a parallel install.
+- If the user wants the standard first-run path after installing ClawSeat onto Claude/Codex, install the entry skills and route them to `/cs`.
+- If the user wants this agent runtime to load ClawSeat, use the `shells/codex-bundle/` or `shells/claude-bundle/` entrypoint for that runtime.
+- If the user wants the canonical install workspace, use `install.toml`.
+- If the user wants a fresh project workspace, use `starter.toml` for a koder-only entrypoint or `full-team.toml` when they explicitly want the full six-seat roster.
+- If the user wants OpenClaw integration, use `shells/openclaw-plugin/openclaw_bootstrap.py` and keep core logic in ClawSeat, not OpenClaw.
+
+## Standard Flow
+
+1. Resolve the canonical project/workspace name and check whether an existing TUI or workspace already exists for it.
+2. Read [install-flow.md](references/install-flow.md) for the command sequence and fallback rules.
+3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
+4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
+5. Install the entry skills with `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`.
+6. For the default post-install path, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
+7. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
+8. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.
+9. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project} --start`.
+10. Start or verify `koder` with `start_seat.py --seat koder`, then check `render_console.py`.
+11. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding.
+
+## Interaction Contract
+
+- Auto-run inspection, preflight, profile creation, bootstrap, and console verification when the target project/runtime is already clear.
+- If an existing workspace or live TUI is already present, reuse it and report that it is being resumed instead of creating a parallel project.
+- Treat `/cs` as explicit approval to bootstrap or resume the canonical `install` project and launch `planner`.
+- Tell the user exactly when installation leaves the automatic path and requires manual action.
+- Ask for user confirmation before launching any non-frontstage seat or changing runtime/provider choices that affect an existing seat.
+- When Claude first-launch prompts appear, explain that the user must complete the TUI step, then resume the install flow afterwards.
+- When the host terminal cannot provide PTY/tmux capability, stop cleanly and hand the next command to the user instead of masking it as a ClawSeat failure.
+- Once the user provides a Feishu group ID during install bring-up, proactively delegate the smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`, and launch `reviewer-1` in parallel when that seat exists.
+
+## Troubleshooting
+
+- If `tmux new-session` or `openpty` fails with `Device not configured`, report a host terminal limitation instead of a ClawSeat config failure.
+- If `CLAWSEAT_ROOT` is missing or wrong, stop and ask the user to export the correct path.
+- Do not patch OpenClaw source to solve a ClawSeat install issue; use config or the plugin shell only.
+
+## Reference Points
+
+- `docs/INSTALL_GUIDE.md` for the human install guide
+- `docs/INSTALL.md` for path placeholders and contract
+- `core/skills/gstack-harness/SKILL.md` for harness and seat semantics
+- `core/skills/cs/SKILL.md` for the first-run `/cs` entrypoint

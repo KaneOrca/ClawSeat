@@ -71,6 +71,7 @@ run_tmux() {
 }
 
 capture_tail() {
+  local LAST_TMUX_OUTPUT=""
   run_tmux "capture-pane" capture-pane -t "$SESSION" -p || return 1
   printf "%s\n" "$LAST_TMUX_OUTPUT" | tail -n 5
 }

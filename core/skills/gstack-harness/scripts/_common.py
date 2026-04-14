@@ -161,6 +161,7 @@ def infer_role_from_seat_id(seat: str, fallback: str = "") -> str:
 def resolve_dynamic_seats(
     *,
     heartbeat_owner: str,
+    declared_seats: list[str],
     bootstrap_seats: list[str],
     compat_legacy_seats: bool,
     legacy_seats: list[str],
@@ -171,6 +172,7 @@ def resolve_dynamic_seats(
     seen: set[str] = set()
     groups = [
         [heartbeat_owner],
+        declared_seats,
         bootstrap_seats,
         legacy_seats if compat_legacy_seats else [],
         sorted(
@@ -202,6 +204,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
     }
     legacy_seats = [str(item) for item in data.get("legacy_seats", list(legacy_seat_roles.keys()))]
     bootstrap_seats = [str(item) for item in dynamic.get("bootstrap_seats", data.get("seats", []))]
+    declared_seats = [str(item) for item in data.get("seats", [])]
     default_start_seats = [
         str(item) for item in dynamic.get("default_start_seats", bootstrap_seats)
     ]
@@ -215,6 +218,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
     seats = (
         resolve_dynamic_seats(
             heartbeat_owner=heartbeat_owner,
+            declared_seats=declared_seats,
             bootstrap_seats=bootstrap_seats,
             compat_legacy_seats=compat_legacy_seats,
             legacy_seats=legacy_seats,
@@ -589,14 +593,14 @@ def heartbeat_state(profile: HarnessProfile, seat: str) -> dict[str, Any]:
 
 
 def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
-    bootstrap_seats = list(profile.bootstrap_seats or profile.seats)
+    materialized_seats = list(profile.seats)
     lines = [
         "version = 1",
         "",
         f'project_name = "{project_name}"',
         f'repo_root = "{repo_root}"',
-        f"seat_order = {json.dumps(bootstrap_seats)}",
-        f"bootstrap_seats = {json.dumps(bootstrap_seats)}",
+        f"seat_order = {json.dumps(materialized_seats)}",
+        f"bootstrap_seats = {json.dumps(materialized_seats)}",
     ]
     for seat_id, override in profile.seat_overrides.items():
         if not override:
@@ -700,6 +704,46 @@ def render_status_doc() -> str:
     return "# Status\n"
 
 
+def render_idle_todo(profile: HarnessProfile, seat: str) -> str:
+    role = profile.seat_roles.get(seat, "specialist")
+    if seat == profile.heartbeat_owner:
+        reply_to = profile.default_notify_target
+        title = "等待项目启动与群联调"
+        objective = (
+            f"{seat} template已初始化。若当前项目走 OpenClaw/Feishu 链路，且 planner 已经启动，"
+            "请主动要求用户让 main agent 拉群并回报 group ID。无需 open_id。"
+            "main 在群里保持 requireMention=true；warden/koder 在该群里设为 requireMention=false，"
+            "拿到 group ID 后，立即委派 planner 做飞书联调测试，提示用户“收到测试消息即可回复希望完成什么任务”，"
+            "并并行拉起 reviewer 进入审查待命，再继续 planner 初始化完成广播。"
+        )
+    elif seat == profile.active_loop_owner or role in {"planner", "planner-dispatcher"}:
+        reply_to = profile.heartbeat_owner
+        title = "等待 frontstage intake / 初始化广播"
+        objective = (
+            f"{seat} template已初始化。当前没有已派发任务。若你刚完成 planner 初始化，"
+            "请尽快把 ready 状态回给 koder/frontstage，方便其完成 Feishu 群联调与 planner-ready 广播；"
+            "若 frontstage 提供了 group ID，请先完成群联调测试并向用户发送首条测试消息，提示其收到后直接回复希望完成什么任务；"
+            "否则先阅读 WORKSPACE_CONTRACT.toml 与 workspace guide，等待新的 dispatch。"
+        )
+    else:
+        reply_to = profile.active_loop_owner
+        title = "等待任务派发"
+        objective = (
+            f"{seat} template已初始化。当前没有已派发任务，先阅读 WORKSPACE_CONTRACT.toml 与 workspace guide，随后等待新的 dispatch。"
+        )
+    return (
+        "task_id: null\n"
+        f"project: {profile.project_name}\n"
+        f"owner: {seat}\n"
+        "status: pending\n"
+        f"title: {title}\n\n"
+        f"# Objective\n\n{objective}\n\n"
+        "# Dispatch\n\n"
+        "source: null\n"
+        f"reply_to: {reply_to}\n"
+    )
+
+
 def render_status_wrapper(profile: HarnessProfile) -> str:
     seats = " ".join(tracked_runtime_seats(profile))
     return (
@@ -717,7 +761,7 @@ def render_patrol_wrapper(profile: HarnessProfile) -> str:
     return (
         "#!/bin/bash\n"
         "set -euo pipefail\n\n"
-        f'exec python3 {REPO_ROOT / ".agents" / "skills" / "gstack-harness" / "scripts" / "patrol_supervisor.py"} --profile {profile.profile_path} "$@"\n'
+        f'exec python3 {REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "patrol_supervisor.py"} --profile {profile.profile_path} "$@"\n'
     )
 
 
@@ -754,12 +798,10 @@ def render_heartbeat_md(profile: HarnessProfile, seat: str) -> str:
         "- `consumed` = target seat durable ACK exists in `TODO.md`\n"
         "- only `assigned + notified + consumed` counts as a healthy handoff\n\n"
         "Review verdict routing matrix:\n\n"
-        "- `APPROVED` -> `engineer-d`\n"
-        "- `APPROVED_WITH_NITS` -> `engineer-d`\n"
-        "- `CHANGES_REQUESTED` -> `engineer-a`\n"
-        f"- `BLOCKED` -> `{profile.heartbeat_owner}`\n"
-        f"- `DECISION_NEEDED` -> `{profile.heartbeat_owner}`\n"
-        f"- `engineer-c` only delivers the verdict; `{profile.active_loop_owner}` still chooses the next hop\n\n"
+        f"- `APPROVED` / `APPROVED_WITH_NITS` -> `{profile.heartbeat_owner}`\n"
+        "- `CHANGES_REQUESTED` -> builder seat (from profile `seat_roles`, or `active_loop_owner`)\n"
+        f"- `BLOCKED` / `DECISION_NEEDED` -> `{profile.heartbeat_owner}`\n"
+        f"- Reviewer seat delivers verdicts; `{profile.active_loop_owner}` chooses the next hop\n\n"
         "Guardrails:\n\n"
         f"- `{profile.active_loop_owner}` remains the active loop owner and decision owner.\n"
         f"- `{profile.heartbeat_owner}` owns confirmations, approvals, reminders, and other procedural unblock actions.\n"
@@ -801,8 +843,17 @@ def render_heartbeat_manifest(profile: HarnessProfile, seat: str) -> str:
 def materialize_profile_runtime(profile: HarnessProfile) -> None:
     ensure_dir(profile.tasks_root)
     ensure_dir(profile.handoff_dir)
-    for seat in (profile.bootstrap_seats or profile.seats):
+    all_seats: list[str] = []
+    for seat in [*(profile.bootstrap_seats or []), *profile.seats]:
+        if seat and seat not in all_seats:
+            all_seats.append(seat)
+    if not all_seats:
+        all_seats = list(profile.seats)
+    for seat in all_seats:
         ensure_dir(profile.tasks_root / seat)
+        todo_path = profile.todo_path(seat)
+        if not todo_path.exists():
+            write_text(todo_path, render_idle_todo(profile, seat))
     if not profile.project_doc.exists():
         write_text(profile.project_doc, render_project_doc(profile))
     if not profile.tasks_doc.exists():

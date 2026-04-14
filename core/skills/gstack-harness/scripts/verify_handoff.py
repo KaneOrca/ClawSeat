@@ -52,7 +52,8 @@ def main() -> int:
     consumed = bool(ack_line)
     verdict = extract_canonical_verdict(delivery_path) if delivery_path.exists() else None
     verdict_valid = True
-    if receipt.get("kind") == "completion" and args.source == "engineer-c":
+    source_role = profile.seat_roles.get(args.source, "")
+    if receipt.get("kind") == "completion" and source_role == "reviewer":
         verdict_valid = verdict in VALID_VERDICTS
     payload = {
         "task_id": args.task_id,

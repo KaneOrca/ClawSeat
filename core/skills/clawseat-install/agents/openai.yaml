@@ -1,0 +1,7 @@
+interface:
+  display_name: "ClawSeat Install"
+  short_description: "Install, bootstrap, and resume existing seats"
+  default_prompt: "Use $clawseat-install to set up ClawSeat, detect and reuse any existing workspace or TUI seat, and handle user/agent onboarding handoffs cleanly."
+
+policy:
+  allow_implicit_invocation: true

@@ -6,7 +6,7 @@ Default chain shape:
 
 One common project mapping is:
 
-- `user -> koder -> engineer-b -> specialist -> engineer-b -> ... -> koder -> user`
+- `user -> koder -> planner -> specialist -> planner -> ... -> koder -> user`
 
 ## Dispatch protocol
 
@@ -24,7 +24,7 @@ One common project mapping is:
      - who the target seat is
      - who the target seat should reply to when complete
    - in a multi-project setup, never resolve a bare seat id with
-     `agentctl.sh session-name engineer-b`
+     `agentctl.sh session-name planner`
    - use either the canonical tmux session name directly, or pass
      `--project <project>` to the transport helper
    - prefer `scripts/notify_seat.py`
