@@ -1,0 +1,1079 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from agent_admin_heartbeat import (
+    HeartbeatHandlers,
+    HeartbeatHooks,
+)
+from agent_admin_commands import CommandHandlers, CommandHooks
+from agent_admin_config import (
+    AGENT_ADMIN_SH,
+    AGENTCTL_SH,
+    AGENTS_ROOT,
+    CODEX_API_PROVIDER_CONFIGS,
+    CURRENT_PROJECT_PATH,
+    DEFAULT_PATH,
+    DEFAULT_TOOL_ARGS,
+    ENGINEERS_ROOT,
+    HARNESS_PROFILE_ROOT,
+    HOME,
+    LEGACY_ASSIGNMENTS_PATH,
+    LEGACY_CONFIG_ROOT,
+    LEGACY_ENGINEERS,
+    LEGACY_GEMINI_SANDBOXES,
+    LEGACY_IDENTITIES_PATH,
+    LEGACY_IDENTITIES_ROOT,
+    LEGACY_ROOT,
+    LEGACY_SECRETS_ROOT,
+    PROJECTS_ROOT,
+    PROJECT_DEFAULTS,
+    REPO_ROOT,
+    RUNTIME_ROOT,
+    SEND_AND_VERIFY_SH,
+    SECRETS_ROOT,
+    SESSIONS_ROOT,
+    STATE_ROOT,
+    TEMPLATES_ROOT,
+    TOOL_BINARIES,
+    WORKSPACES_ROOT,
+)
+from agent_admin_crud import CrudHandlers, CrudHooks
+from agent_admin_info import InfoHandlers, InfoHooks
+from agent_admin_legacy import LegacyHandlers, LegacyHooks
+from agent_admin_parser import ParserHooks, build_parser as build_agent_admin_parser
+from agent_admin_runtime import (
+    common_env,
+    detect_macos_system_proxies,
+    ensure_empty_env_file,
+    ensure_secret_permissions,
+    identity_name,
+    parse_env_file,
+    runtime_dir_for_identity,
+    secret_file_for,
+    session_name_for,
+    write_codex_api_config,
+    write_env_file,
+)
+from agent_admin_resolve import ResolveHandlers, ResolveHooks
+from agent_admin_session import SessionHooks, SessionService
+from agent_admin_store import StoreHandlers, StoreHooks
+from agent_admin_switch import SwitchHandlers, SwitchHooks
+from agent_admin_template import TemplateHandlers, TemplateHooks
+from agent_admin_tui import TuiHooks, run_tui_app
+from agent_admin_window import (
+    AgentAdminWindowError,
+    build_monitor_layout,
+    display_name_for,
+    open_dashboard_window,
+    open_engineer_window,
+    open_monitor_window,
+    open_project_tabs_window,
+    tmux_has_session,
+)
+from agent_admin_workspace import (
+    render_aliases_lines,
+    render_authority_lines,
+    render_communication_protocol_lines,
+    render_dispatch_playbook_lines,
+    render_harness_runtime_lines,
+    render_loaded_skills_lines,
+    render_optional_skills_catalog,
+    render_project_seat_map_lines,
+    render_read_first_lines,
+    render_role_details_lines,
+    render_role_line,
+    render_seat_boundary_lines,
+    workspace_contract_fingerprint,
+    workspace_contract_payload,
+    render_workspace_contract_text,
+)
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib
+
+
+
+@dataclass
+class Engineer:
+    engineer_id: str
+    display_name: str
+    aliases: list[str] = field(default_factory=list)
+    role: str = ""
+    role_details: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
+    human_facing: bool = False
+    active_loop_owner: bool = False
+    dispatch_authority: bool = False
+    patrol_authority: bool = False
+    unblock_authority: bool = False
+    escalation_authority: bool = False
+    remind_active_loop_owner: bool = False
+    review_authority: bool = False
+    qa_authority: bool = False
+    design_authority: bool = False
+    default_tool: str = ""
+    default_auth_mode: str = ""
+    default_provider: str = ""
+
+
+@dataclass
+class SessionRecord:
+    engineer_id: str
+    project: str
+    tool: str
+    auth_mode: str
+    provider: str
+    identity: str
+    workspace: str
+    runtime_dir: str
+    session: str
+    bin_path: str
+    monitor: bool = True
+    legacy_sessions: list[str] = field(default_factory=list)
+    launch_args: list[str] = field(default_factory=list)
+    secret_file: str = ""
+    wrapper: str = ""
+
+
+@dataclass
+class Project:
+    name: str
+    repo_root: str
+    monitor_session: str
+    engineers: list[str]
+    monitor_engineers: list[str]
+    template_name: str = ""
+    seat_overrides: dict[str, dict[str, object]] | None = None
+    window_mode: str = "project-monitor"
+    monitor_max_panes: int = 4
+    open_detail_windows: bool = False
+
+
+class AgentAdminError(RuntimeError):
+    pass
+
+
+def q(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def q_array(values: list[str]) -> str:
+    return "[" + ", ".join(q(v) for v in values) + "]"
+
+
+def ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def write_text(path: Path, content: str, mode: int | None = None) -> None:
+    ensure_dir(path.parent)
+    path.write_text(content)
+    if mode is not None:
+        path.chmod(mode)
+
+
+def load_toml(path: Path) -> dict:
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def normalize_name(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9-]+", "-", value.strip().lower())
+    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
+    if not normalized:
+        raise AgentAdminError("Name cannot be empty")
+    return normalized
+
+
+def ensure_root_layout() -> None:
+    for path in (
+        AGENTS_ROOT,
+        PROJECTS_ROOT,
+        ENGINEERS_ROOT,
+        SESSIONS_ROOT,
+        WORKSPACES_ROOT,
+        RUNTIME_ROOT,
+        SECRETS_ROOT,
+        LEGACY_ROOT,
+        STATE_ROOT,
+    ):
+        ensure_dir(path)
+
+
+def project_path(project: str) -> Path:
+    return STORE_HANDLERS.project_path(project)
+
+
+def engineer_path(engineer_id: str) -> Path:
+    return STORE_HANDLERS.engineer_path(engineer_id)
+
+
+def session_path(project: str, engineer_id: str) -> Path:
+    return STORE_HANDLERS.session_path(project, engineer_id)
+
+
+def load_project(name: str) -> Project:
+    return STORE_HANDLERS.load_project(name)
+
+
+def load_projects() -> dict[str, Project]:
+    return STORE_HANDLERS.load_projects()
+
+
+def get_current_project_name(projects: dict[str, Project] | None = None) -> str | None:
+    return STORE_HANDLERS.get_current_project_name(projects)
+
+
+def set_current_project(name: str) -> None:
+    STORE_HANDLERS.set_current_project(name)
+
+
+def load_project_or_current(name: str | None) -> Project:
+    return STORE_HANDLERS.load_project_or_current(name)
+
+
+def load_engineer(engineer_id: str) -> Engineer:
+    return STORE_HANDLERS.load_engineer(engineer_id)
+
+
+def load_engineers() -> dict[str, Engineer]:
+    return STORE_HANDLERS.load_engineers()
+
+
+def load_session(project: str, engineer_id: str) -> SessionRecord:
+    return STORE_HANDLERS.load_session(project, engineer_id)
+
+
+def load_sessions() -> dict[tuple[str, str], SessionRecord]:
+    return STORE_HANDLERS.load_sessions()
+
+
+def load_project_sessions(project: str) -> dict[str, SessionRecord]:
+    return STORE_HANDLERS.load_project_sessions(project)
+
+
+def load_template(name_or_path: str) -> dict:
+    return STORE_HANDLERS.load_template(name_or_path)
+
+
+def merge_template_local(template: dict, local: dict) -> dict:
+    return STORE_HANDLERS.merge_template_local(template, local)
+
+
+def write_project(project: Project) -> None:
+    STORE_HANDLERS.write_project(project)
+
+
+def project_template_context(project: Project) -> tuple[dict[str, Engineer], list[str], list[dict[str, object]]] | None:
+    return STORE_HANDLERS.project_template_context(project)
+
+
+def write_engineer(engineer: Engineer) -> None:
+    STORE_HANDLERS.write_engineer(engineer)
+
+
+def write_session(session: SessionRecord) -> None:
+    STORE_HANDLERS.write_session(session)
+
+
+def find_active_loop_owner(
+    project: Project,
+    *,
+    project_engineers: dict[str, Engineer] | None = None,
+    engineer_order: list[str] | None = None,
+) -> str | None:
+    engineers = project_engineers or load_engineers()
+    ordered_engineer_ids = list(engineer_order or project.engineers or engineers.keys())
+    for engineer_id in ordered_engineer_ids:
+        engineer = engineers.get(engineer_id)
+        if engineer and engineer.active_loop_owner:
+            return engineer.engineer_id
+    return None
+
+
+def render_heartbeat_text(session: SessionRecord, project: Project, engineer: Engineer) -> str | None:
+    return HEARTBEAT_HANDLERS.render_heartbeat_text(session, project, engineer)
+
+
+def render_heartbeat_manifest_text(
+    session: SessionRecord,
+    project: Project,
+    engineer: Engineer,
+    *,
+    project_engineers: dict[str, Engineer] | None = None,
+    engineer_order: list[str] | None = None,
+) -> str | None:
+    return HEARTBEAT_HANDLERS.render_heartbeat_manifest_text(
+        session,
+        project,
+        engineer,
+        project_engineers=project_engineers,
+        engineer_order=engineer_order,
+    )
+
+
+def heartbeat_manifest_path(session: SessionRecord) -> Path:
+    return HEARTBEAT_HANDLERS.manifest_path(session)
+
+
+def heartbeat_receipt_path(session: SessionRecord) -> Path:
+    return HEARTBEAT_HANDLERS.receipt_path(session)
+
+
+def load_heartbeat_manifest(session: SessionRecord) -> dict | None:
+    return HEARTBEAT_HANDLERS.load_manifest(session)
+
+
+def load_heartbeat_receipt(session: SessionRecord) -> dict | None:
+    return HEARTBEAT_HANDLERS.load_receipt(session)
+
+
+def heartbeat_manifest_fingerprint(manifest: dict) -> str:
+    return HEARTBEAT_HANDLERS.manifest_fingerprint(manifest)
+
+
+def heartbeat_install_fingerprint(session: SessionRecord, manifest: dict) -> str:
+    return HEARTBEAT_HANDLERS.install_fingerprint(session, manifest)
+
+
+def heartbeat_receipt_matches_manifest(receipt: dict | None, manifest: dict, session: SessionRecord) -> bool:
+    return HEARTBEAT_HANDLERS.receipt_matches_manifest(receipt, manifest, session)
+
+
+def write_heartbeat_receipt(
+    session: SessionRecord,
+    manifest: dict,
+    *,
+    verification_method: str,
+    evidence: str,
+    status: str = "verified",
+    job_id: str = "",
+    schedule: str = "",
+) -> None:
+    HEARTBEAT_HANDLERS.write_receipt(
+        session,
+        manifest,
+        verification_method=verification_method,
+        evidence=evidence,
+        status=status,
+        job_id=job_id,
+        schedule=schedule,
+    )
+
+
+def provision_session_heartbeat(
+    session: SessionRecord,
+    *,
+    force: bool = False,
+    dry_run: bool = False,
+) -> tuple[bool, str]:
+    return HEARTBEAT_HANDLERS.provision_session_heartbeat(
+        session,
+        force=force,
+        dry_run=dry_run,
+    )
+
+
+STORE_HANDLERS = StoreHandlers(
+    StoreHooks(
+        error_cls=AgentAdminError,
+        project_cls=Project,
+        engineer_cls=Engineer,
+        session_record_cls=SessionRecord,
+        projects_root=PROJECTS_ROOT,
+        engineers_root=ENGINEERS_ROOT,
+        sessions_root=SESSIONS_ROOT,
+        workspaces_root=WORKSPACES_ROOT,
+        current_project_path=CURRENT_PROJECT_PATH,
+        templates_root=TEMPLATES_ROOT,
+        tool_binaries=TOOL_BINARIES,
+        normalize_name=normalize_name,
+        ensure_dir=ensure_dir,
+        write_text=write_text,
+        load_toml=load_toml,
+        q=q,
+        q_array=q_array,
+        identity_name=identity_name,
+        runtime_dir_for_identity=runtime_dir_for_identity,
+        secret_file_for=secret_file_for,
+        session_name_for=session_name_for,
+    )
+)
+
+
+def render_template_text(
+    tool: str,
+    session: SessionRecord,
+    project: Project,
+    engineer_override: Engineer | None = None,
+    project_engineers: dict[str, Engineer] | None = None,
+    engineer_order: list[str] | None = None,
+) -> dict[str, str]:
+    return TEMPLATE_HANDLERS.render_template_text(
+        tool,
+        session,
+        project,
+        engineer_override=engineer_override,
+        project_engineers=project_engineers,
+        engineer_order=engineer_order,
+    )
+
+
+def apply_template(
+    session: SessionRecord,
+    project: Project,
+    engineer_override: Engineer | None = None,
+    optional_skills: list[dict[str, object]] | None = None,
+    project_engineers: dict[str, Engineer] | None = None,
+    engineer_order: list[str] | None = None,
+) -> None:
+    TEMPLATE_HANDLERS.apply_template(
+        session,
+        project,
+        engineer_override=engineer_override,
+        optional_skills=optional_skills,
+        project_engineers=project_engineers,
+        engineer_order=engineer_order,
+    )
+
+
+TEMPLATE_HANDLERS = TemplateHandlers(
+    TemplateHooks(
+        ensure_dir=ensure_dir,
+        write_text=write_text,
+        load_engineer=load_engineer,
+        project_template_context=project_template_context,
+        q=q,
+        render_authority_lines=render_authority_lines,
+        render_read_first_lines=render_read_first_lines,
+        render_harness_runtime_lines=render_harness_runtime_lines,
+        render_project_seat_map_lines=render_project_seat_map_lines,
+        render_seat_boundary_lines=render_seat_boundary_lines,
+        render_communication_protocol_lines=render_communication_protocol_lines,
+        render_dispatch_playbook_lines=render_dispatch_playbook_lines,
+        render_loaded_skills_lines=render_loaded_skills_lines,
+        render_optional_skills_catalog=render_optional_skills_catalog,
+        workspace_contract_payload=workspace_contract_payload,
+        workspace_contract_fingerprint=workspace_contract_fingerprint,
+        render_workspace_contract_text=render_workspace_contract_text,
+        render_role_line=render_role_line,
+        render_role_details_lines=render_role_details_lines,
+        render_aliases_lines=render_aliases_lines,
+        render_heartbeat_text=render_heartbeat_text,
+        render_heartbeat_manifest_text=render_heartbeat_manifest_text,
+    )
+)
+
+
+def build_runtime(session: SessionRecord) -> tuple[str, dict[str, str]]:
+    return RESOLVE_HANDLERS.build_runtime(session)
+
+
+def default_launch_args(session: SessionRecord) -> list[str]:
+    return RESOLVE_HANDLERS.default_launch_args(session)
+
+
+def resolve_engineer(name: str, engineers: dict[str, Engineer] | None = None) -> Engineer:
+    return RESOLVE_HANDLERS.resolve_engineer(name, engineers)
+
+
+def resolve_engineer_session(
+    engineer_name: str,
+    project_name: str | None = None,
+    sessions: dict[tuple[str, str], SessionRecord] | None = None,
+    engineers: dict[str, Engineer] | None = None,
+) -> SessionRecord:
+    return RESOLVE_HANDLERS.resolve_engineer_session(
+        engineer_name,
+        project_name=project_name,
+        sessions=sessions,
+        engineers=engineers,
+    )
+
+
+def resolve_session(
+    name: str,
+    project_name: str | None = None,
+    *,
+    prefer_current_project: bool = True,
+) -> str:
+    return RESOLVE_HANDLERS.resolve_session(
+        name,
+        project_name=project_name,
+        prefer_current_project=prefer_current_project,
+    )
+
+
+def build_engineer_exec(session: SessionRecord) -> list[str]:
+    return SESSION_SERVICE.build_engineer_exec(session)
+
+
+def session_start_engineer(session: SessionRecord, reset: bool = False) -> None:
+    SESSION_SERVICE.start_engineer(session, reset=reset)
+
+
+def session_stop_engineer(session: SessionRecord) -> None:
+    SESSION_SERVICE.stop_engineer(session)
+
+
+def session_status(session: SessionRecord) -> str:
+    return SESSION_SERVICE.status(session)
+
+
+def session_start_project(project: Project, ensure_monitor: bool = True, reset: bool = False) -> None:
+    SESSION_SERVICE.start_project(project, ensure_monitor=ensure_monitor, reset=reset)
+
+
+def project_engineer_context(project: Project) -> tuple[dict[str, Engineer], list[str]]:
+    return SESSION_SERVICE.project_engineer_context(project)
+
+
+def project_autostart_engineer_ids(project: Project, *, ensure_monitor: bool = False) -> list[str]:
+    return SESSION_SERVICE.project_autostart_engineer_ids(project, ensure_monitor=ensure_monitor)
+
+
+def seat_requires_launch_confirmation(project: Project, engineer_id: str) -> bool:
+    return SESSION_SERVICE.seat_requires_launch_confirmation(project, engineer_id)
+
+
+def display_label(engineer: Engineer | None, fallback: str) -> str:
+    return RESOLVE_HANDLERS.display_label(engineer, fallback)
+
+
+RESOLVE_HANDLERS = ResolveHandlers(
+    ResolveHooks(
+        error_cls=AgentAdminError,
+        default_tool_args=DEFAULT_TOOL_ARGS,
+        codex_api_provider_configs=CODEX_API_PROVIDER_CONFIGS,
+        common_env=common_env,
+        ensure_dir=ensure_dir,
+        parse_env_file=parse_env_file,
+        write_codex_api_config=write_codex_api_config,
+        write_text=write_text,
+        load_project=load_project,
+        load_projects=load_projects,
+        load_engineers=load_engineers,
+        load_sessions=load_sessions,
+        get_current_project_name=get_current_project_name,
+        display_name_for=display_name_for,
+    )
+)
+
+
+def create_engineer_profile(
+    engineer_id: str,
+    tool: str,
+    auth_mode: str,
+    provider: str,
+    role: str = "",
+    display_name: str = "",
+    role_details: list[str] | None = None,
+    skills: list[str] | None = None,
+    aliases: list[str] | None = None,
+    human_facing: bool = False,
+    active_loop_owner: bool = False,
+    dispatch_authority: bool = False,
+    patrol_authority: bool = False,
+    unblock_authority: bool = False,
+    escalation_authority: bool = False,
+    remind_active_loop_owner: bool = False,
+    review_authority: bool = False,
+    qa_authority: bool = False,
+    design_authority: bool = False,
+) -> Engineer:
+    return STORE_HANDLERS.create_engineer_profile(
+        engineer_id=engineer_id,
+        tool=tool,
+        auth_mode=auth_mode,
+        provider=provider,
+        role=role,
+        display_name=display_name,
+        role_details=role_details,
+        skills=skills,
+        aliases=aliases,
+        human_facing=human_facing,
+        active_loop_owner=active_loop_owner,
+        dispatch_authority=dispatch_authority,
+        patrol_authority=patrol_authority,
+        unblock_authority=unblock_authority,
+        escalation_authority=escalation_authority,
+        remind_active_loop_owner=remind_active_loop_owner,
+        review_authority=review_authority,
+        qa_authority=qa_authority,
+        design_authority=design_authority,
+    )
+
+
+def merge_engineer_profile_with_template(profile: Engineer, engineer_spec: dict) -> Engineer:
+    return STORE_HANDLERS.merge_engineer_profile_with_template(profile, engineer_spec)
+
+
+def create_session_record(
+    engineer_id: str,
+    project: Project,
+    tool: str,
+    auth_mode: str,
+    provider: str,
+    monitor: bool = True,
+    legacy_session: str = "",
+    launch_args: list[str] | None = None,
+    wrapper: str = "",
+) -> SessionRecord:
+    return STORE_HANDLERS.create_session_record(
+        engineer_id=engineer_id,
+        project=project,
+        tool=tool,
+        auth_mode=auth_mode,
+        provider=provider,
+        monitor=monitor,
+        legacy_session=legacy_session,
+        launch_args=launch_args,
+        wrapper=wrapper,
+    )
+
+
+def archive_if_exists(path: Path, category: str) -> None:
+    LEGACY_HANDLERS.archive_if_exists(path, category)
+
+
+def migrate_session_model() -> None:
+    LEGACY_HANDLERS.migrate_session_model()
+
+
+def migrate_legacy(args: argparse.Namespace) -> int:
+    return LEGACY_HANDLERS.migrate_legacy(args)
+
+
+def engineer_summary(engineer: Engineer, sessions: dict[tuple[str, str], SessionRecord] | None = None) -> str:
+    return INFO_HANDLERS.engineer_summary(engineer, sessions)
+
+
+def session_summary(session: SessionRecord) -> str:
+    return INFO_HANDLERS.session_summary(session)
+
+
+def cmd_list_projects(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.list_projects(args)
+
+
+def cmd_list_engineers(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.list_engineers(args)
+
+
+def cmd_show_project(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.show_project(args)
+
+
+def cmd_show_engineer(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.show_engineer(args)
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.show(args)
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.resolve(args)
+
+
+def cmd_show_identity(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.show_identity(args)
+
+
+def cmd_list_identities(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.list_identities(args)
+
+
+def cmd_run_engineer(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.run_engineer(args)
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.start(args)
+
+
+def cmd_start_identity(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.start_identity(args)
+
+
+def cmd_session_name(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.session_name(args)
+
+
+def cmd_project_open(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_open(args)
+
+
+def cmd_project_create(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_create(args)
+
+
+def cmd_project_bootstrap(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_bootstrap(args)
+
+
+def cmd_project_use(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_use(args)
+
+
+def cmd_project_current(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_current(args)
+
+
+def cmd_project_layout_set(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_layout_set(args)
+
+
+def cmd_project_delete(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_delete(args)
+
+
+def cmd_session_start_engineer(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_start_engineer(args)
+
+
+def cmd_session_provision_heartbeat(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_provision_heartbeat(args)
+
+
+def cmd_session_stop_engineer(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_stop_engineer(args)
+
+
+def cmd_session_start_project(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_start_project(args)
+
+
+def cmd_session_status(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_status(args)
+
+
+def ensure_api_secret_ready(session: SessionRecord) -> None:
+    SWITCH_HANDLERS.ensure_api_secret_ready(session)
+
+
+def expected_identity_for_session(session: SessionRecord) -> str:
+    return SWITCH_HANDLERS.expected_identity_for_session(session)
+
+
+def reconcile_session_runtime(session: SessionRecord) -> SessionRecord:
+    return SWITCH_HANDLERS.reconcile_session_runtime(session)
+
+
+SWITCH_HANDLERS = SwitchHandlers(
+    SwitchHooks(
+        error_cls=AgentAdminError,
+        legacy_secrets_root=LEGACY_SECRETS_ROOT,
+        tool_binaries=TOOL_BINARIES,
+        identity_name=identity_name,
+        runtime_dir_for_identity=runtime_dir_for_identity,
+        secret_file_for=secret_file_for,
+        session_name_for=session_name_for,
+        ensure_dir=ensure_dir,
+        ensure_secret_permissions=ensure_secret_permissions,
+        write_env_file=write_env_file,
+        parse_env_file=parse_env_file,
+        load_project=load_project,
+        load_project_or_current=load_project_or_current,
+        load_session=load_session,
+        write_session=write_session,
+        apply_template=apply_template,
+        session_stop_engineer=session_stop_engineer,
+        session_record_cls=SessionRecord,
+        normalize_name=normalize_name,
+    )
+)
+
+
+SESSION_SERVICE = SessionService(
+    SessionHooks(
+        agentctl_path=str(AGENTCTL_SH),
+        load_project=load_project,
+        apply_template=apply_template,
+        reconcile_session_runtime=reconcile_session_runtime,
+        ensure_api_secret_ready=ensure_api_secret_ready,
+        load_project_sessions=load_project_sessions,
+        project_template_context=project_template_context,
+        load_engineers=load_engineers,
+        tmux_has_session=tmux_has_session,
+        build_monitor_layout=build_monitor_layout,
+    )
+)
+
+HEARTBEAT_HANDLERS = HeartbeatHandlers(
+    HeartbeatHooks(
+        error_cls=AgentAdminError,
+        send_and_verify_sh=str(SEND_AND_VERIFY_SH),
+        q=q,
+        q_array=q_array,
+        ensure_dir=ensure_dir,
+        write_text=write_text,
+        load_toml=load_toml,
+        tmux_has_session=tmux_has_session,
+        find_active_loop_owner=find_active_loop_owner,
+    )
+)
+
+COMMAND_HANDLERS = CommandHandlers(
+    CommandHooks(
+        error_cls=AgentAdminError,
+        load_project_or_current=load_project_or_current,
+        resolve_engineer_session=resolve_engineer_session,
+        provision_session_heartbeat=provision_session_heartbeat,
+        load_project_sessions=load_project_sessions,
+        tmux_has_session=tmux_has_session,
+        load_projects=load_projects,
+        get_current_project_name=get_current_project_name,
+        session_service=SESSION_SERVICE,
+        open_monitor_window=open_monitor_window,
+        open_dashboard_window=open_dashboard_window,
+        open_project_tabs_window=open_project_tabs_window,
+        open_engineer_window=open_engineer_window,
+        load_engineers=load_engineers,
+    )
+)
+
+INFO_HANDLERS = InfoHandlers(
+    InfoHooks(
+        error_cls=AgentAdminError,
+        load_projects=load_projects,
+        load_project_or_current=load_project_or_current,
+        load_project=load_project,
+        load_engineers=load_engineers,
+        load_sessions=load_sessions,
+        project_template_context=project_template_context,
+        resolve_engineer=resolve_engineer,
+        resolve_engineer_session=resolve_engineer_session,
+        resolve_session=resolve_session,
+        display_label=display_label,
+        session_status=session_status,
+        build_runtime=build_runtime,
+        default_launch_args=default_launch_args,
+    )
+)
+
+CRUD_HANDLERS = CrudHandlers(
+    CrudHooks(
+        error_cls=AgentAdminError,
+        project_cls=Project,
+        engineer_cls=Engineer,
+        session_record_cls=SessionRecord,
+        sessions_root=SESSIONS_ROOT,
+        workspaces_root=WORKSPACES_ROOT,
+        current_project_path=CURRENT_PROJECT_PATH,
+        normalize_name=normalize_name,
+        project_path=project_path,
+        engineer_path=engineer_path,
+        session_path=session_path,
+        load_project=load_project,
+        load_projects=load_projects,
+        load_project_or_current=load_project_or_current,
+        load_engineer=load_engineer,
+        load_sessions=load_sessions,
+        load_template=load_template,
+        load_toml=load_toml,
+        merge_template_local=merge_template_local,
+        write_project=write_project,
+        write_engineer=write_engineer,
+        write_session=write_session,
+        set_current_project=set_current_project,
+        get_current_project_name=get_current_project_name,
+        show_project=cmd_show_project,
+        resolve_engineer=resolve_engineer,
+        resolve_engineer_session=resolve_engineer_session,
+        create_engineer_profile=create_engineer_profile,
+        merge_engineer_profile_with_template=merge_engineer_profile_with_template,
+        create_session_record=create_session_record,
+        apply_template=apply_template,
+        ensure_empty_env_file=ensure_empty_env_file,
+        ensure_dir=ensure_dir,
+        write_text=write_text,
+        write_env_file=write_env_file,
+        parse_env_file=parse_env_file,
+        archive_if_exists=archive_if_exists,
+        identity_name=identity_name,
+        runtime_dir_for_identity=runtime_dir_for_identity,
+        secret_file_for=secret_file_for,
+        session_name_for=session_name_for,
+        ensure_secret_permissions=ensure_secret_permissions,
+        session_service=SESSION_SERVICE,
+        tmux_has_session=tmux_has_session,
+    )
+)
+
+LEGACY_HANDLERS = LegacyHandlers(
+    LegacyHooks(
+        legacy_root=LEGACY_ROOT,
+        engineers_root=ENGINEERS_ROOT,
+        legacy_gemini_sandboxes=LEGACY_GEMINI_SANDBOXES,
+        project_defaults=PROJECT_DEFAULTS,
+        legacy_engineers=LEGACY_ENGINEERS,
+        error_cls=AgentAdminError,
+        project_cls=Project,
+        engineer_cls=Engineer,
+        session_record_cls=SessionRecord,
+        tool_binaries=TOOL_BINARIES,
+        ensure_root_layout=ensure_root_layout,
+        ensure_dir=ensure_dir,
+        project_path=project_path,
+        load_toml=load_toml,
+        load_projects=load_projects,
+        write_project=write_project,
+        write_engineer=write_engineer,
+        write_session=write_session,
+        apply_template=apply_template,
+        create_engineer_profile=create_engineer_profile,
+        create_session_record=create_session_record,
+        write_env_file=write_env_file,
+        write_text=write_text,
+        ensure_secret_permissions=ensure_secret_permissions,
+    )
+)
+
+TUI_HOOKS = TuiHooks(
+    error_cls=AgentAdminError,
+    load_projects=load_projects,
+    load_engineers=load_engineers,
+    get_current_project_name=get_current_project_name,
+    set_current_project=set_current_project,
+    load_project_sessions=load_project_sessions,
+    display_name_for=display_name_for,
+    engineer_summary=engineer_summary,
+    session_summary=session_summary,
+    session_status=session_status,
+    normalize_name=normalize_name,
+    cmd_project_create=CRUD_HANDLERS.project_create,
+    cmd_project_layout_set=CRUD_HANDLERS.project_layout_set,
+    session_start_engineer=SESSION_SERVICE.start_engineer,
+    cmd_window_open_dashboard=COMMAND_HANDLERS.window_open_dashboard,
+    open_engineer_window=open_engineer_window,
+    cmd_engineer_create=CRUD_HANDLERS.engineer_create,
+    cmd_engineer_rename=CRUD_HANDLERS.engineer_rename,
+    cmd_engineer_rebind=CRUD_HANDLERS.engineer_rebind,
+    cmd_engineer_secret_set=CRUD_HANDLERS.engineer_secret_set,
+    cmd_engineer_delete=CRUD_HANDLERS.engineer_delete,
+)
+
+def cmd_session_switch_harness(args: argparse.Namespace) -> int:
+    return SWITCH_HANDLERS.session_switch_harness(args)
+
+
+def cmd_session_switch_auth(args: argparse.Namespace) -> int:
+    return SWITCH_HANDLERS.session_switch_auth(args)
+
+
+def cmd_window_open_monitor(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.window_open_monitor(args)
+
+
+def cmd_window_open_dashboard(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.window_open_dashboard(args)
+
+
+def cmd_window_open_engineer(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.window_open_engineer(args)
+
+
+def cmd_engineer_create(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_create(args)
+
+
+def cmd_engineer_delete(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_delete(args)
+
+
+def cmd_engineer_rename(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_rename(args)
+
+
+def cmd_engineer_rebind(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_rebind(args)
+
+
+def cmd_engineer_secret_set(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_secret_set(args)
+
+
+def cmd_window_config_monitor(args: argparse.Namespace) -> int:
+    project = load_project_or_current(args.project)
+    engineers = [normalize_name(item) for item in args.engineers.split(",") if item.strip()]
+    project.monitor_engineers = engineers
+    write_project(project)
+    return 0
+
+
+def cmd_tui(args: argparse.Namespace) -> int:
+    return run_tui_app(TUI_HOOKS)
+
+
+PARSER_HOOKS = ParserHooks(
+    migrate_legacy=migrate_legacy,
+    cmd_list_projects=cmd_list_projects,
+    cmd_list_engineers=cmd_list_engineers,
+    cmd_list_identities=cmd_list_identities,
+    cmd_show_project=cmd_show_project,
+    cmd_show_engineer=cmd_show_engineer,
+    cmd_show=cmd_show,
+    cmd_resolve=cmd_resolve,
+    cmd_show_identity=cmd_show_identity,
+    cmd_run_engineer=cmd_run_engineer,
+    cmd_start=cmd_start,
+    cmd_start_identity=cmd_start_identity,
+    cmd_session_name=cmd_session_name,
+    cmd_project_open=cmd_project_open,
+    cmd_project_current=cmd_project_current,
+    cmd_project_use=cmd_project_use,
+    cmd_project_create=cmd_project_create,
+    cmd_project_bootstrap=cmd_project_bootstrap,
+    cmd_project_delete=cmd_project_delete,
+    cmd_project_layout_set=cmd_project_layout_set,
+    cmd_session_start_engineer=cmd_session_start_engineer,
+    cmd_session_provision_heartbeat=cmd_session_provision_heartbeat,
+    cmd_session_stop_engineer=cmd_session_stop_engineer,
+    cmd_session_start_project=cmd_session_start_project,
+    cmd_session_status=cmd_session_status,
+    cmd_session_switch_harness=cmd_session_switch_harness,
+    cmd_session_switch_auth=cmd_session_switch_auth,
+    cmd_window_open_monitor=cmd_window_open_monitor,
+    cmd_window_open_dashboard=cmd_window_open_dashboard,
+    cmd_window_open_engineer=cmd_window_open_engineer,
+    cmd_window_config_monitor=cmd_window_config_monitor,
+    cmd_engineer_create=cmd_engineer_create,
+    cmd_engineer_delete=cmd_engineer_delete,
+    cmd_engineer_rename=cmd_engineer_rename,
+    cmd_engineer_rebind=cmd_engineer_rebind,
+    cmd_engineer_secret_set=cmd_engineer_secret_set,
+    cmd_tui=cmd_tui,
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    return build_agent_admin_parser(PARSER_HOOKS)
+
+
+def main(argv: list[str] | None = None) -> int:
+    ensure_root_layout()
+    migrate_session_model()
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except (AgentAdminError, AgentAdminWindowError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

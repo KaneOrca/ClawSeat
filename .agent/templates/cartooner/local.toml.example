@@ -1,0 +1,20 @@
+version = 1
+
+# Required: becomes /Users/ywf/.agents/projects/<project_name>/project.toml
+project_name = "my-new-project"
+
+# Required: absolute path to the repo root that workspaces should point at
+repo_root = "/Users/ywf/coding/my-new-project"
+
+# Optional: per-seat overrides. Only specify fields that differ from template.toml.
+
+# Skip an optional engineer entirely for this project:
+# [[overrides]]
+# id = "engineer-e"
+# active = false
+
+# Override auth/provider for one seat in this project only:
+# [[overrides]]
+# id = "engineer-a"
+# auth_mode = "api"
+# provider = "openai-direct"

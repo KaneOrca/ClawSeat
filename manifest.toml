@@ -1,0 +1,13 @@
+name = "clawseat"
+version = "0.1.0"
+description = "ClawSeat 多席位控制面框架"
+
+[modules]
+core = [".agent/scripts", ".agents/skills", ".scripts"]
+adapters = ["adapters/cartooner", "adapters/openclaw"]
+examples = ["examples/arena-pretext-ui"]
+docs = ["docs"]
+
+[dependencies]
+python = ">=3.9"
+tomllib = { stdlib = true }

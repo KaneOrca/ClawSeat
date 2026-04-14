@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+build/
+.tasks/
+.tmp/
+generated/
+*.pyc

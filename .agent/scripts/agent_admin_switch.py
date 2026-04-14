@@ -1,0 +1,158 @@
+from __future__ import annotations
+
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable
+
+
+@dataclass
+class SwitchHooks:
+    error_cls: type[Exception]
+    legacy_secrets_root: Path
+    tool_binaries: dict[str, str]
+    identity_name: Callable[..., str]
+    runtime_dir_for_identity: Callable[..., Path]
+    secret_file_for: Callable[..., Path]
+    session_name_for: Callable[..., str]
+    ensure_dir: Callable[[Path], None]
+    ensure_secret_permissions: Callable[[Path], None]
+    write_env_file: Callable[..., None]
+    parse_env_file: Callable[[Path], dict[str, str]]
+    load_project: Callable[[str], Any]
+    load_project_or_current: Callable[[str | None], Any]
+    load_session: Callable[[str, str], Any]
+    write_session: Callable[[Any], None]
+    apply_template: Callable[[Any, Any], None]
+    session_stop_engineer: Callable[[Any], None]
+    session_record_cls: type
+    normalize_name: Callable[[str], str]
+
+
+class SwitchHandlers:
+    def __init__(self, hooks: SwitchHooks) -> None:
+        self.hooks = hooks
+
+    def ensure_api_secret_ready(self, session: Any) -> None:
+        if session.auth_mode != "api" or not session.secret_file:
+            return
+        secret_path = Path(session.secret_file)
+        if not secret_path.exists() or not secret_path.read_text().strip():
+            self.hooks.ensure_dir(secret_path.parent)
+            for peer in sorted(secret_path.parent.glob("*.env")):
+                if peer == secret_path or not peer.read_text().strip():
+                    continue
+                shutil.copy2(peer, secret_path)
+                self.hooks.ensure_secret_permissions(secret_path)
+                break
+        if (not secret_path.exists() or not secret_path.read_text().strip()) and session.tool == "codex" and session.provider == "xcode-best":
+            legacy_secret = self.hooks.legacy_secrets_root / "codex" / "xcode.env"
+            if legacy_secret.exists() and legacy_secret.read_text().strip():
+                self.hooks.ensure_dir(secret_path.parent)
+                shutil.copy2(legacy_secret, secret_path)
+                self.hooks.ensure_secret_permissions(secret_path)
+        if not secret_path.exists():
+            raise self.hooks.error_cls(
+                f"Abort: missing API secret file for {session.engineer_id}: {secret_path}. "
+                f"Provision the secret before switching to {session.tool}/{session.provider} API auth."
+            )
+        if not secret_path.read_text().strip():
+            raise self.hooks.error_cls(
+                f"Abort: API secret file is empty for {session.engineer_id}: {secret_path}. "
+                f"Provision the secret before switching to {session.tool}/{session.provider} API auth."
+            )
+
+    def expected_identity_for_session(self, session: Any) -> str:
+        return self.hooks.identity_name(
+            session.tool,
+            session.auth_mode,
+            session.provider,
+            session.engineer_id,
+            session.project,
+        )
+
+    def reconcile_session_runtime(self, session: Any) -> Any:
+        expected_identity = self.expected_identity_for_session(session)
+        expected_runtime = self.hooks.runtime_dir_for_identity(
+            session.tool,
+            session.auth_mode,
+            expected_identity,
+        )
+        if session.identity == expected_identity and session.runtime_dir == str(expected_runtime):
+            return session
+        session.identity = expected_identity
+        session.runtime_dir = str(expected_runtime)
+        self.hooks.write_session(session)
+        self.hooks.apply_template(session, self.hooks.load_project(session.project))
+        return session
+
+    def build_switched_session(
+        self,
+        old_session: Any,
+        project: Any,
+        tool: str,
+        auth_mode: str,
+        provider: str,
+    ) -> Any:
+        engineer_id = old_session.engineer_id
+        identity = self.hooks.identity_name(tool, auth_mode, provider, engineer_id, project.name)
+        secret_file = str(self.hooks.secret_file_for(tool, provider, engineer_id)) if auth_mode == "api" else ""
+        return self.hooks.session_record_cls(
+            engineer_id=engineer_id,
+            project=project.name,
+            tool=tool,
+            auth_mode=auth_mode,
+            provider=provider,
+            identity=identity,
+            workspace=old_session.workspace,
+            runtime_dir=str(self.hooks.runtime_dir_for_identity(tool, auth_mode, identity)),
+            session=self.hooks.session_name_for(project.name, engineer_id, tool),
+            bin_path=self.hooks.tool_binaries[tool],
+            monitor=old_session.monitor,
+            legacy_sessions=list(old_session.legacy_sessions),
+            launch_args=list(old_session.launch_args),
+            secret_file=secret_file,
+            wrapper=old_session.wrapper,
+        )
+
+    def session_switch_harness(self, args: Any) -> int:
+        project = self.hooks.load_project_or_current(args.project)
+        old_session = self.hooks.load_session(project.name, self.hooks.normalize_name(args.engineer))
+        new_session = self.build_switched_session(old_session, project, args.tool, args.mode, args.provider)
+        if (
+            old_session.tool == new_session.tool
+            and old_session.auth_mode == new_session.auth_mode
+            and old_session.provider == new_session.provider
+        ):
+            print(f"no change for {old_session.engineer_id} in {project.name}")
+            return 0
+        self.ensure_api_secret_ready(new_session)
+        self.hooks.session_stop_engineer(old_session)
+        self.hooks.write_session(new_session)
+        self.hooks.apply_template(new_session, project)
+        self.hooks.ensure_dir(Path(new_session.runtime_dir))
+        print(f"switched {new_session.engineer_id} in {project.name}: {old_session.session} -> {new_session.session}")
+        print(f"run: agent-admin session start-engineer {new_session.engineer_id} --project {project.name}")
+        return 0
+
+    def session_switch_auth(self, args: Any) -> int:
+        project = self.hooks.load_project_or_current(args.project)
+        old_session = self.hooks.load_session(project.name, self.hooks.normalize_name(args.engineer))
+        new_session = self.build_switched_session(old_session, project, old_session.tool, args.mode, args.provider)
+        if new_session.tool != old_session.tool:
+            raise self.hooks.error_cls(
+                f"Tool change requested for {old_session.engineer_id}; use session switch-harness instead"
+            )
+        if old_session.auth_mode == new_session.auth_mode and old_session.provider == new_session.provider:
+            print(f"no auth change for {old_session.engineer_id} in {project.name}")
+            return 0
+        self.ensure_api_secret_ready(new_session)
+        self.hooks.session_stop_engineer(old_session)
+        self.hooks.write_session(new_session)
+        self.hooks.ensure_dir(Path(new_session.runtime_dir))
+        print(
+            f"auth switched for {new_session.engineer_id} in {project.name}: "
+            f"{old_session.identity} -> {new_session.identity}"
+        )
+        print(f"run: agent-admin session start-engineer {new_session.engineer_id} --project {project.name}")
+        return 0

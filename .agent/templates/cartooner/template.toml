@@ -1,0 +1,147 @@
+version = 1
+template_name = "cartooner"
+description = "Six-seat frontend project: koder frontstage + ABCDE specialist crew"
+
+[defaults]
+window_mode = "tabs-1up"
+monitor_max_panes = 4
+open_detail_windows = false
+
+[[engineers]]
+id = "koder"
+display_name = "koder"
+aliases = ["frontstage"]
+role = "frontstage-supervisor"
+monitor = true
+human_facing = true
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = true
+unblock_authority = true
+escalation_authority = true
+remind_active_loop_owner = true
+review_authority = false
+qa_authority = false
+design_authority = false
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+skills = [
+  "{CLAWSEAT_ROOT}/.agents/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/adapters/cartooner/skills/cartooner-koder/SKILL.md",
+]
+role_details = [
+  "runtime seat id remains koder; canonical framework role is frontstage-supervisor",
+  "user-facing intake and product clarification",
+  "do intake framing and scope clarification before handing active work to engineer-b; do not own execution planning or next-hop routing",
+  "patrol the chain state and summarize progress for the user",
+  "receive escalations from engineer-b and reframe when needed",
+  "do not absorb builder, reviewer, QA, or designer specialist work",
+]
+
+[[engineers]]
+id = "engineer-a"
+role = "builder"
+tool = "codex"
+auth_mode = "api"
+provider = "xcode-best"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = ["{CLAWSEAT_ROOT}/.agents/skills/gstack-harness/SKILL.md"]
+
+[[engineers]]
+id = "engineer-b"
+role = "planner-dispatcher"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+monitor = true
+aliases = ["planner", "dispatcher"]
+human_facing = false
+active_loop_owner = true
+dispatch_authority = true
+patrol_authority = false
+unblock_authority = false
+escalation_authority = true
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = ["{CLAWSEAT_ROOT}/.agents/skills/gstack-harness/SKILL.md"]
+
+[[engineers]]
+id = "engineer-c"
+role = "reviewer"
+tool = "codex"
+auth_mode = "api"
+provider = "xcode-best"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = true
+qa_authority = false
+design_authority = false
+skills = ["{CLAWSEAT_ROOT}/.agents/skills/gstack-harness/SKILL.md"]
+
+[[engineers]]
+id = "engineer-d"
+role = "qa"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = true
+design_authority = false
+skills = ["{CLAWSEAT_ROOT}/.agents/skills/gstack-harness/SKILL.md"]
+role_details = [
+  "default verification / smoke / regression lane",
+  "prefer MiniMax-M2.7-highspeed for test-heavy execution",
+]
+
+[[engineers]]
+id = "engineer-e"
+role = "designer"
+tool = "gemini"
+auth_mode = "api"
+provider = "google-api-key"
+monitor = true
+optional = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = true
+skills = ["{CLAWSEAT_ROOT}/.agents/skills/gstack-harness/SKILL.md"]
+role_details = [
+  "implementation-before design review",
+  "visual direction and style decisions",
+  "design-driven UI prototypes / visual shells",
+  "not production wiring or full feature completion",
+]
