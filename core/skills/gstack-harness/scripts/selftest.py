@@ -83,7 +83,7 @@ def main() -> int:
                     'send_script = "/usr/bin/true"',
                     f'status_script = "{status_script}"',
                     f'patrol_script = "{patrol_script}"',
-                    f'agent_admin = "{REPO_ROOT / ".agent" / "scripts" / "agent_admin.py"}"',
+                    f'agent_admin = "{REPO_ROOT / "core" / "scripts" / "agent_admin.py"}"',
                     f'workspace_root = "{temp_root / "workspaces" / "clawseat"}"',
                     f'handoff_dir = "{handoff_dir}"',
                     'heartbeat_owner = "koder"',
