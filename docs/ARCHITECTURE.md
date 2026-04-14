@@ -41,9 +41,9 @@ Owns:
 - tmux/iTerm window layout
 - workspace contract rendering
 
-Primary future home:
+Primary home:
 
-- `.agent/scripts/agent_admin*.py`
+- `core/scripts/agent_admin*.py`
 
 ### 2. Runtime Contract Layer
 
@@ -54,10 +54,11 @@ Owns:
 - heartbeat manifest / receipt
 - dispatch / completion / ACK model
 
-Primary future home:
+Primary home:
 
-- `.agent/` shared contract code
-- `.agents/skills/gstack-harness/`
+- `core/harness_adapter.py`
+- `core/templates/`
+- `core/skills/gstack-harness/`
 
 ### 3. Skill Layer
 
@@ -68,9 +69,9 @@ Owns:
 - patrol / console
 - seat launch protocol
 
-Primary future home:
+Primary home:
 
-- `.agents/skills/gstack-harness/`
+- `core/skills/gstack-harness/`
 
 ### 4. Adapter Layer
 
@@ -82,8 +83,8 @@ Owns:
 
 Examples:
 
-- `adapters/cartooner/`
-- `adapters/openclaw/`
+- `adapters/projects/cartooner/`
+- `adapters/projects/openclaw/`
 
 ### 5. Sample / Fixture Layer
 
@@ -101,10 +102,11 @@ Examples:
 
 Already inside ClawSeat:
 
-- control plane (`.agent/scripts/agent_admin*.py`)
-- core harness (`.agents/skills/gstack-harness/`)
-- shared transport helpers (`.scripts/`)
-- Cartooner adapter (`adapters/cartooner/`)
+- control plane (`core/scripts/agent_admin*.py`)
+- core harness (`core/skills/gstack-harness/`)
+- shared transport helpers (`core/shell-scripts/`)
+- harness adapter interface + tmux-cli implementation (`core/harness_adapter.py`, `adapters/harness/tmux-cli/`)
+- Cartooner adapter (`adapters/projects/cartooner/`)
 
 Still outside ClawSeat by design:
 

@@ -3,8 +3,9 @@ version = "0.1.0"
 description = "ClawSeat 多席位控制面框架"
 
 [modules]
-core = [".agent/scripts", ".agents/skills", ".scripts"]
-adapters = ["adapters/cartooner", "adapters/openclaw"]
+core = ["core/scripts", "core/skills", "core/templates", "core/shell-scripts", "core/harness_adapter.py"]
+adapters = ["adapters/harness", "adapters/projects/cartooner", "adapters/projects/openclaw"]
+shells = ["shells"]
 examples = ["examples/arena-pretext-ui"]
 docs = ["docs"]
 

@@ -28,11 +28,14 @@ ClawSeat provides:
 
 ClawSeat core should contain only framework concerns:
 
-- `.agent/`
-- `.agents/skills/`
-- `.scripts/`
+- `core/scripts/`
+- `core/skills/`
+- `core/templates/`
+- `core/shell-scripts/`
+- `core/harness_adapter.py`
 - `docs/`
 - `adapters/`
+- `shells/`
 - `examples/`
 
 Consumer projects stay separate:
@@ -45,10 +48,16 @@ Consumer projects stay separate:
 
 ```text
 ClawSeat/
-├── .agent/                  # control plane scripts, templates, rules
-├── .agents/skills/          # core framework skills
-├── .scripts/                # transport helpers
-├── adapters/                # consumer adapters (cartooner/openclaw)
+├── core/                    # framework-agnostic control plane/runtime code
+│   ├── scripts/             # agent_admin / agentctl Python entrypoints
+│   ├── skills/              # reusable framework skills
+│   ├── templates/           # project / seat template sources
+│   ├── shell-scripts/       # transport/status shell wrappers
+│   └── harness_adapter.py   # adapter interface definition
+├── adapters/                # harness + consumer adapters
+│   ├── harness/
+│   └── projects/
+├── shells/                  # reserved for future shell implementations
 ├── examples/                # sample projects / smoke fixtures
 └── docs/                    # architecture and migration docs
 ```
@@ -57,10 +66,11 @@ ClawSeat/
 
 Already migrated into ClawSeat:
 
-1. control plane: `agent_admin*`
-2. core harness: `gstack-harness`
-3. shared transport: `send-and-verify.sh` and related helpers
-4. Cartooner adapter: profile, wrapper skill, and patrol scripts
+1. control plane: `core/scripts/agent_admin*`
+2. core harness: `core/skills/gstack-harness`
+3. shared transport: `core/shell-scripts/send-and-verify.sh` and related helpers
+4. adapter interface + tmux harness adapter: `core/harness_adapter.py`, `adapters/harness/tmux-cli/`
+5. Cartooner adapter: `adapters/projects/cartooner/`
 
 Still intentionally external:
 
@@ -80,6 +90,6 @@ Runtime contract:
 - export `CLAWSEAT_ROOT=/path/to/ClawSeat` before running ClawSeat helpers on a new machine
 - `~` is expanded by Python `Path.expanduser()`
 - `{CLAWSEAT_ROOT}` is expanded by the profile loader in
-  `.agents/skills/gstack-harness/scripts/_common.py`
+  `core/skills/gstack-harness/scripts/_common.py`
 
 Setup details and examples live in `docs/INSTALL.md`.

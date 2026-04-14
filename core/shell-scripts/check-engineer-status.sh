@@ -1,0 +1,363 @@
+#!/bin/bash
+# check-engineer-status.sh v9 — 判断工程师状态
+# 核心原理：文件状态 + pane 快照 + 最近输出变化
+# 重点区分：
+# - WORKING: 正在编码/构建/测试/思考推进
+# - BLOCKED: 技术性阻塞（缺权限、缺文件、队列、容量、额度/订阅等）
+# - DECISION_NEEDED: 等确认、等选择、等 PM 拍板
+# - DELIVERED / STALLED / IDLE / CRASHED / DRIFT
+#
+# 用法: ./check-engineer-status.sh [engineer...]
+#       ./check-engineer-status.sh                           # 默认: A/B/C/D/E/F/G
+#       ./check-engineer-status.sh engineer-e engineer-f     # 检查指定工程师
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+TMUX_BIN=/opt/homebrew/bin/tmux
+AGENTCTL="$REPO_ROOT/core/shell-scripts/agentctl.sh"
+TASKS_ROOT="${TASKS_ROOT:-$REPO_ROOT/.tasks}"
+PATROL="${PATROL_DIR:-$TASKS_ROOT/patrol}"
+DEFAULT_SESSIONS="${DEFAULT_SESSIONS:-engineer-a engineer-b engineer-c engineer-d engineer-e engineer-f engineer-g}"
+SESSIONS="${*:-$DEFAULT_SESSIONS}"
+
+mkdir -p "$PATROL"
+
+get_letter() {
+  echo "$1" | sed 's/^engineer-//'
+}
+
+is_excluded_session() {
+  case "$1" in
+    engineer-pm|codex-PM|codex-pm) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+expects_mailbox() {
+  case "$1" in
+    engineer-g|claude-G|claude-g) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+read_task_id() {
+  local file="$1"
+  grep '^task_id:' "$file" 2>/dev/null | head -1 | awk '{print $2}'
+}
+
+check_mailbox() {
+  local letter=$(get_letter "$1")
+  local todo="$TASKS_ROOT/engineer-${letter}/TODO.md"
+  local delivery="$TASKS_ROOT/engineer-${letter}/DELIVERY.md"
+  local todo_id=""
+  local delivery_id=""
+
+  [ -f "$todo" ] && todo_id=$(read_task_id "$todo")
+  [ -f "$delivery" ] && delivery_id=$(read_task_id "$delivery")
+
+  if [ -f "$todo" ] && [ -f "$delivery" ]; then
+    if [ -n "$todo_id" ] && [ "$todo_id" = "$delivery_id" ]; then
+      echo "DELIVERED:${todo_id}"
+    else
+      echo "ACTIVE:${todo_id}:${delivery_id}"
+    fi
+  elif [ -f "$delivery" ]; then
+    echo "DELIVERED:${delivery_id}"
+  elif [ -f "$todo" ]; then
+    echo "HAS_TODO:${todo_id}"
+  else
+    echo "EMPTY"
+  fi
+}
+
+todo_file_for_session() {
+  local letter=$(get_letter "$1")
+  echo "$TASKS_ROOT/engineer-${letter}/TODO.md"
+}
+
+for s in $SESSIONS; do
+  if is_excluded_session "$s"; then
+    echo "$s: SKIPPED (PM session excluded)"
+    continue
+  fi
+
+  if [ -n "${AGENT_PROJECT:-}" ]; then
+    SESSION_NAME="$("$AGENTCTL" session-name --project "$AGENT_PROJECT" "$s")"
+  else
+    SESSION_NAME="$("$AGENTCTL" session-name "$s")"
+  fi
+  RAW=$(env -u TMUX "$TMUX_BIN" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+  if [ -z "$RAW" ]; then
+    echo "$s: SESSION_NOT_FOUND"
+    continue
+  fi
+  MAILBOX=$(check_mailbox "$s")
+  TODO_FILE=$(todo_file_for_session "$s")
+  META=$(env -u TMUX "$TMUX_BIN" display-message -p -t "$SESSION_NAME" '#{pane_current_command}|#{pane_title}' 2>/dev/null)
+  PANE_CMD="${META%%|*}"
+  PANE_TITLE="${META#*|}"
+  RAW_TAIL5=$(echo "$RAW" | tail -5)
+  RAW_TAIL20=$(echo "$RAW" | tail -20)
+  RAW_TAIL40=$(echo "$RAW" | tail -40)
+  ACTIVE_TODO_ID=""
+  LAST_DELIVERY_ID=""
+
+  # 输入框经验位（不换行时更稳定）
+  THIRD_FROM_LAST=$(echo "$RAW" | tail -3 | head -1)
+  SECOND_FROM_LAST=$(echo "$RAW" | tail -2 | head -1)
+
+  case "$MAILBOX" in
+    ACTIVE:*)
+      ACTIVE_TODO_ID=$(echo "$MAILBOX" | cut -d: -f2)
+      LAST_DELIVERY_ID=$(echo "$MAILBOX" | cut -d: -f3)
+      ;;
+    HAS_TODO:*)
+      ACTIVE_TODO_ID="${MAILBOX#HAS_TODO:}"
+      ;;
+  esac
+
+  # === 1. context 满 ===
+  CTX=$(echo "$RAW" | grep -oE "[0-9]+% until auto-compact" | head -1)
+  if [ -n "$CTX" ]; then
+    PCT=$(echo "$CTX" | grep -oE "^[0-9]+")
+    if [ "$PCT" -le 1 ]; then
+      echo "$s: CONTEXT_FULL ($CTX)"
+      continue
+    fi
+  fi
+
+  # === 2. pane title 快速识别（优先修正 Gemini / 交付态误判）===
+  if echo "$PANE_TITLE" | grep -q "Working"; then
+    case "$MAILBOX" in
+      EMPTY)
+        if expects_mailbox "$s"; then
+          echo "$s: DRIFT (working title, no TODO)"
+        else
+          echo "$s: WORKING (title)"
+        fi
+        ;;
+      *) echo "$s: WORKING (title)" ;;
+    esac
+    continue
+  fi
+
+  if echo "$PANE_TITLE" | grep -q "Ready"; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (ready, has TODO=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (ready, no task)" ;;
+    esac
+    continue
+  fi
+
+  # === 3. plan mode / decision-needed ===
+  if echo "$RAW" | grep -q "plan mode on"; then
+    CTX_INFO=""
+    [ -n "$CTX" ] && CTX_INFO=", $CTX"
+    echo "$s: DECISION_NEEDED (plan mode${CTX_INFO})"
+    continue
+  fi
+
+  # === 4. 工作状态检测 ===
+  # 规则：esc to interrupt 是地面真相，优先级最高。
+  # 历史 timer 文本会残留在滚动区，不可信——只在确认 esc to interrupt 存在后才用 timer 提取时间。
+  # 检测范围：esc to interrupt 查最后 10 行（Codex 底部有空行/建议会挤开）；timer 只查最后 5 行。
+
+  RAW_TAIL10=$(echo "$RAW" | tail -10)
+  HAS_ESC=""
+  echo "$RAW_TAIL10" | grep -q "esc to interrupt" && HAS_ESC=1
+
+  if [ -n "$HAS_ESC" ]; then
+    # 确认在工作，尝试从最后 5 行提取 timer 显示
+    TIMER=$(echo "$RAW_TAIL5" | grep -oE "([0-9]+h )?[0-9]+m [0-9]+s|[0-9]+s · " | tail -1 | sed 's/ · $//')
+    if [ -n "$TIMER" ]; then
+      echo "$s: WORKING ($TIMER)"
+    else
+      echo "$s: WORKING (active)"
+    fi
+    continue
+  fi
+
+  # 没有 esc to interrupt — 只查最后 5 行的 timer（避免历史残留误判）
+  TIMER=$(echo "$RAW_TAIL5" | grep -oE "([0-9]+h )?[0-9]+m [0-9]+s|[0-9]+s · " | tail -1 | sed 's/ · $//')
+  if [ -n "$TIMER" ]; then
+    if expects_mailbox "$s" && [ "$MAILBOX" = "EMPTY" ]; then
+      echo "$s: DRIFT (active timer, no TODO)"
+      continue
+    fi
+    echo "$s: WORKING ($TIMER)"
+    continue
+  fi
+
+  # === 5. 阻塞检测 ===
+  if echo "$RAW_TAIL20" | grep -qE "Would you like to proceed|Yes, and bypass"; then
+    echo "$s: DECISION_NEEDED (plan approval)"
+    continue
+  fi
+  if echo "$RAW_TAIL20" | grep -qE "Action Required|Do you want to create"; then
+    echo "$s: DECISION_NEEDED (needs confirmation)"
+    continue
+  fi
+  if echo "$RAW_TAIL20" | grep -qE "Press up to edit queued messages|Queued \(press ↑ to edit\)"; then
+    echo "$s: BLOCKED (queued messages)"
+    continue
+  fi
+  if echo "$RAW_TAIL40" | grep -qiE "You've hit your usage limit|Try again later|insufficient_quota|rate limit|rate_limit|no active subscription|Too Many Requests|429|exceeded retry limit|额度不足|订阅额度不足"; then
+    echo "$s: BLOCKED (usage_limit)"
+    continue
+  fi
+  if echo "$RAW_TAIL40" | grep -qE "AT CAPACITY|quota exceeded"; then
+    echo "$s: BLOCKED (capacity)"
+    continue
+  fi
+  # Claude 评分对话框: "1: Bad  2: Fine  3: Good  0: Dismiss"
+  if echo "$RAW_TAIL20" | grep -qE "^[[:space:]]*[0-9]+: [A-Za-z]"; then
+    echo "$s: DECISION_NEEDED (rating dialog)"
+    continue
+  fi
+  # 连续数字编号选项 = 等待用户选择（只查最后 20 行）
+  if echo "$RAW_TAIL20" | grep -qE "^[[:space:]]*[❯●]?[[:space:]]*[1-4]\. "; then
+    echo "$s: DECISION_NEEDED (awaiting selection)"
+    continue
+  fi
+
+  # === 5.5 派工已提醒但未消费 ===
+  if [ -n "$ACTIVE_TODO_ID" ]; then
+    if [ -n "$TODO_FILE" ] && echo "$RAW_TAIL20" | grep -qF "$TODO_FILE"; then
+      echo "$s: NOTIFIED (TODO=${ACTIVE_TODO_ID})"
+      continue
+    fi
+  fi
+
+  # === 6. 检测是否退出到了 shell（CLI 崩溃/退出）===
+  if echo "$PANE_CMD" | grep -qE "bash|zsh|sh|fish"; then
+    case "$MAILBOX" in
+      HAS_TODO:*|ACTIVE:*)
+        echo "$s: CRASHED (shell with active TODO=${ACTIVE_TODO_ID})"
+        continue
+        ;;
+      EMPTY)
+        echo "$s: IDLE (shell, no task)"
+        continue
+        ;;
+    esac
+  fi
+  if echo "$RAW" | grep -qE "zsh: no such file|bash-[0-9]"; then
+    echo "$s: CRASHED (exited to shell)"
+    continue
+  fi
+
+  # === 7. thinking / spinner 中间态（掉到 diff 之前先捕获）===
+  # Codex thinking / processing
+  if echo "$RAW_TAIL20" | grep -qE "Topsy-turvying|Thinking|Working on it|alyzing|evising|Processing"; then
+    echo "$s: WORKING (thinking)"
+    continue
+  fi
+
+  # npm / spinner 进度
+  if echo "$RAW" | grep -q "⠋\|⠙\|⠹\|⠸\|⠼\|⠴\|⠦\|⠧"; then
+    echo "$s: WORKING (spinner)"
+    continue
+  fi
+
+  # === 8. idle prompt 检测（优先于 diff fallback）===
+  # Codex idle prompt — 纯 prompt，无其他输出
+  if echo "$LAST_LINE" | grep -qE "^› "; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (idle prompt, has TODO=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (no task)" ;;
+    esac
+    continue
+  fi
+
+  # Codex idle variant with trailing suggestion
+  if echo "$RAW_TAIL20" | grep -q "› Improve documentation" || echo "$SECOND_FROM_LAST" | grep -q "^›"; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (Codex idle, has TODO=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (no task)" ;;
+    esac
+    continue
+  fi
+
+  # Gemini 空闲
+  if echo "$RAW_TAIL5" | grep -q "Type your message" || echo "$THIRD_FROM_LAST" | grep -q "Type your message"; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (Gemini idle, has TODO=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (no task)" ;;
+    esac
+    continue
+  fi
+
+  # === 8.7 Claude Code 空闲：过滤噪音后最后一行是 ❯
+  SNAP=$(echo "$RAW" | grep -v "\[°°\]" | grep -v "Pickle" | grep -v "bypass permissions" | grep -v "accept edits" | grep -v "─────" | grep -v "^[[:space:]]*$" | grep -v "ctrl+t to hide" | grep -v "● high")
+  LAST_LINE=$(echo "$SNAP" | tail -1)
+  if echo "$LAST_LINE" | grep -qE "^❯"; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (idle, has TODO=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (no task)" ;;
+    esac
+    continue
+  fi
+
+  # === 9. 空 pane（SNAP 完全空）===
+  if [ -z "$SNAP" ]; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: IDLE (empty pane, last delivered=${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: IDLE (empty pane, last todo=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (empty pane)" ;;
+    esac
+    continue
+  fi
+
+  # === 10. 无法判断 — 用 diff ===
+  CURR="$PATROL/${s}_current.txt"
+  PREV="$PATROL/${s}_previous.txt"
+  echo "$SNAP" > "$CURR"
+
+  if [ -f "$PREV" ]; then
+    if diff -q "$PREV" "$CURR" >/dev/null 2>&1; then
+      case "$MAILBOX" in
+        DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+        EMPTY)
+          if expects_mailbox "$s"; then
+            echo "$s: IDLE (no task)"
+          else
+            echo "$s: UNKNOWN (unchanged)"
+          fi
+          ;;
+        *) echo "$s: UNKNOWN (unchanged)" ;;
+      esac
+    else
+      case "$MAILBOX" in
+        DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+        EMPTY)
+          if expects_mailbox "$s"; then
+            echo "$s: DRIFT (output changed, no TODO)"
+          else
+            echo "$s: WORKING (output changed)"
+          fi
+          ;;
+        *) echo "$s: WORKING (output changed)" ;;
+      esac
+    fi
+  else
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      EMPTY)
+        if expects_mailbox "$s"; then
+          echo "$s: IDLE (no task)"
+        else
+          echo "$s: UNKNOWN (first run)"
+        fi
+        ;;
+      *) echo "$s: UNKNOWN (first run)" ;;
+    esac
+  fi
+
+  cp "$CURR" "$PREV" 2>/dev/null
+done

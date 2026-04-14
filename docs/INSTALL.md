@@ -27,7 +27,7 @@ export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 ## Expansion Rules
 
 - `{CLAWSEAT_ROOT}` is expanded by the profile loader in
-  `.agents/skills/gstack-harness/scripts/_common.py`
+  `core/skills/gstack-harness/scripts/_common.py`
 - `~` is expanded through Python `Path.expanduser()`
 - If `CLAWSEAT_ROOT` is not exported, the loader falls back to the current
   repository root when it is executing inside this checkout

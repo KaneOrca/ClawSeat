@@ -1,0 +1,524 @@
+from __future__ import annotations
+
+import hashlib
+import textwrap
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+HARNESS_PROFILE_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "assets" / "profiles"
+SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
+HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
+
+
+def q(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def q_array(values: list[str]) -> str:
+    return "[" + ", ".join(q(item) for item in values) + "]"
+
+
+def render_role_line(engineer: Any, bullet: bool = False) -> str:
+    if not getattr(engineer, "role", ""):
+        return ""
+    prefix = "- " if bullet else ""
+    return f"{prefix}Role: `{engineer.role}`"
+
+
+def render_role_details_lines(engineer: Any) -> list[str]:
+    details = list(getattr(engineer, "role_details", []) or [])
+    if not details:
+        return []
+    lines = ["## Role Focus", ""]
+    lines.extend(f"- {detail}" for detail in details)
+    return lines
+
+
+def render_aliases_lines(engineer: Any) -> list[str]:
+    aliases = list(getattr(engineer, "aliases", []) or [])
+    if not aliases:
+        return []
+    alias_text = ", ".join(f"`{alias}`" for alias in aliases)
+    return [
+        "## Aliases",
+        "",
+        f"- {alias_text}",
+    ]
+
+
+def render_authority_lines(engineer: Any) -> list[str]:
+    capabilities: list[str] = []
+    if getattr(engineer, "human_facing", False):
+        capabilities.append("human-facing intake and user communication")
+    if getattr(engineer, "active_loop_owner", False):
+        capabilities.append("active loop ownership")
+    if getattr(engineer, "dispatch_authority", False):
+        capabilities.append("downstream dispatch authority")
+    if getattr(engineer, "patrol_authority", False):
+        capabilities.append("patrol / supervision authority")
+    if getattr(engineer, "unblock_authority", False):
+        capabilities.append("chain unblock authority (confirmations, approvals, reminders)")
+    if getattr(engineer, "escalation_authority", False):
+        capabilities.append("escalation authority")
+    if getattr(engineer, "remind_active_loop_owner", False):
+        capabilities.append("may remind the active loop owner when patrol finds drift")
+    if getattr(engineer, "review_authority", False):
+        capabilities.append("review verdict authority")
+    if getattr(engineer, "qa_authority", False):
+        capabilities.append("QA verdict authority")
+    if getattr(engineer, "design_authority", False):
+        capabilities.append("design review / prototype authority")
+    if not capabilities:
+        return []
+    lines = ["## Seat Capabilities", ""]
+    lines.extend(f"- {capability}" for capability in capabilities)
+    return lines
+
+
+def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[str]:
+    repo_root = project.repo_root
+    todo_path = f"{repo_root}/.tasks/{session.engineer_id}/TODO.md"
+    project_doc = f"{repo_root}/.tasks/PROJECT.md"
+    tasks_doc = f"{repo_root}/.tasks/TASKS.md"
+    status_doc = f"{repo_root}/.tasks/STATUS.md"
+    lines = [
+        "## Read First",
+        "",
+        f"1. `{todo_path}`",
+        f"2. `{project_doc}`",
+        f"3. `{tasks_doc}`",
+    ]
+    next_index = 4
+    if engineer.role in {"frontstage-supervisor", "planner-dispatcher"}:
+        lines.append(f"{next_index}. `{status_doc}`")
+        next_index += 1
+    role_contract = None
+    if engineer.role == "frontstage-supervisor":
+        candidate = Path(repo_root) / "KODER.md"
+        if candidate.exists():
+            role_contract = str(candidate)
+    if role_contract:
+        lines.append(f"{next_index}. `{role_contract}`")
+        next_index += 1
+    roster_contract = None
+    if engineer.role == "frontstage-supervisor":
+        candidate = Path(repo_root) / ".tasks/FE-003-SPECIALIST-ROSTER.md"
+        if candidate.exists():
+            roster_contract = str(candidate)
+    if roster_contract:
+        lines.append(f"{next_index}. `{roster_contract}`")
+        next_index += 1
+    lines.append(f"{next_index}. task-specific docs referenced by the current TODO")
+    return lines
+
+
+def render_harness_runtime_lines(engineer: Any) -> list[str]:
+    skills = list(getattr(engineer, "skills", []) or [])
+    if not any("gstack-harness/SKILL.md" in skill for skill in skills):
+        return []
+    lines = [
+        "`gstack-harness` provides the shared runtime for:",
+        "",
+        "- seat/runtime schema",
+        "- dispatch/completion/ACK protocol",
+        "- heartbeat / patrol / unblock loop",
+        "- CLI control console",
+    ]
+    if any("cartooner-koder/SKILL.md" in skill for skill in skills):
+        lines.extend(
+            [
+                "",
+                "`cartooner-koder` remains the project-facing wrapper over that runtime.",
+            ]
+        )
+    return lines
+
+
+def render_role_scope_summary(engineer: Any) -> str:
+    role = engineer.role
+    if role == "frontstage-supervisor":
+        return "intake framing, seat launch, patrol, unblock, and escalation"
+    if role == "planner-dispatcher":
+        return "execution planning, next-hop routing, and durable consumption of completions"
+    if role == "builder":
+        return "implementation and code changes"
+    if role == "reviewer":
+        return "code review and canonical verdicts"
+    if role == "qa":
+        return "QA verification, repro, and regression checks"
+    if role == "designer":
+        return "design review, visual direction, and prototype guidance"
+    return "assigned seat responsibilities"
+
+
+def render_project_seat_map_lines(
+    session: Any,
+    project: Any,
+    engineer: Any,
+    *,
+    project_engineers: dict[str, Any] | None = None,
+    engineer_order: list[str] | None = None,
+) -> list[str]:
+    if engineer.role not in {"frontstage-supervisor", "planner-dispatcher"}:
+        return []
+    engineers = project_engineers or {}
+    ordered_engineer_ids = list(engineer_order or project.engineers or engineers.keys())
+    seat_lines: list[str] = []
+    for engineer_id in ordered_engineer_ids:
+        mapped_engineer = engineers.get(engineer_id)
+        if not mapped_engineer:
+            continue
+        runtime = (
+            f"{mapped_engineer.default_tool} / "
+            f"{mapped_engineer.default_auth_mode} / "
+            f"{mapped_engineer.default_provider}"
+        )
+        scope = render_role_scope_summary(mapped_engineer)
+        seat_lines.append(f"- `{engineer_id}` -> `{mapped_engineer.role}`: {scope} (`{runtime}`)")
+    if not seat_lines:
+        return []
+    lines = [
+        "## Project Seat Map",
+        "",
+        f"- Current project role order: `{' -> '.join(ordered_engineer_ids)}`",
+    ]
+    lines.extend(seat_lines)
+    return lines
+
+
+def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
+    seat_name = session.engineer_id
+    lines = ["## Seat Boundary", ""]
+    if engineer.role == "frontstage-supervisor":
+        lines.extend(
+            [
+                f"- `{seat_name}` owns intake framing, seat launch orchestration, patrol, unblock, and escalations.",
+                "- do intake framing and scope clarification before handing active work to engineer-b",
+                "- do not own execution planning or next-hop routing; that belongs to engineer-b",
+                "- use document-first dispatch helpers when handing work to engineer-b; do not hand-write task chain state unless the helper path is unavailable",
+                "- before launching any non-frontstage seat, summarize harness/profile, seat/role, tool/runtime, and auth/provider to the user and wait for confirmation",
+                "- remind engineer-b when drift appears; do not silently reroute specialists yourself",
+                "- do not absorb builder, reviewer, QA, or designer specialist work",
+            ]
+        )
+    elif engineer.role == "planner-dispatcher":
+        lines.extend(
+            [
+                f"- `{seat_name}` owns execution decisions, next-hop routing, and durable consumption of specialist completions.",
+                "- expect A/C/D/E specialists to return completion to engineer-b, not directly to koder",
+                "- use `gstack-harness/scripts/dispatch_task.py` as the default path for planner -> specialist dispatch; do not hand-write TODO/TASKS/STATUS unless the helper is unavailable",
+                "- use document-first dispatch helpers; treat raw `tmux send-keys` as a protocol violation",
+                "- escalate back to koder only when direction, seat boundaries, or model/auth choices need frontstage help",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"- `{seat_name}` is a specialist seat. Execute the assigned work from TODO.md and return completion to engineer-b.",
+                "- do not bypass engineer-b for normal completion handoffs",
+                "- do not become an ad hoc frontstage or planner seat",
+            ]
+        )
+    return lines
+
+
+def render_communication_protocol_lines(engineer: Any, project_name: str) -> list[str]:
+    send_script = str(SEND_AND_VERIFY_SH)
+    notify_script = str(HARNESS_SCRIPTS_ROOT / "notify_seat.py")
+    lines = [
+        "## Communication Protocol",
+        "",
+        "- treat `TODO.md`, `DELIVERY.md`, and handoff receipts as the source of truth; tmux/chat only wakes the next seat up",
+        "- read `source` and `reply_to` in `TODO.md` to know who dispatched the task and who should receive the completion",
+        f"- for any seat-to-seat notification, use `{send_script}` as the default transport",
+        f"- in multi-project mode, if you call `send-and-verify.sh` directly, pass `--project {project_name}` or use the canonical session name for this project",
+        f"- prefer `{notify_script}` for ad hoc reminders or unblock notices instead of composing transport by hand",
+        "- treat raw `tmux send-keys` as a protocol violation unless the transport script is unavailable",
+        "- if a fallback is unavoidable, replicate the transport contract: send text, wait 1 second, send `Enter`, then verify the message did not remain stranded in the input buffer",
+    ]
+    if engineer.role == "frontstage-supervisor":
+        lines.extend(
+            [
+                "- when patrol finds waiting approvals or drift, unblock or remind engineer-b; do not replace engineer-b as planner",
+                "- when handing work to engineer-b, default to `gstack-harness/scripts/dispatch_task.py` so the dispatch leaves `source`, `reply_to`, and a receipt",
+                "- after starting a seat, refresh the project window so tabs stay in canonical role order",
+                "- when engineer-b returns a planning memo or execution plan with `FrontstageDisposition: AUTO_ADVANCE`, convert it into downstream dispatch promptly instead of leaving it parked at frontstage",
+                "- when engineer-b returns a closeout receipt, summarize it for the user in plain language and auto-advance by default; only ask the user to decide when the receipt explicitly says `FrontstageDisposition: USER_DECISION_NEEDED`",
+                "- planner -> frontstage closeout should also refresh `koder/TODO.md` so frontstage keeps a durable current-task anchor across compaction or restarts",
+            ]
+        )
+    elif engineer.role == "planner-dispatcher":
+        lines.extend(
+            [
+                "- when dispatching work to A/C/D/E, default to `gstack-harness/scripts/dispatch_task.py` so `TODO.md` gets `source` and `reply_to`, project state docs are updated, and a dispatch receipt is written",
+                "- when a specialist completes work, write a durable `Consumed:` ACK before routing the next hop",
+                "- use canonical review verdicts (`APPROVED`, `APPROVED_WITH_NITS`, `CHANGES_REQUESTED`, `BLOCKED`, `DECISION_NEEDED`) instead of inferring routing from prose",
+                "- when returning a chain result to frontstage, use `gstack-harness/scripts/complete_handoff.py` as the default closeout path instead of hand-rolling the delivery",
+                "- planner closeout back to frontstage must leave all three artifacts: `DELIVERY.md`, seat-to-seat notify, and a machine-readable handoff receipt",
+                "- planner closeout back to frontstage should also refresh the frontstage TODO so koder has a durable inbox item for the current chain result",
+                "- do not leave a normal planning result parked as 'awaiting koder decision' unless the task really created a frontstage decision gate; default to `AUTO_ADVANCE` for accepted-scope plans",
+                "- when returning a chain result to frontstage, include `FrontstageDisposition:` and `UserSummary:` in `DELIVERY.md`; default to `AUTO_ADVANCE` unless a real user decision is needed",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"- when you complete assigned work, update `DELIVERY.md`, then notify engineer-b with `send-and-verify.sh --project {project_name} engineer-b ...` or the `complete_handoff.py` helper",
+                "- if you are reviewing work, include a canonical `Verdict:` field in `DELIVERY.md`",
+            ]
+        )
+    return lines
+
+
+def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) -> list[str]:
+    profile_path = HARNESS_PROFILE_ROOT / f"{project.name}.toml"
+    profile_ref = str(profile_path) if profile_path.exists() else "<profile-path>"
+    root = str(HARNESS_SCRIPTS_ROOT)
+    lines: list[str] = []
+
+    if engineer.role == "frontstage-supervisor":
+        lines = [
+            "## Dispatch Playbook",
+            "",
+            "Use these canonical commands instead of hand-writing task-chain state:",
+            "",
+            "Dispatch work to engineer-b:",
+            "```bash",
+            f"python3 {root}/dispatch_task.py \\",
+            f"  --profile {profile_ref} \\",
+            "  --source koder \\",
+            "  --target engineer-b \\",
+            "  --task-id <TASK_ID> \\",
+            "  --title '<TITLE>' \\",
+            "  --objective '<OBJECTIVE>' \\",
+            "  --reply-to koder",
+            "```",
+            "",
+            "Send a one-off unblock/reminder to engineer-b:",
+            "```bash",
+            f"python3 {root}/notify_seat.py \\",
+            f"  --profile {profile_ref} \\",
+            "  --source koder \\",
+            "  --target engineer-b \\",
+            "  --task-id <TASK_ID> \\",
+            "  --kind unblock \\",
+            "  --reply-to koder \\",
+            "  --message '<MESSAGE>'",
+            "```",
+        ]
+    elif engineer.role == "planner-dispatcher":
+        lines = [
+            "## Dispatch Playbook",
+            "",
+            "Prefer these helpers over hand-written TODO/TASKS/STATUS edits:",
+            "",
+            "Dispatch work to a specialist (swap the target seat as needed):",
+            "```bash",
+            f"python3 {root}/dispatch_task.py \\",
+            f"  --profile {profile_ref} \\",
+            "  --source engineer-b \\",
+            "  --target engineer-a \\",
+            "  --task-id <TASK_ID> \\",
+            "  --title '<TITLE>' \\",
+            "  --objective '<OBJECTIVE>' \\",
+            "  --reply-to engineer-b",
+            "```",
+            "",
+            "After reading a specialist delivery, stamp the durable ACK before routing onward:",
+            "```bash",
+            f"python3 {root}/complete_handoff.py \\",
+            f"  --profile {profile_ref} \\",
+            "  --source engineer-a \\",
+            "  --target engineer-b \\",
+            "  --task-id <TASK_ID> \\",
+            "  --ack-only",
+            "```",
+            "",
+            "Return a chain result to koder:",
+            "```bash",
+            f"python3 {root}/complete_handoff.py \\",
+            f"  --profile {profile_ref} \\",
+            "  --source engineer-b \\",
+            "  --target koder \\",
+            "  --task-id <TASK_ID> \\",
+            "  --title '<TITLE>' \\",
+            "  --summary '<CHAIN_SUMMARY>' \\",
+            "  --frontstage-disposition AUTO_ADVANCE \\",
+            "  --user-summary '<SHORT_USER_SUMMARY>'",
+            "```",
+        ]
+    elif engineer.role in {"builder", "reviewer", "qa", "designer"}:
+        lines = [
+            "## Dispatch Playbook",
+            "",
+            "When your assigned work is complete, return it to engineer-b with the helper:",
+            "```bash",
+            f"python3 {root}/complete_handoff.py \\",
+            f"  --profile {profile_ref} \\",
+            f"  --source {session.engineer_id} \\",
+            "  --target engineer-b \\",
+            "  --task-id <TASK_ID> \\",
+            "  --title '<TITLE>' \\",
+            "  --summary '<DELIVERY_SUMMARY>'",
+            "```",
+        ]
+        if engineer.role == "reviewer":
+            lines.extend(
+                [
+                    "",
+                    "Reviewer closeout must include a canonical verdict:",
+                    "```bash",
+                    f"python3 {root}/complete_handoff.py \\",
+                    f"  --profile {profile_ref} \\",
+                    f"  --source {session.engineer_id} \\",
+                    "  --target engineer-b \\",
+                    "  --task-id <TASK_ID> \\",
+                    "  --title '<TITLE>' \\",
+                    "  --summary '<DELIVERY_SUMMARY>' \\",
+                    "  --verdict APPROVED",
+                    "```",
+                ]
+            )
+    return lines
+
+
+def workspace_contract_payload(
+    session: Any,
+    project: Any,
+    engineer: Any,
+    *,
+    project_engineers: dict[str, Any] | None = None,
+    engineer_order: list[str] | None = None,
+) -> dict[str, object]:
+    read_first_items = [
+        line.split("`")[1]
+        for line in render_read_first_lines(session, project, engineer)
+        if line and line[0].isdigit() and "`" in line
+    ]
+    source_paths: list[str] = [
+        f"{project.repo_root}/.tasks/{session.engineer_id}/TODO.md",
+        f"{project.repo_root}/.tasks/PROJECT.md",
+        f"{project.repo_root}/.tasks/TASKS.md",
+    ]
+    if engineer.role in {"frontstage-supervisor", "planner-dispatcher"}:
+        source_paths.append(f"{project.repo_root}/.tasks/STATUS.md")
+    if engineer.role == "frontstage-supervisor":
+        candidate = Path(project.repo_root) / "KODER.md"
+        if candidate.exists():
+            source_paths.append(str(candidate))
+        roster = Path(project.repo_root) / ".tasks/FE-003-SPECIALIST-ROSTER.md"
+        if roster.exists():
+            source_paths.append(str(roster))
+    project_seat_map = [
+        line[2:]
+        for line in render_project_seat_map_lines(
+            session,
+            project,
+            engineer,
+            project_engineers=project_engineers,
+            engineer_order=engineer_order,
+        )
+        if line.startswith("- ")
+    ]
+    return {
+        "engineer_id": session.engineer_id,
+        "project": project.name,
+        "tool": session.tool,
+        "workspace": session.workspace,
+        "role": engineer.role,
+        "role_details": list(getattr(engineer, "role_details", []) or []),
+        "aliases": list(getattr(engineer, "aliases", []) or []),
+        "capabilities": [line[2:] for line in render_authority_lines(engineer) if line.startswith("- ")],
+        "read_first": read_first_items,
+        "project_seat_map": project_seat_map,
+        "seat_boundary": [line[2:] for line in render_seat_boundary_lines(session, engineer) if line.startswith("- ")],
+        "communication_protocol": [
+            line[2:] for line in render_communication_protocol_lines(engineer, project.name) if line.startswith("- ")
+        ],
+        "source_paths": source_paths,
+    }
+
+
+def workspace_contract_fingerprint(payload: dict[str, object]) -> str:
+    canonical = repr(sorted(payload.items())).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def render_workspace_contract_text(
+    session: Any,
+    project: Any,
+    engineer: Any,
+    *,
+    project_engineers: dict[str, Any] | None = None,
+    engineer_order: list[str] | None = None,
+) -> str:
+    payload = workspace_contract_payload(
+        session,
+        project,
+        engineer,
+        project_engineers=project_engineers,
+        engineer_order=engineer_order,
+    )
+    fingerprint = workspace_contract_fingerprint(payload)
+    lines = [
+        'version = 1',
+        f"engineer_id = {q(session.engineer_id)}",
+        f"project = {q(project.name)}",
+        f"tool = {q(session.tool)}",
+        f"workspace = {q(session.workspace)}",
+        f"role = {q(engineer.role)}",
+        f"fingerprint = {q(fingerprint)}",
+        f"aliases = {q_array([str(item) for item in payload['aliases']])}",
+        f"role_details = {q_array([str(item) for item in payload['role_details']])}",
+        f"capabilities = {q_array([str(item) for item in payload['capabilities']])}",
+        f"read_first = {q_array([str(item) for item in payload['read_first']])}",
+        f"project_seat_map = {q_array([str(item) for item in payload['project_seat_map']])}",
+        f"seat_boundary = {q_array([str(item) for item in payload['seat_boundary']])}",
+        f"communication_protocol = {q_array([str(item) for item in payload['communication_protocol']])}",
+        f"source_paths = {q_array([str(item) for item in payload['source_paths']])}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def render_loaded_skills_lines(engineer: Any, engineer_id: str) -> list[str]:
+    skills = list(getattr(engineer, "skills", []) or [])
+    if not skills:
+        return []
+    header = "## Loaded Skills"
+    lines = [header, "", f"Use these as the default skill set for `{engineer_id}`:", ""]
+    lines.extend(f"- `{skill}`" for skill in skills)
+    return lines
+
+
+def render_optional_skill_when_to_use(description: str) -> str:
+    first_line = description.strip().splitlines()[0] if description.strip() else ""
+    return first_line.strip()
+
+
+def render_optional_skills_catalog(optional_skills: list[dict[str, object]]) -> str:
+    lines = [
+        "# Optional Skill Catalog",
+        "",
+        "These skills are available to this project but are not preloaded for every seat.",
+        "Activate only when your TODO.md explicitly references them.",
+        "",
+    ]
+    for skill in optional_skills:
+        name = str(skill.get("name", "")).strip()
+        path = str(skill.get("path", "")).strip()
+        description = str(skill.get("description", "")).strip()
+        when_to_use = render_optional_skill_when_to_use(description)
+        seat_affinity = [str(item).strip() for item in skill.get("seat_affinity", []) if str(item).strip()]
+        lines.append(f"## `{name}`")
+        lines.append("")
+        if path:
+            lines.append(f"- Path: `{path}`")
+        if seat_affinity:
+            lines.append(f"- Seat affinity: {', '.join(f'`{item}`' for item in seat_affinity)}")
+        if when_to_use:
+            lines.append(f"- Use when: {when_to_use}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
