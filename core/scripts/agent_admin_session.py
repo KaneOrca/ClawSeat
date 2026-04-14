@@ -204,7 +204,7 @@ class SessionService:
                     f"start engineer '{session.session}' failed after {TMUX_COMMAND_RETRIES} attempts; "
                     f"window_state={detail}; reason={exc}"
                 ) from exc
-        # Enable tmux terminal titles so iTerm2 tabs show session name.
+        # Enable tmux terminal titles so iTerm tabs show session name.
         # set-titles-string '#{session_name}' uses the session identifier as the tab title.
         self._run_tmux_with_retry(
             ["set", "-g", "set-titles", "on"],
@@ -318,7 +318,11 @@ class SessionService:
                     raise SessionStartError(f"monitor session empty after layout build: {monitor_state}")
                 return
             except Exception as exc:
-                last_error = exc if isinstance(exc, SessionStartError) else SessionStartError(str(exc))
+                wrapped_error = exc if isinstance(exc, SessionStartError) else SessionStartError(str(exc))
+                window_state = self._session_window_state(project.monitor_session)
+                last_error = SessionStartError(
+                    f"monitor session '{project.monitor_session}' error={wrapped_error}; window_state={window_state}"
+                )
                 if self.hooks.tmux_has_session(project.monitor_session):
                     self._run_tmux_with_retry(
                         ["kill-session", "-t", project.monitor_session],

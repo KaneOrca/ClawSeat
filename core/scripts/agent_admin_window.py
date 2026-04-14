@@ -140,6 +140,13 @@ def build_attach_command(
     return f"cd {workspace_dir} && exec env -u TMUX tmux attach -t {attach_target}{fallback}"
 
 
+def _iterm_script_command(command: str, *, context: str) -> str:
+    cleaned = command.strip()
+    if not cleaned:
+        raise AgentAdminWindowError(f"empty iterm command for {context}")
+    return applescript_quote(cleaned)
+
+
 def shell_attach_command(session: Any) -> str:
     return build_attach_command(session=session.session, workspace=session.workspace)
 
@@ -308,9 +315,11 @@ def _sanitize_applescript_text(value: str) -> str:
 def run_iterm_script(script_factory: Any) -> None:
     # iTerm-first hard-stop policy: do not downgrade to non-iTerm terminal tooling.
     # If this fails, caller should surface the error and ask operator for remediation.
+    attempts = 0
     last_error: subprocess.CalledProcessError | None = None
     for app_name in ITERM_SCRIPT_APPS:
         for attempt in range(1, ITERM_SCRIPT_RETRIES + 1):
+            attempts += 1
             try:
                 osascript(script_factory(app_name))
                 return
@@ -331,7 +340,8 @@ def run_iterm_script(script_factory: Any) -> None:
             if not last_detail and getattr(last_error, "output", None):
                 last_detail = (getattr(last_error, "output") or "").strip()
             print(
-                f"iterm_script_failed_once: app={app_name} last_rc={last_code} detail={last_detail}",
+                f"iterm_script_failed_once: app={app_name} total_attempts={attempts} last_rc={last_code} "
+                f"detail={last_detail}",
                 file=sys.stderr,
             )
     if last_error is not None:
@@ -347,7 +357,7 @@ def applescript_quote(value: str) -> str:
 
 def iterm_run_command(command: str, title: str | None = None) -> None:
     # Ensure command content is deterministic before writing into AppleScript text.
-    escaped_command = applescript_quote(command.strip())
+    escaped_command = _iterm_script_command(command, context="iterm_run_command")
     title_lines = ""
     if title:
         escaped_title = applescript_quote(title)
@@ -422,7 +432,7 @@ def open_project_tabs_window(project: Any, sessions: dict[str, Any], engineers: 
                 lines.append("  tell projectWindow")
                 lines.append("    create tab with default profile")
                 lines.append("  end tell")
-            command = applescript_quote(shell_attach_command(session))
+            command = _iterm_script_command(shell_attach_command(session), context=f"monitor tab {session.engineer_id}")
             engineer = engineers.get(session.engineer_id)
             title = applescript_quote(f"{project.name}:{engineer.display_name if engineer else session.engineer_id}")
             lines.append("  tell current session of current window")
@@ -452,7 +462,10 @@ def open_dashboard_window(projects: list[Any]) -> None:
                 lines.append("  tell dashboardWindow")
                 lines.append("    create tab with default profile")
                 lines.append("  end tell")
-            command = applescript_quote(project_monitor_shell_command(project))
+            command = _iterm_script_command(
+                project_monitor_shell_command(project),
+                context="open_dashboard_window",
+            )
             lines.append("  tell current session of current window")
             lines.append(f'    write text "{command}"')
             lines.append("  end tell")

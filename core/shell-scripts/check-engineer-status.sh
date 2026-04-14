@@ -14,12 +14,19 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-TMUX_BIN=/opt/homebrew/bin/tmux
+TMUX_BIN=
 AGENTCTL="$REPO_ROOT/core/shell-scripts/agentctl.sh"
 TASKS_ROOT="${TASKS_ROOT:-$REPO_ROOT/.tasks}"
 PATROL="${PATROL_DIR:-$TASKS_ROOT/patrol}"
 DEFAULT_SESSIONS="${DEFAULT_SESSIONS:-}"
 SESSIONS="${*:-$DEFAULT_SESSIONS}"
+
+if [ -z "${SESSIONS//[[:space:]]/}" ]; then
+  echo "check-engineer-status: no sessions specified and DEFAULT_SESSIONS is empty"
+  echo "Usage: ./check-engineer-status.sh [seat-id ...] or set DEFAULT_SESSIONS"
+  echo "Hint: for iTerm-only, ensure sessions are started before polling status."
+  exit 1
+fi
 
 mkdir -p "$PATROL"
 
@@ -47,7 +54,7 @@ run_tmux_capture() {
   local command_name="$1"
   local target="$2"
   if ! RESULT="$(env -u TMUX "$TMUX_BIN" capture-pane -t "$target" -p 2>&1)"; then
-    echo "${command_name}: ${target} TMUX_CAPTURE_FAILED rc=$?" >&2
+    echo "${command_name}: ${target} TMUX_CAPTURE_FAILED rc=$? output=${RESULT:-no_output} (iTerm-only hard-stop)" >&2
     return 1
   fi
   printf "%s\n" "$RESULT"
@@ -56,7 +63,7 @@ run_tmux_capture() {
 run_tmux_meta() {
   local target="$1"
   if ! RESULT="$(env -u TMUX "$TMUX_BIN" display-message -p -t "$target" '#{pane_current_command}|#{pane_title}' 2>&1)"; then
-    echo "${target}: TMUX_META_FAILED rc=$? output=${RESULT:-no_output}" >&2
+    echo "${target}: TMUX_META_FAILED rc=$? output=${RESULT:-no_output} (iTerm-only hard-stop)" >&2
     return 1
   fi
   printf "%s\n" "$RESULT"

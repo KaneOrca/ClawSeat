@@ -89,12 +89,19 @@ def send_frontstage_trigger(profile, seat: str) -> None:
         )
         return
     output = (result.stdout or "").strip() or (result.stderr or "").strip()
+    fix_hint = (
+        "single_fix: run "
+        f"`python3 {REPO_ROOT}/core/scripts/agent_admin.py window open-engineer {seat} --project {profile.project_name}` "
+        "to reopen the frontstage window, then `tmux list-sessions` to confirm runtime state."
+    )
+    detail = output or "no output"
+    if "RETRY_FAILED" in detail:
+        detail += "; send-and-verify detected unsubmitted input"
+    if "TMUX_MISSING" in detail:
+        detail += "; recover path: ensure CLAWSEAT_ROOT and tmux are valid, then rerun preflight"
     raise RuntimeError(
         f"frontstage trigger failed for seat '{seat}' in project '{profile.project_name}': "
-        f"tmux/send failed; return_code={result.returncode}; output={output or 'no output'}; "
-        f"suggestion: 1) run `python3 {REPO_ROOT}/core/scripts/agent_admin.py window open-engineer {seat} --project {profile.project_name}` "
-        "to reopen the frontstage window, 2) verify tmux is healthy with `tmux list-sessions`, "
-        "3) rerun `start_seat` after iTerm + tmux path are restored."
+        f"tmux/send failed; return_code={result.returncode}; output={detail}; {fix_hint}"
     )
 
 

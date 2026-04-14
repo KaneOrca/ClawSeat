@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 # send-and-verify.sh — 发送指令并验证是否成功
 # 用法: ./send-and-verify.sh [--project <project>] <session> "<message>"
@@ -39,6 +39,7 @@ resolve_tmux_bin() {
 TMUX_BIN="$(resolve_tmux_bin || true)"
 if [ -z "$TMUX_BIN" ]; then
   echo "send-and-verify: TMUX_MISSING - cannot resolve tmux binary"
+  echo "send-and-verify: iTerm-only hard-stop: fix PATH/tmux install, then retry."
   exit 1
 fi
 
@@ -51,6 +52,7 @@ fi
 
 if [ -z "$RESOLVED_SESSION" ]; then
   echo "send-and-verify: SESSION_NOT_FOUND project=$PROJECT seat=$SESSION"
+  echo "send-and-verify: iTerm-only hard-stop: run project bootstrap/start to recreate this seat."
   exit 1
 fi
 SESSION="$RESOLVED_SESSION"
@@ -61,6 +63,7 @@ run_tmux() {
   if ! RESULT="$(env -u TMUX "$TMUX_BIN" "$@" 2>&1)"; then
     local rc=$?
     echo "${SESSION}: ${command_name}_FAILED rc=$rc output=${RESULT:-no_output}" >&2
+    echo "${SESSION}: HARD_BLOCK iTerm-only tmux execution failure" >&2
     return "$rc"
   fi
   LAST_TMUX_OUTPUT="$RESULT"
@@ -75,6 +78,7 @@ capture_tail() {
 before="$(capture_tail)" || {
   rc=$?
   echo "${SESSION}: CAPTURE_BEFORE_FAILED rc=${rc}"
+  echo "${SESSION}: HARD_BLOCK iTerm-only precheck failed before submit"
   exit 1
 }
 
@@ -92,6 +96,7 @@ send_and_verify_once() {
 
 if ! send_and_verify_once "$MSG"; then
   echo "${SESSION}: SEND_FAILED (iterm-only flow)"
+  echo "${SESSION}: HARD_BLOCK iTerm-only verify chain failed while sending"
   exit 1
 fi
 
@@ -99,6 +104,7 @@ sleep 3
 after="$(capture_tail)" || {
   rc=$?
   echo "${SESSION}: CAPTURE_AFTER_FAILED rc=${rc}"
+  echo "${SESSION}: HARD_BLOCK iTerm-only verify chain failed after send"
   exit 1
 }
 
@@ -106,12 +112,14 @@ if printf "%s\n" "$after" | grep -qF "$MSG"; then
   echo "${SESSION}: RETRY_NEEDED - message still visible; attempting Enter retry"
   if ! run_tmux "retry-enter" send-keys -t "$SESSION" Enter; then
     echo "${SESSION}: RETRY_ENTER_FAILED"
+    echo "${SESSION}: HARD_BLOCK iTerm-only Enter retry failed"
     exit 1
   fi
   sleep 2
   after2="$(capture_tail)" || {
     rc=$?
     echo "${SESSION}: CAPTURE_AFTER_RETRY_FAILED rc=${rc}"
+    echo "${SESSION}: HARD_BLOCK iTerm-only retry verification failed"
     exit 1
   }
   if printf "%s\n" "$after2" | grep -qF "$MSG"; then

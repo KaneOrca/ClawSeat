@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 import sys
@@ -97,7 +98,9 @@ class TmuxCliAdapter(HarnessAdapter):
         self.agent_admin = None
         self.harness_common = None
         self._last_probe_reason: str | None = None  # set by probe_state_detailed
-        self.send_strategy = os.environ.get("CLAWSEAT_MESSAGE_STRATEGY", "send-and-verify")
+        self.send_strategies = self._parse_message_strategies(
+            os.environ.get("CLAWSEAT_MESSAGE_STRATEGY", "send-and-verify")
+        )
 
     def _classify_degraded_reason(self, output: str) -> str | None:
         """
@@ -136,7 +139,8 @@ class TmuxCliAdapter(HarnessAdapter):
         """
         Extract observability fields from pane output.
 
-        - current_task_id   : matches task_id from TODO.md lines or [project] TASK-XXX pattern
+        - current_task_id   : matches task_id from TODO.md lines or [project] TASK-XXX patterns,
+                              including IDs without numeric middle segments
         - needs_input       : True when pane appears to be waiting at a prompt
         - input_reason      : rate_limit | auth_prompt | idle_prompt | user_question | ""
         - last_prompt_excerpt: last 3 non-empty lines of output
@@ -144,14 +148,14 @@ class TmuxCliAdapter(HarnessAdapter):
         import re
 
         task_id = ""
-        # Match "task_id: TASK-XXX" or "task_id: PROD-001-A" etc.
+        task_id_pattern = r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+"
         for line in output.splitlines():
             line = line.strip()
-            m = re.search(r"task_id[:\s]+([A-Z]+-\d+-[A-Z]+)", line, re.IGNORECASE)
+            m = re.search(rf"task_id[:\s]+({task_id_pattern})", line, re.IGNORECASE)
             if m:
                 task_id = m.group(1)
                 break
-            m = re.search(r"\[" + re.escape(project) + r"\]\s+([A-Z]+-\d+-[A-Z]+)", line, re.IGNORECASE)
+            m = re.search(r"\[" + re.escape(project) + r"\]\s+(" + task_id_pattern + r")", line, re.IGNORECASE)
             if m:
                 task_id = m.group(1)
                 break
@@ -204,6 +208,27 @@ class TmuxCliAdapter(HarnessAdapter):
             input_reason=input_reason,
             last_prompt_excerpt=last_excerpt,
         )
+
+    @staticmethod
+    def _parse_message_strategies(raw: str) -> tuple[str, ...]:
+        candidates = [value.strip() for value in raw.split(",") if value.strip()]
+        if not candidates:
+            return ("send-and-verify",)
+        normalized: list[str] = []
+        invalid: list[str] = []
+        for value in candidates:
+            if value in {"send-and-verify", "send-keys"}:
+                normalized.append(value)
+            else:
+                invalid.append(value)
+        if invalid:
+            print(
+                f"tmux_adapter: unsupported CLAWSEAT_MESSAGE_STRATEGY values ignored: {', '.join(invalid)}",
+                file=sys.stderr,
+            )
+        if not normalized:
+            return ("send-and-verify",)
+        return tuple(dict.fromkeys(normalized))
 
     def materialize(self, plan: SeatPlan) -> SessionHandle:
         workspace_path = Path(plan.workspace_path).expanduser()
@@ -305,9 +330,25 @@ class TmuxCliAdapter(HarnessAdapter):
     def send_message(self, handle: SessionHandle, text: str) -> SendResult:
         if not self._session_exists(handle.runtime_id):
             return SendResult(delivered=False, transport="tmux", detail="runtime is not running")
-        if self.send_strategy == "send-keys":
-            return self._send_message_send_keys(handle, text)
-        return self._send_message_send_and_verify(handle, text)
+        last_result: SendResult | None = None
+        for strategy in self.send_strategies:
+            if strategy == "send-keys":
+                result = self._send_message_send_keys(handle, text)
+            else:
+                result = self._send_message_send_and_verify(handle, text)
+            if result.delivered:
+                return result
+            last_result = result
+            if strategy == "send-and-verify":
+                # Prefer send-and-verify by default; avoid silent drops from queue not flushed.
+                break
+        if last_result is not None:
+            return last_result
+        return SendResult(
+            delivered=False,
+            transport="tmux",
+            detail="no available message strategy configured",
+        )
 
     def _send_message_send_keys(self, handle: SessionHandle, text: str) -> SendResult:
         result = self._run_tmux_with_retry(["send-keys", "-t", handle.runtime_id, text, "C-m"], "send-keys")
@@ -459,8 +500,9 @@ class TmuxCliAdapter(HarnessAdapter):
         last: subprocess.CompletedProcess | None = None
         for attempt in range(1, TMUX_COMMAND_RETRIES + 1):
             try:
+                tmux_bin = self._resolve_tmux_bin()
                 result = subprocess.run(
-                    ["tmux", *args],
+                    [tmux_bin, *args],
                     check=False,
                     text=True,
                     capture_output=True,
@@ -484,11 +526,29 @@ class TmuxCliAdapter(HarnessAdapter):
                 )
                 time.sleep(TMUX_COMMAND_RETRY_DELAY_SECONDS)
             except OSError as exc:
-                raise RuntimeError(f"{label} failed before executing tmux: {exc}") from exc
+                if attempt >= TMUX_COMMAND_RETRIES:
+                    raise RuntimeError(f"{label} failed before executing tmux: {exc}") from exc
+                print(
+                    f"tmux_retry: {label} attempt={attempt}/{TMUX_COMMAND_RETRIES} OSError={exc}",
+                    file=sys.stderr,
+                )
+                time.sleep(TMUX_COMMAND_RETRY_DELAY_SECONDS)
         if last is None:
             raise RuntimeError(f"{label} failed with no tmux result")
         detail = last.stderr.strip() or last.stdout.strip() or f"exit {last.returncode}"
         raise RuntimeError(f"{label} failed after {TMUX_COMMAND_RETRIES} attempts: {detail}")
+
+    def _resolve_tmux_bin(self) -> str:
+        explicit = os.environ.get("TMUX_BIN")
+        if explicit:
+            return explicit
+        env_tmux = shutil.which("tmux")
+        if env_tmux:
+            return env_tmux
+        for candidate in ("/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux", "/bin/tmux"):
+            if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+        raise RuntimeError("tmux binary not found in PATH or fallback locations")
 
     def _send_and_verify(self, handle: SessionHandle, text: str) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -520,6 +580,12 @@ class TmuxCliAdapter(HarnessAdapter):
             return SendResult(delivered=True, transport="send-and-verify", detail=output)
         if "RETRY_FAILED" in output:
             reason = "message may not have been submitted (input still present after Enter retry)"
+        elif "RETRY_ENTER_FAILED" in output:
+            reason = "send-and-verify retry Enter failed before queue submission"
+        elif "RETRY_NEEDED" in output:
+            reason = "send-and-verify retried Enter after stale input echo"
+        elif "CAPTURE_AFTER_FAILED" in output or "CAPTURE_BEFORE_FAILED" in output:
+            reason = f"send-and-verify capture verification failed: {output}"
         else:
             reason = (output or result.stderr or f"exit {result.returncode}").strip()
         return SendResult(

@@ -38,10 +38,12 @@ ClawSeat 不依赖 cartooner 即可运行。用户只需 OpenClaw + Claude Code 
 1) iTerm 可脚本化
 
 ```bash
-osascript -e 'tell application "iTerm2" to get name of windows'
+osascript -e 'tell application "iTerm" to get name of windows'
 ```
 
 若弹出 AppleScript 授权提示，请在「系统设置」→「隐私与安全性」→「自动化」里允许该客户端控制 iTerm。
+
+> 说明：ClawSeat 已兼容 `iTerm` 与 `iTerm2` 两种 AppleScript 应用名；若你安装的是旧别名，`iTerm2` 也可用。优先确认 `iTerm` 可用。
 
 2) `tmux` 二进制可被路径查找到
 
@@ -61,7 +63,7 @@ python3 "$CLAWSEAT_ROOT/core/preflight.py"
 
 ```bash
 # iTerm 无法被 AppleScript 识别
-osascript -e 'tell application "iTerm2" to activate'
+osascript -e 'tell application "iTerm" to activate'
 
 # tmux 命令不存在
 brew install tmux
@@ -88,25 +90,27 @@ export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 - `{CLAWSEAT_ROOT}`：ClawSeat 仓库根目录
 - `~`：当前用户主目录
 
-### 2. 获取 starter profile
+### 2. 选择 starter profile
 
-ClawSeat 提供通用 starter profile，位于：
+ClawSeat 现在提供两种通用 starter profile：
 
-```
-{CLAWSEAT_ROOT}/examples/starter/profiles/starter.toml
-```
+| Profile | 用途 |
+|---------|------|
+| `{CLAWSEAT_ROOT}/examples/starter/profiles/starter.toml` | 仅初始化 `koder`，适合先搭前台入口 |
+| `{CLAWSEAT_ROOT}/examples/starter/profiles/full-team.toml` | 一次性创建 `koder / planner / builder-1 / reviewer-1 / qa-1 / designer-1` 六个个人工作区 |
 
-该 profile：
-- 仅定义 `koder`（前台入口）
-- 不依赖 cartooner
-- 可直接被 `bootstrap_harness.py` 使用
+两者都不依赖 cartooner，都可以直接被 `bootstrap_harness.py` 使用。
 
-将 starter profile 复制到项目目录：
+复制你要的 profile：
 
 ```bash
 PROJECT_NAME=my-project
+PROFILE_TEMPLATE=$CLAWSEAT_ROOT/examples/starter/profiles/starter.toml
+# 六席初始化时改成：
+# PROFILE_TEMPLATE=$CLAWSEAT_ROOT/examples/starter/profiles/full-team.toml
+
 mkdir -p ~/.agents/tasks/$PROJECT_NAME
-cp $CLAWSEAT_ROOT/examples/starter/profiles/starter.toml /tmp/$PROJECT_NAME-profile-dynamic.toml
+cp $PROFILE_TEMPLATE /tmp/$PROJECT_NAME-profile-dynamic.toml
 ```
 
 > `ensure_clawseat_profile()` 默认查找 `/tmp/{project}-profile-dynamic.toml`。如需其他位置，传入 `--profile` 参数。
@@ -143,7 +147,7 @@ touch ~/.agents/tasks/$PROJECT/STATUS.md
 ### 5. 运行 preflight 检查
 
 ```bash
-python3 $CLAWSEAT_ROOT/core/preflight.py
+python3 $CLAWSEAT_ROOT/core/preflight.py $PROJECT
 ```
 
 预期输出：`[PASS]` 表示所有检查通过；`[HARD_BLOCKED]` 需先修复对应问题。
@@ -174,7 +178,38 @@ python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py \
   --start
 ```
 
-`--start` 参数：启动 koder（前台）seat 并打开项目窗口。
+`--start` 参数：启动 `koder`（前台）seat 并打开项目窗口。
+
+如果 profile 使用的是 `full-team.toml`：
+- bootstrap 会一次性创建六个 seat 的个人工作区
+- 但仍只自动启动 `koder`
+- `planner` 和其他 specialist seat 需要后续显式启动
+
+### 六人工位快速初始化
+
+如果你的目标就是“快速准备完整团队工作区”，最短路径是直接用 `full-team.toml`：
+
+```bash
+PROJECT=my-project
+PROFILE=/tmp/$PROJECT-profile-dynamic.toml
+
+cp $CLAWSEAT_ROOT/examples/starter/profiles/full-team.toml $PROFILE
+sed -i '' "s/my-project/$PROJECT/g" $PROFILE
+
+python3 $CLAWSEAT_ROOT/core/preflight.py $PROJECT
+python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py \
+  --profile $PROFILE \
+  --project-name $PROJECT \
+  --start
+```
+
+完成后会生成：
+- `~/.agents/workspaces/$PROJECT/koder`
+- `~/.agents/workspaces/$PROJECT/planner`
+- `~/.agents/workspaces/$PROJECT/builder-1`
+- `~/.agents/workspaces/$PROJECT/reviewer-1`
+- `~/.agents/workspaces/$PROJECT/qa-1`
+- `~/.agents/workspaces/$PROJECT/designer-1`
 
 ---
 
@@ -248,18 +283,30 @@ python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py \
 python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py \
   --profile /tmp/my-project-profile-dynamic.toml \
   --seat planner
+
+python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py \
+  --profile /tmp/my-project-profile-dynamic.toml \
+  --seat planner \
+  --confirm-start
 ```
 
-> 首次启动 planner 前，koder 会显示确认信息（harness/profile、目标 seat 和角色、工具/认证方式），需用户批准后才会实际启动。
+> 第一次执行会先输出 launch summary；确认后，需要带 `--confirm-start` 再执行一次才会真正启动。
 
-### 添加 builder / reviewer
+### 启动 builder / reviewer / qa / designer
 
-在 profile 的 `[seat_roles]` 中添加 `builder-1`/`reviewer-1` 等，并在需要时启动：
+如果使用的是 `full-team.toml`，这些 seat 已经预置；如果使用的是 `starter.toml`，先在 profile 里补齐 `seats` 和 `[seat_roles]`。
+
+启动时同样遵循“先 review launch summary，再 confirm”：
 
 ```bash
 python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py \
   --profile /tmp/my-project-profile-dynamic.toml \
   --seat builder-1
+
+python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py \
+  --profile /tmp/my-project-profile-dynamic.toml \
+  --seat builder-1 \
+  --confirm-start
 ```
 
 ---
@@ -268,7 +315,7 @@ python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py \
 
 ```bash
 # 环境预检
-python3 $CLAWSEAT_ROOT/core/preflight.py
+python3 $CLAWSEAT_ROOT/core/preflight.py my-project
 
 # Bootstrap
 python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/openclaw_bootstrap.py
