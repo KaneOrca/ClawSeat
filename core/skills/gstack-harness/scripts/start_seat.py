@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 
 from _common import (
+    REPO_ROOT,
     capture_session_pane,
     detect_claude_onboarding_step,
     load_profile,
@@ -13,7 +15,9 @@ from _common import (
     run_command,
     seed_empty_secret_from_peer,
     seed_empty_oauth_runtime_from_peer,
+    session_name_for,
     session_path_for,
+    utc_now_iso,
 )
 
 
@@ -28,6 +32,70 @@ def parse_args() -> argparse.Namespace:
         help="Required for non-frontstage seats after the launch summary has been reviewed with the user.",
     )
     return parser.parse_args()
+
+
+def write_frontstage_receipt(profile, seat: str) -> str:
+    """
+    Write a durable frontstage binding receipt proving koder has entered frontstage
+    with the correct identity and project binding.
+    """
+    session_data = load_toml(session_path_for(profile, seat))
+    role = profile.seat_roles.get(seat, "specialist")
+    workspace = profile.workspace_for(seat)
+    receipt_path = workspace / "FRONTSTAGE_RECEIPT.toml"
+    lines = [
+        "version = 1",
+        f'seat_id = "{seat}"',
+        f'role = "{role}"',
+        f'project = "{profile.project_name}"',
+        f'entered_at = "{utc_now_iso()}"',
+        f"tool = \"{session_data.get('tool', '-')}\"",
+        f"auth_mode = \"{session_data.get('auth_mode', '-')}\"",
+        f"provider = \"{session_data.get('provider', '-')}\"",
+        f"identity = \"{session_data.get('identity', '-')}\"",
+        f"workspace = \"{workspace}\"",
+        f"contract_path = \"{workspace / 'WORKSPACE_CONTRACT.toml'}\"",
+    ]
+    receipt_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(receipt_path)
+
+
+SEND_SCRIPT_PATH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
+
+
+def _send_frontstage_via_send_and_verify(project: str, seat: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(SEND_SCRIPT_PATH), "--project", project, seat, "enter_frontstage"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def send_frontstage_trigger(profile, seat: str) -> None:
+    """
+    Send a frontstage entry trigger to the seat via tmux.
+    For koder, this triggers automatic entry into the frontstage shell.
+    """
+    session_name = session_name_for(profile, seat)
+    if not session_name:
+        return
+    result = _send_frontstage_via_send_and_verify(profile.project_name, seat)
+    if result.returncode == 0:
+        print(
+            f"frontstage_trigger_ok: {profile.project_name}/{seat} via send-and-verify "
+            f"(session={session_name})"
+        )
+        return
+    output = (result.stdout or "").strip() or (result.stderr or "").strip()
+    raise RuntimeError(
+        f"frontstage trigger failed for seat '{seat}' in project '{profile.project_name}': "
+        f"tmux/send failed; return_code={result.returncode}; output={output or 'no output'}; "
+        f"suggestion: 1) run `python3 {REPO_ROOT}/core/scripts/agent_admin.py window open-engineer {seat} --project {profile.project_name}` "
+        "to reopen the frontstage window, 2) verify tmux is healthy with `tmux list-sessions`, "
+        "3) rerun `start_seat` after iTerm + tmux path are restored."
+    )
 
 
 def render_launch_summary(profile, seat: str) -> str:
@@ -102,12 +170,25 @@ def main() -> int:
             "Ask the user to complete the prompt in the TUI window, then notify the operator to take over."
         )
     else:
-        print(
-            "contract_reread_required: "
-            f"after {args.seat} is up, have that seat re-read its generated workspace guide "
-            "and WORKSPACE_CONTRACT.toml before treating it as fully ready. "
-            "If you need durable proof, run scripts/ack_contract.py for that seat afterwards."
-        )
+        # No onboarding step detected — koder is ready to enter frontstage
+        if args.seat == "koder":
+            # Write durable frontstage receipt
+            receipt_path = write_frontstage_receipt(profile, args.seat)
+            print(f"frontstage_receipt_written: {receipt_path}")
+            # Send frontstage entry trigger to koder
+            send_frontstage_trigger(profile, args.seat)
+            print(
+                "frontstage_auto_entry: "
+                f"{args.seat} has been triggered to enter frontstage shell automatically. "
+                "The seat will read WORKSPACE_CONTRACT.toml and enter the frontstage loop."
+            )
+        else:
+            print(
+                "contract_reread_required: "
+                f"after {args.seat} is up, have that seat re-read its generated workspace guide "
+                "and WORKSPACE_CONTRACT.toml before treating it as fully ready. "
+                "If you need durable proof, run scripts/ack_contract.py for that seat afterwards."
+            )
     return 0
 
 

@@ -7,9 +7,9 @@
 # - DECISION_NEEDED: 等确认、等选择、等 PM 拍板
 # - DELIVERED / STALLED / IDLE / CRASHED / DRIFT
 #
-# 用法: ./check-engineer-status.sh [engineer...]
-#       ./check-engineer-status.sh                           # 默认: A/B/C/D/E/F/G
-#       ./check-engineer-status.sh engineer-e engineer-f     # 检查指定工程师
+# 用法: ./check-engineer-status.sh [seat-id...]
+#       ./check-engineer-status.sh                           # 默认: $DEFAULT_SESSIONS (from profile)
+#       ./check-engineer-status.sh builder-1 reviewer-1      # 检查指定 seat
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -18,25 +18,62 @@ TMUX_BIN=/opt/homebrew/bin/tmux
 AGENTCTL="$REPO_ROOT/core/shell-scripts/agentctl.sh"
 TASKS_ROOT="${TASKS_ROOT:-$REPO_ROOT/.tasks}"
 PATROL="${PATROL_DIR:-$TASKS_ROOT/patrol}"
-DEFAULT_SESSIONS="${DEFAULT_SESSIONS:-engineer-a engineer-b engineer-c engineer-d engineer-e engineer-f engineer-g}"
+DEFAULT_SESSIONS="${DEFAULT_SESSIONS:-}"
 SESSIONS="${*:-$DEFAULT_SESSIONS}"
 
 mkdir -p "$PATROL"
 
-get_letter() {
-  echo "$1" | sed 's/^engineer-//'
+resolve_tmux_bin() {
+  if command -v tmux >/dev/null 2>&1; then
+    command -v tmux
+    return 0
+  fi
+  for candidate in /opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux /bin/tmux; do
+    if [ -x "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+TMUX_BIN="$(resolve_tmux_bin || true)"
+if [ -z "$TMUX_BIN" ]; then
+  echo "check-engineer-status: TMUX_MISSING - cannot resolve tmux binary"
+  exit 1
+fi
+
+run_tmux_capture() {
+  local command_name="$1"
+  local target="$2"
+  if ! RESULT="$(env -u TMUX "$TMUX_BIN" capture-pane -t "$target" -p 2>&1)"; then
+    echo "${command_name}: ${target} TMUX_CAPTURE_FAILED rc=$?" >&2
+    return 1
+  fi
+  printf "%s\n" "$RESULT"
+}
+
+run_tmux_meta() {
+  local target="$1"
+  if ! RESULT="$(env -u TMUX "$TMUX_BIN" display-message -p -t "$target" '#{pane_current_command}|#{pane_title}' 2>&1)"; then
+    echo "${target}: TMUX_META_FAILED rc=$? output=${RESULT:-no_output}" >&2
+    return 1
+  fi
+  printf "%s\n" "$RESULT"
 }
 
 is_excluded_session() {
+  # PM/debug seats excluded by naming convention
   case "$1" in
-    engineer-pm|codex-PM|codex-pm) return 0 ;;
+    *-pm|pm-*) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 expects_mailbox() {
+  # These seat roles do not maintain a TODO/DELIVERY mailbox
   case "$1" in
-    engineer-g|claude-G|claude-g) return 1 ;;
+    koder|frontstage|monitor) return 1 ;;
     *) return 0 ;;
   esac
 }
@@ -47,9 +84,9 @@ read_task_id() {
 }
 
 check_mailbox() {
-  local letter=$(get_letter "$1")
-  local todo="$TASKS_ROOT/engineer-${letter}/TODO.md"
-  local delivery="$TASKS_ROOT/engineer-${letter}/DELIVERY.md"
+  local seat="$1"
+  local todo="$TASKS_ROOT/$seat/TODO.md"
+  local delivery="$TASKS_ROOT/$seat/DELIVERY.md"
   local todo_id=""
   local delivery_id=""
 
@@ -72,8 +109,8 @@ check_mailbox() {
 }
 
 todo_file_for_session() {
-  local letter=$(get_letter "$1")
-  echo "$TASKS_ROOT/engineer-${letter}/TODO.md"
+  local seat="$1"
+  echo "$TASKS_ROOT/$seat/TODO.md"
 }
 
 for s in $SESSIONS; do
@@ -87,14 +124,24 @@ for s in $SESSIONS; do
   else
     SESSION_NAME="$("$AGENTCTL" session-name "$s")"
   fi
-  RAW=$(env -u TMUX "$TMUX_BIN" capture-pane -t "$SESSION_NAME" -p 2>/dev/null)
+  if [ -z "$SESSION_NAME" ]; then
+    echo "$s: SESSION_NOT_FOUND (name unresolved)"
+    continue
+  fi
+  if ! RAW="$(run_tmux_capture "capture" "$SESSION_NAME")"; then
+    echo "$s: SESSION_CAPTURE_FAILED (tmux command unavailable or session missing)"
+    continue
+  fi
   if [ -z "$RAW" ]; then
-    echo "$s: SESSION_NOT_FOUND"
+    echo "$s: SESSION_NOT_FOUND (empty capture)"
     continue
   fi
   MAILBOX=$(check_mailbox "$s")
   TODO_FILE=$(todo_file_for_session "$s")
-  META=$(env -u TMUX "$TMUX_BIN" display-message -p -t "$SESSION_NAME" '#{pane_current_command}|#{pane_title}' 2>/dev/null)
+  if ! META="$(run_tmux_meta "$SESSION_NAME")"; then
+    echo "$s: SESSION_META_FAILED"
+    continue
+  fi
   PANE_CMD="${META%%|*}"
   PANE_TITLE="${META#*|}"
   RAW_TAIL5=$(echo "$RAW" | tail -5)

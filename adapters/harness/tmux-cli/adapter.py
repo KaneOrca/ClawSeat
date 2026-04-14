@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ from harness_adapter import (
     HarnessAdapter,
     RecoverResult,
     ResumeResult,
+    SeatObservable,
     SeatPlan,
     SendResult,
     SessionHandle,
@@ -56,6 +58,20 @@ DEGRADED_KEYWORDS = (
     "crash",
 )
 READY_KEYWORDS = ("ready", "idle", "waiting for input", "bypass permissions on")
+TMUX_COMMAND_RETRIES = 2
+TMUX_COMMAND_TIMEOUT_SECONDS = 8.0
+TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
+SEND_AND_VERIFY_SH = str(CORE_ROOT / "shell-scripts" / "send-and-verify.sh")
+
+# Input-reason detection
+RATE_LIMIT_INPUT_KEYWORDS = ("rate limit", "exceeded retry", "usage limit", "quota exceeded", "too many requests")
+AUTH_PROMPT_INPUT_KEYWORDS = ("sign in", "api key", "oauth", "authentication", "paste code here")
+IDLE_PROMPT_INPUT_KEYWORDS = ("?", "press enter to continue", "press return", "continue?", "proceed?")
+USER_QUESTION_INPUT_KEYWORDS = ("what would you like", "which would you prefer", "how should i", "should i")
+
+# Sub-reasons for DEGRADED state — used to distinguish authz (403) vs quota (429)
+AUTHZ_DEGRADED_KEYWORDS = ("forbidden", "access forbidden", "permission denied", "unauthorized")
+QUOTA_DEGRADED_KEYWORDS = ("rate limit", "exceeded retry", "usage limit", "quota exceeded", "too many requests")
 
 
 class TmuxCliAdapter(HarnessAdapter):
@@ -80,6 +96,114 @@ class TmuxCliAdapter(HarnessAdapter):
         ).expanduser()
         self.agent_admin = None
         self.harness_common = None
+        self._last_probe_reason: str | None = None  # set by probe_state_detailed
+        self.send_strategy = os.environ.get("CLAWSEAT_MESSAGE_STRATEGY", "send-and-verify")
+
+    def _classify_degraded_reason(self, output: str) -> str | None:
+        """
+        Classify the sub-reason for a DEGRADED state.
+
+        Returns 'authz' for 403/forbidden issues, 'quota' for 429/rate-limit issues,
+        or None if the cause is ambiguous/generic.
+        """
+        lowered = output.lower()
+        if any(kw in lowered for kw in AUTHZ_DEGRADED_KEYWORDS):
+            return "authz"
+        if any(kw in lowered for kw in QUOTA_DEGRADED_KEYWORDS):
+            return "quota"
+        return None
+
+    def probe_state_detailed(self, handle: SessionHandle) -> tuple[SessionState, str | None, SeatObservable]:
+        """
+        Probe session state with sub-reason classification and observable metadata.
+
+        Returns (state, reason, observable) where:
+        - state  : SessionState enum
+        - reason : 'authz' (403/forbidden) | 'quota' (429/rate-limit) | None
+        - observable : SeatObservable with current_task_id, needs_input, input_reason,
+                       last_prompt_excerpt
+        """
+        output = self.get_output(handle, lines=80)
+        state = self.probe_state(handle)
+        reason: str | None = None
+        if state == SessionState.DEGRADED:
+            reason = self._classify_degraded_reason(output)
+        self._last_probe_reason = reason
+        observable = self._extract_observable(output, handle.project)
+        return state, reason, observable
+
+    def _extract_observable(self, output: str, project: str) -> SeatObservable:
+        """
+        Extract observability fields from pane output.
+
+        - current_task_id   : matches task_id from TODO.md lines or [project] TASK-XXX pattern
+        - needs_input       : True when pane appears to be waiting at a prompt
+        - input_reason      : rate_limit | auth_prompt | idle_prompt | user_question | ""
+        - last_prompt_excerpt: last 3 non-empty lines of output
+        """
+        import re
+
+        task_id = ""
+        # Match "task_id: TASK-XXX" or "task_id: PROD-001-A" etc.
+        for line in output.splitlines():
+            line = line.strip()
+            m = re.search(r"task_id[:\s]+([A-Z]+-\d+-[A-Z]+)", line, re.IGNORECASE)
+            if m:
+                task_id = m.group(1)
+                break
+            m = re.search(r"\[" + re.escape(project) + r"\]\s+([A-Z]+-\d+-[A-Z]+)", line, re.IGNORECASE)
+            if m:
+                task_id = m.group(1)
+                break
+
+        # Detect needs_input from last few lines
+        non_empty = [l.strip() for l in output.splitlines() if l.strip()]
+        tail = non_empty[-5:] if non_empty else []
+        last_excerpt = " | ".join(tail[-3:]) if tail else ""
+
+        needs_input = False
+        input_reason = ""
+        lowered = output.lower()
+
+        for kw in RATE_LIMIT_INPUT_KEYWORDS:
+            if kw in lowered:
+                needs_input = True
+                input_reason = "rate_limit"
+                break
+        if not needs_input:
+            for kw in AUTH_PROMPT_INPUT_KEYWORDS:
+                if kw in lowered:
+                    needs_input = True
+                    input_reason = "auth_prompt"
+                    break
+        if not needs_input:
+            for kw in USER_QUESTION_INPUT_KEYWORDS:
+                if kw in lowered:
+                    needs_input = True
+                    input_reason = "user_question"
+                    break
+        if not needs_input:
+            for kw in IDLE_PROMPT_INPUT_KEYWORDS:
+                if kw in lowered:
+                    needs_input = True
+                    input_reason = "idle_prompt"
+                    break
+
+        # Also flag needs_input if last non-empty line ends with "?" and suggests waiting
+        if not needs_input and tail:
+            last_line = tail[-1]
+            if last_line.endswith("?") and any(
+                k in last_line.lower() for k in ("continue", "proceed", "what", "which", "how")
+            ):
+                needs_input = True
+                input_reason = "user_question"
+
+        return SeatObservable(
+            current_task_id=task_id,
+            needs_input=needs_input,
+            input_reason=input_reason,
+            last_prompt_excerpt=last_excerpt,
+        )
 
     def materialize(self, plan: SeatPlan) -> SessionHandle:
         workspace_path = Path(plan.workspace_path).expanduser()
@@ -143,7 +267,7 @@ class TmuxCliAdapter(HarnessAdapter):
 
     def destroy_session(self, handle: SessionHandle) -> None:
         if self._session_exists(handle.runtime_id):
-            self._run(["tmux", "kill-session", "-t", handle.runtime_id], "destroy session")
+            self._run(["kill-session", "-t", handle.runtime_id], "destroy session")
 
     def resume_session(self, handle: SessionHandle) -> ResumeResult:
         if not self._session_exists(handle.runtime_id):
@@ -181,24 +305,32 @@ class TmuxCliAdapter(HarnessAdapter):
     def send_message(self, handle: SessionHandle, text: str) -> SendResult:
         if not self._session_exists(handle.runtime_id):
             return SendResult(delivered=False, transport="tmux", detail="runtime is not running")
-        result = subprocess.run(
-            ["tmux", "send-keys", "-t", handle.runtime_id, text, "C-m"],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        detail = result.stderr.strip() or result.stdout.strip()
+        if self.send_strategy == "send-keys":
+            return self._send_message_send_keys(handle, text)
+        return self._send_message_send_and_verify(handle, text)
+
+    def _send_message_send_keys(self, handle: SessionHandle, text: str) -> SendResult:
+        result = self._run_tmux_with_retry(["send-keys", "-t", handle.runtime_id, text, "C-m"], "send-keys")
         return SendResult(
             delivered=result.returncode == 0,
-            transport="tmux",
-            detail=detail,
+            transport="tmux-send-keys",
+            detail=result.stderr.strip() or result.stdout.strip() or "no detail",
         )
 
     def get_output(self, handle: SessionHandle, lines: int = 50) -> str:
         self._ensure_helpers()
         if not self._session_exists(handle.runtime_id):
             return ""
-        profile = self._profile_for_handle(handle)
+        try:
+            profile = self._profile_for_handle(handle)
+        except FileNotFoundError:
+            # Handle case where session binding doesn't exist yet (tmux fallback handles)
+            workspace = Path(handle.workspace_path).expanduser() if handle.workspace_path else Path.cwd()
+            profile = SimpleNamespace(
+                workspace_root=workspace,
+                project_name=handle.project,
+                repo_root=workspace,
+            )
         return self.harness_common.capture_session_pane(profile, handle.seat_id, lines=max(lines, 1))
 
     def probe_state(self, handle: SessionHandle) -> SessionState:
@@ -243,12 +375,7 @@ class TmuxCliAdapter(HarnessAdapter):
             if handles:
                 return handles
 
-        result = subprocess.run(
-            ["tmux", "list-sessions", "-F", "#{session_name}"],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        result = self._run_tmux_with_retry(["list-sessions", "-F", "#{session_name}"], "list-sessions")
         prefix = f"{project}-"
         for raw in result.stdout.splitlines():
             session_name = raw.strip()
@@ -258,12 +385,14 @@ class TmuxCliAdapter(HarnessAdapter):
             if "-" not in remainder:
                 continue
             seat_id, tool = remainder.rsplit("-", 1)
+            fallback_session_path = str(self.sessions_root / project / seat_id / "session.toml")
             handles.append(
                 self._make_handle(
                     seat_id=seat_id,
                     project=project,
                     tool=tool,
                     runtime_id=session_name,
+                    session_path=fallback_session_path,
                 )
             )
         return handles
@@ -294,13 +423,11 @@ class TmuxCliAdapter(HarnessAdapter):
         )
 
     def _session_exists(self, runtime_id: str) -> bool:
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", runtime_id],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        return result.returncode == 0
+        try:
+            self._run_tmux_with_retry(["has-session", "-t", runtime_id], "has-session")
+        except RuntimeError:
+            return False
+        return True
 
     def _load_session_binding(
         self,
@@ -322,11 +449,84 @@ class TmuxCliAdapter(HarnessAdapter):
             return tomllib.load(handle)
 
     def _run(self, args: list[str], label: str) -> None:
-        result = subprocess.run(args, text=True, capture_output=True, check=False)
+        result = self._run_tmux_with_retry(args, label)
         if result.returncode == 0:
             return
         detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
         raise RuntimeError(f"{label} failed: {detail}")
+
+    def _run_tmux_with_retry(self, args: list[str], label: str) -> subprocess.CompletedProcess:
+        last: subprocess.CompletedProcess | None = None
+        for attempt in range(1, TMUX_COMMAND_RETRIES + 1):
+            try:
+                result = subprocess.run(
+                    ["tmux", *args],
+                    check=False,
+                    text=True,
+                    capture_output=True,
+                    timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+                )
+                if result.returncode == 0:
+                    return result
+                last = result
+                if attempt < TMUX_COMMAND_RETRIES:
+                    print(
+                        f"tmux_retry: {label} attempt={attempt}/{TMUX_COMMAND_RETRIES} rc={result.returncode}",
+                        file=sys.stderr,
+                    )
+                    time.sleep(TMUX_COMMAND_RETRY_DELAY_SECONDS)
+            except subprocess.TimeoutExpired as exc:
+                if attempt >= TMUX_COMMAND_RETRIES:
+                    raise RuntimeError(f"{label} timed out after {TMUX_COMMAND_RETRIES} attempts: {exc}") from exc
+                print(
+                    f"tmux_retry: {label} attempt={attempt}/{TMUX_COMMAND_RETRIES} timeout={TMUX_COMMAND_TIMEOUT_SECONDS}s",
+                    file=sys.stderr,
+                )
+                time.sleep(TMUX_COMMAND_RETRY_DELAY_SECONDS)
+            except OSError as exc:
+                raise RuntimeError(f"{label} failed before executing tmux: {exc}") from exc
+        if last is None:
+            raise RuntimeError(f"{label} failed with no tmux result")
+        detail = last.stderr.strip() or last.stdout.strip() or f"exit {last.returncode}"
+        raise RuntimeError(f"{label} failed after {TMUX_COMMAND_RETRIES} attempts: {detail}")
+
+    def _send_and_verify(self, handle: SessionHandle, text: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [SEND_AND_VERIFY_SH, "--project", handle.project, handle.runtime_id, text],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=TMUX_COMMAND_TIMEOUT_SECONDS + 8,
+        )
+
+    def _send_message_send_and_verify(self, handle: SessionHandle, text: str) -> SendResult:
+        try:
+            result = self._send_and_verify(handle, text)
+        except FileNotFoundError:
+            return SendResult(
+                delivered=False,
+                transport="send-and-verify",
+                detail=f"send-and-verify missing at {SEND_AND_VERIFY_SH}",
+            )
+        except subprocess.TimeoutExpired as exc:
+            return SendResult(
+                delivered=False,
+                transport="send-and-verify",
+                detail=f"send-and-verify timeout: {exc}",
+            )
+
+        output = (result.stdout or "").strip()
+        if result.returncode == 0 and "OK" in output:
+            return SendResult(delivered=True, transport="send-and-verify", detail=output)
+        if "RETRY_FAILED" in output:
+            reason = "message may not have been submitted (input still present after Enter retry)"
+        else:
+            reason = (output or result.stderr or f"exit {result.returncode}").strip()
+        return SendResult(
+            delivered=False,
+            transport="send-and-verify",
+            detail=reason,
+        )
 
     def _write_toml(self, path: Path, data: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
