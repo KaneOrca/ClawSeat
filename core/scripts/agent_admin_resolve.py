@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,7 @@ class ResolveHandlers:
         mode = session.auth_mode
         binary = session.bin_path
         env = self.hooks.common_env()
+        shared_agent_home = Path(os.environ.get("AGENT_HOME", str(Path.home()))).expanduser()
 
         home = runtime_dir / "home"
         xdg_config = runtime_dir / "xdg" / "config"
@@ -44,6 +46,8 @@ class ResolveHandlers:
             self.hooks.ensure_dir(path)
         env.update(
             {
+                "AGENT_HOME": str(shared_agent_home),
+                "AGENTS_ROOT": str(shared_agent_home / ".agents"),
                 "HOME": str(home),
                 "XDG_CONFIG_HOME": str(xdg_config),
                 "XDG_DATA_HOME": str(xdg_data),

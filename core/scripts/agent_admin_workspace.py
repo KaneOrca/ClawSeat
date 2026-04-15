@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import textwrap
 from pathlib import Path
 from typing import Any
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(
+    os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[2]))
+)
 HARNESS_PROFILE_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "assets" / "profiles"
 SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
@@ -94,6 +97,15 @@ def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[s
     if engineer.role in {"frontstage-supervisor", "planner-dispatcher"}:
         lines.append(f"{next_index}. `{status_doc}`")
         next_index += 1
+    if engineer.role == "planner-dispatcher":
+        planner_brief = Path(repo_root) / ".tasks/planner/PLANNER_BRIEF.md"
+        if planner_brief.exists():
+            lines.append(f"{next_index}. `{planner_brief}`")
+            next_index += 1
+        warden_brief = Path(repo_root) / ".tasks/warden/WARDEN_BRIEF.md"
+        if warden_brief.exists():
+            lines.append(f"{next_index}. `{warden_brief}`")
+            next_index += 1
     role_contract = None
     if engineer.role == "frontstage-supervisor":
         candidate = Path(repo_root) / "KODER.md"
@@ -141,7 +153,7 @@ def render_role_scope_summary(engineer: Any) -> str:
     if role == "frontstage-supervisor":
         return "intake framing, seat launch, patrol, unblock, and escalation"
     if role == "planner-dispatcher":
-        return "execution planning, next-hop routing, and durable consumption of completions"
+        return "task initialization, research coordination, execution planning, next-hop routing, and durable consumption of completions"
     if role == "builder":
         return "implementation and code changes"
     if role == "reviewer":
@@ -249,8 +261,11 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
                 f"- use document-first dispatch helpers when handing work to `{planner_seat}`; do not hand-write task chain state unless the helper path is unavailable",
                 "- before launching any non-frontstage seat, summarize harness/profile, seat/role, tool/runtime, and auth/provider to the user and wait for confirmation",
                 "- once planner is live in an OpenClaw/Feishu setup, proactively ask the user for the target Feishu group ID; do not wait for the user to request group wiring",
-                "- in that bridge flow, keep `main` mention-gated and keep `warden`/koder non-mention-gated for the target group",
-                f"- once the group ID arrives, immediately hand the Feishu smoke test to `{planner_seat}`, tell the user “收到测试消息即可回复希望完成什么任务”, and bring up `reviewer-1` in parallel when that seat exists",
+                "- after the group ID arrives, require an explicit project-binding confirmation: bind the current project, switch to another existing project, or create a new project; do not treat a new group as an automatic new project",
+                "- in that bridge flow, keep `main` mention-gated and keep the project-facing `koder` account non-mention-gated by default; optional system seats such as `warden` only become non-mention-gated when they are explicitly deployed",
+                "- planner should treat the bound group as the user-visible bridge for `OC_DELEGATION_REPORT_V1` closeouts; keep legacy auto-broadcast disabled by default; opt-in requires CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1",
+                f"- once group ID and project binding are both confirmed, immediately hand the Feishu smoke test to `{planner_seat}`, tell the user “收到测试消息即可回复希望完成什么任务”, and bring up `reviewer-1` in parallel when that seat exists",
+                "- if the current chain is verification-heavy, bring up `qa-1` in parallel with or immediately after `reviewer-1`; do not treat QA as a first-launch seat",
                 f"- remind `{planner_seat}` when drift appears; do not silently reroute specialists yourself",
                 "- do not absorb builder, reviewer, QA, or designer specialist work",
             ]
@@ -260,7 +275,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
             [
                 f"- `{seat_name}` owns execution decisions, next-hop routing, and durable consumption of specialist completions.",
                 f"- expect specialists to return completion to `{seat_name}`, not directly to koder",
-                "- when planner has just been initialized for an OpenClaw/Feishu workflow, return a short ready signal so frontstage can finish the group bridge and planner-ready broadcast",
+                "- when planner has just been initialized for an OpenClaw/Feishu workflow, return a short ready signal so frontstage can finish group binding and the bridge smoke test",
                 "- use `gstack-harness/scripts/dispatch_task.py` as the default path for planner -> specialist dispatch; do not hand-write TODO/TASKS/STATUS unless the helper is unavailable",
                 "- use document-first dispatch helpers; treat raw `tmux send-keys` as a protocol violation",
                 "- escalate back to koder only when direction, seat boundaries, or model/auth choices need frontstage help",
@@ -306,19 +321,23 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
                 f"- when patrol finds waiting approvals or drift, unblock or remind `{planner_seat}`; do not replace `{planner_seat}` as planner",
                 f"- when handing work to `{planner_seat}`, default to `gstack-harness/scripts/dispatch_task.py` so the dispatch leaves `source`, `reply_to`, and a receipt",
                 "- after starting a seat, refresh the project window so tabs stay in canonical role order",
-                "- after planner startup in an OpenClaw/Feishu workflow, ask the user for the group ID, verify it from `~/.openclaw/agents/*/sessions/sessions.json` if possible, then complete group hookup before expecting unattended group traffic",
-                "- in that flow, require `main` to stay on `requireMention=true`; only `warden`/koder should be set to `requireMention=false` for the target group",
-                "- once the group ID is known and `warden` is present in the group, use the standard `feishu-send.sh --target group:<GROUP_ID>` path to announce planner initialization",
+                "- after planner startup in an OpenClaw/Feishu workflow, ask the user for the group ID, verify it from `~/.openclaw/agents/*/sessions/sessions.json` if possible, then require explicit project binding before expecting unattended group traffic",
+                "- in that flow, require `main` to stay on `requireMention=true`; keep the project-facing `koder` account non-mention-gated by default, and only add optional system seats such as `warden` when they are explicitly deployed for that group",
+                "- once the group ID and project binding are known, treat the Feishu group as the user-visible bridge for explicit smoke tests and OC_DELEGATION_REPORT_V1 closeouts; do not rely on the legacy auto-broadcast path as the control packet",
                 f"- after the group bridge is ready, dispatch the first smoke test to `{planner_seat}`, tell the user “收到测试消息即可回复希望完成什么任务”, and start `reviewer-1` in parallel when present",
+                "- when the planner bridge uses `lark-cli --as user`, do not trust sender identity in the group; only treat `OC_DELEGATION_REPORT_V1` as a machine-readable delegation receipt",
                 f"- when `{planner_seat}` returns a planning memo or execution plan with `FrontstageDisposition: AUTO_ADVANCE`, convert it into downstream dispatch promptly instead of leaving it parked at frontstage",
                 f"- when `{planner_seat}` returns a closeout receipt, summarize it for the user in plain language and auto-advance by default; only ask the user to decide when the receipt explicitly says `FrontstageDisposition: USER_DECISION_NEEDED`",
+                "- when that closeout becomes visible in the group, read the linked delivery trail, reconcile the wrap-up, and update the project docs before giving the user the summary",
                 "- planner -> frontstage closeout should also refresh `koder/TODO.md` so frontstage keeps a durable current-task anchor across compaction or restarts",
             ]
         )
     elif engineer.role == "planner-dispatcher":
         lines.extend(
             [
-                "- when dispatching work to A/C/D/E, default to `gstack-harness/scripts/dispatch_task.py` so `TODO.md` gets `source` and `reply_to`, project state docs are updated, and a dispatch receipt is written",
+                "- when dispatching work to `builder-1`, `reviewer-1`, `qa-1`, or `designer-1`, default to `gstack-harness/scripts/dispatch_task.py` so `TODO.md` gets `source` and `reply_to`, project state docs are updated, and a dispatch receipt is written",
+                "- when a Feishu group is bound, keep the legacy group broadcast path disabled unless explicitly opted in; the default planner closeout path is `OC_DELEGATION_REPORT_V1` through `lark-cli --as user`",
+                "- when the bound group is used to wake koder through the user channel, use `gstack-harness/scripts/send_delegation_report.py` to emit `OC_DELEGATION_REPORT_V1` instead of hand-writing a free-form status message",
                 "- when a specialist completes work, write a durable `Consumed:` ACK before routing the next hop",
                 "- use canonical review verdicts (`APPROVED`, `APPROVED_WITH_NITS`, `CHANGES_REQUESTED`, `BLOCKED`, `DECISION_NEEDED`) instead of inferring routing from prose",
                 "- when returning a chain result to frontstage, use `gstack-harness/scripts/complete_handoff.py` as the default closeout path instead of hand-rolling the delivery",
@@ -327,6 +346,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
                 "- do not leave a normal planning result parked as 'awaiting koder decision' unless the task really created a frontstage decision gate; default to `AUTO_ADVANCE` for accepted-scope plans",
                 "- when returning a chain result to frontstage, include `FrontstageDisposition:` and `UserSummary:` in `DELIVERY.md`; default to `AUTO_ADVANCE` unless a real user decision is needed",
                 "- when frontstage supplies a Feishu group ID for install bring-up, first run the group smoke test, send the user-facing test prompt, and expect reviewer startup in parallel rather than waiting for a second nudge",
+                "- if the chain is verification-heavy, start `qa-1` in parallel with or immediately after `reviewer-1`; QA is a verification lane, not a first-launch seat",
             ]
         )
     else:
@@ -399,6 +419,8 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "",
             "Prefer these helpers over hand-written TODO/TASKS/STATUS edits:",
             "",
+            "When a Feishu group is bound, the dispatch helper will broadcast the task release to that same group only when CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1 is explicitly set.",
+            "",
             "Dispatch work to a specialist (swap the target seat as needed):",
             "```bash",
             f"python3 {root}/dispatch_task.py \\",
@@ -410,6 +432,8 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "  --objective '<OBJECTIVE>' \\",
             f"  --reply-to {planner_seat}",
             "```",
+            "",
+            "The receipt helper follows the same hook and only broadcasts when $CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1 is explicitly set; default is disabled.",
             "",
             "After reading a specialist delivery, stamp the durable ACK before routing onward:",
             "```bash",
@@ -433,6 +457,8 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "  --frontstage-disposition AUTO_ADVANCE \\",
             "  --user-summary '<SHORT_USER_SUMMARY>'",
             "```",
+            "",
+            "If a closeout is visible in the bound group, read the linked delivery trail, reconcile the wrap-up, and update the project docs before giving the user the summary.",
         ]
     elif engineer.role in {"builder", "reviewer", "qa", "designer"}:
         lines = [
@@ -477,6 +503,10 @@ def workspace_contract_payload(
     project_engineers: dict[str, Any] | None = None,
     engineer_order: list[str] | None = None,
 ) -> dict[str, object]:
+    merged_engineer = (project_engineers or {}).get(session.engineer_id)
+    role_details = list(getattr(engineer, "role_details", []) or [])
+    if not role_details and merged_engineer is not None:
+        role_details = list(getattr(merged_engineer, "role_details", []) or [])
     read_first_items = [
         line.split("`")[1]
         for line in render_read_first_lines(session, project, engineer)
@@ -513,7 +543,7 @@ def workspace_contract_payload(
         "tool": session.tool,
         "workspace": session.workspace,
         "role": engineer.role,
-        "role_details": list(getattr(engineer, "role_details", []) or []),
+        "role_details": role_details,
         "aliases": list(getattr(engineer, "aliases", []) or []),
         "capabilities": [line[2:] for line in render_authority_lines(engineer) if line.startswith("- ")],
         "read_first": read_first_items,

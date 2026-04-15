@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,13 @@ def q(value: str) -> str:
 
 def q_array(values: list[str]) -> str:
     return "[" + ", ".join(q(value) for value in values) + "]"
+
+
+def resolve_clawseat_root() -> Path:
+    configured = os.environ.get("CLAWSEAT_ROOT", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path(__file__).resolve().parents[4]
 
 
 def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, bootstrap_only: bool) -> list[str]:
@@ -110,7 +118,7 @@ def main() -> int:
     output_profile = Path(args.output_profile).expanduser()
     data = load_toml(source_profile)
     project_name = args.project_name or str(data["project_name"])
-    repo_root = args.repo_root or str(data["repo_root"])
+    repo_root = args.repo_root or str(resolve_clawseat_root())
     lines = build_lines(
         data,
         project_name=project_name,

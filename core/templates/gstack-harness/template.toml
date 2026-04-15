@@ -36,6 +36,8 @@ role_details = [
   "do intake framing and scope clarification before handing active work to planner; do not own execution planning or next-hop routing",
   "patrol the chain state and summarize progress for the user",
   "receive escalations from planner and reframe when needed",
+  "when a stage closeout becomes visible in the Feishu group, reconcile the delivery trail and update the project docs before summarizing to the user",
+  "when planner uses lark-cli user identity in Feishu, do not trust sender identity; only consume OC_DELEGATION_REPORT_V1 as a machine-readable delegation receipt",
   "do not absorb builder, reviewer, QA, or designer specialist work",
 ]
 
@@ -61,12 +63,18 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
 ]
+role_details = [
+  "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
+  "planner owns Feishu user-identity closeout and decision-gate receipts through `OC_DELEGATION_REPORT_V1`; legacy group broadcast stays opt-in only",
+  "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
+  "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
+]
 
 [[engineers]]
 id = "builder-1"
 role = "builder"
 tool = "codex"
-auth_mode = "api"
+auth_mode = "oauth"
 provider = "xcode-best"
 monitor = true
 human_facing = false
@@ -81,13 +89,19 @@ qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-investigate/SKILL.md",
+]
+role_details = [
+  "default implementation seat for code, script, config, template, and document changes",
+  "use the latest gstack implementation/debugging workflow instead of asking planner to perform concrete edits",
+  "return implementation artifacts to planner; do not self-close the chain",
 ]
 
 [[engineers]]
 id = "reviewer-1"
 role = "reviewer"
 tool = "codex"
-auth_mode = "api"
+auth_mode = "oauth"
 provider = "xcode-best"
 monitor = true
 human_facing = false
@@ -102,13 +116,19 @@ qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-review/SKILL.md",
+]
+role_details = [
+  "default review gate for docs / templates / skills / protocol / config / source changes",
+  "use the latest gstack review workflow and canonical verdicts",
+  "return verdicts to planner; do not reroute the chain yourself",
 ]
 
 [[engineers]]
 id = "qa-1"
 role = "qa"
 tool = "claude"
-auth_mode = "api"
+auth_mode = "oauth"
 provider = "minimax"
 monitor = true
 human_facing = false
@@ -123,9 +143,11 @@ qa_authority = true
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md",
 ]
 role_details = [
   "default verification / smoke / regression lane",
+  "use the latest gstack QA workflow for verification-heavy execution",
   "prefer MiniMax-M2.7-highspeed for test-heavy execution",
 ]
 
@@ -133,7 +155,7 @@ role_details = [
 id = "designer-1"
 role = "designer"
 tool = "gemini"
-auth_mode = "api"
+auth_mode = "oauth"
 provider = "google-api-key"
 monitor = true
 optional = true
@@ -149,10 +171,10 @@ qa_authority = false
 design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-design-review/SKILL.md",
 ]
 role_details = [
-  "implementation-before design review",
-  "visual direction and style decisions",
-  "design-driven UI prototypes / visual shells",
-  "not production wiring or full feature completion",
+  "default visual review and design-direction seat",
+  "use the latest gstack design-review workflow for visual QA and design corrections",
+  "design-driven UI prototypes / visual shells, not production wiring or full feature completion",
 ]

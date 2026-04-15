@@ -44,6 +44,12 @@ Default policy:
   `scripts/dispatch_task.py`
 - planner -> specialist dispatch should normally go through
   `scripts/dispatch_task.py`
+- when a Feishu group is configured, `dispatch_task.py` also emits the planner
+  task-release broadcast to the initial bound group instead of leaving that as
+  a manual side effect
+- that release broadcast is operational telemetry, not a control packet for
+  `koder`; only `OC_DELEGATION_REPORT_V1` should be treated as a machine-readable
+  delegation receipt on the user channel
 - if the helper is unavailable and a fallback is unavoidable, the operator
   must still leave all four artifacts:
   - `TODO.md` with `source` and `reply_to`
@@ -111,6 +117,34 @@ When the active loop owner returns a chain result to frontstage:
    - gives the user a short, easy-to-understand summary
    - auto-advances by default when the disposition is `AUTO_ADVANCE`
    - asks the user to decide only when the disposition is `USER_DECISION_NEEDED`
+7. if a Feishu group is configured, planner also emits the closeout broadcast
+   to the same initial bound group when the receipt lands, so the group sees
+   both release and wrap-up without requiring a separate manual post
+   - when the closeout is intended to wake `koder` through the user channel,
+     this must be an `OC_DELEGATION_REPORT_V1` envelope sent with
+     `lark-cli --as user`, not just an unstructured status line
+8. when frontstage sees the stage wrap-up, it should read the linked delivery
+   trail, reconcile the stage result, and update the project docs before
+   reporting the final status to the user
+
+## Planner decision gates
+
+If planner pauses for user input before the chain is complete, that decision
+must also be made visible on the Feishu user-identity bridge instead of staying
+only in the TUI.
+
+- emit `OC_DELEGATION_REPORT_V1` immediately when the pause is caused by a
+  user gate
+- use `report_status=needs_decision`
+- use `decision_hint=ask_user`
+- use `user_gate=required`
+- use `next_action=ask_user`
+- keep the human-readable tail short and explicit so `koder` can surface the
+  same question to the user without inventing new semantics
+
+This is an interim decision report, not a substitute for the final closeout.
+Once the user decides, planner should continue the chain and later send the
+normal `AUTO_ADVANCE` or `finalize_chain` closeout.
 
 Default policy:
 
@@ -120,6 +154,27 @@ Default policy:
   frontstage approval unless the task spec or the user explicitly created a
   plan gate
 - escalate to the user only for genuine product, scope, risk, seat, or model/auth choices
+- when using the Feishu user-identity bridge, `koder` must parse the
+  `OC_DELEGATION_REPORT_V1` envelope instead of relying on sender identity; see
+  `references/feishu-delegation-report.md`
+
+## Mandatory review gate
+
+Planner may self-close only when a task is truly self-contained and does not
+change repository artifacts or protocol semantics. As soon as a task touches
+docs, templates, skills, protocol text, config, or source code, planner must
+treat it as review-required:
+
+- if implementation is needed, route through `builder-1` first
+- always route the resulting artifact through `reviewer-1` before frontstage
+  closeout
+- do not auto-advance a docs/templates/protocol change without a reviewer
+  verdict unless the user explicitly exempted review
+- pure investigation or analysis tasks may still auto-advance when they produce
+  no repository change
+
+This keeps planner from silently self-closing edits that should have been
+cross-checked by another seat.
 
 ## Handoff state machine
 

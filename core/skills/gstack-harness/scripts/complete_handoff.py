@@ -2,14 +2,20 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from _common import (
     append_consumed_ack,
+    broadcast_feishu_group_message,
+    build_delegation_report_text,
     build_completion_message,
     load_json,
     load_profile,
+    legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
+    send_feishu_user_message,
+    stable_dispatch_nonce,
     utc_now_iso,
     write_delivery,
     write_json,
@@ -45,6 +51,7 @@ def build_frontstage_objective(
         f"{source} returned {task_id} to frontstage.",
         f"FrontstageDisposition: {disposition}",
         f"UserSummary: {user_summary}",
+        "Before replying to the user, review the delivery trail, consolidate the wrap-up, and update PROJECT.md / TASKS.md / STATUS.md when the stage closeout changes the project record.",
     ]
     if disposition == "AUTO_ADVANCE":
         lines.append("Summarize the result for the user in plain language and auto-advance the chain unless a real decision gate appears.")
@@ -91,6 +98,7 @@ def main() -> int:
         "target": args.target,
     }
     source_role = profile.seat_roles.get(args.source, "")
+    target_role = profile.seat_roles.get(args.target, "")
 
     if args.ack_only:
         ack_line = append_consumed_ack(profile.todo_path(args.target), task_id=args.task_id, source=args.source)
@@ -181,6 +189,89 @@ def main() -> int:
         require_success(result, "completion notify")
         receipt["notified_at"] = utc_now_iso()
         receipt["notify_message"] = message
+        should_broadcast = (
+            source_role in {"planner", "planner-dispatcher"}
+            or target_role in {"planner", "planner-dispatcher"}
+            or args.source == profile.active_loop_owner
+            or args.target == profile.active_loop_owner
+        )
+        if planner_to_frontstage:
+            delegation_report = build_delegation_report_text(
+                project=profile.project_name,
+                lane="planning",
+                task_id=args.task_id,
+                dispatch_nonce=stable_dispatch_nonce(
+                    profile.project_name,
+                    "planning",
+                    args.task_id,
+                ),
+                report_status=(
+                    "done"
+                    if args.frontstage_disposition == "AUTO_ADVANCE"
+                    else "needs_decision"
+                ),
+                decision_hint=(
+                    "proceed"
+                    if args.frontstage_disposition == "AUTO_ADVANCE"
+                    else "ask_user"
+                ),
+                user_gate=(
+                    "none"
+                    if args.frontstage_disposition == "AUTO_ADVANCE"
+                    else "required"
+                ),
+                next_action=(
+                    "consume_closeout"
+                    if args.frontstage_disposition == "AUTO_ADVANCE"
+                    else "ask_user"
+                ),
+                summary=args.user_summary or args.summary or args.title or args.task_id,
+                human_summary=args.user_summary or args.summary or args.title,
+            )
+            broadcast = send_feishu_user_message(delegation_report)
+            receipt["feishu_delegation_report"] = broadcast
+            if broadcast.get("status") == "failed":
+                print(
+                    f"warn: feishu delegation report failed for {args.task_id}: "
+                    f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
+                    file=sys.stderr,
+                )
+        elif should_broadcast and legacy_feishu_group_broadcast_enabled():
+            if source_role in {"planner", "planner-dispatcher"} and target_role not in {
+                "planner",
+                "planner-dispatcher",
+            }:
+                broadcast_message = (
+                    f"{profile.project_name} 项目 planner 阶段收尾 {args.task_id}："
+                    f"{args.user_summary or args.summary or args.title or args.task_id}。"
+                    f" FrontstageDisposition={args.frontstage_disposition or 'n/a'}."
+                )
+            elif target_role in {"planner", "planner-dispatcher"} and source_role not in {
+                "planner",
+                "planner-dispatcher",
+            }:
+                broadcast_message = (
+                    f"{profile.project_name} 项目 planner 已收到回执 {args.task_id}，"
+                    f"来自 {args.source}。{args.summary or args.title or ''}".strip()
+                )
+            else:
+                broadcast_message = (
+                    f"{profile.project_name} 项目 planner 完成任务流转 {args.task_id}："
+                    f"{args.source} -> {args.target}。"
+                )
+            broadcast = broadcast_feishu_group_message(broadcast_message)
+            receipt["feishu_group_broadcast"] = broadcast
+            if broadcast.get("status") == "failed":
+                print(
+                    f"warn: feishu group broadcast failed for {args.task_id}: "
+                    f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
+                    file=sys.stderr,
+                )
+        elif should_broadcast:
+            receipt["feishu_group_broadcast"] = {
+                "status": "skipped",
+                "reason": "legacy_group_broadcast_disabled",
+            }
     write_json(receipt_path, receipt)
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")

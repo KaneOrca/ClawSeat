@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -12,11 +13,15 @@ ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parents[4]
 
 
-def run(*args: str, expect: int = 0) -> subprocess.CompletedProcess[str]:
+def run(*args: str, expect: int = 0, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
     result = subprocess.run(
         ["python3", *args],
         text=True,
         capture_output=True,
+        env=merged_env,
         check=False,
     )
     if result.returncode != expect:
@@ -65,6 +70,75 @@ def main() -> int:
 
         heartbeat_receipt = temp_root / "workspaces" / "clawseat" / "koder" / "HEARTBEAT_RECEIPT.toml"
         write(heartbeat_receipt, "installed = true\n")
+
+        openclaw_home = temp_root / ".openclaw"
+        feishu_send_log = temp_root / "feishu-send.log"
+        lark_cli_log = temp_root / "lark-cli.log"
+        fake_bin = temp_root / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        feishu_send_script = (
+            openclaw_home / "skills" / "claude-desktop" / "script" / "feishu-send.sh"
+        )
+        fake_lark_cli = fake_bin / "lark-cli"
+        write(
+            openclaw_home / "openclaw.json",
+            json.dumps(
+                {
+                    "channels": {
+                        "feishu": {
+                            "defaultAccount": "main",
+                            "groups": {
+                                "oc_selftest_group": {
+                                    "requireMention": False,
+                                    "tools": {"allow": ["group:openclaw"]},
+                                }
+                            },
+                            "accounts": {
+                                "main": {"groups": {"*": {"tools": {"allow": ["group:messaging"]}}}}
+                            },
+                        }
+                    }
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+        )
+        write(
+            feishu_send_script,
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$*\" >> \"$FEISHU_SEND_LOG\"\n"
+            "echo \"[feishu-send] OK → $2\"\n",
+        )
+        feishu_send_script.chmod(0o755)
+        write(
+            fake_lark_cli,
+            "#!/bin/sh\n"
+            "printf '%s\\n' \"$*\" >> \"$LARK_CLI_LOG\"\n"
+            "if [ \"$1\" = \"auth\" ] && [ \"$2\" = \"status\" ]; then\n"
+            "  cat <<'EOF'\n"
+            "{\"identity\":\"user\",\"tokenStatus\":\"valid\",\"userName\":\"selftest\"}\n"
+            "EOF\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [ \"$1\" = \"im\" ] && [ \"$2\" = \"+messages-send\" ]; then\n"
+            "  cat <<'EOF'\n"
+            "{\"status\":\"sent\",\"message_id\":\"om_selftest\"}\n"
+            "EOF\n"
+            "  exit 0\n"
+            "fi\n"
+            "echo \"unsupported fake lark-cli invocation: $*\" >&2\n"
+            "exit 1\n",
+        )
+        fake_lark_cli.chmod(0o755)
+        feishu_env = {
+            "OPENCLAW_HOME": str(openclaw_home),
+            "OPENCLAW_CONFIG_PATH": str(openclaw_home / "openclaw.json"),
+            "CLAWSEAT_FEISHU_SEND_SH": str(feishu_send_script),
+            "FEISHU_SEND_LOG": str(feishu_send_log),
+            "AGENT_HOME": str(temp_root / "agent-home"),
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "LARK_CLI_LOG": str(lark_cli_log),
+        }
 
         profile = temp_root / "clawseat.toml"
         write(
@@ -144,10 +218,16 @@ def main() -> int:
             "Smoke task",
             "--objective",
             "Review the change set",
+            env=feishu_env,
         )
         todo_text = (tasks_root / "reviewer-1" / "TODO.md").read_text(encoding="utf-8")
         if "source: planner" not in todo_text or "reply_to: planner" not in todo_text:
             raise RuntimeError("dispatch TODO missing source/reply_to fields")
+        dispatch_receipt = json.loads(
+            (handoff_dir / "FE-SMOKE__planner__reviewer-1.json").read_text(encoding="utf-8")
+        )
+        if dispatch_receipt.get("feishu_group_broadcast", {}).get("reason") != "legacy_group_broadcast_disabled":
+            raise RuntimeError("dispatch unexpectedly used the legacy Feishu group broadcast path")
 
         run(
             str(notify_seat),
@@ -255,6 +335,7 @@ def main() -> int:
             "Looks good.",
             "--verdict",
             "APPROVED",
+            env=feishu_env,
         )
         delivery_text = (tasks_root / "reviewer-1" / "DELIVERY.md").read_text(encoding="utf-8")
         if "owner: reviewer-1" not in delivery_text or "target: planner" not in delivery_text:
@@ -302,6 +383,7 @@ def main() -> int:
             "AUTO_ADVANCE",
             "--user-summary",
             "Review and QA passed. We can keep moving.",
+            env=feishu_env,
         )
         planner_delivery = (tasks_root / "planner" / "DELIVERY.md").read_text(encoding="utf-8")
         if "FrontstageDisposition: AUTO_ADVANCE" not in planner_delivery:
@@ -324,6 +406,14 @@ def main() -> int:
             raise RuntimeError("planner closeout receipt missing notify evidence")
         if "todo_path" not in planner_receipt:
             raise RuntimeError("planner closeout receipt missing frontstage todo path")
+        if planner_receipt.get("feishu_delegation_report", {}).get("status") != "sent":
+            raise RuntimeError("planner closeout did not send OC_DELEGATION_REPORT_V1 successfully")
+        if "feishu_group_broadcast" in planner_receipt:
+            raise RuntimeError("planner closeout unexpectedly touched the legacy Feishu group broadcast path")
+        if feishu_send_log.exists() and feishu_send_log.read_text(encoding="utf-8").strip():
+            raise RuntimeError("legacy Feishu broadcast hook should be disabled by default")
+        if not lark_cli_log.exists() or "im +messages-send --as user" not in lark_cli_log.read_text(encoding="utf-8"):
+            raise RuntimeError("user-identity Feishu report did not invoke lark-cli as expected")
 
         run(
             str(verify_handoff),

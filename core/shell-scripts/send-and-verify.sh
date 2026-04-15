@@ -60,8 +60,9 @@ SESSION="$RESOLVED_SESSION"
 run_tmux() {
   local command_name="$1"
   shift
-  if ! RESULT="$(env -u TMUX "$TMUX_BIN" "$@" 2>&1)"; then
-    local rc=$?
+  RESULT="$(env -u TMUX "$TMUX_BIN" "$@" 2>&1)"
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
     echo "${SESSION}: ${command_name}_FAILED rc=$rc output=${RESULT:-no_output}" >&2
     echo "${SESSION}: HARD_BLOCK iTerm-only tmux execution failure" >&2
     return "$rc"

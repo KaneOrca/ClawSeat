@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 
-OPENCLAW_AGENTS_ROOT = Path.home() / ".openclaw" / "agents"
+OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))).expanduser()
+OPENCLAW_AGENTS_ROOT = OPENCLAW_HOME / "agents"
 
 
 def parse_args() -> argparse.Namespace:

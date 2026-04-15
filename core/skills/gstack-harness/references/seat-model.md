@@ -62,6 +62,23 @@ After the configuration change:
 3. make the seat re-read `WORKSPACE_CONTRACT.toml`
 4. stamp `scripts/ack_contract.py` when you need durable proof that the reread happened
 
+Configuration changes that touch provider selection, auth mode, API keys, or
+provider-specific base URLs/endpoints should be treated as a separate
+configuration verification event, not as invisible setup noise.
+
+Recommended split:
+
+1. configuration entry
+   - frontstage / planner records the selected tool/auth/provider and the
+     operator supplies required secret material
+2. configuration verification
+   - planner uses reviewer/qa lanes as needed to prove the seat can actually
+     connect and behave correctly
+
+`qa-1` is the preferred verification seat when the change affects connectivity,
+bridges, or provider reachability, but `qa-1` should validate behavior without
+becoming the seat that owns plaintext secrets long term.
+
 This is how frontstage ensures the seat remembers its role, seat boundary, and
 communication protocol after a runtime change.
 

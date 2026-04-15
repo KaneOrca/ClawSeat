@@ -183,7 +183,7 @@ class TemplateHandlers:
 
         template_map = {
             "codex": {
-                "CLAUDE.md": "\n".join(codex_lines) + "\n",
+                "AGENTS.md": "\n".join(codex_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
@@ -194,7 +194,7 @@ class TemplateHandlers:
                 "WORKSPACE.md": "\n".join(workspace_notes_lines) + "\n",
             },
             "claude": {
-                "CLAUDE.md": "\n".join(claude_lines) + "\n",
+                "AGENTS.md": "\n".join(claude_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
@@ -207,7 +207,7 @@ class TemplateHandlers:
                 + "\n}\n",
             },
             "gemini": {
-                "CLAUDE.md": "\n".join(gemini_lines) + "\n",
+                "AGENTS.md": "\n".join(gemini_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
@@ -273,7 +273,7 @@ class TemplateHandlers:
             project_engineers=project_engineers,
             engineer_order=engineer_order,
         )
-        for stale_name in ("AGENTS.md", "GEMINI.md"):
+        for stale_name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
             if stale_name not in rendered:
                 stale_path = workspace / stale_name
                 if stale_path.exists():

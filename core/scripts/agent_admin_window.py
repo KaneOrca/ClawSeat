@@ -407,23 +407,26 @@ def open_project_tabs_window(project: Any, sessions: dict[str, Any], engineers: 
         )
 
     def build_script(app_name: str) -> str:
+        project_prefix = applescript_quote(f"{project.name}:")
         lines = [
             f'tell application "{app_name}"',
             "  activate",
-            "  set existingWindow to missing value",
+            "  set tabsToClose to {}",
             "  repeat with w in windows",
             "    repeat with t in tabs of w",
             "      try",
             "        set tabName to name of current session of t",
-            f'        if tabName starts with "{applescript_quote(str(project.name))}:" then',
-            "          set existingWindow to w",
-            "          exit repeat",
+            f'        if tabName starts with "{project_prefix}" then',
+            "          set end of tabsToClose to t",
             "        end if",
             "      end try",
             "    end repeat",
-            "    if existingWindow is not missing value then exit repeat",
             "  end repeat",
-            "  if existingWindow is not missing value then close existingWindow",
+            "  repeat with t in tabsToClose",
+            "    try",
+            "      close t",
+            "    end try",
+            "  end repeat",
             "  set projectWindow to (create window with default profile)",
         ]
 

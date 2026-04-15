@@ -59,6 +59,23 @@
 3. 窗口构建：`agent_admin_window.py` monitor 重建异常会回滚并保留故障上下文  
 4. 现场修复：`tmux` 进程与 iTerm Script 授权核验
 
+## 3.1 稳定恢复原则
+- 对于 `tabs-1up` 项目，`agent-admin window open-monitor <project>` 是唯一推荐的窗口修复动作
+- 它会按 canonical seat 顺序重建同一个项目窗口，不需要手工逐个 `tmux attach`
+- 如果之前误开了多个同项目窗口，修复命令会清理旧窗口并恢复到单窗口多 tab 的布局
+- koder 的日常维护只需要记住这一个入口；不要把窗口维护分散到多个手工命令里
+
+## 3.2 脚本化回归入口
+- 运行 `python3 core/scripts/iterm_tmux_selftest.py`
+- 该自测不依赖真实 iTerm GUI；它使用 fake `tmux` / fake `osascript` 回放关键约束
+- 当前覆盖 6 个核心场景：
+  - `send-and-verify` 直通成功
+  - `send-and-verify` Enter 重试成功
+  - `send-and-verify` capture 失败后的硬停
+  - `check-engineer-status` capture 失败后的状态输出
+  - `agent_admin_window.iterm_run_command` 从 `iTerm` 回退到 `iTerm2`
+  - `open_project_tabs_window` 多 tab AppleScript 生成
+
 ## 4. 错误语义建议回看（快速）
 - `TMUX_MISSING`：`command -v tmux` 及 fallback 均失败，优先修环境变量与安装。  
 - `SESSION_NOT_FOUND`：会话映射失败，优先 `agent_admin` 重建会话绑定。  

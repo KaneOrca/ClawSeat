@@ -37,6 +37,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
 - `full-team.toml` creates `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1` workspaces in one bootstrap.
 - Even with `full-team.toml`, `--start` still only auto-starts `koder`; other seats require explicit confirmation and launch.
 - `/cs` is the exception path: invoking `/cs` counts as explicit approval to bootstrap or resume `install` and start `planner`.
+- `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
 
 ## Entry Skill Install
 
@@ -69,9 +70,18 @@ That wrapper will:
 - render the install console state
 - then tell frontstage to finish the OpenClaw/Feishu bridge:
   ask the user for the group ID, keep `main` on `requireMention=true`, keep
-  `warden`/koder on `requireMention=false`, then, once the group ID arrives,
-  delegate the smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`,
-  bring up review in parallel, and announce planner readiness to `group:<GROUP_ID>`
+  the project-facing `koder` account on `requireMention=false` by default,
+  require an explicit project-binding confirmation, then delegate the smoke
+  test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`, and
+  bring up review in parallel
+- after bootstrap, enter a configuration phase before normal task execution:
+  finish project binding, Feishu bridge binding, provider/auth selection, API
+  key setup, and base URL / endpoint configuration
+- configuration should be split into configuration entry and configuration
+  verification; do not collapse secret entry and validation into one opaque step
+- once the project-group binding exists, planner decision gates and closeouts
+  should use that same group through `OC_DELEGATION_REPORT_V1`; do not rely on
+  the legacy auto-broadcast path as a control packet
 
 ## First-Launch Notes
 
@@ -90,9 +100,22 @@ That wrapper will:
 - once `planner` is up, the agent should proactively ask for the Feishu group ID
   needed for the OpenClaw bridge; do not wait for the user to suggest group
   wiring
-- once the user provides the group ID, the agent should immediately delegate the
-  bridge smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`,
-  and start `reviewer-1` in parallel when that seat exists
+- once the user provides the group ID, the agent should first confirm whether
+  the group binds the current project, another existing project, or a new
+  project; only then should it delegate the bridge smoke test to `planner`,
+  tell the user `收到测试消息即可回复希望完成什么任务`, and start
+  `reviewer-1` in parallel when that seat exists
+- if the current chain is verification-heavy, start `qa-1` in parallel with
+  or immediately after `reviewer-1`; `qa-1` owns the smoke/regression lane
+  rather than execution planning
+- if configuration changes touch Feishu bridge settings, API keys, key
+  rotation, base URL / endpoint values, or auth/provider bindings, treat that
+  as configuration verification work and prefer launching `qa-1`
+- `qa-1` should verify connectivity and behavior, not become the long-term
+  owner of plaintext secrets
+- when the closeout eventually comes back to frontstage, koder should read the
+  linked delivery trail, reconcile the stage result, and update the project
+  docs before summarizing to the user
 
 ## Common Failures
 

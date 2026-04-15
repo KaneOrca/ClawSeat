@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from _common import (
     append_status_note,
+    broadcast_feishu_group_message,
     build_notify_message,
     load_profile,
+    legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
     upsert_tasks_row,
@@ -36,6 +39,8 @@ def main() -> int:
     profile = load_profile(args.profile)
     todo_path = profile.todo_path(args.target)
     reply_to = args.reply_to or args.source
+    source_role = profile.seat_roles.get(args.source, "")
+    target_role = profile.seat_roles.get(args.target, "")
     write_todo(
         todo_path,
         task_id=args.task_id,
@@ -83,6 +88,47 @@ def main() -> int:
         require_success(result, "dispatch notify")
         receipt["notified_at"] = utc_now_iso()
         receipt["notify_message"] = message
+        should_broadcast = (
+            source_role in {"planner", "planner-dispatcher"}
+            or target_role in {"planner", "planner-dispatcher"}
+            or args.source == profile.active_loop_owner
+            or args.target == profile.active_loop_owner
+        )
+        if should_broadcast and legacy_feishu_group_broadcast_enabled():
+            if source_role in {"planner", "planner-dispatcher"} and target_role not in {
+                "planner",
+                "planner-dispatcher",
+            }:
+                group_message = (
+                    f"{profile.project_name} 项目 planner 已向 {args.target} 发布任务 {args.task_id}："
+                    f"{args.title}. 回复链路 {reply_to}."
+                )
+            elif target_role in {"planner", "planner-dispatcher"} and source_role not in {
+                "planner",
+                "planner-dispatcher",
+            }:
+                group_message = (
+                    f"{profile.project_name} 项目 planner 已收到任务 {args.task_id}，"
+                    f"来自 {args.source}：{args.title}. 回复链路 {reply_to}."
+                )
+            else:
+                group_message = (
+                    f"{profile.project_name} 项目 planner 任务流转 {args.task_id}："
+                    f"{args.source} -> {args.target}，{args.title}."
+                )
+            broadcast = broadcast_feishu_group_message(group_message)
+            receipt["feishu_group_broadcast"] = broadcast
+            if broadcast.get("status") == "failed":
+                print(
+                    f"warn: feishu group broadcast failed for {args.task_id}: "
+                    f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
+                    file=sys.stderr,
+                )
+        elif should_broadcast:
+            receipt["feishu_group_broadcast"] = {
+                "status": "skipped",
+                "reason": "legacy_group_broadcast_disabled",
+            }
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     write_json(receipt_path, receipt)
     print(f"dispatched {args.task_id} -> {args.target}")

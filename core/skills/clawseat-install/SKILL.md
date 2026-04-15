@@ -43,7 +43,15 @@ After the runtime-side install is in place, the preferred first user command is 
 - Ask for user confirmation before launching any non-frontstage seat or changing runtime/provider choices that affect an existing seat.
 - When Claude first-launch prompts appear, explain that the user must complete the TUI step, then resume the install flow afterwards.
 - When the host terminal cannot provide PTY/tmux capability, stop cleanly and hand the next command to the user instead of masking it as a ClawSeat failure.
-- Once the user provides a Feishu group ID during install bring-up, proactively delegate the smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`, and launch `reviewer-1` in parallel when that seat exists.
+- `qa-1` is not part of the default `/cs` first-launch roster; only bring it up when the current chain is explicitly test / smoke / regression heavy.
+- After runtime bootstrap, move into a configuration phase before normal task execution. That phase owns project/group binding plus the runtime values that make seats usable: provider choice, auth mode, API key material, and base URL / endpoint configuration.
+- Treat configuration as two sub-phases: configuration entry first, configuration verification second.
+- Once the user provides a Feishu group ID during install bring-up, first confirm whether that group binds the current project, another existing project, or a new project; only then proactively delegate the smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`, and launch `reviewer-1` in parallel when that seat exists.
+- When the current chain is verification-heavy, ask `planner` to launch `qa-1` in parallel with or immediately after `reviewer-1`; `qa-1` owns smoke / regression / preflight verification, not execution planning.
+- `qa-1` validates configuration changes but does not become the secret owner: it should verify Feishu bridge health, key usability, URL reachability, and provider correctness without becoming the seat that records or stores raw secrets.
+- Any change to Feishu bridge settings, new API keys, key rotation, base URL / endpoint values, or auth_mode / provider bindings should be treated as configuration work and considered a QA-triggering event.
+- When a Feishu group is bound, planner should use `OC_DELEGATION_REPORT_V1` over the user-identity bridge for koder-facing closeouts; legacy auto-broadcast is opt-in only and should stay disabled by default.
+- When the stage closeout later returns to frontstage, koder should read the linked delivery trail, reconcile the wrap-up, and update the project docs before summarizing to the user.
 
 ## Troubleshooting
 

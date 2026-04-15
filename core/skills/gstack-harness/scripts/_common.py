@@ -19,10 +19,28 @@ except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(
+    os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[4]))
+)
 AGENT_HOME = Path(os.environ.get("AGENT_HOME", str(Path.home()))).expanduser()
 AGENTS_ROOT = AGENT_HOME / ".agents"
 SCRIPTS_ROOT = REPO_ROOT / "core" / "shell-scripts"
+OPENCLAW_HOME = Path(
+    os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))
+).expanduser()
+OPENCLAW_CONFIG_PATH = Path(
+    os.environ.get("OPENCLAW_CONFIG_PATH", str(OPENCLAW_HOME / "openclaw.json"))
+).expanduser()
+OPENCLAW_AGENTS_ROOT = OPENCLAW_HOME / "agents"
+OPENCLAW_FEISHU_SEND_SH = Path(
+    os.environ.get(
+        "CLAWSEAT_FEISHU_SEND_SH",
+        os.environ.get(
+            "OPENCLAW_FEISHU_SEND_SH",
+            str(OPENCLAW_HOME / "skills" / "claude-desktop" / "script" / "feishu-send.sh"),
+        ),
+    )
+).expanduser()
 
 
 TASK_ROW_RE = re.compile(r"^\|\s*([A-Za-z0-9_-]+)\s*\|")
@@ -30,6 +48,43 @@ CONSUMED_RE = re.compile(
     r"^Consumed:\s*(?P<task_id>\S+)\s+from\s+(?P<source>\S+)\s+at\s+(?P<ts>.+)$"
 )
 PLACEHOLDER_RE = re.compile(r"\{([A-Z0-9_]+)\}")
+
+DELEGATION_REPORT_HEADER = "OC_DELEGATION_REPORT_V1"
+VALID_DELEGATION_LANES = {
+    "planning",
+    "builder",
+    "reviewer",
+    "qa",
+    "designer",
+    "frontstage",
+}
+VALID_DELEGATION_REPORT_STATUSES = {
+    "in_progress",
+    "done",
+    "needs_decision",
+    "blocked",
+}
+VALID_DELEGATION_DECISION_HINTS = {
+    "hold",
+    "proceed",
+    "ask_user",
+    "retry",
+    "escalate",
+    "close",
+}
+VALID_DELEGATION_USER_GATES = {
+    "none",
+    "optional",
+    "required",
+}
+VALID_DELEGATION_NEXT_ACTIONS = {
+    "wait",
+    "consume_closeout",
+    "ask_user",
+    "retry_current_lane",
+    "surface_blocker",
+    "finalize_chain",
+}
 
 
 @dataclass
@@ -298,6 +353,248 @@ def load_toml(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+def collect_feishu_group_keys(payload: Any, *, found: list[str]) -> None:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if isinstance(key, str) and key.startswith("group:"):
+                group_id = key.split("group:", 1)[1].strip()
+                if group_id and group_id not in found:
+                    found.append(group_id)
+            collect_feishu_group_keys(value, found=found)
+    elif isinstance(payload, list):
+        for item in payload:
+            collect_feishu_group_keys(item, found=found)
+
+
+def collect_feishu_group_ids_from_config(config: dict[str, Any]) -> list[str]:
+    found: list[str] = []
+
+    def add_group_id(value: Any) -> None:
+        group_id = str(value).strip()
+        if group_id and group_id != "*" and group_id not in found:
+            found.append(group_id)
+
+    channels = config.get("channels")
+    if isinstance(channels, dict):
+        feishu = channels.get("feishu")
+        if isinstance(feishu, dict):
+            groups = feishu.get("groups")
+            if isinstance(groups, dict):
+                for group_id in groups.keys():
+                    add_group_id(group_id)
+            accounts = feishu.get("accounts")
+            if isinstance(accounts, dict):
+                default_account = feishu.get("defaultAccount")
+                if isinstance(default_account, str):
+                    default_account_payload = accounts.get(default_account)
+                    if isinstance(default_account_payload, dict):
+                        default_groups = default_account_payload.get("groups")
+                        if isinstance(default_groups, dict):
+                            for group_id in default_groups.keys():
+                                add_group_id(group_id)
+                for account_payload in accounts.values():
+                    if not isinstance(account_payload, dict):
+                        continue
+                    account_groups = account_payload.get("groups")
+                    if isinstance(account_groups, dict):
+                        for group_id in account_groups.keys():
+                            add_group_id(group_id)
+    return found
+
+
+def collect_feishu_group_ids_from_sessions() -> list[str]:
+    found: list[str] = []
+    if not OPENCLAW_AGENTS_ROOT.exists():
+        return found
+    for path in sorted(OPENCLAW_AGENTS_ROOT.glob("*/sessions/sessions.json")):
+        try:
+            payload = load_json(path)
+        except Exception:
+            continue
+        if payload is None:
+            continue
+        collect_feishu_group_keys(payload, found=found)
+    return found
+
+
+def resolve_primary_feishu_group_id() -> str | None:
+    override = (
+        os.environ.get("CLAWSEAT_FEISHU_GROUP_ID")
+        or os.environ.get("OPENCLAW_FEISHU_GROUP_ID")
+    )
+    if override:
+        resolved = override.strip()
+        if resolved:
+            return resolved
+    config = load_json(OPENCLAW_CONFIG_PATH) or {}
+    group_ids = collect_feishu_group_ids_from_config(config)
+    if group_ids:
+        return group_ids[0]
+    group_ids = collect_feishu_group_ids_from_sessions()
+    if group_ids:
+        return group_ids[0]
+    return None
+
+
+def stable_dispatch_nonce(project: str, lane: str, task_id: str) -> str:
+    seed = f"{project}:{lane}:{task_id}".encode("utf-8")
+    return hashlib.sha1(seed).hexdigest()[:8]
+
+
+def sanitize_report_value(value: str) -> str:
+    return " ".join(str(value).split()).strip()
+
+
+def build_delegation_report_text(
+    *,
+    project: str,
+    lane: str,
+    task_id: str,
+    dispatch_nonce: str,
+    report_status: str,
+    decision_hint: str,
+    user_gate: str,
+    next_action: str,
+    summary: str,
+    human_summary: str | None = None,
+) -> str:
+    if lane not in VALID_DELEGATION_LANES:
+        raise ValueError(f"invalid delegation lane: {lane}")
+    if report_status not in VALID_DELEGATION_REPORT_STATUSES:
+        raise ValueError(f"invalid delegation report_status: {report_status}")
+    if decision_hint not in VALID_DELEGATION_DECISION_HINTS:
+        raise ValueError(f"invalid delegation decision_hint: {decision_hint}")
+    if user_gate not in VALID_DELEGATION_USER_GATES:
+        raise ValueError(f"invalid delegation user_gate: {user_gate}")
+    if next_action not in VALID_DELEGATION_NEXT_ACTIONS:
+        raise ValueError(f"invalid delegation next_action: {next_action}")
+
+    ordered_fields = [
+        ("project", sanitize_report_value(project)),
+        ("lane", sanitize_report_value(lane)),
+        ("task_id", sanitize_report_value(task_id)),
+        ("dispatch_nonce", sanitize_report_value(dispatch_nonce)),
+        ("report_status", sanitize_report_value(report_status)),
+        ("decision_hint", sanitize_report_value(decision_hint)),
+        ("user_gate", sanitize_report_value(user_gate)),
+        ("next_action", sanitize_report_value(next_action)),
+        ("summary", sanitize_report_value(summary)),
+    ]
+    lines = [f"[{DELEGATION_REPORT_HEADER}]"]
+    lines.extend(f"{key}={value}" for key, value in ordered_fields)
+    lines.append(f"[/{DELEGATION_REPORT_HEADER}]")
+    human = sanitize_report_value(human_summary or "")
+    if human:
+        lines.extend(["", human])
+    return "\n".join(lines)
+
+
+def send_feishu_user_message(
+    message: str,
+    *,
+    group_id: str | None = None,
+) -> dict[str, str]:
+    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
+    payload: dict[str, str] = {
+        "status": "skipped",
+        "reason": "no_group_id_found",
+        "message": message.strip(),
+    }
+    if not resolved_group_id:
+        return payload
+
+    payload["group_id"] = resolved_group_id
+    lark_cli = shutil.which("lark-cli")
+    if not lark_cli:
+        payload["reason"] = "lark_cli_missing"
+        return payload
+
+    result = run_command_with_env(
+        [
+            lark_cli,
+            "im",
+            "+messages-send",
+            "--as",
+            "user",
+            "--chat-id",
+            resolved_group_id,
+            "--text",
+            message,
+        ],
+        cwd=OPENCLAW_HOME,
+        env={"HOME": str(AGENT_HOME)},
+    )
+    payload["transport"] = "lark-cli-user"
+    payload["returncode"] = str(result.returncode)
+    if result.stdout.strip():
+        payload["stdout"] = result.stdout.strip()
+    if result.stderr.strip():
+        payload["stderr"] = result.stderr.strip()
+    if result.returncode == 0:
+        payload["status"] = "sent"
+    else:
+        payload["status"] = "failed"
+        payload["reason"] = "lark_cli_send_failed"
+    return payload
+
+
+def legacy_feishu_group_broadcast_enabled() -> bool:
+    value = os.environ.get("CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST")
+    if value is None:
+        value = os.environ.get("OPENCLAW_ENABLE_LEGACY_FEISHU_BROADCAST")
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def broadcast_feishu_group_message(
+    message: str,
+    *,
+    group_id: str | None = None,
+) -> dict[str, str]:
+    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
+    payload: dict[str, str] = {
+        "status": "skipped",
+        "reason": "no_group_id_found",
+        "message": message.strip(),
+    }
+    if not resolved_group_id:
+        return payload
+
+    payload["group_id"] = resolved_group_id
+    if not legacy_feishu_group_broadcast_enabled():
+        payload["reason"] = "legacy_group_broadcast_disabled"
+        return payload
+    if not OPENCLAW_FEISHU_SEND_SH.exists():
+        payload["reason"] = "feishu_send_script_missing"
+        payload["send_script"] = str(OPENCLAW_FEISHU_SEND_SH)
+        return payload
+
+    result = run_command_with_env(
+        [
+            "bash",
+            str(OPENCLAW_FEISHU_SEND_SH),
+            "--target",
+            f"group:{resolved_group_id}",
+            message,
+        ],
+        cwd=OPENCLAW_HOME,
+        env={"HOME": str(AGENT_HOME)},
+    )
+    payload["send_script"] = str(OPENCLAW_FEISHU_SEND_SH)
+    payload["returncode"] = str(result.returncode)
+    if result.stdout.strip():
+        payload["stdout"] = result.stdout.strip()
+    if result.stderr.strip():
+        payload["stderr"] = result.stderr.strip()
+    if result.returncode == 0:
+        payload["status"] = "sent"
+    else:
+        payload["status"] = "failed"
+        payload["reason"] = "feishu_send_failed"
+    return payload
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -712,17 +1009,19 @@ def render_idle_todo(profile: HarnessProfile, seat: str) -> str:
         objective = (
             f"{seat} template已初始化。若当前项目走 OpenClaw/Feishu 链路，且 planner 已经启动，"
             "请主动要求用户让 main agent 拉群并回报 group ID。无需 open_id。"
-            "main 在群里保持 requireMention=true；warden/koder 在该群里设为 requireMention=false，"
-            "拿到 group ID 后，立即委派 planner 做飞书联调测试，提示用户“收到测试消息即可回复希望完成什么任务”，"
-            "并并行拉起 reviewer 进入审查待命，再继续 planner 初始化完成广播。"
+            "main 在群里保持 requireMention=true；项目面向前台的 koder 账号在该群里默认设为 requireMention=false，"
+            "只有显式部署的系统 seat（如 warden）才需要额外放开。"
+            "拿到 group ID 后，先确认该群绑定当前项目、已有项目还是新项目，再委派 planner 做飞书联调测试，"
+            "提示用户“收到测试消息即可回复希望完成什么任务”，并并行拉起 reviewer 进入审查待命。"
         )
     elif seat == profile.active_loop_owner or role in {"planner", "planner-dispatcher"}:
         reply_to = profile.heartbeat_owner
         title = "等待 frontstage intake / 初始化广播"
         objective = (
             f"{seat} template已初始化。当前没有已派发任务。若你刚完成 planner 初始化，"
-            "请尽快把 ready 状态回给 koder/frontstage，方便其完成 Feishu 群联调与 planner-ready 广播；"
-            "若 frontstage 提供了 group ID，请先完成群联调测试并向用户发送首条测试消息，提示其收到后直接回复希望完成什么任务；"
+            "请尽快把 ready 状态回给 koder/frontstage，方便其完成项目绑定与 Feishu 群联调；"
+            "若 frontstage 提供了 group ID 和项目绑定，请先完成群联调测试并向用户发送首条测试消息，提示其收到后直接回复希望完成什么任务；"
+            "若当前链路是测试、验证、smoke 或回归重任务，请同步拉起 qa-1 作为验证席位；"
             "否则先阅读 WORKSPACE_CONTRACT.toml 与 workspace guide，等待新的 dispatch。"
         )
     else:

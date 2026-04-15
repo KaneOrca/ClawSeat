@@ -15,7 +15,9 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
-CLAWSEAT_ROOT = Path(__file__).resolve().parents[3]
+CLAWSEAT_ROOT = Path(
+    os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[3]))
+)
 CORE_ROOT = CLAWSEAT_ROOT / "core"
 if str(CORE_ROOT) not in sys.path:
     sys.path.insert(0, str(CORE_ROOT))

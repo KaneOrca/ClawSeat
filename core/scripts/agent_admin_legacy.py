@@ -26,13 +26,6 @@ def copy_workspace_overlay(src: Path, dst: Path, ensure_dir: Callable[[Path], No
         "COMMANDS.md",
         "WORKSPACE.md",
         "BACKEND_HARDENING_NEXT.md",
-        "HOMEPAGE_REVIEW_R3.md",
-        "HOMEPAGE_REVIEW_R3_REPORT.md",
-        "HOMEPAGE_REVIEW_R4.md",
-        "PRODUCTION_CUTOVER_READINESS.md",
-        "STAGING_VARIANT_REVIEW_R2.md",
-        "STAGING_VARIANT_REVIEW_R2_REPORT.md",
-        "TAILSCALE_DEV_SETUP.md",
     }
     for item in src.iterdir():
         if item.name == ".git":

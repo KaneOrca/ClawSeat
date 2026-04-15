@@ -53,8 +53,10 @@ fi
 run_tmux_capture() {
   local command_name="$1"
   local target="$2"
-  if ! RESULT="$(env -u TMUX "$TMUX_BIN" capture-pane -t "$target" -p 2>&1)"; then
-    echo "${command_name}: ${target} TMUX_CAPTURE_FAILED rc=$? output=${RESULT:-no_output} (iTerm-only hard-stop)" >&2
+  RESULT="$(env -u TMUX "$TMUX_BIN" capture-pane -t "$target" -p 2>&1)"
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "${command_name}: ${target} TMUX_CAPTURE_FAILED rc=$rc output=${RESULT:-no_output} (iTerm-only hard-stop)" >&2
     return 1
   fi
   printf "%s\n" "$RESULT"
@@ -62,8 +64,10 @@ run_tmux_capture() {
 
 run_tmux_meta() {
   local target="$1"
-  if ! RESULT="$(env -u TMUX "$TMUX_BIN" display-message -p -t "$target" '#{pane_current_command}|#{pane_title}' 2>&1)"; then
-    echo "${target}: TMUX_META_FAILED rc=$? output=${RESULT:-no_output} (iTerm-only hard-stop)" >&2
+  RESULT="$(env -u TMUX "$TMUX_BIN" display-message -p -t "$target" '#{pane_current_command}|#{pane_title}' 2>&1)"
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "${target}: TMUX_META_FAILED rc=$rc output=${RESULT:-no_output} (iTerm-only hard-stop)" >&2
     return 1
   fi
   printf "%s\n" "$RESULT"
@@ -132,8 +136,14 @@ for s in $SESSIONS; do
     SESSION_NAME="$("$AGENTCTL" session-name "$s")"
   fi
   if [ -z "$SESSION_NAME" ]; then
-    echo "$s: SESSION_NOT_FOUND (name unresolved)"
-    continue
+    # Fallback: if agentctl resolution fails but $s is already a valid tmux session, use it directly.
+    # This handles unregistered seats or direct tmux session name usage.
+    if env -u TMUX "$TMUX_BIN" has-session -t "$s" 2>/dev/null; then
+      SESSION_NAME="$s"
+    else
+      echo "$s: SESSION_NOT_FOUND (name unresolved)"
+      continue
+    fi
   fi
   if ! RAW="$(run_tmux_capture "capture" "$SESSION_NAME")"; then
     echo "$s: SESSION_CAPTURE_FAILED (tmux command unavailable or session missing)"

@@ -167,16 +167,22 @@ def main() -> int:
         f"- planner live 后，frontstage 应主动让用户把 main agent 拉进飞书群，并回报 group ID（无需 open_id）。"
     )
     print(
-        "- main agent 在群里保持 requireMention=true；warden/koder 在群里设置 requireMention=false。"
+        "- main agent 在群里保持 requireMention=true；项目面向前台的 koder 账号在群里默认设置 requireMention=false；只有显式部署的系统 seat（如 warden）才需要额外放开。"
     )
     print(
         f"- 可用 `python3 {REPO_ROOT / 'core' / 'skills' / 'clawseat-install' / 'scripts' / 'find_feishu_group_ids.py'}` 查找已有 group ID。"
     )
     print(
-        f"- planner 初始化完成后，可执行 `bash /Users/ywf/.openclaw/skills/claude-desktop/script/feishu-send.sh --target group:<GROUP_ID> \"{PROJECT} 项目 planner 初始化完成\"`。"
+        "- 一旦用户提供 group ID，frontstage 必须先确认这是绑定当前项目、切换到已有项目，还是用于创建新项目。"
     )
     print(
-        "- 一旦用户提供 group ID，frontstage 应立刻委派 planner 做群联调测试，提示用户“收到测试消息即可回复希望完成什么任务”，并并行拉起 reviewer。"
+        "- 项目绑定确认后，frontstage 应立刻委派 planner 做群联调测试，提示用户“收到测试消息即可回复希望完成什么任务”，并并行拉起 reviewer。"
+    )
+    print(
+        "- 如果当前链路是测试、验证、smoke 或回归重任务，frontstage 应让 planner 额外拉起 qa-1；qa-1 不属于 /cs 首启固定名单。"
+    )
+    print(
+        "- 之后 planner 的 decision gate 与 closeout 应通过 `send_delegation_report.py` / `OC_DELEGATION_REPORT_V1` 回到同一个群；koder 在看到阶段收尾结果后，要先梳理 delivery trail 再更新项目文档。"
     )
     return 0
 

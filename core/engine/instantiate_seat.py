@@ -437,7 +437,7 @@ def build_instance(
     manifest_dir = GENERATED_ROOT / project_name / instance_id
     workspace_guide_path = workspace / "WORKSPACE.md"
     contract_path = workspace / "WORKSPACE_CONTRACT.toml"
-    tool_guide_name = "CLAUDE.md"
+    tool_guide_name = "AGENTS.md"
     return SeatInstance(
         template=template,
         project_name=project_name,

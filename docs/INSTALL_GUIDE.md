@@ -30,7 +30,11 @@ python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills
 - 初始化 `koder / planner / builder-1 / reviewer-1` 工作区
 - 自动恢复或拉起 `koder`
 - 直接拉起 `planner`，让它接任后续安装链
-- planner 就绪后，frontstage 会继续要求用户提供飞书群 `group ID`，用于 main / warden 的群联调；无需 `open_id`
+- `qa-1` 不属于 `/cs` 首启固定拉起名单；只有当当前链路明确是 smoke / regression / 审批前复测时，才由 `planner` 拉起 `qa-1`
+- planner 就绪后，frontstage 会继续要求用户提供飞书群 `group ID`；无需 `open_id`
+- frontstage 在拿到 `group ID` 后，必须先确认这个群是绑定当前项目、切换到已有项目，还是用于创建新项目；不要把新群自动当成新项目
+- 安装阶段结束后，应进入配置阶段：补齐项目绑定、Feishu 群绑定、provider 选择、API key、base URL / endpoint URL 等运行所需配置
+- 一旦项目群绑定完成，planner 会优先使用 `OC_DELEGATION_REPORT_V1` 的 user-identity 回执作为主链路；旧的自动群广播只作为显式 opt-in 的兼容路径
 
 这条入口不替代 `clawseat-install`；它只是把默认安装路径压缩成一条稳定的第一指令。
 
@@ -45,6 +49,11 @@ python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills
   - 当前宿主环境不支持 PTY/tmux，需要换到真实终端继续
 - 手工安装阶段默认只拉起 `koder`；`planner` 和其他 specialist seat 仍需按 frontstage 规则显式确认
 - `/cs` 是唯一例外：它本身就视为用户已明确要求创建 `install` 项目并拉起 `planner`
+- 当链路明确是测试、验证、smoke 或回归时，frontstage 应让 `planner` 额外拉起 `qa-1`；`qa-1` 默认不跟随 `/cs` 首启自动启动
+- 配置阶段分两段：先做配置录入（项目/群/API key/URL/provider），再做配置验证
+- `qa-1` 介入的是配置验证，不是明文 secret 录入；涉及 Feishu bridge、新 API key、key rotation、base URL / endpoint 修改、auth_mode / provider 切换时，默认应让 `planner` 视风险拉起 `qa-1`
+- 当用户给出 Feishu `group ID` 时，frontstage 必须先完成“项目绑定确认”：绑定当前项目、切换到已有项目，或创建新项目；未确认前不要直接开始 planner 执行链
+- 当阶段收尾返回前台时，koder 需要先读 linked delivery trail，再更新 `PROJECT.md` / `TASKS.md` / `STATUS.md`，然后再向用户总结结果
 
 ---
 

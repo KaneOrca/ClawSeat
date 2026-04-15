@@ -25,7 +25,7 @@ repeatable user-facing actions.
 
 Load these inputs in order:
 
-1. the generated workspace guide (`CLAUDE.md`; legacy `AGENTS.md` only when still present)
+1. the workspace guide (`AGENTS.md`) — for OpenClaw-based seats and gstack-harness seats, `AGENTS.md` is the canonical entry when present
 2. this wrapper skill
 3. `clawseat_adapter.py`
 4. project `CLAUDE.md` or equivalent project knowledge file
@@ -127,27 +127,93 @@ When `planner` has just been initialized and the project uses OpenClaw + Feishu:
   Feishu group and report the `group ID`
 - do not ask for `open_id`; `group ID` is enough
 - keep the main agent on `requireMention = true`
-- set `warden` / koder on `requireMention = false` for that group so it can
-  receive the planner-ready broadcast without explicit mentions
+- keep the project-facing `koder` account on `requireMention = false` for that
+  group by default; only add optional system seats such as `warden` when they
+  are explicitly deployed for that group
 - verify existing group ids from `~/.openclaw/agents/*/sessions/sessions.json`
   by scanning keys prefixed with `group:`
 - check `~/.openclaw/openclaw.json` for the group-specific settings under
   `messaging.feishu.accounts.<account>.groups.<group_id>`
-- confirm `warden` is actually a member of that group before relying on group
-  delivery
-- once the `group ID` arrives, immediately delegate the bridge smoke test to
-  `planner`, tell the user `收到测试消息即可回复希望完成什么任务`, and start
-  `reviewer-1` in parallel when that seat exists
-- after planner initialization completes, send the broadcast with:
-
-```bash
-bash /Users/ywf/.openclaw/skills/claude-desktop/script/feishu-send.sh \
-  --target group:<GROUP_ID> \
-  "<project> 项目 planner 初始化完成"
-```
+- after the `group ID` arrives, explicitly confirm whether that group should
+  bind the current project, switch to another existing project, or bootstrap a
+  new project; do not treat a new group as an automatic new project
+- planner should treat that same bound group as the user-visible bridge for
+  `OC_DELEGATION_REPORT_V1` decision gates and closeouts; keep the legacy
+  auto-broadcast path disabled unless it is explicitly opted in
+- once the `group ID` and project binding are confirmed, immediately delegate
+  the bridge smoke test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`,
+  and start `reviewer-1` in parallel when that seat exists
+- if the current chain is verification-heavy, ask `planner` to launch `qa-1`
+  in parallel with or immediately after `reviewer-1`; do not treat QA as a
+  first-launch seat
+- after planner initialization completes, rely on the planner smoke test and
+  `OC_DELEGATION_REPORT_V1` bridge receipts instead of a free-form
+  “planner 初始化完成” broadcast
 
 If the main agent is also in that group, it should remain mention-gated. Do not
 weaken the main account to `requireMention = false`.
+
+## Feishu Delegation Receipt Rule
+
+When the planner-facing bridge uses `lark-cli --as user`, the sender identity in
+the Feishu group is no longer meaningful. `koder` must not infer "this came
+from planner" from the sender.
+
+Instead, treat the group message as machine-actionable only when it contains a
+strict `OC_DELEGATION_REPORT_V1` envelope. Parse it as a delegation receipt,
+not as an agent persona speaking.
+
+Required fields:
+
+- `project`
+- `lane`
+- `task_id`
+- `dispatch_nonce`
+- `report_status`
+- `decision_hint`
+- `user_gate`
+- `next_action`
+- `summary`
+
+Interpretation rules:
+
+- `lane=planning` means the receipt belongs to the planning lane; it does not
+  mean the visible sender is planner
+- reject the envelope if `project`, `task_id`, or `dispatch_nonce` do not match
+  the current active chain
+- only auto-advance when the state machine resolves to a safe branch:
+  `done + proceed + none + consume_closeout`
+- for `needs_decision + ask_user`, turn the receipt into a short user question
+  instead of dispatching immediately
+- for `blocked + retry` or `blocked + escalate`, surface the blocker according
+  to the framework decision table; do not invent a hidden next hop
+
+## Stage Closeout Review
+
+When planner later returns a stage closeout to frontstage and the group shows
+the wrap-up result, koder must:
+
+- read the linked delivery trail and any referenced specialist deliveries
+- reconcile the stage outcome against `TASKS.md`, `STATUS.md`, and the project
+  docs
+- update `PROJECT.md` and any other affected project documents before the user
+  summary goes out
+- only then summarize the closeout back to the user or auto-advance the chain
+
+## Window Maintenance
+
+For iTerm/TUI maintenance, koder should treat `agent-admin window open-monitor
+<project>` as the single canonical repair action:
+
+- use it whenever seats start, stop, or drift out of the canonical tab order
+- do not hand-open per-seat windows for a `tabs-1up` project
+- do not use raw `tmux attach` as the normal recovery path
+- expect the command to rebuild one project window with one tab per running seat
+- if duplicate project windows already exist, the helper will close stale copies
+  and restore the canonical layout
+
+The practical rule is: one project, one iTerm window, tabs in canonical seat
+order. Koder owns keeping that layout tidy; specialists should never freehand it.
 
 ## Action Schema Consumption
 
@@ -227,7 +293,7 @@ Switch protocol:
 3. increment `frontstage_epoch`
 4. set `current_project`
 5. reload profile, roster, planner binding, and brief through the adapter
-6. refresh project-local knowledge files such as `CLAUDE.md`
+6. refresh project-local knowledge files such as `AGENTS.md`
 7. reply with the new project status using the project tag format
 
 Rules:

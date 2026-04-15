@@ -42,6 +42,8 @@ Do not load every reference by default. Start from the project profile under
 - dispatch / completion / verify handoff
   - [Chain protocol](references/chain-protocol.md)
   - [Dispatch playbook](references/dispatch-playbook.md)
+  - [Feishu delegation report](references/feishu-delegation-report.md) when planner
+    uses user-identity group messages to wake frontstage/koder
 - console / patrol / reminder review
   - [Console model](references/console-model.md)
   - [Heartbeat policy](references/heartbeat-policy.md)
@@ -79,13 +81,22 @@ Keep those under:
   - default dispatch path for frontstage -> planner and planner -> specialist
     handoffs
   - writes `TODO`, updates project task/state docs, notifies the target seat,
-    and writes a machine-readable handoff receipt
+    emits the planner Feishu group broadcast only when a binding is available
+    and `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`, and
+    writes a machine-readable handoff receipt
 - `scripts/notify_seat.py`
   - send a protocol-compliant seat-to-seat notice, reminder, or unblock
     message using the standard transport instead of raw tmux
 - `scripts/complete_handoff.py`
   - write `DELIVERY`, notify the target seat, and optionally write a durable
     `Consumed:` ACK when the receiver has consumed the handoff
+  - when planner is part of the handoff and a Feishu group is configured,
+    emit the matching group broadcast only when
+    `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`
+- `scripts/send_delegation_report.py`
+  - send an `OC_DELEGATION_REPORT_V1` message to Feishu through `lark-cli --as user`
+  - use this when planner must wake `koder` through the user channel instead of
+    relying on sender identity
 - `scripts/verify_handoff.py`
   - verify `assigned`, `notified`, and `consumed` for one handoff
 - `scripts/render_console.py`
@@ -137,6 +148,9 @@ Keep those under:
   - the selected tool, auth mode, and provider/model family
   Then, after user approval, it may re-run the start command with explicit
   confirmation.
+- when a stage closeout lands back at frontstage, koder should reconcile the
+  linked delivery trail, update the project docs, and then summarize the wrap-up
+  for the user
 
 ## Claude recovery rule
 

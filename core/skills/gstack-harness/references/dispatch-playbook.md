@@ -39,6 +39,12 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
 ```
 
 Swap `--target` for `reviewer-1`, `qa-1`, or `designer-1` as needed.
+When a Feishu group is configured, the dispatch helper only posts the planner
+release broadcast when legacy group broadcasting is explicitly enabled. That
+legacy path is opt-in, not the default control packet for koder-facing routing.
+
+That release broadcast is only group-visible telemetry. Do not use it as the
+control packet that `koder` parses for automated routing.
 
 ## Specialist -> planner completion
 
@@ -55,6 +61,21 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
 Reviewer completion must add `--verdict APPROVED` (or another canonical
 verdict).
 
+## Review gate
+
+If a task changes docs, templates, skills, protocol text, config, or source
+code, planner must not close it out directly after a single review-free pass.
+The safe default is:
+
+1. planner routes the implementation to `builder-1` when code or files need
+   to change
+2. planner routes the resulting artifact to `reviewer-1`
+3. only after the reviewer verdict lands may planner send the frontstage
+   closeout
+
+Pure audit or analysis tasks may skip the review lane only when the task spec
+explicitly says it is review-free.
+
 ## Planner consumes specialist completion
 
 After reading the specialist delivery, stamp the durable ACK before routing the
@@ -68,6 +89,30 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
   --task-id <TASK_ID> \
   --ack-only
 ```
+
+If the receipt is part of the planner's group-visible chain, the completion
+helper only emits the matching Feishu group broadcast when
+`CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1` (or the OpenClaw equivalent) is
+set. Otherwise it stays on the user-identity `OC_DELEGATION_REPORT_V1`
+closeout path.
+
+When the receiver is frontstage / `koder` and the group bridge uses user
+identity, prefer the dedicated helper:
+
+```bash
+python3 <repo-root>/core/skills/gstack-harness/scripts/send_delegation_report.py \
+  --project <PROJECT> \
+  --lane planning \
+  --task-id <TASK_ID> \
+  --report-status done \
+  --decision-hint proceed \
+  --user-gate none \
+  --next-action consume_closeout \
+  --summary '<ONE_LINE_SUMMARY>'
+```
+
+This emits `OC_DELEGATION_REPORT_V1` through `lark-cli --as user`, which
+`koder` can safely parse without depending on sender identity.
 
 ## Planner -> frontstage closeout
 

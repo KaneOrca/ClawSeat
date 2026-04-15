@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SEND_AND_VERIFY_SH = REPO_ROOT / ".scripts" / "send-and-verify.sh"
 CARTOONER_ADAPTER_ROOT = REPO_ROOT / "adapters" / "cartooner"
 CARTOONER_CHECK_SCRIPT = CARTOONER_ADAPTER_ROOT / "scripts" / "check-cartooner-status.sh"
 CARTOONER_SUPERVISOR_SCRIPT = CARTOONER_ADAPTER_ROOT / "scripts" / "patrol_supervisor.py"
@@ -277,7 +276,7 @@ class HeartbeatHandlers:
         frontstage_seat = session.engineer_id or "koder"
         check_script = str(CARTOONER_CHECK_SCRIPT)
         supervisor_script = str(CARTOONER_SUPERVISOR_SCRIPT)
-        send_script = str(SEND_AND_VERIFY_SH)
+        send_script = str(self.hooks.send_and_verify_sh)
         lines = [
             f"# {session.engineer_id} heartbeat",
             "",
@@ -381,7 +380,7 @@ class HeartbeatHandlers:
             f"receipt_path = {self.hooks.q(str(self.receipt_path(session)))}",
             f"patrol_entrypoint = {self.hooks.q(str(CARTOONER_CHECK_SCRIPT))}",
             f"supervisor_entrypoint = {self.hooks.q(str(CARTOONER_SUPERVISOR_SCRIPT))}",
-            f"send_script = {self.hooks.q(str(SEND_AND_VERIFY_SH))}",
+            f"send_script = {self.hooks.q(str(self.hooks.send_and_verify_sh))}",
             f"commands = {self.hooks.q_array(commands)}",
             f"human_facing = {'true' if engineer.human_facing else 'false'}",
             f"patrol_authority = {'true' if engineer.patrol_authority else 'false'}",

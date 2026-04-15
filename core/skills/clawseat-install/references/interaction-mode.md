@@ -26,6 +26,8 @@ Keep installation mostly automatic while preserving the frontstage rules that ma
 
 - launching any non-frontstage seat
 - rebinding an existing seat to a different tool, auth mode, or provider
+- entering or rotating API key / secret material, or changing provider-specific
+  base URL / endpoint settings for an existing seat
 - taking a recovery path that would discard a prior Claude session instead of resuming it
 
 Exception:
