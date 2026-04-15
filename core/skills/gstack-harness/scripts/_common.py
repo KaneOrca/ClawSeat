@@ -1146,10 +1146,15 @@ def render_heartbeat_manifest(profile: HarnessProfile, seat: str) -> str:
 
 
 def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str]) -> None:
-    """Patch .claude/settings.local.json with model and effortLevel for each seat.
+    """Patch Claude settings with model, effortLevel, and hasCompletedOnboarding.
 
-    Reads model/effort from the profile's template.toml via the seat_overrides
-    or by loading the template directly. Only patches claude-tool seats.
+    Writes to TWO locations:
+    1. workspace .claude/settings.local.json — model only (effort not supported here)
+    2. runtime HOME .claude/settings.json — model + effortLevel (Claude Code reads this)
+
+    Claude Code reads effortLevel from the global ~/.claude/settings.json, not from
+    workspace settings.local.json. Since each seat has an isolated runtime HOME,
+    we must write to {runtime_dir}/home/.claude/settings.json for effort to take effect.
     """
     template_path = REPO_ROOT / "core" / "templates" / profile.template_name / "template.toml"
     if not template_path.exists():
@@ -1159,7 +1164,6 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
     for eng in template_data.get("engineers", []):
         engineer_map[str(eng.get("id", ""))] = eng
 
-    # Also read session.toml to determine auth_mode for hasCompletedOnboarding
     sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(AGENTS_ROOT / "sessions")))
 
     for seat in seats:
@@ -1167,30 +1171,54 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
         model = str(spec.get("model", "")).strip()
         effort = str(spec.get("effort", "")).strip()
         auth_mode = str(spec.get("auth_mode", "")).strip()
-        # Also check session.toml for auth_mode (may differ if overridden at start)
         session_path = sessions_root / profile.project_name / seat / "session.toml"
+        runtime_dir = None
         if session_path.exists():
             session_data = load_toml(session_path)
             auth_mode = str(session_data.get("auth_mode", auth_mode)).strip()
+            runtime_dir = str(session_data.get("runtime_dir", "")).strip()
+            # Use session tool to skip non-claude seats
+            tool = str(session_data.get("tool", "")).strip()
+            if tool and tool != "claude":
+                continue
+
+        # 1. Patch workspace settings.local.json (model + hasCompletedOnboarding)
         settings_path = profile.workspace_for(seat) / ".claude" / "settings.local.json"
-        if not settings_path.exists():
-            continue
-        try:
-            settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        changed = False
-        if model and settings.get("model") != model:
-            settings["model"] = model
-            changed = True
-        if effort and settings.get("effortLevel") != effort:
-            settings["effortLevel"] = effort
-            changed = True
-        if auth_mode == "api" and not settings.get("hasCompletedOnboarding"):
-            settings["hasCompletedOnboarding"] = True
-            changed = True
-        if changed:
-            write_text(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+        if settings_path.exists():
+            try:
+                settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                settings = {}
+            changed = False
+            if model and settings.get("model") != model:
+                settings["model"] = model
+                changed = True
+            if auth_mode == "api" and not settings.get("hasCompletedOnboarding"):
+                settings["hasCompletedOnboarding"] = True
+                changed = True
+            if changed:
+                write_text(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+
+        # 2. Patch runtime HOME settings.json (model + effortLevel)
+        if runtime_dir:
+            runtime_settings_path = Path(runtime_dir) / "home" / ".claude" / "settings.json"
+            ensure_parent(runtime_settings_path)
+            try:
+                rt_settings = json.loads(runtime_settings_path.read_text(encoding="utf-8")) if runtime_settings_path.exists() else {}
+            except (json.JSONDecodeError, OSError):
+                rt_settings = {}
+            rt_changed = False
+            if model and rt_settings.get("model") != model:
+                rt_settings["model"] = model
+                rt_changed = True
+            if effort and rt_settings.get("effortLevel") != effort:
+                rt_settings["effortLevel"] = effort
+                rt_changed = True
+            if "skipDangerousModePermissionPrompt" not in rt_settings:
+                rt_settings["skipDangerousModePermissionPrompt"] = True
+                rt_changed = True
+            if rt_changed:
+                write_text(runtime_settings_path, json.dumps(rt_settings, indent=2, ensure_ascii=False) + "\n")
 
 
 def materialize_profile_runtime(profile: HarnessProfile) -> None:

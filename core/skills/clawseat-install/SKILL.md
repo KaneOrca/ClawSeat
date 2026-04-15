@@ -32,16 +32,24 @@ post-install convenience command.
 2. Read [install-flow.md](references/install-flow.md) for the command sequence and fallback rules.
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
-5. Install the entry skills with `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`.
+5. **Install skill symlinks** — this is mandatory, do NOT skip:
+   - OpenClaw: `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"`
+   - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
+   - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
-   - Route through `shells/openclaw-plugin/openclaw_bootstrap.py`
+   - After running `install_openclaw_bundle.py` (step 5), run preflight and bootstrap
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`
    - Bootstrap creates workspaces for backend seats (planner, builder, reviewer) only
-   - After bootstrap, ask the user for each backend seat's tool/auth/provider preferences (planner first, then each specialist: builder-1, reviewer-1, etc.)
-   - Start planner with `start_seat.py --seat planner --confirm-start`; user completes OAuth
-   - Then delegate **ALL** remaining specialist seat startups to planner via `dispatch_task.py` — include every declared seat (builder-1 AND reviewer-1), not just some of them
-   - The dispatch objective must include exact `start_seat.py` commands with user-confirmed `--tool`/`--auth-mode`/`--provider` overrides for each seat
+   - After bootstrap, **you MUST ask the user** for each backend seat's configuration before starting ANY seat. Do NOT use template defaults without user confirmation. For each seat, ask:
+     - Tool: Claude Code / Codex / Gemini?
+     - Auth: OAuth (recommended) or API key?
+     - Provider: which provider?
+   - Ask about planner first, then each specialist (builder-1, reviewer-1, etc.) one by one
+   - Only after the user confirms each seat's config, start planner with the confirmed overrides: `start_seat.py --seat planner --tool <X> --auth-mode <Y> --provider <Z> --confirm-start`
+   - Wait for user to confirm planner OAuth/auth is complete
+   - Then delegate **ALL** remaining specialist seat startups to planner via `dispatch_task.py` — include every declared seat with the user-confirmed `--tool`/`--auth-mode`/`--provider` overrides
+   - **Never let planner choose seat configs on its own** — all config decisions come from the user through koder
 7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
 8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
 9. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.
