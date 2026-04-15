@@ -31,6 +31,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Required for non-frontstage seats after the launch summary has been reviewed with the user.",
     )
+    parser.add_argument("--tool", help="Override tool (claude, codex, gemini). Updates session before start.")
+    parser.add_argument("--auth-mode", help="Override auth mode (oauth, api). Updates session before start.")
+    parser.add_argument("--provider", help="Override provider. Updates session before start.")
     return parser.parse_args()
 
 
@@ -105,6 +108,45 @@ def send_frontstage_trigger(profile, seat: str) -> None:
     )
 
 
+def apply_config_overrides(profile, seat: str, *, tool: str | None, auth_mode: str | None, provider: str | None) -> bool:
+    """Apply tool/auth_mode/provider overrides via agent_admin switch-harness.
+
+    Returns True if the session was updated, False if no changes were needed.
+    """
+    if not tool and not auth_mode and not provider:
+        return False
+    session_data = load_toml(session_path_for(profile, seat))
+    current_tool = session_data.get("tool", "")
+    current_auth = session_data.get("auth_mode", "")
+    current_provider = session_data.get("provider", "")
+    new_tool = tool or current_tool
+    new_auth = auth_mode or current_auth
+    new_provider = provider or current_provider
+    if new_tool == current_tool and new_auth == current_auth and new_provider == current_provider:
+        return False
+    cmd = [
+        "python3",
+        str(profile.agent_admin),
+        "session",
+        "switch-harness",
+        "--engineer",
+        seat,
+        "--project",
+        profile.project_name,
+        "--tool",
+        new_tool,
+        "--mode",
+        new_auth,
+        "--provider",
+        new_provider,
+    ]
+    result = run_command(cmd, cwd=profile.repo_root)
+    require_success(result, f"switch config for {seat}")
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    return True
+
+
 def render_launch_summary(profile, seat: str) -> str:
     session_data = load_toml(session_path_for(profile, seat))
     role = profile.seat_roles.get(seat, "specialist")
@@ -120,6 +162,7 @@ def render_launch_summary(profile, seat: str) -> str:
         f"  provider: {session_data.get('provider', '-')}",
         f"  session: {session_data.get('session', '-')}",
         f"  workspace: {session_data.get('workspace', '-')}",
+        "config_override_hint: to change tool/auth/provider, re-run with --tool/--auth-mode/--provider flags.",
     ]
     return "\n".join(lines)
 
@@ -128,6 +171,14 @@ def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
     materialize_profile_runtime(profile)
+    has_overrides = args.tool or args.auth_mode or args.provider
+    if has_overrides:
+        switched = apply_config_overrides(
+            profile, args.seat,
+            tool=args.tool, auth_mode=args.auth_mode, provider=args.provider,
+        )
+        if switched:
+            print(f"config_updated: {args.seat} session updated before start")
     if args.seat not in profile.heartbeat_seats and not args.confirm_start:
         print(render_launch_summary(profile, args.seat))
         print(
