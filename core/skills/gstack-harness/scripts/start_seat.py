@@ -216,7 +216,10 @@ def main() -> int:
     if seeded_from is not None:
         print(f"seeded secret for {args.seat} from {seeded_from}")
     if oauth_seeded_from is not None:
-        print(f"seeded oauth runtime for {args.seat} from {oauth_seeded_from}")
+        print(
+            f"oauth_seed_warning: copied credentials for {args.seat} from {oauth_seeded_from} — "
+            "Claude Code may still require a fresh OAuth login for this seat"
+        )
     if result.stdout.strip():
         print(result.stdout.strip())
     pane_text = capture_session_pane(profile, args.seat)

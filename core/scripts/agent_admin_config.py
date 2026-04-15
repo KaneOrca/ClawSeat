@@ -206,6 +206,13 @@ XCODE_PROVIDER_ENDPOINT_RULES = {
     },
 }
 
+CLAUDE_API_PROVIDER_CONFIGS = {
+    "minimax": {
+        "model": "MiniMax-M2.7",
+        "base_url": "https://api.minimaxi.com",
+    },
+}
+
 CODEX_API_PROVIDER_CONFIGS = {
     "xcode-best": {
         "model_provider": "api111",

@@ -36,6 +36,17 @@ class TemplateHandlers:
     def __init__(self, hooks: TemplateHooks) -> None:
         self.hooks = hooks
 
+    def _render_claude_settings(self, session: Any) -> str:
+        import json
+        from agent_admin_config import CLAUDE_API_PROVIDER_CONFIGS
+
+        settings: dict[str, str] = {"workspace_label": session.engineer_id}
+        if session.auth_mode == "api":
+            provider_config = CLAUDE_API_PROVIDER_CONFIGS.get(session.provider, {})
+            if provider_config.get("model"):
+                settings["model"] = provider_config["model"]
+        return json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
+
     def render_template_text(
         self,
         tool: str,
@@ -202,9 +213,7 @@ class TemplateHandlers:
                     project_engineers=project_engineers,
                     engineer_order=engineer_order,
                 ),
-                ".claude/settings.local.json": "{\n  \"workspace_label\": "
-                + self.hooks.q(session.engineer_id)
-                + "\n}\n",
+                ".claude/settings.local.json": self._render_claude_settings(session),
             },
             "gemini": {
                 "AGENTS.md": "\n".join(gemini_lines) + "\n",
