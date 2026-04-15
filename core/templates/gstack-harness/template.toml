@@ -30,6 +30,7 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
 ]
 role_details = [
   "runtime seat id remains koder; canonical framework role is frontstage-supervisor",
@@ -41,7 +42,8 @@ role_details = [
   "receive escalations from planner and reframe when needed",
   "when a stage closeout becomes visible in the Feishu group, reconcile the delivery trail and update the project docs before summarizing to the user",
   "when planner uses lark-cli user identity in Feishu, do not trust sender identity; only consume OC_DELEGATION_REPORT_V1 as a machine-readable delegation receipt",
-  "do not absorb builder, reviewer, QA, or designer specialist work",
+  "do not absorb builder, reviewer, QA, designer, or warden specialist work",
+  "learn, checkpoint, document-release, retro, and autoplan belong to warden (future expansion), not koder",
 ]
 
 [[engineers]]
@@ -67,6 +69,9 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
   "~/.agents/skills/lark-shared/SKILL.md",
   "~/.agents/skills/lark-im/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-ship/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
 ]
 role_details = [
   "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
@@ -74,6 +79,8 @@ role_details = [
   "planner must ensure lark-cli is available and auth is valid before using Feishu features; run `lark-cli auth login` if token is expired",
   "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
   "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
+  "use gstack-plan-eng-review for execution plan review before dispatching to specialists",
+  "use gstack-ship to coordinate branch merges, PR creation, and deployment",
 ]
 
 [[engineers]]
@@ -96,10 +103,17 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-investigate/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-ship/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-freeze/SKILL.md",
 ]
 role_details = [
   "default implementation seat for code, script, config, template, and document changes",
-  "use the latest gstack implementation/debugging workflow instead of asking planner to perform concrete edits",
+  "use gstack-investigate for systematic debugging with root cause analysis",
+  "use gstack-ship to create PRs and push changes",
+  "use gstack-browse for headless browser testing of UI changes",
+  "use gstack-freeze to restrict edits to the target directory when debugging",
   "return implementation artifacts to planner; do not self-close the chain",
 ]
 
@@ -123,6 +137,7 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
 ]
 role_details = [
   "default review gate for docs / templates / skills / protocol / config / source changes",
@@ -150,10 +165,14 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-qa-only/SKILL.md",
 ]
 role_details = [
   "default verification / smoke / regression lane",
-  "use the latest gstack QA workflow for verification-heavy execution",
+  "use gstack-qa for full QA testing with bug fixing",
+  "use gstack-qa-only for report-only mode without fixing",
+  "use gstack-browse for headless browser UI testing",
   "prefer MiniMax-M2.7-highspeed for test-heavy execution",
 ]
 
@@ -178,9 +197,15 @@ design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-design-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-design-shotgun/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-design-html/SKILL.md",
 ]
 role_details = [
   "default visual review and design-direction seat",
-  "use the latest gstack design-review workflow for visual QA and design corrections",
+  "use gstack-design-review for visual QA and design corrections",
+  "use gstack-design-shotgun for multi-variant design exploration",
+  "use gstack-design-html for production-quality HTML/CSS from approved designs",
+  "use gstack-browse for visual inspection and responsive testing",
   "design-driven UI prototypes / visual shells, not production wiring or full feature completion",
 ]
