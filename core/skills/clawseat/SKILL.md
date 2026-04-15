@@ -29,6 +29,7 @@ This skill does not replace the core install/bootstrap engine. It routes to:
    - use the OpenClaw plugin/bootstrap path
    - keep the experience product-shaped: “install/start ClawSeat”
    - do not assume `/cs` is available
+   - treat the canonical bootstrap project as `install`, not as a smoke-only placeholder
 3. If the host is **Claude Code** or **Codex**:
    - install the local entry skills when needed
    - use `/cs` or `$cs` only as a convenience alias after install

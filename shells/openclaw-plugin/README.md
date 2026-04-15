@@ -52,7 +52,20 @@ role = "koder"
 
 ### Friend Install Path
 
-For a fresh OpenClaw machine, the simplest path is:
+For a fresh OpenClaw machine, prefer the repository URL install path:
+
+```bash
+openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/ClawSeat.git
+```
+
+This keeps the user experience product-shaped:
+
+- install `clawseat` from a single repo URL
+- let OpenClaw load `clawseat` as the product entry
+- do not require the user to understand `/cs` or `gstack-harness`
+
+If you are working on a local checkout and explicitly want the symlink-based
+developer path, use:
 
 ```bash
 export CLAWSEAT_ROOT=/path/to/ClawSeat
@@ -64,8 +77,6 @@ This installs the minimum ClawSeat-facing skill surface into `~/.openclaw`:
 - global skills:
   - `clawseat`
   - `clawseat-install`
-  - `cs`
-  - `gstack-harness`
   - `clawseat-koder-frontstage`
 - koder workspace skill:
   - `workspace-koder/skills/clawseat-koder-frontstage`
@@ -82,5 +93,6 @@ After that, the user should interact with OpenClaw by saying “安装 ClawSeat�
 - Business protocol logic (planner/koder/handoff semantics) lives in `core/`, not in this shell.
 - This shell contains only bootstrap wiring, adapter registration, and metadata.
 - The OpenClaw harness adapter (`core/adapters/harness/openclaw/`) is currently a placeholder/stub.
+- `gstack-harness` remains an internal runtime dependency carried by ClawSeat; it should not be presented as a separate end-user install target in OpenClaw.
 - The local `/cs` command remains only a convenience alias for Claude/Codex
   runtimes after their local entry skills are installed.

@@ -965,7 +965,7 @@ def safe_start_seat(
 
 
 def bootstrap(
-    project_name: str = "clawseat-runtime-smoke",
+    project_name: str = "install",
     *,
     profile_path: str | Path | None = None,
     skip_preflight: bool = False,

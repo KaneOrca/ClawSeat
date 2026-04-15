@@ -17,8 +17,9 @@ import os
 import sys
 from pathlib import Path
 
-# OpenClaw may inject environment variables for project configuration
-OPENCLAW_PROJECT = os.environ.get("OPENCLAW_PROJECT", "clawseat-runtime-smoke")
+# OpenClaw may inject environment variables for project configuration.
+# Default to the canonical install project rather than a smoke-only placeholder.
+OPENCLAW_PROJECT = os.environ.get("OPENCLAW_PROJECT", "install")
 OPENCLAW_AGENTS_ROOT = os.environ.get("AGENTS_ROOT", str(Path.home() / ".agents"))
 OPENCLAW_SESSIONS_ROOT = os.environ.get("SESSIONS_ROOT", f"{OPENCLAW_AGENTS_ROOT}/sessions")
 OPENCLAW_WORKSPACES_ROOT = os.environ.get("WORKSPACES_ROOT", f"{OPENCLAW_AGENTS_ROOT}/workspaces")

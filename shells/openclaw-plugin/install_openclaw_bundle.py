@@ -13,8 +13,6 @@ DEFAULT_OPENCLAW_HOME = Path.home() / ".openclaw"
 GLOBAL_SKILLS = {
     "clawseat": CLAWSEAT_ROOT / "core" / "skills" / "clawseat",
     "clawseat-install": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-install",
-    "cs": CLAWSEAT_ROOT / "core" / "skills" / "cs",
-    "gstack-harness": CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness",
     "clawseat-koder-frontstage": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-koder-frontstage",
 }
 

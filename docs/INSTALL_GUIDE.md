@@ -11,7 +11,20 @@ ClawSeat 对外应只有一个产品名：`clawseat`。
 - **OpenClaw / 飞书**：让运行时加载 `clawseat` skill 或 plugin，并自动进入完整流程；不要要求用户知道 `/cs`
 - **Claude Code / Codex 本地终端**：在入口 skill 安装完成后，可以把 `/cs` 当成快捷入口
 
-如果目标机器是全新的 OpenClaw 环境，推荐先执行：
+如果目标机器是全新的 OpenClaw 环境，优先走“仓库地址安装”：
+
+```bash
+openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/ClawSeat.git
+```
+
+这条路径才是给朋友或终端用户的主路径：
+
+- 只给 OpenClaw 一个仓库地址
+- 让 OpenClaw 安装 `clawseat`
+- 让 OpenClaw 以 `clawseat` 作为唯一产品入口
+- 不要求用户知道 `/cs`、`CLAWSEAT_ROOT`、`gstack-harness`
+
+如果目标机器是本地开发机，才推荐执行：
 
 ```bash
 export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
@@ -20,13 +33,6 @@ python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py
 
 这会把 ClawSeat 对 OpenClaw 需要的 skill surface 一次性挂到 `~/.openclaw`，
 之后用户只需要在 OpenClaw / 飞书里说“安装 ClawSeat”或“启动 ClawSeat”。
-
-如果目标是“只给朋友一个仓库地址”，现在也支持把 ClawSeat 仓库本身当作
-OpenClaw marketplace source。最简 CLI 形式是：
-
-```bash
-openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/ClawSeat.git
-```
 
 如果 OpenClaw 侧是通过 agent/飞书来执行安装，则用户可以只提供这个仓库地址；
 运行时先读取仓库根的 `marketplace.json`，再安装其中的 `clawseat` 条目。
