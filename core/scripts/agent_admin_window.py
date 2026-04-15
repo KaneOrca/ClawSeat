@@ -407,26 +407,15 @@ def open_project_tabs_window(project: Any, sessions: dict[str, Any], engineers: 
         )
 
     def build_script(app_name: str) -> str:
-        project_prefix = applescript_quote(f"{project.name}:")
+        # Note: we intentionally do NOT close existing project tabs before
+        # creating the new window. Closing tabs kills their shell process,
+        # which detaches running agent sessions (including the caller if it
+        # runs open-monitor from inside one of those tabs). Old windows are
+        # left for the user to close manually or are replaced naturally when
+        # the tmux session reattaches in the new tab.
         lines = [
             f'tell application "{app_name}"',
             "  activate",
-            "  set tabsToClose to {}",
-            "  repeat with w in windows",
-            "    repeat with t in tabs of w",
-            "      try",
-            "        set tabName to name of current session of t",
-            f'        if tabName starts with "{project_prefix}" then',
-            "          set end of tabsToClose to t",
-            "        end if",
-            "      end try",
-            "    end repeat",
-            "  end repeat",
-            "  repeat with t in tabsToClose",
-            "    try",
-            "      close t",
-            "    end try",
-            "  end repeat",
             "  set projectWindow to (create window with default profile)",
         ]
 

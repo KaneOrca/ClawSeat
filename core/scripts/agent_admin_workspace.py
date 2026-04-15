@@ -496,11 +496,9 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "This shows a launch summary; re-run with `--confirm-start` to actually start.",
             "Use `--tool`, `--auth-mode`, `--provider` to override the template defaults.",
             "",
-            "Open the project iTerm window with one tab per running seat:",
-            "```bash",
-            f"python3 {project.repo_root}/core/scripts/agent_admin.py \\",
-            f"  window open-monitor {project.name}",
-            "```",
+            "Do NOT run `window open-monitor` from inside a tmux seat — it may close",
+            "the tab you are running in. Ask koder (frontstage) to open the monitor window,",
+            "or let the user run it from an external terminal.",
         ]
     elif engineer.role in {"builder", "reviewer", "qa", "designer"}:
         lines = [
