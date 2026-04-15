@@ -25,7 +25,7 @@ python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py
 OpenClaw marketplace source。最简 CLI 形式是：
 
 ```bash
-openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/coding-framework.git
+openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/ClawSeat.git
 ```
 
 如果 OpenClaw 侧是通过 agent/飞书来执行安装，则用户可以只提供这个仓库地址；
