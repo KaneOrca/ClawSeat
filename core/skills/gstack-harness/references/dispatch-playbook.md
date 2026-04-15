@@ -90,6 +90,12 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/complete_handoff.py \
   --ack-only
 ```
 
+That `Consumed:` ACK only records that the specialist delivery was read. It
+does not mean the chain is finished. If the reviewer verdict resolves the
+task, planner must immediately continue with the frontstage closeout helper
+and emit the `planner -> koder` receipt; do not leave the chain parked after
+`ack-only`.
+
 If the receipt is part of the planner's group-visible chain, the completion
 helper only emits the matching Feishu group broadcast when
 `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1` (or the OpenClaw equivalent) is

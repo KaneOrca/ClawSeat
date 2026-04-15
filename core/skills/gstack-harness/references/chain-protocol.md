@@ -86,6 +86,12 @@ Only after the user confirms may frontstage actually launch the seat.
 3. planner writes durable `Consumed:` ACK
 4. planner decides the next hop
 
+The durable `Consumed:` ACK is only the handoff-read marker. It is not the end
+of the chain. If the delivery resolves the task, planner must immediately move
+on to the planner -> frontstage closeout helper and emit the matching
+`OC_DELEGATION_REPORT_V1` / `complete_handoff.py` receipt instead of parking on
+the ACK.
+
 ## Planner -> frontstage closeout
 
 When the active loop owner returns a chain result to frontstage:
@@ -117,6 +123,8 @@ When the active loop owner returns a chain result to frontstage:
    - gives the user a short, easy-to-understand summary
    - auto-advances by default when the disposition is `AUTO_ADVANCE`
    - asks the user to decide only when the disposition is `USER_DECISION_NEEDED`
+   - if the chain already resolved at planner, the receipt should have been
+     written before the planner session could forget the closeout step
 7. if a Feishu group is configured, planner also emits the closeout broadcast
    to the same initial bound group when the receipt lands, so the group sees
    both release and wrap-up without requiring a separate manual post
