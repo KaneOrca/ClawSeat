@@ -75,7 +75,7 @@ Only if needed, also read:
 
 Keep `delegate-first` as the default posture.
 
-`engineer-b` still owns execution planning and next-hop routing once the task
+`planner` still owns execution planning and next-hop routing once the task
 enters the active loop.
 
 ## Seat Configuration Rule

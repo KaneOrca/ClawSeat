@@ -2,7 +2,7 @@
 
 当前 `cartooner` 要区分两种通信面：
 
-- harness specialists (`engineer-a/b/c/d/e`)
+- harness specialists (`planner/builder-1/reviewer-1/qa-1/designer-1`)
 - OpenClaw-native `koder`
 
 如果某个 specialist 只是外部 harness seat，不要假设它能直接调用

@@ -29,7 +29,7 @@ enabled = true
 session_root = "~/.agents/sessions"
 bootstrap_seats = ["koder"]
 default_start_seats = ["koder"]
-compat_legacy_seats = true
+compat_legacy_seats = false
 
 # For the canonical /cs install workspace, copy:
 # {CLAWSEAT_ROOT}/examples/starter/profiles/install.toml

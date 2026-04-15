@@ -80,7 +80,7 @@ skills = [
 role_details = [
   "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
   "planner owns Feishu user-identity closeout and decision-gate receipts through `OC_DELEGATION_REPORT_V1`; legacy group broadcast stays opt-in only",
-  "planner must ensure lark-cli is available and auth is valid before using Feishu features; run `lark-cli auth login` if token is expired",
+  "planner must verify Feishu auth before first send: run `send_delegation_report.py --check-auth`; if status is not ok, tell the user to run `lark-cli auth login` in a terminal with browser access",
   "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
   "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
   "use gstack-plan-eng-review for execution plan review before dispatching to specialists",

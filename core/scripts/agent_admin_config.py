@@ -238,6 +238,7 @@ SUPPORTED_RUNTIME_MATRIX = {
     },
     "gemini": {
         "oauth": ("google",),
+        "api": ("google-api-key",),
     },
 }
 

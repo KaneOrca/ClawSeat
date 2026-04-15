@@ -135,6 +135,27 @@ When the active loop owner returns a chain result to frontstage:
    trail, reconcile the stage result, and update the project docs before
    reporting the final status to the user
 
+## Persistent planner state: PLANNER_BRIEF.md
+
+`DELIVERY.md` is per-handoff. In addition, planner maintains a persistent
+state document: `PLANNER_BRIEF.md` (at `{tasks_root}/planner/PLANNER_BRIEF.md`).
+
+`PLANNER_BRIEF.md` is the only planning window that frontstage reads. It
+carries:
+
+- `status`: current chain/planner state
+- `frontstage_disposition`: the machine-readable control field that drives
+  frontstage behavior (same vocabulary as `DELIVERY.md` FrontstageDisposition)
+- `用户摘要`: user-facing Chinese summary of the current state
+
+Frontstage reads `PLANNER_BRIEF.md` through the adapter, not by parsing
+specialist `DELIVERY.md` files directly. This keeps the frontstage layer
+thin and disposition-driven.
+
+When planner writes a `DELIVERY.md` aimed at frontstage via
+`complete_handoff.py`, it should also update `PLANNER_BRIEF.md` to reflect
+the new state so that patrol and subsequent reads stay consistent.
+
 ## Planner decision gates
 
 If planner pauses for user input before the chain is complete, that decision

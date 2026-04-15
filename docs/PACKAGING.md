@@ -103,7 +103,7 @@ ClawSeat carries `gstack-harness` internally.
 To build a clean publishable bundle from this repo:
 
 ```bash
-python3 /Users/ywf/coding/ClawSeat/core/scripts/build_product_bundle.py --clean
+python3 "$CLAWSEAT_ROOT/core/scripts/build_product_bundle.py" --clean
 ```
 
 This exports the minimum complete package to:
@@ -113,5 +113,5 @@ This exports the minimum complete package to:
 To include optional consumer adapters and extra docs too:
 
 ```bash
-python3 /Users/ywf/coding/ClawSeat/core/scripts/build_product_bundle.py --clean --include-optional
+python3 "$CLAWSEAT_ROOT/core/scripts/build_product_bundle.py" --clean --include-optional
 ```

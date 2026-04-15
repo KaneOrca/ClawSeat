@@ -7,22 +7,22 @@
 ```text
 Request type: [discovery / implementation / review / qa / design / mixed]
 Need intake skill: [office-hours / plan-ceo-review / none]
-Next seat: [engineer-b / none]
+Next seat: [planner / none]
 Need user decision: [yes/no]
 ```
 
 规则：
 
 - 顶层仍然先按 seat 路由，不先按工具名路由
-- `engineer-b` 是 planner-dispatcher
-- `engineer-a` 是 builder
-- `engineer-c` 是 reviewer
-- `engineer-d` 是 qa
-- `engineer-e` 是 optional designer
+- `planner` 是 planner-dispatcher
+- `builder-1` 是 builder
+- `reviewer-1` 是 reviewer
+- `qa-1` 是 qa
+- `designer-1` 是 optional designer
 - 默认保持 delegate-first
 
 Accepted two-review split:
 
-- `engineer-b` = execution-plan review and next-hop routing
-- `engineer-c` = code review
+- `planner` = execution-plan review and next-hop routing
+- `reviewer-1` = code review
 - `koder` = intake framing + routing + tracking, not execution planner and not default final reviewer

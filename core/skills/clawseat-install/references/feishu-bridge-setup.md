@@ -8,17 +8,37 @@
 
 ## Step 1: Verify lark-cli auth
 
+Use the built-in auth check before anything else:
+
 ```bash
-lark-cli auth status
+python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py --check-auth
 ```
 
-If `tokenStatus` is `needs_refresh` or `expired`:
+Expected output when healthy:
+
+```json
+{
+  "identity": "user",
+  "reason": "auth token is valid",
+  "status": "ok",
+  "userName": "your_name"
+}
+```
+
+If `status` is not `ok`, follow the `fix` field in the output. Most common fix:
 
 ```bash
 lark-cli auth login
 ```
 
-Follow the browser prompt to complete OAuth. This is a **user action** — the agent cannot complete it automatically.
+Follow the browser prompt to complete OAuth. This is a **user action** — the
+agent cannot complete it automatically.
+
+**Important for tmux seats**: lark-cli auth config lives under the **real user
+HOME**, not the isolated seat runtime HOME. The ClawSeat scripts handle this
+automatically by passing `AGENT_HOME` to the lark-cli environment. If you see
+auth failures from a tmux seat but `lark-cli auth status` works in your normal
+terminal, check that `AGENT_HOME` is correctly set in the seat's environment.
 
 ## Step 2: Collect Feishu group ID
 
@@ -66,7 +86,22 @@ See `references/feishu-group-no-mention.md` for configuration details.
 
 ## Step 6: Smoke test
 
-Planner sends a test delegation report to the bound group:
+First do a dry-run to verify the envelope is well-formed:
+
+```bash
+python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py \
+  --project install \
+  --lane planning \
+  --task-id BRIDGE-SMOKE-001 \
+  --report-status done \
+  --decision-hint proceed \
+  --user-gate none \
+  --next-action consume_closeout \
+  --summary 'Feishu bridge smoke test' \
+  --dry-run
+```
+
+Then send for real (the script auto-checks auth before sending):
 
 ```bash
 python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py \
@@ -95,10 +130,64 @@ Koder should receive the `OC_DELEGATION_REPORT_V1` envelope in the group and ver
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| `lark_cli_missing` in send result | `brew install larksuite/cli/lark-cli` |
-| `lark_cli_send_failed` | Check `lark-cli auth status`, run `lark-cli auth login` if expired |
-| `no_group_id_found` | Pass `--chat-id` explicitly or set `CLAWSEAT_FEISHU_GROUP_ID` |
-| Message sent but koder doesn't see it | Check `requireMention` config and restart gateway |
-| Permission denied on im:message | Re-run `lark-cli auth login` with `im:message` scope |
+### Quick diagnosis
+
+```bash
+# 1. Is lark-cli installed?
+which lark-cli
+
+# 2. Is auth valid?
+python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py --check-auth
+
+# 3. Can we resolve a group ID?
+python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/find_feishu_group_ids.py
+
+# 4. Is the env var set? (for tmux seats)
+echo $CLAWSEAT_FEISHU_GROUP_ID
+```
+
+### Error reference
+
+| Error reason in send result | Meaning | Fix |
+|-----------------------------|---------|-----|
+| `lark_cli_missing` | lark-cli binary not in PATH | `brew install larksuite/cli/lark-cli` |
+| `auth_expired` | OAuth token expired | User runs `lark-cli auth login` in a terminal with browser access |
+| `auth_needs_refresh` | Token needs refresh | User runs `lark-cli auth login` |
+| `permission_denied` | Missing `im:message` scope | Re-run `lark-cli auth login` and ensure the OAuth scope includes `im:message` |
+| `group_not_found` | Group ID invalid or bot not in group | Verify group ID; ensure the bot app is added to the target group in Feishu admin |
+| `network_error` | Network connectivity issue | Check internet; retry |
+| `no_group_id_found` | No group ID resolved from env/config/sessions | Pass `--chat-id` explicitly or `export CLAWSEAT_FEISHU_GROUP_ID=oc_xxx` |
+
+### Common scenarios
+
+**Scenario: planner in tmux can't send but terminal works**
+
+lark-cli auth lives in the real user HOME. The isolated seat HOME is different.
+ClawSeat passes `AGENT_HOME` as the real HOME to lark-cli, but if `AGENT_HOME`
+is not set (e.g. manual tmux session), lark-cli will look in the wrong place.
+
+Fix: ensure `AGENT_HOME` is exported in the seat environment, or run
+`start_seat.py` which handles this automatically.
+
+**Scenario: token expires mid-session**
+
+lark-cli tokens have a limited lifetime. If a long-running planner session
+eventually fails to send, the token has likely expired.
+
+Fix: user runs `lark-cli auth login` in any terminal. The refreshed token is
+stored under the real HOME and will be picked up by the next send attempt
+from any seat.
+
+**Scenario: message sent but koder doesn't see it**
+
+1. Check `requireMention` config — koder account must be `requireMention: false`
+   for the target group
+2. Restart OpenClaw gateway after config changes: `cd openclaw && pnpm openclaw gateway restart`
+3. Verify the bot app has `im:message:receive` permission in Feishu developer console
+
+**Scenario: koder sees the message but doesn't auto-advance**
+
+1. Verify the envelope has all 9 required fields
+2. Check `project` matches the active project in koder
+3. Check `task_id` and `dispatch_nonce` match the active delegation chain
+4. Use `--dry-run` to inspect the envelope before sending

@@ -32,6 +32,7 @@ default_start_seats = ["koder"]
 compat_legacy_seats = true
 
 legacy_seats = ["engineer-b", "engineer-a", "engineer-c", "engineer-d", "engineer-e"]
+role_first_seats = ["planner", "builder-1", "reviewer-1", "qa-1", "designer-1"]
 
 [legacy_seat_roles]
 engineer-b = "planner-dispatcher"
@@ -39,3 +40,10 @@ engineer-a = "builder"
 engineer-c = "reviewer"
 engineer-d = "qa"
 engineer-e = "designer"
+
+[role_first_seat_roles]
+planner = "planner-dispatcher"
+"builder-1" = "builder"
+"reviewer-1" = "reviewer"
+"qa-1" = "qa"
+"designer-1" = "designer"

@@ -25,7 +25,7 @@ Never run `start_seat.py --seat koder` in OpenClaw mode.
 ## Required Environment
 
 ```sh
-export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+export CLAWSEAT_ROOT="/path/to/ClawSeat"
 ```
 
 If `CLAWSEAT_ROOT` is unset, check the current checkout before doing anything else.

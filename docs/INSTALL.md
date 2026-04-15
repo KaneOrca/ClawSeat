@@ -21,7 +21,7 @@ export CLAWSEAT_ROOT=/path/to/ClawSeat
 Typical example:
 
 ```sh
-export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+export CLAWSEAT_ROOT="/path/to/ClawSeat"
 ```
 
 ## Role-First Bootstrap
@@ -62,11 +62,12 @@ For dynamic-roster profiles, keep bootstrap minimal:
 enabled = true
 bootstrap_seats = ["koder"]
 default_start_seats = ["koder"]
-compat_legacy_seats = true
+compat_legacy_seats = false
 ```
 
-This makes fresh bootstraps frontstage-only while preserving legacy
-`engineer-*` seats for migrated projects.
+This makes fresh bootstraps frontstage-only with role-first naming.
+Set `compat_legacy_seats = true` only for migrated projects that still use
+legacy `engineer-*` seat names.
 
 ## Expansion Rules
 

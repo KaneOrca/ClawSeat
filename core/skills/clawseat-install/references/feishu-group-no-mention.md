@@ -64,7 +64,9 @@
    ```bash
    python3 -c "
    import json
-   with open('/Users/ywf/.openclaw/agents/<account>/sessions/sessions.json') as f:
+   import os
+   openclaw_home = os.environ.get('OPENCLAW_HOME', os.path.expanduser('~/.openclaw'))
+   with open(f'{openclaw_home}/agents/<account>/sessions/sessions.json') as f:
        d = json.load(f)
    for k in d.keys():
        if '<group_id>' in k:

@@ -491,10 +491,112 @@ def build_delegation_report_text(
     return "\n".join(lines)
 
 
+def _lark_cli_real_home() -> str:
+    """Return the real user HOME for lark-cli (not the isolated seat runtime HOME),
+    because lark-cli's auth config lives under the real user's home directory."""
+    return str(AGENT_HOME) if str(AGENT_HOME) != str(Path.home()) else str(Path.home())
+
+
+def _lark_cli_env() -> dict[str, str]:
+    return {
+        "HOME": _lark_cli_real_home(),
+        "OPENCLAW_HOME": str(OPENCLAW_HOME),
+    }
+
+
+def check_feishu_auth() -> dict[str, str]:
+    """Check lark-cli availability and auth token status.
+
+    Returns a dict with:
+      - status: "ok" | "missing" | "expired" | "needs_refresh" | "error"
+      - reason: human-readable explanation
+      - fix: actionable command the user should run
+      - identity: "user" when token is valid
+      - userName: the authenticated user name when available
+    """
+    lark_cli = shutil.which("lark-cli")
+    if not lark_cli:
+        return {
+            "status": "missing",
+            "reason": "lark-cli not found in PATH",
+            "fix": "brew install larksuite/cli/lark-cli",
+        }
+
+    result = run_command_with_env(
+        [lark_cli, "auth", "status"],
+        cwd=str(OPENCLAW_HOME),
+        env=_lark_cli_env(),
+    )
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        return {
+            "status": "error",
+            "reason": f"lark-cli auth status failed (rc={result.returncode}): {stderr}",
+            "fix": "lark-cli auth login",
+        }
+
+    stdout = result.stdout.strip()
+    try:
+        import json as _json
+        auth_info = _json.loads(stdout)
+    except (ValueError, TypeError):
+        return {
+            "status": "error",
+            "reason": f"unexpected lark-cli auth output: {stdout[:200]}",
+            "fix": "lark-cli auth login",
+        }
+
+    token_status = auth_info.get("tokenStatus", "unknown")
+    identity = auth_info.get("identity", "unknown")
+    user_name = auth_info.get("userName", "")
+
+    if token_status == "valid":
+        payload: dict[str, str] = {
+            "status": "ok",
+            "reason": "auth token is valid",
+            "identity": identity,
+        }
+        if user_name:
+            payload["userName"] = user_name
+        return payload
+
+    if token_status in ("expired", "needs_refresh"):
+        return {
+            "status": token_status,
+            "reason": f"lark-cli token is {token_status}",
+            "fix": "lark-cli auth login",
+        }
+
+    return {
+        "status": "error",
+        "reason": f"unexpected token status: {token_status}",
+        "fix": "lark-cli auth login",
+    }
+
+
+def _classify_send_failure(stderr: str) -> tuple[str, str]:
+    """Classify a lark-cli send failure into a specific reason and fix command.
+
+    Returns (reason, fix).
+    """
+    lower = stderr.lower()
+    if "token" in lower and ("expired" in lower or "invalid" in lower or "refresh" in lower):
+        return "auth_expired", "lark-cli auth login"
+    if "permission" in lower or "scope" in lower or "forbidden" in lower:
+        return "permission_denied", "lark-cli auth login  (ensure im:message scope is granted)"
+    if "not found" in lower or "no such" in lower or "404" in lower:
+        return "group_not_found", "check that the group ID is correct and the bot is in the group"
+    if "timeout" in lower or "connection" in lower or "network" in lower:
+        return "network_error", "check network connectivity and retry"
+    return "lark_cli_send_failed", "run `lark-cli auth status` to diagnose"
+
+
 def send_feishu_user_message(
     message: str,
     *,
     group_id: str | None = None,
+    pre_check_auth: bool = False,
 ) -> dict[str, str]:
     resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
     payload: dict[str, str] = {
@@ -509,11 +611,19 @@ def send_feishu_user_message(
     lark_cli = shutil.which("lark-cli")
     if not lark_cli:
         payload["reason"] = "lark_cli_missing"
+        payload["fix"] = "brew install larksuite/cli/lark-cli"
         return payload
 
-    # Use the real user HOME for lark-cli (not the isolated seat runtime HOME),
-    # because lark-cli's auth config lives under the real user's home directory.
-    real_home = str(AGENT_HOME) if str(AGENT_HOME) != str(Path.home()) else str(Path.home())
+    # Optional pre-send auth check to catch expired tokens early.
+    if pre_check_auth:
+        auth = check_feishu_auth()
+        if auth["status"] != "ok":
+            payload["status"] = "failed"
+            payload["reason"] = f"auth_{auth['status']}"
+            payload["fix"] = auth.get("fix", "lark-cli auth login")
+            payload["auth_detail"] = auth.get("reason", "")
+            return payload
+
     result = run_command_with_env(
         [
             lark_cli,
@@ -527,10 +637,7 @@ def send_feishu_user_message(
             message,
         ],
         cwd=str(OPENCLAW_HOME),
-        env={
-            "HOME": real_home,
-            "OPENCLAW_HOME": str(OPENCLAW_HOME),
-        },
+        env=_lark_cli_env(),
     )
     payload["transport"] = "lark-cli-user"
     payload["returncode"] = str(result.returncode)
@@ -542,7 +649,9 @@ def send_feishu_user_message(
         payload["status"] = "sent"
     else:
         payload["status"] = "failed"
-        payload["reason"] = "lark_cli_send_failed"
+        reason, fix = _classify_send_failure(result.stderr)
+        payload["reason"] = reason
+        payload["fix"] = fix
     return payload
 
 

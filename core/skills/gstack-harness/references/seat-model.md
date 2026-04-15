@@ -18,6 +18,7 @@ The harness runtime separates **stable seat identity** from **role semantics**.
 - `codex` + `oauth`: `openai`
 - `codex` + `api`: `xcode-best`
 - `gemini` + `oauth`: `google`
+- `gemini` + `api`: `google-api-key`
 
 Unsupported combinations should be treated as invalid configuration, not as a
 runtime surprise to discover later during launch.

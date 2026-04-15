@@ -20,10 +20,9 @@ Keep it thin. This skill does not define a second bootstrap flow. It delegates t
 - the install workspace roster is `koder + planner + builder-1 + reviewer-1`
 - `koder` is bootstrapped or resumed first
 - `planner` is then explicitly started so it can take over the install chain
-- after `planner` is live, `koder` should immediately follow up with the user for the Feishu/OpenClaw bridge:
-  ask the user to create or identify the group, report the group ID, confirm whether the group should bind the current project / another existing project / a new project, keep `main` on `requireMention=true`, and keep the project-facing `koder` account on `requireMention=false` by default
-- once the user sends the group ID and confirms the project binding, `koder` should immediately ask `planner` to run the bridge smoke test, tell the user `收到测试消息即可回复希望完成什么任务`, and bring up `reviewer-1` in parallel when that seat exists
-- after the group is bound, planner should treat that same group as the user-visible bridge for `OC_DELEGATION_REPORT_V1` closeouts; keep the legacy auto-broadcast path disabled unless explicitly opted in
+- after `planner` is live, follow the Feishu bridge setup and seat launch flow
+  described in `clawseat-install/SKILL.md` and
+  `clawseat-install/references/feishu-bridge-setup.md`
 
 ## Run
 
@@ -41,16 +40,20 @@ Keep it thin. This skill does not define a second bootstrap flow. It delegates t
 
 ## Interaction Rules
 
-- Treat `/cs` itself as the user's explicit approval to create or resume the canonical `install` project and launch `planner`.
+- Treat `/cs` itself as the user's explicit approval to create or resume the
+  canonical `install` project and launch `planner`.
 - Reuse an existing `install` workspace or live TUI if one already exists.
-- Do not create a parallel `install-*` project when the canonical workspace is already present.
-- Once `planner` is up, proactively ask the user for the Feishu group setup instead of waiting for them to bring it up:
-  main agent 拉群并汇报 group ID；无需 user open_id。
-- After the user provides the group ID, require an explicit project-binding confirmation before planner smoke tests begin.
-- Treat Claude OAuth, workspace trust, and permissions prompts as normal manual onboarding.
-- If tmux or PTY support is unavailable, stop cleanly and hand the next terminal command back to the user.
+- Do not create a parallel `install-*` project when the canonical workspace is
+  already present.
+- Treat Claude OAuth, workspace trust, and permissions prompts as normal manual
+  onboarding.
+- If tmux or PTY support is unavailable, stop cleanly and hand the next terminal
+  command back to the user.
+- For all post-planner steps (Feishu bridge, seat config, specialist launch),
+  follow the rules in `clawseat-install/SKILL.md`.
 
 ## References
 
 - `{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`
+- `{CLAWSEAT_ROOT}/core/skills/clawseat-install/references/feishu-bridge-setup.md`
 - `{CLAWSEAT_ROOT}/docs/INSTALL_GUIDE.md`

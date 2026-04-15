@@ -27,7 +27,7 @@ openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/Claw
 如果目标机器是本地开发机，才推荐执行：
 
 ```bash
-export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+export CLAWSEAT_ROOT="/path/to/ClawSeat"
 python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py
 ```
 
@@ -40,7 +40,7 @@ python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py
 如果当前环境是本地 Claude Code / Codex，先在 shell 里把入口 skill 安装到本机 runtime：
 
 ```bash
-export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+export CLAWSEAT_ROOT="/path/to/ClawSeat"
 python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py
 ```
 
@@ -161,8 +161,6 @@ tmux list-sessions
 
 ```bash
 export CLAWSEAT_ROOT=/path/to/ClawSeat
-# 示例：
-export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 ```
 
 路径约定：
@@ -240,7 +238,7 @@ python3 $CLAWSEAT_ROOT/core/preflight.py $PROJECT
 
 | 检查项 | 原因 | 修复 |
 |--------|------|------|
-| CLAWSEAT_ROOT | 环境变量未设置 | `export CLAWSEAT_ROOT=$HOME/coding/ClawSeat` |
+| CLAWSEAT_ROOT | 环境变量未设置 | `export CLAWSEAT_ROOT=/path/to/ClawSeat` |
 | python3 | 版本 < 3.11 | `brew install python3` |
 | tomllib | Python < 3.11 | 升级 Python 至 3.11+ |
 | tmux | 未安装 | `brew install tmux` |
@@ -281,7 +279,7 @@ python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py \
 如果你的目标是直接进入默认安装链，最短路径就是：
 
 ```bash
-export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+export CLAWSEAT_ROOT="/path/to/ClawSeat"
 python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py
 ```
 

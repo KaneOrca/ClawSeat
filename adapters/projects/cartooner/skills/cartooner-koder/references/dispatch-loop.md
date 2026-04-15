@@ -19,8 +19,8 @@ Rules:
 - do not replace docs with chat text
 - `send-and-verify.sh` is the default transport path
 - in multi-project environments, do not use a bare seat name such as
-  `engineer-b`
-- prefer the canonical session name, for example `cartooner-engineer-b-claude`
+  `planner`
+- prefer the canonical session name, for example `cartooner-planner-claude`
 - otherwise pass `--project cartooner`
 - for frontstage unblock / reminder messages, `notify_seat.py` is preferred
 - raw `tmux send-keys` is protocol drift
@@ -28,13 +28,13 @@ Rules:
 - fallback must still honor the transport contract: send text, wait one
   second, send `Enter`, verify the message did not remain queued
 
-Completion back to `engineer-b` is also document-first:
+Completion back to `planner` is also document-first:
 
 1. specialist updates `DELIVERY.md`
-2. specialist notifies `engineer-b` with
+2. specialist notifies `planner` with
    `{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh`
-3. `engineer-b` writes a durable `Consumed:` ACK in the consumer repo's
-   `.tasks/engineer-b/TODO.md`
+3. `planner` writes a durable `Consumed:` ACK in the consumer repo's
+   `.tasks/planner/TODO.md`
 
 Do not treat pane noise as proof that a completion handoff was consumed.
 
@@ -47,7 +47,7 @@ Protocol helpers:
 
 Low-freedom defaults:
 
-- `koder -> engineer-b` uses `dispatch_task.py`
-- `engineer-b -> specialist` uses `dispatch_task.py`
-- `specialist -> engineer-b` uses `complete_handoff.py`
-- `engineer-b -> koder` uses `complete_handoff.py`
+- `koder -> planner` uses `dispatch_task.py`
+- `planner -> specialist` uses `dispatch_task.py`
+- `specialist -> planner` uses `complete_handoff.py`
+- `planner -> koder` uses `complete_handoff.py`
