@@ -20,6 +20,11 @@ product:
 - `koder` clarifies the request, recommends the team, and then instantiates
   seats
 
+For OpenClaw, the repo root is now also a marketplace source. That means
+OpenClaw can install ClawSeat directly from the repo URL as a Claude-compatible
+bundle, without asking end users to understand `/cs`, local skill symlinks, or
+the internal repo layout.
+
 Internally, ClawSeat is more than a single skill. It is the framework and
 control plane behind that product-shaped skill/plugin entrypoint.
 
@@ -111,3 +116,5 @@ Runtime contract:
   `core/skills/gstack-harness/scripts/_common.py`
 
 Setup details and examples live in `docs/INSTALL.md`.
+
+Packaging/export details live in [docs/PACKAGING.md](docs/PACKAGING.md).

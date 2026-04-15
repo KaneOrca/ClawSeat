@@ -3,11 +3,39 @@ version = "0.1.0"
 description = "ClawSeat 多席位控制面框架"
 
 [modules]
-core = ["core/scripts", "core/skills", "core/templates", "core/shell-scripts", "core/harness_adapter.py"]
-adapters = ["adapters/harness", "adapters/projects/cartooner", "adapters/projects/openclaw"]
-shells = ["shells"]
-examples = ["examples/arena-pretext-ui"]
-docs = ["docs"]
+root = ["README.md", "marketplace.json", ".claude-plugin/plugin.json", "manifest.toml"]
+core = [
+  "core/adapter",
+  "core/bootstrap_receipt.py",
+  "core/engine",
+  "core/harness_adapter.py",
+  "core/migration",
+  "core/preflight.py",
+  "core/scripts",
+  "core/shell-scripts",
+  "core/skills",
+  "core/templates",
+  "core/transport",
+]
+adapters = ["adapters/harness"]
+shells = ["shells/openclaw-plugin", "shells/claude-bundle", "shells/codex-bundle"]
+profiles = ["examples/starter/profiles"]
+docs = ["docs/INSTALL.md", "docs/INSTALL_GUIDE.md", "docs/ARCHITECTURE.md"]
+optional = [
+  "adapters/projects/cartooner",
+  "adapters/projects/openclaw",
+  "examples/arena-pretext-ui",
+  "docs",
+]
+
+[entrypoints]
+openclaw_marketplace = "marketplace.json"
+openclaw_bundle = ".claude-plugin/plugin.json"
+product_skill = "core/skills/clawseat/SKILL.md"
+install_skill = "core/skills/clawseat-install/SKILL.md"
+frontstage_skill = "core/skills/clawseat-koder-frontstage/SKILL.md"
+runtime_core = "core/skills/gstack-harness/SKILL.md"
+bootstrap = "shells/openclaw-plugin/openclaw_bootstrap.py"
 
 [dependencies]
 python = ">=3.11"

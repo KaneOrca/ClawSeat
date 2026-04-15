@@ -21,6 +21,16 @@ python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py
 这会把 ClawSeat 对 OpenClaw 需要的 skill surface 一次性挂到 `~/.openclaw`，
 之后用户只需要在 OpenClaw / 飞书里说“安装 ClawSeat”或“启动 ClawSeat”。
 
+如果目标是“只给朋友一个仓库地址”，现在也支持把 ClawSeat 仓库本身当作
+OpenClaw marketplace source。最简 CLI 形式是：
+
+```bash
+openclaw plugins install clawseat --marketplace https://github.com/KaneOrca/coding-framework.git
+```
+
+如果 OpenClaw 侧是通过 agent/飞书来执行安装，则用户可以只提供这个仓库地址；
+运行时先读取仓库根的 `marketplace.json`，再安装其中的 `clawseat` 条目。
+
 如果当前环境是本地 Claude Code / Codex，先在 shell 里把入口 skill 安装到本机 runtime：
 
 ```bash
