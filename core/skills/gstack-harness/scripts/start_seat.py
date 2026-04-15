@@ -187,6 +187,10 @@ def main() -> int:
         return 2
     seeded_from = seed_empty_secret_from_peer(profile, args.seat)
     oauth_seeded_from = seed_empty_oauth_runtime_from_peer(profile, args.seat)
+    # Ensure model/effort are written to settings.local.json before starting.
+    # This covers seats started after bootstrap (via planner dispatch).
+    from _common import _patch_claude_settings_from_profile
+    _patch_claude_settings_from_profile(profile, [args.seat])
     cmd = [
         "python3",
         str(profile.agent_admin),
