@@ -178,6 +178,10 @@ class CrudHandlers:
                 provider=str(engineer_spec["provider"]),
                 monitor=bool(engineer_spec.get("monitor", True)),
             )
+            # Attach template-only fields (model, effort) for settings generation.
+            # These are not part of SessionRecord but are consumed by _render_claude_settings.
+            session._template_model = str(engineer_spec.get("model", "")).strip()
+            session._template_effort = str(engineer_spec.get("effort", "")).strip()
             self.hooks.write_session(session)
             self.hooks.apply_template(
                 session,

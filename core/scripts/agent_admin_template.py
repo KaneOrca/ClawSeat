@@ -36,15 +36,25 @@ class TemplateHandlers:
     def __init__(self, hooks: TemplateHooks) -> None:
         self.hooks = hooks
 
-    def _render_claude_settings(self, session: Any) -> str:
+    def _render_claude_settings(self, session: Any, engineer: Any = None) -> str:
         import json
         from agent_admin_config import CLAUDE_API_PROVIDER_CONFIGS
 
-        settings: dict[str, str] = {"workspace_label": session.engineer_id}
-        if session.auth_mode == "api":
+        settings: dict[str, object] = {"workspace_label": session.engineer_id}
+
+        # Model priority: template field on session > API provider config > omit
+        model = getattr(session, "_template_model", "") or ""
+        if not model and session.auth_mode == "api":
             provider_config = CLAUDE_API_PROVIDER_CONFIGS.get(session.provider, {})
-            if provider_config.get("model"):
-                settings["model"] = provider_config["model"]
+            model = provider_config.get("model", "")
+        if model:
+            settings["model"] = model
+
+        # Effort level from template
+        effort = getattr(session, "_template_effort", "") or ""
+        if effort:
+            settings["effortLevel"] = effort
+
         return json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
 
     def render_template_text(
@@ -213,7 +223,7 @@ class TemplateHandlers:
                     project_engineers=project_engineers,
                     engineer_order=engineer_order,
                 ),
-                ".claude/settings.local.json": self._render_claude_settings(session),
+                ".claude/settings.local.json": self._render_claude_settings(session, engineer),
             },
             "gemini": {
                 "AGENTS.md": "\n".join(gemini_lines) + "\n",
