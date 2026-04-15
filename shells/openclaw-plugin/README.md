@@ -62,6 +62,8 @@ This keeps the user experience product-shaped:
 
 - install `clawseat` from a single repo URL
 - let OpenClaw load `clawseat` as the product entry
+- let the canonical `install` bootstrap auto-seed its own dynamic profile on a
+  blank machine
 - do not require the user to understand `/cs` or `gstack-harness`
 
 If you are working on a local checkout and explicitly want the symlink-based

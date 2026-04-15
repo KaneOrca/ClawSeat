@@ -286,6 +286,16 @@ def _check_dynamic_profile(project: str) -> PreflightItem:
                 status=PreflightStatus.PASS,
                 message=f"profile found at {candidate}",
             )
+    if project == "install":
+        return PreflightItem(
+            name="dynamic_profile",
+            status=PreflightStatus.RETRYABLE,
+            message="no dynamic profile found for canonical install project",
+            fix_command=(
+                "python3 \"${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/cs_init.py\" "
+                "--refresh-profile"
+            ),
+        )
     return PreflightItem(
         name="dynamic_profile",
         status=PreflightStatus.RETRYABLE,
@@ -389,6 +399,29 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
 
     if item.name == "dynamic_profile":
         try:
+            if project == "install":
+                clawseat_root = os.environ.get("CLAWSEAT_ROOT", "").strip()
+                if clawseat_root:
+                    template_root = Path(clawseat_root).expanduser()
+                else:
+                    template_root = Path.home() / "coding" / "ClawSeat"
+                template_path = template_root / "examples" / "starter" / "profiles" / "install.toml"
+                output_profile = Path(f"/tmp/{project}-profile-dynamic.toml")
+                if not template_path.exists():
+                    return PreflightItem(
+                        name=item.name,
+                        status=PreflightStatus.RETRYABLE,
+                        message=f"install profile template not found at {template_path}",
+                        fix_command=item.fix_command,
+                    )
+                output_profile.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
+                return PreflightItem(
+                    name=item.name,
+                    status=PreflightStatus.PASS,
+                    message=f"canonical install profile created at {output_profile}",
+                    fix_command="",
+                )
+
             # Find migrate_profile.py — prefer CLAWSEAT_ROOT, then filesystem inference
             clawseat_root = os.environ.get("CLAWSEAT_ROOT", "").strip()
             if clawseat_root:

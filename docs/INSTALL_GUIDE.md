@@ -86,6 +86,7 @@ python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills
   - 当前宿主环境不支持 PTY/tmux，需要换到真实终端继续
 - 手工安装阶段默认只拉起 `koder`；`planner` 和其他 specialist seat 仍需按 frontstage 规则显式确认
 - OpenClaw / 飞书场景下，`clawseat` 才是第一入口；不要把 `/cs` 当作跨运行时的必经步骤
+- OpenClaw canonical `install` 首装路径会自动从 shipped `install.toml` 补种 `/tmp/install-profile-dynamic.toml`；只有其他项目仍需要先准备对应 starter profile
 - `/cs` 是本地终端例外：它本身就视为用户已明确要求创建 `install` 项目并拉起 `planner`
 - 当链路明确是测试、验证、smoke 或回归时，frontstage 应让 `planner` 额外拉起 `qa-1`；`qa-1` 默认不跟随 `/cs` 首启自动启动
 - 配置阶段分两段：先做配置录入（项目/群/API key/URL/provider），再做配置验证

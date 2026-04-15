@@ -123,5 +123,5 @@ That wrapper will:
 |---|---|---|
 | `Device not configured` | Host PTY/tmux limitation | Tell the user to run in a real terminal session |
 | `CLAWSEAT_ROOT` missing | Environment not initialized | Export the repo root and rerun preflight |
-| `dynamic profile not found` | Project profile missing | Create `/tmp/{project}-profile-dynamic.toml` from the starter profile |
+| `dynamic profile not found` | Project profile missing | `install` 项目会自动从 shipped `install.toml` 补种；其他项目需先创建 `/tmp/{project}-profile-dynamic.toml` |
 | `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |

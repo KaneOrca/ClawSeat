@@ -233,8 +233,11 @@ def ensure_clawseat_profile(
     """
     Ensure a ClawSeat dynamic profile exists for the given project.
 
-    If no profile exists at the expected path, creates one via migrate_profile.py.
     Returns the resolved profile path.
+
+    Special case: the canonical `install` project auto-seeds its dynamic profile
+    from the shipped `examples/starter/profiles/install.toml` when bootstrapping
+    on a blank machine.
     """
     if profile_path is not None:
         candidate = Path(profile_path).expanduser()
@@ -250,10 +253,22 @@ def ensure_clawseat_profile(
     if legacy_path.exists():
         return str(legacy_path)
 
+    if project_name == "install":
+        template_root = Path(repo_root).expanduser() if repo_root is not None else _CLAWSEAT_ROOT
+        template_path = template_root / "examples" / "starter" / "profiles" / "install.toml"
+        if template_path.exists():
+            dynamic_path.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
+            return str(dynamic_path)
+        raise FileNotFoundError(
+            f"canonical install profile template missing at {template_path}; "
+            f"cannot seed /tmp/{project_name}-profile-dynamic.toml"
+        )
+
     # No profile found — need to create one
     raise FileNotFoundError(
         f"no dynamic profile found for project {project_name!r}; "
-        f"run migrate_profile.py first to create one"
+        f"create /tmp/{project_name}-profile-dynamic.toml from a starter profile "
+        f"or run migrate_profile.py if a legacy /tmp/{project_name}-profile.toml already exists"
     )
 
 
