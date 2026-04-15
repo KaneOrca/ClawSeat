@@ -50,6 +50,29 @@ tool = "openclaw"
 role = "koder"
 ```
 
+### Friend Install Path
+
+For a fresh OpenClaw machine, the simplest path is:
+
+```bash
+export CLAWSEAT_ROOT=/path/to/ClawSeat
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
+```
+
+This installs the minimum ClawSeat-facing skill surface into `~/.openclaw`:
+
+- global skills:
+  - `clawseat`
+  - `clawseat-install`
+  - `cs`
+  - `gstack-harness`
+  - `clawseat-koder-frontstage`
+- koder workspace skill:
+  - `workspace-koder/skills/clawseat-koder-frontstage`
+
+After that, the user should interact with OpenClaw by saying “安装 ClawSeat” or
+“启动 ClawSeat”. OpenClaw should load `clawseat` as the product entry.
+
 ## Environment Variables
 
 - `CLAWSEAT_ROOT`: Path to the ClawSeat repository root (derived automatically if not set)

@@ -11,6 +11,16 @@ ClawSeat 对外应只有一个产品名：`clawseat`。
 - **OpenClaw / 飞书**：让运行时加载 `clawseat` skill 或 plugin，并自动进入完整流程；不要要求用户知道 `/cs`
 - **Claude Code / Codex 本地终端**：在入口 skill 安装完成后，可以把 `/cs` 当成快捷入口
 
+如果目标机器是全新的 OpenClaw 环境，推荐先执行：
+
+```bash
+export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
+python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py
+```
+
+这会把 ClawSeat 对 OpenClaw 需要的 skill surface 一次性挂到 `~/.openclaw`，
+之后用户只需要在 OpenClaw / 飞书里说“安装 ClawSeat”或“启动 ClawSeat”。
+
 如果当前环境是本地 Claude Code / Codex，先在 shell 里把入口 skill 安装到本机 runtime：
 
 ```bash
