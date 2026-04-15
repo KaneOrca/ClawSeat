@@ -126,11 +126,11 @@ role_details = [
 [[engineers]]
 id = "reviewer-1"
 role = "reviewer"
-tool = "claude"
+tool = "codex"
 auth_mode = "oauth"
-provider = "anthropic"
-model = "claude-sonnet-4-6"
-effort = "auto"
+provider = "xcode-best"
+model = "gpt-5.4"
+effort = "high"
 monitor = true
 human_facing = false
 active_loop_owner = false
