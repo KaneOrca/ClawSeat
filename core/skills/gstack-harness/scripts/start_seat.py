@@ -225,9 +225,15 @@ def main() -> int:
     pane_text = capture_session_pane(profile, args.seat)
     onboarding_step = detect_claude_onboarding_step(pane_text)
     if onboarding_step is not None:
+        hint = ""
+        if onboarding_step in ("oauth_login", "oauth_code", "oauth_error"):
+            hint = (
+                " If OAuth times out (e.g. 'timeout of 15000ms exceeded'), "
+                "press Enter in the tmux window to retry."
+            )
         print(
             "manual_onboarding_required: "
-            f"{args.seat} is waiting on Claude first-run step '{onboarding_step}'. "
+            f"{args.seat} is waiting on Claude first-run step '{onboarding_step}'.{hint} "
             "Ask the user to complete the prompt in the TUI window, then notify the operator to take over."
         )
     else:

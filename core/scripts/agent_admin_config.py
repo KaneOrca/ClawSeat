@@ -208,7 +208,7 @@ XCODE_PROVIDER_ENDPOINT_RULES = {
 
 CLAUDE_API_PROVIDER_CONFIGS = {
     "minimax": {
-        "model": "MiniMax-M2.7",
+        "model": "MiniMax-M2.7-highspeed",
         "base_url": "https://api.minimaxi.com",
     },
 }
