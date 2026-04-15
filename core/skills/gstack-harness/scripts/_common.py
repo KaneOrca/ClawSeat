@@ -1259,6 +1259,39 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
         write_text(heartbeat_manifest_path(profile, seat), render_heartbeat_manifest(profile, seat))
 
 
+GLOBAL_ENV_PATH = AGENTS_ROOT / ".env.global"
+
+# Maps (tool, provider) to the env var names in .env.global
+GLOBAL_SECRET_MAP: dict[tuple[str, str], dict[str, str]] = {
+    ("claude", "minimax"): {
+        "ANTHROPIC_API_KEY": "MINIMAX_API_KEY",
+        "ANTHROPIC_BASE_URL": "MINIMAX_BASE_URL",
+    },
+    ("claude", "xcode-best"): {
+        "ANTHROPIC_API_KEY": "XCODE_BEST_API_KEY",
+        "ANTHROPIC_BASE_URL": "XCODE_BEST_CLAUDE_BASE_URL",
+    },
+    ("codex", "xcode-best"): {
+        "OPENAI_API_KEY": "XCODE_BEST_API_KEY",
+    },
+}
+
+
+def _load_global_env() -> dict[str, str]:
+    if not GLOBAL_ENV_PATH.exists():
+        return {}
+    result: dict[str, str] = {}
+    for line in GLOBAL_ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        result[key.strip()] = value.strip()
+    return result
+
+
 def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | None:
     agents_root = profile.workspace_root.parent.parent
     session_path = agents_root / "sessions" / profile.project_name / seat / "session.toml"
@@ -1272,15 +1305,31 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
     ensure_parent(secret_file)
     if secret_file.exists() and secret_file.stat().st_size > 0:
         return None
+    # Try peer in same provider directory
     provider_dir = secret_file.parent
-    if not provider_dir.exists():
-        return None
-    for peer in sorted(provider_dir.glob("*.env")):
-        if peer == secret_file or peer.stat().st_size == 0:
-            continue
-        shutil.copy2(peer, secret_file)
-        secret_file.chmod(0o600)
-        return peer
+    if provider_dir.exists():
+        for peer in sorted(provider_dir.glob("*.env")):
+            if peer == secret_file or peer.stat().st_size == 0:
+                continue
+            shutil.copy2(peer, secret_file)
+            secret_file.chmod(0o600)
+            return peer
+    # Fallback: seed from ~/.agents/.env.global
+    tool = str(session_data.get("tool", "")).strip()
+    provider = str(session_data.get("provider", "")).strip()
+    mapping = GLOBAL_SECRET_MAP.get((tool, provider))
+    if mapping:
+        global_env = _load_global_env()
+        lines = []
+        for seat_var, global_var in mapping.items():
+            value = global_env.get(global_var, "")
+            if value:
+                lines.append(f'{seat_var}="{value}"')
+        if lines:
+            ensure_parent(secret_file)
+            write_text(secret_file, "\n".join(lines) + "\n")
+            secret_file.chmod(0o600)
+            return GLOBAL_ENV_PATH
     return None
 
 
