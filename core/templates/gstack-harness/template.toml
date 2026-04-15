@@ -29,11 +29,14 @@ provider = "anthropic"
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md",
 ]
 role_details = [
   "runtime seat id remains koder; canonical framework role is frontstage-supervisor",
   "user-facing intake and product clarification",
   "do intake framing and scope clarification before handing active work to planner; do not own execution planning or next-hop routing",
+  "during installation, koder collects seat configuration preferences (tool/auth_mode/provider) from the user for each seat, then delegates startup to planner via dispatch_task.py",
+  "never dispatch directly to specialist seats; planner is always the next hop",
   "patrol the chain state and summarize progress for the user",
   "receive escalations from planner and reframe when needed",
   "when a stage closeout becomes visible in the Feishu group, reconcile the delivery trail and update the project docs before summarizing to the user",

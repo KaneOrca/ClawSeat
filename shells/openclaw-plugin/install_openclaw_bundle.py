@@ -60,6 +60,27 @@ def ensure_symlink(destination: Path, source: Path, *, dry_run: bool) -> None:
     print(f"installed: {destination} -> {source}")
 
 
+REQUIRED_AGENT_SKILLS = ["lark-shared", "lark-im"]
+LARK_SKILLS_REPO = "https://github.com/larksuite/cli.git"
+
+
+def check_agent_skills(dry_run: bool) -> list[str]:
+    """Check if required lark skills are installed in ~/.agents/skills/."""
+    agents_skills = Path.home() / ".agents" / "skills"
+    missing = []
+    for skill_name in REQUIRED_AGENT_SKILLS:
+        skill_path = agents_skills / skill_name / "SKILL.md"
+        if skill_path.exists():
+            print(f"agent_skill_ok: {skill_name}")
+        else:
+            missing.append(skill_name)
+            if dry_run:
+                print(f"agent_skill_missing: {skill_name} — would need install")
+            else:
+                print(f"agent_skill_missing: {skill_name}")
+    return missing
+
+
 def install_bundle(openclaw_home: Path, *, dry_run: bool) -> None:
     skills_root = openclaw_home / "skills"
     workspace_koder_skills_root = openclaw_home / "workspace-koder" / "skills"
@@ -73,6 +94,14 @@ def install_bundle(openclaw_home: Path, *, dry_run: bool) -> None:
             source,
             dry_run=dry_run,
         )
+
+    missing_skills = check_agent_skills(dry_run)
+    if missing_skills and not dry_run:
+        print()
+        print(f"lark_skills_required: {', '.join(missing_skills)}")
+        print(f"  planner needs these skills for Feishu bridge integration.")
+        print(f"  Install via OpenClaw: openclaw skills install larksuite/cli")
+        print(f"  Or manually clone {LARK_SKILLS_REPO} and copy skills/ to ~/.agents/skills/")
 
 
 def main() -> int:

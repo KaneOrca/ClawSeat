@@ -509,6 +509,23 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
 # ---------------------------------------------------------------------------
 
 
+def _check_optional_cli(binary: str, label: str, install_hint: str) -> PreflightItem:
+    """Check an optional CLI tool. WARNING if missing, not HARD_BLOCKED."""
+    path = shutil.which(binary)
+    if path:
+        return PreflightItem(
+            name=binary,
+            status=PreflightStatus.PASS,
+            message=f"{label} at {path}",
+        )
+    return PreflightItem(
+        name=binary,
+        status=PreflightStatus.WARNING,
+        message=f"{label} not found — needed for seats using this runtime",
+        fix_command=install_hint,
+    )
+
+
 def preflight_check(project: str) -> PreflightResult:
     """
     Run all preflight checks for the given project.
@@ -547,6 +564,11 @@ def preflight_check(project: str) -> PreflightResult:
 
     # session binding dir
     items.append(_check_session_binding_dir(project))
+
+    # optional runtime CLIs (WARNING, not blocking)
+    items.append(_check_optional_cli("claude", "Claude Code CLI", "brew install claude"))
+    items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
+    items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
 
     # Categorize
     hard_blocked = [i for i in items if i.status == PreflightStatus.HARD_BLOCKED]
