@@ -62,10 +62,13 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
+  "~/.agents/skills/lark-shared/SKILL.md",
+  "~/.agents/skills/lark-im/SKILL.md",
 ]
 role_details = [
   "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
   "planner owns Feishu user-identity closeout and decision-gate receipts through `OC_DELEGATION_REPORT_V1`; legacy group broadcast stays opt-in only",
+  "planner must ensure lark-cli is available and auth is valid before using Feishu features; run `lark-cli auth login` if token is expired",
   "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
   "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
 ]

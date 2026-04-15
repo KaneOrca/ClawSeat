@@ -66,6 +66,17 @@ post-install convenience command.
 - If `CLAWSEAT_ROOT` is missing or wrong, stop and ask the user to export the correct path.
 - Do not patch OpenClaw source to solve a ClawSeat install issue; use config or the plugin shell only.
 
+## Feishu Bridge Setup
+
+After planner is live, the configuration phase includes Feishu bridge setup:
+
+1. **Verify lark-cli**: planner must check `lark-cli auth status` and run `lark-cli auth login` if the token is expired. This is a user action — planner should surface the auth URL and wait.
+2. **Collect group ID**: koder asks the user for the Feishu group ID.
+3. **Confirm binding**: koder confirms whether the group binds the current project, switches to another, or creates a new project.
+4. **Smoke test**: planner sends a test `OC_DELEGATION_REPORT_V1` to the bound group and verifies koder can parse it.
+
+See `references/feishu-bridge-setup.md` for the complete step-by-step guide.
+
 ## Reference Points
 
 - `docs/INSTALL_GUIDE.md` for the human install guide
@@ -73,3 +84,4 @@ post-install convenience command.
 - `core/skills/clawseat/SKILL.md` for the product-level entrypoint
 - `core/skills/gstack-harness/SKILL.md` for harness and seat semantics
 - `core/skills/cs/SKILL.md` for the first-run `/cs` entrypoint
+- `references/feishu-bridge-setup.md` for Feishu bridge setup and smoke test
