@@ -2,28 +2,39 @@
 
 ClawSeat 不依赖 cartooner 即可运行。用户只需 OpenClaw + Claude Code CLI + python3.11+ / tmux / 可选 iTerm2。
 
-如果你是在让 agent 自动帮忙安装 ClawSeat，优先加载 `clawseat-install` skill；它会按这份指南的标准流程执行 preflight、bootstrap、入口 skill 安装和首次启动。
+如果你是在让 agent 自动帮忙安装 ClawSeat，优先加载 `clawseat` skill；它是 ClawSeat 的产品级入口，会根据宿主环境选择 `clawseat-install`、OpenClaw plugin bootstrap 或本地 `/cs` 快捷入口。
 
-## 安装后第一条指令：`/cs`
+## 对外入口：OpenClaw / 飞书优先，本地终端可选 `/cs`
 
-ClawSeat 安装完成后，推荐用户执行的第一条指令就是 `/cs`。
+ClawSeat 对外应只有一个产品名：`clawseat`。
 
-先在 shell 里把入口 skill 安装到本机 runtime：
+- **OpenClaw / 飞书**：让运行时加载 `clawseat` skill 或 plugin，并自动进入完整流程；不要要求用户知道 `/cs`
+- **Claude Code / Codex 本地终端**：在入口 skill 安装完成后，可以把 `/cs` 当成快捷入口
+
+如果当前环境是本地 Claude Code / Codex，先在 shell 里把入口 skill 安装到本机 runtime：
 
 ```bash
 export CLAWSEAT_ROOT="$HOME/coding/ClawSeat"
 python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py
 ```
 
-然后在 Claude Code 里输入：
+然后可选地在 Claude Code 里输入：
 
 ```text
 /cs
 ```
 
-如果当前 runtime 以技能名而不是 slash command 形式调用，就使用 `$cs`。
+如果当前 runtime 以技能名而不是 slash command 形式调用，就优先使用 `$clawseat`；只有在明确需要本地快捷入口时才使用 `$cs`。
 
-`/cs` 会默认做这几件事：
+`clawseat` 在 OpenClaw / 飞书场景下应默认做这几件事：
+
+- 通过 OpenClaw plugin/bootstrap 初始化或复用 canonical 项目
+- 自动恢复或拉起 `koder`
+- 让 `koder` 成为前台入口
+- 继续拉起 `planner`
+- 进入项目绑定、Feishu 群绑定、provider/API key/base URL 配置和配置验证
+
+本地 `/cs` 快捷入口会默认做这几件事：
 
 - 创建或复用 canonical 项目 `install`
 - 使用 `{CLAWSEAT_ROOT}/examples/starter/profiles/install.toml`
@@ -36,7 +47,7 @@ python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills
 - 安装阶段结束后，应进入配置阶段：补齐项目绑定、Feishu 群绑定、provider 选择、API key、base URL / endpoint URL 等运行所需配置
 - 一旦项目群绑定完成，planner 会优先使用 `OC_DELEGATION_REPORT_V1` 的 user-identity 回执作为主链路；旧的自动群广播只作为显式 opt-in 的兼容路径
 
-这条入口不替代 `clawseat-install`；它只是把默认安装路径压缩成一条稳定的第一指令。
+`clawseat` 是产品入口；`clawseat-install` 是内部安装/编排 skill；`/cs` 只是本地终端快捷入口。
 
 ## 用户与 Agent 交互模式
 
@@ -48,7 +59,8 @@ python3 $CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills
   - permissions / bypass prompts
   - 当前宿主环境不支持 PTY/tmux，需要换到真实终端继续
 - 手工安装阶段默认只拉起 `koder`；`planner` 和其他 specialist seat 仍需按 frontstage 规则显式确认
-- `/cs` 是唯一例外：它本身就视为用户已明确要求创建 `install` 项目并拉起 `planner`
+- OpenClaw / 飞书场景下，`clawseat` 才是第一入口；不要把 `/cs` 当作跨运行时的必经步骤
+- `/cs` 是本地终端例外：它本身就视为用户已明确要求创建 `install` 项目并拉起 `planner`
 - 当链路明确是测试、验证、smoke 或回归时，frontstage 应让 `planner` 额外拉起 `qa-1`；`qa-1` 默认不跟随 `/cs` 首启自动启动
 - 配置阶段分两段：先做配置录入（项目/群/API key/URL/provider），再做配置验证
 - `qa-1` 介入的是配置验证，不是明文 secret 录入；涉及 Feishu bridge、新 API key、key rotation、base URL / endpoint 修改、auth_mode / provider 切换时，默认应让 `planner` 视风险拉起 `qa-1`
@@ -326,7 +338,7 @@ openclaw --version
 ls ~/.openclaw/workspace-koder/skills/clawseat-koder-frontstage/
 ```
 
-OpenClaw 启动后，koder seat 即为用户可见的前台入口。若当前环境已经装好 `cs` 入口 skill，仍推荐先让用户执行 `/cs` 来初始化 canonical `install` 项目。
+OpenClaw 启动后，koder seat 即为用户可见的前台入口。默认应该让 OpenClaw 加载 `clawseat` skill 或 `clawseat-openclaw` plugin 来初始化 canonical `install` 项目，而不是要求用户知道 `/cs`。
 
 ---
 
@@ -338,7 +350,7 @@ ClawSeat 多 seat 采用渐进式启动：
 koder（前台）→ planner（规划）→ specialist（专家）
 ```
 
-canonical `/cs` 路径等价于：先确保 `koder` 可用，再直接推进到 `planner`。
+canonical 产品路径等价于：先确保 `koder` 可用，再直接推进到 `planner`。`/cs` 只是这条路径在本地终端上的快捷别名。
 
 ### 仅启动 koder（前台）
 

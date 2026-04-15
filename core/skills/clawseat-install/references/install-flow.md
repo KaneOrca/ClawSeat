@@ -4,10 +4,10 @@
 
 1. First check whether there is already a workspace, seat, or TUI for the requested project/seat label.
 2. If one exists, reuse it and report that the install is a resume/recovery path, not a fresh bootstrap.
-3. If the user wants an agent runtime to load ClawSeat, use the relevant bundle first, then install the entry skills.
-4. If the user is following the default first-run path, have them execute `/cs`.
-5. If the user wants a new project outside the canonical install project, bootstrap a starter profile and run the harness.
-6. If the user wants OpenClaw integration, keep ClawSeat core logic in ClawSeat and use the OpenClaw plugin shell as the entrypoint.
+3. If the user wants OpenClaw or Feishu to load ClawSeat, use the `clawseat` product skill or the OpenClaw plugin shell as the entrypoint.
+4. If the user wants a local Claude/Codex runtime to load ClawSeat, use the relevant bundle first, then install the entry skills.
+5. If the user is following the local first-run shortcut path, have them execute `/cs`.
+6. If the user wants a new project outside the canonical install project, bootstrap a starter profile and run the harness.
 
 ## Required Environment
 
@@ -36,7 +36,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
 - `install.toml` creates the canonical `install` workspace with `koder`, `planner`, `builder-1`, and `reviewer-1`.
 - `full-team.toml` creates `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1` workspaces in one bootstrap.
 - Even with `full-team.toml`, `--start` still only auto-starts `koder`; other seats require explicit confirmation and launch.
-- `/cs` is the exception path: invoking `/cs` counts as explicit approval to bootstrap or resume `install` and start `planner`.
+- `clawseat` is the product path for OpenClaw/Feishu; `/cs` is the local-runtime exception path that counts as explicit approval to bootstrap or resume `install` and start `planner`.
 - `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
 
 ## Entry Skill Install
@@ -45,7 +45,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
 python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
 ```
 
-Then, inside Claude Code, run:
+Then, inside OpenClaw/Feishu, invoke `clawseat`. Inside local Claude Code or Codex, you may run:
 
 ```text
 /cs

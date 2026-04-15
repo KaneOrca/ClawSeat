@@ -45,10 +45,12 @@ Shipped starter profiles now come in three tiers:
 
 Recommended first-run path:
 
-1. install the entry skills with
+1. In OpenClaw or Feishu-facing runtimes, load the `clawseat` skill/plugin and
+   let it route through the OpenClaw bootstrap path.
+2. In Claude Code or Codex local runtimes, install the entry skills with
    `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
-2. run `/cs` inside the agent runtime
-3. let `/cs` create or resume the canonical `install` project and start `planner`
+3. Only in those local runtimes, use `/cs` as the convenience alias that
+   creates or resumes the canonical `install` project and starts `planner`
 
 For dynamic-roster profiles, keep bootstrap minimal:
 

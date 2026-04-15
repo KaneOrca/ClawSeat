@@ -7,15 +7,17 @@ seat logic in `core/` and `adapters/`.
 
 Read in this order:
 
-1. for installation/bootstrap requests:
+1. product entry skill:
+   `{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md`
+2. for installation/bootstrap requests:
    `{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`
-2. first-run entry skill:
+3. first-run entry skill:
    `{CLAWSEAT_ROOT}/core/skills/cs/SKILL.md`
-3. `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
-4. project adapter skill when needed
+4. `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
+5. project adapter skill when needed
    Example:
    `{CLAWSEAT_ROOT}/adapters/projects/cartooner/skills/cartooner-koder/SKILL.md`
-5. `{CLAWSEAT_ROOT}/shells/codex-bundle/adapter_shim.py`
+6. `{CLAWSEAT_ROOT}/shells/codex-bundle/adapter_shim.py`
 
 Bundle boundary:
 
@@ -30,4 +32,4 @@ Runtime note:
 - adapter contract lives at `{CLAWSEAT_ROOT}/core/harness_adapter.py`
 - install-time user/agent interaction rules live in
   `{CLAWSEAT_ROOT}/core/skills/clawseat-install/`
-- preferred first post-install command is `/cs` or `$cs`
+- preferred product entry is `clawseat`; `/cs` or `$cs` remain local shortcut aliases after install

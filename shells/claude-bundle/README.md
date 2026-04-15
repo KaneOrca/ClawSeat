@@ -12,11 +12,11 @@ Use this bundle to load ClawSeat from Claude Code without copying core runtime
 logic into the shell layer.
 
 When the conversation is about installing or bootstrapping ClawSeat, start with
-`{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`. That skill defines the
-install flow and the user/agent interaction mode for onboarding, tmux, and
-frontstage startup. After the runtime-side install is complete, the preferred
-first user command is `/cs`, which bootstraps or resumes the canonical
-`install` project and starts `planner`.
+`{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md`, then route into
+`{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`. `clawseat` is the
+product entry, while `/cs` is only the local convenience alias after the
+runtime-side install is complete. That shortcut bootstraps or resumes the
+canonical `install` project and starts `planner`.
 
 Environment:
 

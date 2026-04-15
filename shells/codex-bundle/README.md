@@ -12,11 +12,11 @@ Use this bundle to make Codex load ClawSeat as an agent configuration surface
 without moving any runtime protocol into `shells/`.
 
 Install/setup conversations should start from
+`{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md`, then route into
 `{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md` before loading the
-runtime harness details. That skill owns the install flow and the user/agent
-handoff rules for onboarding, tmux, and first-launch prompts. After install,
-the preferred first entry command is `/cs` in runtimes that expose slash
-skills, or `$cs` where the runtime invokes skills by name.
+runtime harness details. `clawseat` is the product entry; `/cs` is only the
+local shortcut in runtimes that expose slash skills, and `$cs` is the named
+shortcut where the runtime invokes local skills by name.
 
 Environment:
 

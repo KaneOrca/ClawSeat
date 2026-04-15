@@ -1,11 +1,14 @@
 ---
 name: cs
-description: First post-install ClawSeat entrypoint. Use `/cs` immediately after installing ClawSeat to bootstrap or resume the canonical `install` project and start `planner`.
+description: Local post-install ClawSeat convenience entrypoint. Use `/cs` only in local Claude/Codex runtimes after ClawSeat is already installed to bootstrap or resume the canonical `install` project and start `planner`.
 ---
 
 # ClawSeat Init
 
-`/cs` is the first user-facing command after ClawSeat is installed.
+`/cs` is the thin local shortcut after ClawSeat is installed.
+
+It is not the canonical cross-runtime product entry. In OpenClaw or Feishu
+environments, the preferred entry is `clawseat`, not `/cs`.
 
 Keep it thin. This skill does not define a second bootstrap flow. It delegates to
 `clawseat-install` and uses the canonical install profile.

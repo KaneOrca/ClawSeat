@@ -1,0 +1,67 @@
+---
+name: clawseat
+description: Canonical product entrypoint for ClawSeat. Use this skill when OpenClaw, Feishu, Claude Code, or Codex should load ClawSeat as an installable workflow and automatically run the full bootstrap/configure/verify path.
+---
+
+# ClawSeat
+
+## Overview
+
+Treat `clawseat` as the product-level entrypoint.
+
+- In **OpenClaw / Feishu** environments, this is the canonical way to start
+  ClawSeat. Do not require the user to know `/cs`.
+- In **Claude Code / Codex** local runtimes, this skill may install the local
+  entry skills first; after that, `/cs` remains only a thin convenience alias.
+
+This skill does not replace the core install/bootstrap engine. It routes to:
+
+- `core/skills/clawseat-install/SKILL.md` for the narrow install/bootstrap flow
+- `shells/openclaw-plugin/openclaw_bootstrap.py` when the host runtime is
+  OpenClaw
+- `core/skills/cs/SKILL.md` only when the runtime explicitly supports local
+  slash-skill entrypoints and the user wants that shortcut
+
+## Canonical Behavior
+
+1. Detect the host runtime.
+2. If the host is **OpenClaw** or the user is interacting through **Feishu**:
+   - use the OpenClaw plugin/bootstrap path
+   - keep the experience product-shaped: “install/start ClawSeat”
+   - do not assume `/cs` is available
+3. If the host is **Claude Code** or **Codex**:
+   - install the local entry skills when needed
+   - use `/cs` or `$cs` only as a convenience alias after install
+4. Continue through the standard ClawSeat phases:
+   - install
+   - bootstrap
+   - project/group binding
+   - configuration entry
+   - configuration verification
+   - normal execution
+
+## OpenClaw / Feishu Contract
+
+When the user wants OpenClaw to run ClawSeat as a skill:
+
+- prefer the OpenClaw shell/plugin path
+- keep ClawSeat core logic inside the ClawSeat repo
+- do not patch OpenClaw source code to implement ClawSeat behavior
+- allow the user to invoke ClawSeat through natural language such as
+  “安装 ClawSeat” or “启动 ClawSeat”, with this skill acting as the product
+  wrapper
+
+## Local Runtime Contract
+
+When the host runtime is local and supports explicit skills:
+
+- install `clawseat`, `clawseat-install`, and `cs`
+- explain that `clawseat` is the product entry
+- explain that `/cs` is only the fast local shortcut after install
+
+## References
+
+- `core/skills/clawseat-install/SKILL.md`
+- `core/skills/cs/SKILL.md`
+- `docs/INSTALL_GUIDE.md`
+- `shells/openclaw-plugin/README.md`

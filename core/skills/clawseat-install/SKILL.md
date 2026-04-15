@@ -9,11 +9,17 @@ description: Install and bootstrap ClawSeat for Codex or Claude Code, including 
 
 Use this skill to choose and run the standard ClawSeat installation path. Keep the flow narrow: confirm the target runtime, run preflight, bootstrap the project, and report the first-launch state clearly.
 Before creating anything new, resolve whether the target already has a workspace, project record, or live tmux/TUI seat. Reuse it if present.
-After the runtime-side install is in place, the preferred first user command is `/cs`. That entry skill should create or resume the canonical `install` project and start `planner`.
+For OpenClaw or Feishu-facing usage, prefer the product entry skill
+`clawseat`; it should route here and then use the OpenClaw plugin/bootstrap
+path. Only local Claude/Codex runtimes should treat `/cs` as the preferred
+post-install convenience command.
 
 ## Choose The Install Path
 
 - First check for an existing canonical workspace/TUI for the requested project or seat label. If one exists, treat it as the source of truth instead of creating a parallel install.
+- If the user wants OpenClaw or Feishu to load ClawSeat as a product skill,
+  start from `core/skills/clawseat/SKILL.md`; keep `/cs` out of the primary
+  user experience.
 - If the user wants the standard first-run path after installing ClawSeat onto Claude/Codex, install the entry skills and route them to `/cs`.
 - If the user wants this agent runtime to load ClawSeat, use the `shells/codex-bundle/` or `shells/claude-bundle/` entrypoint for that runtime.
 - If the user wants the canonical install workspace, use `install.toml`.
@@ -27,12 +33,13 @@ After the runtime-side install is in place, the preferred first user command is 
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. Install the entry skills with `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`.
-6. For the default post-install path, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
-7. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
-8. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.
-9. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project} --start`.
-10. Start or verify `koder` with `start_seat.py --seat koder`, then check `render_console.py`.
-11. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding.
+6. If the runtime is OpenClaw or Feishu-facing, route through `shells/openclaw-plugin/openclaw_bootstrap.py` and keep the user experience centered on `clawseat`.
+7. If the runtime is local Claude/Codex, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
+8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
+9. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.
+10. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project} --start`.
+11. Start or verify `koder` with `start_seat.py --seat koder`, then check `render_console.py`.
+12. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding.
 
 ## Interaction Contract
 
@@ -63,5 +70,6 @@ After the runtime-side install is in place, the preferred first user command is 
 
 - `docs/INSTALL_GUIDE.md` for the human install guide
 - `docs/INSTALL.md` for path placeholders and contract
+- `core/skills/clawseat/SKILL.md` for the product-level entrypoint
 - `core/skills/gstack-harness/SKILL.md` for harness and seat semantics
 - `core/skills/cs/SKILL.md` for the first-run `/cs` entrypoint

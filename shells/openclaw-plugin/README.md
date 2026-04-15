@@ -4,7 +4,14 @@ OpenClaw distribution shell for ClawSeat control plane integration.
 
 ## Overview
 
-This plugin provides the entry point for running ClawSeat seat management within the OpenClaw runtime environment. It bridges the ClawSeat core framework with OpenClaw's agent scope and session management capabilities.
+This plugin provides the canonical OpenClaw entry point for running ClawSeat
+inside the OpenClaw runtime environment. It bridges the ClawSeat core
+framework with OpenClaw's agent scope and session management capabilities.
+
+For OpenClaw and Feishu users, this plugin is the preferred product-shaped
+entrypoint. They should install/load ClawSeat as a skill/plugin and let the
+runtime start the bootstrap/configure/verify flow automatically, rather than
+requiring them to know `/cs`.
 
 ## Structure
 
@@ -33,7 +40,8 @@ When the OpenClaw adapter is not yet implemented, the plugin gracefully falls ba
 
 ## Usage
 
-This plugin is loaded by the ClawSeat runtime when the `tool` field in a seat profile is set to `openclaw`.
+This plugin is loaded by the ClawSeat runtime when the `tool` field in a seat
+profile is set to `openclaw`.
 
 ```toml
 # Example seat profile
@@ -51,3 +59,5 @@ role = "koder"
 - Business protocol logic (planner/koder/handoff semantics) lives in `core/`, not in this shell.
 - This shell contains only bootstrap wiring, adapter registration, and metadata.
 - The OpenClaw harness adapter (`core/adapters/harness/openclaw/`) is currently a placeholder/stub.
+- The local `/cs` command remains only a convenience alias for Claude/Codex
+  runtimes after their local entry skills are installed.

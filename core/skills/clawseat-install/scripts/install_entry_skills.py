@@ -13,6 +13,7 @@ RUNTIME_SKILL_ROOTS = {
     "codex": HOME / ".codex" / "skills",
 }
 ENTRY_SKILLS = {
+    "clawseat": REPO_ROOT / "core" / "skills" / "clawseat",
     "cs": REPO_ROOT / "core" / "skills" / "cs",
     "clawseat-install": REPO_ROOT / "core" / "skills" / "clawseat-install",
 }

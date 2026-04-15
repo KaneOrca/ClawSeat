@@ -7,15 +7,21 @@ Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core s
 
 ## Positioning
 
-Externally, ClawSeat can be understood as a heavy skill:
+Externally, ClawSeat should be understood as an installable skill/plugin
+product:
 
-- install the ClawSeat entry skills on an agent
-- have the user run `/cs` as the first post-install command
-- that agent becomes the frontstage `koder`
-- `koder` clarifies the request, recommends the team, and then instantiates seats
+- in OpenClaw or Feishu environments, let the runtime load the `clawseat`
+  skill/plugin and start the full ClawSeat flow automatically
+- in Claude Code or Codex, install the ClawSeat entry skills on the local
+  runtime
+- treat `/cs` only as a local convenience alias after the install path is in
+  place
+- the resulting agent becomes the frontstage `koder`
+- `koder` clarifies the request, recommends the team, and then instantiates
+  seats
 
 Internally, ClawSeat is more than a single skill. It is the framework and
-control plane behind that skill-first entrypoint.
+control plane behind that product-shaped skill/plugin entrypoint.
 
 ClawSeat provides:
 
