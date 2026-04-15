@@ -38,9 +38,10 @@ post-install convenience command.
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`
    - Bootstrap creates workspaces for backend seats (planner, builder, reviewer) only
-   - After bootstrap, ask the user for each backend seat's tool/auth/provider preferences
-   - Then start planner with `start_seat.py --seat planner --confirm-start`
-   - Delegate specialist seat startup to planner via `dispatch_task.py`
+   - After bootstrap, ask the user for each backend seat's tool/auth/provider preferences (planner first, then each specialist: builder-1, reviewer-1, etc.)
+   - Start planner with `start_seat.py --seat planner --confirm-start`; user completes OAuth
+   - Then delegate **ALL** remaining specialist seat startups to planner via `dispatch_task.py` — include every declared seat (builder-1 AND reviewer-1), not just some of them
+   - The dispatch objective must include exact `start_seat.py` commands with user-confirmed `--tool`/`--auth-mode`/`--provider` overrides for each seat
 7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
 8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
 9. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.

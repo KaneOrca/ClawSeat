@@ -511,6 +511,9 @@ def send_feishu_user_message(
         payload["reason"] = "lark_cli_missing"
         return payload
 
+    # Use the real user HOME for lark-cli (not the isolated seat runtime HOME),
+    # because lark-cli's auth config lives under the real user's home directory.
+    real_home = str(AGENT_HOME) if str(AGENT_HOME) != str(Path.home()) else str(Path.home())
     result = run_command_with_env(
         [
             lark_cli,
@@ -523,8 +526,11 @@ def send_feishu_user_message(
             "--text",
             message,
         ],
-        cwd=OPENCLAW_HOME,
-        env={"HOME": str(AGENT_HOME)},
+        cwd=str(OPENCLAW_HOME),
+        env={
+            "HOME": real_home,
+            "OPENCLAW_HOME": str(OPENCLAW_HOME),
+        },
     )
     payload["transport"] = "lark-cli-user"
     payload["returncode"] = str(result.returncode)
@@ -1139,6 +1145,44 @@ def render_heartbeat_manifest(profile: HarnessProfile, seat: str) -> str:
     return "\n".join(lines)
 
 
+def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str]) -> None:
+    """Patch .claude/settings.local.json with model and effortLevel for each seat.
+
+    Reads model/effort from the profile's template.toml via the seat_overrides
+    or by loading the template directly. Only patches claude-tool seats.
+    """
+    template_path = REPO_ROOT / "core" / "templates" / profile.template_name / "template.toml"
+    if not template_path.exists():
+        return
+    template_data = load_toml(template_path)
+    engineer_map: dict[str, dict] = {}
+    for eng in template_data.get("engineers", []):
+        engineer_map[str(eng.get("id", ""))] = eng
+
+    for seat in seats:
+        spec = engineer_map.get(seat, {})
+        model = str(spec.get("model", "")).strip()
+        effort = str(spec.get("effort", "")).strip()
+        if not model and not effort:
+            continue
+        settings_path = profile.workspace_for(seat) / ".claude" / "settings.local.json"
+        if not settings_path.exists():
+            continue
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        changed = False
+        if model and settings.get("model") != model:
+            settings["model"] = model
+            changed = True
+        if effort and settings.get("effortLevel") != effort:
+            settings["effortLevel"] = effort
+            changed = True
+        if changed:
+            write_text(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+
+
 def materialize_profile_runtime(profile: HarnessProfile) -> None:
     ensure_dir(profile.tasks_root)
     ensure_dir(profile.handoff_dir)
@@ -1166,6 +1210,10 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
     if is_managed_runtime_path(profile, profile.patrol_script):
         write_text(profile.patrol_script, render_patrol_wrapper(profile))
         profile.patrol_script.chmod(0o755)
+
+    # Patch .claude/settings.local.json with model/effort from profile seat_overrides
+    # or template defaults. This runs after apply_template to ensure the file exists.
+    _patch_claude_settings_from_profile(profile, all_seats)
 
     for seat in profile.heartbeat_seats:
         ensure_dir(profile.workspace_for(seat))
