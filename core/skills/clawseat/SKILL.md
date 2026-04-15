@@ -52,6 +52,17 @@ When the user wants OpenClaw to run ClawSeat as a skill:
   “安装 ClawSeat” or “启动 ClawSeat”, with this skill acting as the product
   wrapper
 
+**Critical: koder identity in OpenClaw mode**
+
+In the OpenClaw path, **you (the current agent) ARE koder**. You are the
+frontstage. You do NOT need a separate tmux session for koder.
+
+- Do NOT run `start_seat.py --seat koder` — that creates a redundant tmux session
+- Do NOT bootstrap a project named after yourself (e.g. `koder-frontstage`)
+- The canonical project name is `install`
+- Only backend seats (planner, builder, reviewer, qa, designer) run in tmux
+- You talk to the user directly; backend seats talk to you via TODO/DELIVERY protocol
+
 ## Local Runtime Contract
 
 When the host runtime is local and supports explicit skills:

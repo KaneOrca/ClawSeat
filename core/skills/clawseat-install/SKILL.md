@@ -33,13 +33,20 @@ post-install convenience command.
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. Install the entry skills with `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`.
-6. If the runtime is OpenClaw or Feishu-facing, route through `shells/openclaw-plugin/openclaw_bootstrap.py` and keep the user experience centered on `clawseat`.
-7. If the runtime is local Claude/Codex, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
+6. If the runtime is **OpenClaw or Feishu-facing**:
+   - Route through `shells/openclaw-plugin/openclaw_bootstrap.py`
+   - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
+   - The canonical project name is `install`
+   - Bootstrap creates workspaces for backend seats (planner, builder, reviewer) only
+   - After bootstrap, ask the user for each backend seat's tool/auth/provider preferences
+   - Then start planner with `start_seat.py --seat planner --confirm-start`
+   - Delegate specialist seat startup to planner via `dispatch_task.py`
+7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
 8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
 9. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.
-10. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project} --start`.
-11. Start or verify `koder` with `start_seat.py --seat koder`, then check `render_console.py`.
-12. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding.
+10. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project}` (do NOT pass `--start` in OpenClaw mode — koder is already running).
+11. In local CLI mode only: start koder with `start_seat.py --seat koder`. In OpenClaw mode: skip this step — you are koder.
+12. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding for backend seats.
 
 ## Interaction Contract
 

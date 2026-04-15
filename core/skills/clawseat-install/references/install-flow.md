@@ -1,5 +1,18 @@
 # ClawSeat Install Flow
 
+## Critical: koder identity
+
+There are two runtime modes. The koder identity rule differs:
+
+- **OpenClaw / Feishu mode**: You (the current agent) ARE koder. You do NOT
+  need a tmux session. Only backend seats (planner, builder, reviewer, qa,
+  designer) run in tmux. The canonical project name is `install`.
+- **Local CLI mode** (`/cs`): koder runs as a tmux session alongside other
+  seats. `cs_init.py` handles koder startup.
+
+Never create a project named after yourself (e.g. `koder-frontstage`).
+Never run `start_seat.py --seat koder` in OpenClaw mode.
+
 ## Decision Tree
 
 1. First check whether there is already a workspace, seat, or TUI for the requested project/seat label.
@@ -65,8 +78,9 @@ That wrapper will:
 - ensure every declared seat already has its managed scaffold (`session.toml`,
   isolated `runtime_dir`, workspace guide, `WORKSPACE_CONTRACT.toml`, `repos/`,
   and idle `TODO.md`) before dispatch begins
-- start or resume `koder`
-- start `planner`
+- in local CLI mode: start or resume `koder` as a tmux session
+- in OpenClaw mode: skip koder startup — the current agent IS koder
+- start `planner` (the only backend seat started during bootstrap)
 - render the install console state
 - then tell frontstage to finish the OpenClaw/Feishu bridge:
   ask the user for the group ID, keep `main` on `requireMention=true`, keep
