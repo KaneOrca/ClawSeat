@@ -83,13 +83,15 @@ def render_authority_lines(engineer: Any) -> list[str]:
 def _resolve_tasks_root(project: Any) -> str:
     """Resolve the actual tasks root for a project.
 
-    Priority: ~/.agents/tasks/{project} if it exists, else repo_root/.tasks.
-    This handles the case where the profile configures tasks_root outside
-    the repo (e.g. ~/.agents/tasks/install) but the Project dataclass only
-    carries repo_root.
+    Uses the standard ~/.agents/tasks/{project} path when ~/.agents exists
+    (ClawSeat convention). Falls back to repo_root/.tasks for projects
+    that keep tasks inside their repo.
     """
-    agents_tasks = Path.home() / ".agents" / "tasks" / project.name
-    if agents_tasks.exists():
+    agents_root = Path(os.environ.get("AGENTS_ROOT", str(Path.home() / ".agents")))
+    agents_tasks = agents_root / "tasks" / project.name
+    # Use the standard agents path if the agents root exists (even if the
+    # project tasks dir hasn't been created yet — it will be during bootstrap).
+    if agents_root.exists():
         return str(agents_tasks)
     return f"{project.repo_root}/.tasks"
 
