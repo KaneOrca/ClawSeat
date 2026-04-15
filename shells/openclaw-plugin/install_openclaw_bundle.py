@@ -62,6 +62,13 @@ def ensure_symlink(destination: Path, source: Path, *, dry_run: bool) -> None:
 
 REQUIRED_AGENT_SKILLS = ["lark-shared", "lark-im"]
 LARK_SKILLS_REPO = "https://github.com/larksuite/cli.git"
+GSTACK_SKILLS_ROOT = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+REQUIRED_GSTACK_SKILLS = [
+    "gstack-investigate", "gstack-review", "gstack-qa", "gstack-qa-only",
+    "gstack-design-review", "gstack-design-shotgun", "gstack-design-html",
+    "gstack-ship", "gstack-careful", "gstack-browse", "gstack-freeze",
+    "gstack-plan-eng-review",
+]
 
 
 def check_agent_skills(dry_run: bool) -> list[str]:
@@ -95,13 +102,33 @@ def install_bundle(openclaw_home: Path, *, dry_run: bool) -> None:
             dry_run=dry_run,
         )
 
-    missing_skills = check_agent_skills(dry_run)
-    if missing_skills and not dry_run:
+    missing_agent_skills = check_agent_skills(dry_run)
+    if missing_agent_skills and not dry_run:
         print()
-        print(f"lark_skills_required: {', '.join(missing_skills)}")
+        print(f"lark_skills_required: {', '.join(missing_agent_skills)}")
         print(f"  planner needs these skills for Feishu bridge integration.")
         print(f"  Install via OpenClaw: openclaw skills install larksuite/cli")
         print(f"  Or manually clone {LARK_SKILLS_REPO} and copy skills/ to ~/.agents/skills/")
+
+    # Check gstack skills
+    missing_gstack = []
+    for skill_name in REQUIRED_GSTACK_SKILLS:
+        skill_path = GSTACK_SKILLS_ROOT / skill_name / "SKILL.md"
+        if skill_path.exists():
+            if not dry_run:
+                pass  # suppress per-skill OK to keep output clean
+        else:
+            missing_gstack.append(skill_name)
+    if missing_gstack:
+        if dry_run:
+            print(f"gstack_skills_missing: {', '.join(missing_gstack)}")
+        else:
+            print()
+            print(f"gstack_skills_required: {', '.join(missing_gstack)}")
+            print(f"  Specialist seats need gstack skills for implementation, review, QA, and design.")
+            print(f"  Install gstack first: see https://github.com/gstack-cli/gstack")
+    elif not dry_run:
+        print("gstack_skills: all {0} required skills present".format(len(REQUIRED_GSTACK_SKILLS)))
 
 
 def main() -> int:
