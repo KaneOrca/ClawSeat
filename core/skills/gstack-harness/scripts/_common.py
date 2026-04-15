@@ -1159,12 +1159,19 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
     for eng in template_data.get("engineers", []):
         engineer_map[str(eng.get("id", ""))] = eng
 
+    # Also read session.toml to determine auth_mode for hasCompletedOnboarding
+    sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(AGENTS_ROOT / "sessions")))
+
     for seat in seats:
         spec = engineer_map.get(seat, {})
         model = str(spec.get("model", "")).strip()
         effort = str(spec.get("effort", "")).strip()
-        if not model and not effort:
-            continue
+        auth_mode = str(spec.get("auth_mode", "")).strip()
+        # Also check session.toml for auth_mode (may differ if overridden at start)
+        session_path = sessions_root / profile.project_name / seat / "session.toml"
+        if session_path.exists():
+            session_data = load_toml(session_path)
+            auth_mode = str(session_data.get("auth_mode", auth_mode)).strip()
         settings_path = profile.workspace_for(seat) / ".claude" / "settings.local.json"
         if not settings_path.exists():
             continue
@@ -1178,6 +1185,9 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
             changed = True
         if effort and settings.get("effortLevel") != effort:
             settings["effortLevel"] = effort
+            changed = True
+        if auth_mode == "api" and not settings.get("hasCompletedOnboarding"):
+            settings["hasCompletedOnboarding"] = True
             changed = True
         if changed:
             write_text(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")

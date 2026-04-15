@@ -55,6 +55,10 @@ class TemplateHandlers:
         if effort:
             settings["effortLevel"] = effort
 
+        # API mode seats skip onboarding — auth is via API key, not OAuth
+        if session.auth_mode == "api":
+            settings["hasCompletedOnboarding"] = True
+
         return json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
 
     def render_template_text(
