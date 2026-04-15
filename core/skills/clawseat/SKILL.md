@@ -52,6 +52,19 @@ When the user wants OpenClaw to run ClawSeat as a skill:
   “安装 ClawSeat” or “启动 ClawSeat”, with this skill acting as the product
   wrapper
 
+**Critical: clone location**
+
+When cloning from git, install ClawSeat to a user-level directory, NOT inside
+`~/.openclaw/`. ClawSeat is a standalone project, not an OpenClaw internal
+component.
+
+- Correct: `git clone <url> ~/coding/ClawSeat`
+- Wrong: `git clone <url> ~/.openclaw/workspace-clawseat`
+
+Then run `install_openclaw_bundle.py` to create symlinks from `~/.openclaw/skills/`
+into the repo. Do NOT manually copy skill directories — use the script so that
+dependency checks (lark-cli, gstack) run and symlinks stay in sync with the repo.
+
 **Critical: koder identity in OpenClaw mode**
 
 In the OpenClaw path, **you (the current agent) ARE koder**. You are the
