@@ -104,24 +104,10 @@ def main() -> dict[str, str]:
     for s in sessions:
         print(f"    - {s['seat_id']} ({s['tool']}): {s['runtime_id']}", file=sys.stderr)
 
-    # After bootstrap, start koder and automatically enter frontstage
-    # This is the minimal path: bootstrap initializes the bridge, then koder enters frontstage
-    import subprocess
-
-    profile_path = state["profile_path"]
-    if profile_path:
-        start_seat_script = CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "start_seat.py"
-        if start_seat_script.exists():
-            result = subprocess.run(
-                ["python3", str(start_seat_script), "--profile", profile_path, "--seat", "koder"],
-                capture_output=True,
-                text=True,
-                cwd=str(CLAWSEAT_ROOT),
-            )
-            if result.returncode == 0:
-                print(f"koder started with auto frontstage entry", file=sys.stderr)
-            else:
-                print(f"koder start warning: {result.stderr}", file=sys.stderr)
+    # koder IS the OpenClaw agent — it does not need a tmux session.
+    # Backend seats (planner, builder, reviewer, etc.) are started later
+    # by the koder frontstage skill after the user completes configuration
+    # (provider selection, auth setup, API key provisioning).
 
     return {
         "status": "initialized",

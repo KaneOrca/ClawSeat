@@ -86,7 +86,7 @@ before="$(capture_tail)" || {
 
 send_and_verify_once() {
   local message="$1"
-  if ! run_tmux "send-text" send-keys -t "$SESSION" "$message"; then
+  if ! run_tmux "send-text" send-keys -l -t "$SESSION" "$message"; then
     return 1
   fi
   sleep 1

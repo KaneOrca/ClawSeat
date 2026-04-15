@@ -34,10 +34,23 @@ bootstrap_seats = ["koder"]
 default_start_seats = ["koder", "planner"]
 compat_legacy_seats = true
 
-[seat_overrides.planner]
-tool = "claude"
-auth_mode = "api"
-provider = "minimax"
+# seat_overrides are populated during the configuration phase.
+# The koder frontstage skill guides the user through provider selection
+# and auth setup before any backend seat is started.
+# Default auth_mode is "oauth" — API mode requires explicit user opt-in.
+#
+# Example after configuration:
+#   [seat_overrides.planner]
+#   tool = "claude"
+#   auth_mode = "oauth"
+#
+#   [seat_overrides.builder-1]
+#   tool = "claude"
+#   auth_mode = "oauth"
+#
+#   [seat_overrides.reviewer-1]
+#   tool = "claude"
+#   auth_mode = "oauth"
 
 [patrol]
 enabled = false

@@ -200,6 +200,8 @@ def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
         raw_ts = bootstrap.get("bootstrapped_at", "")
         if raw_ts:
             ts = datetime.fromisoformat(raw_ts)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
             age = datetime.now(timezone.utc) - ts
             if age.total_seconds() > RECEIPT_VALID_FOR_SECONDS:
                 return False, f"receipt expired ({age.days}d old)"

@@ -321,7 +321,7 @@ def compose_message(reminders: List[Reminder]) -> str:
 def maybe_send(session: str, message: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(SEND_SCRIPT), session, message],
-        cwd=str(REPO_ROOT),
+        cwd=str(CLAWSEAT_ROOT),
         capture_output=True,
         text=True,
         check=False,

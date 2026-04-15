@@ -125,6 +125,8 @@ todo_file_for_session() {
 }
 
 for s in $SESSIONS; do
+  LAST_LINE=""
+  SNAP=""
   if is_excluded_session "$s"; then
     echo "$s: SKIPPED (PM session excluded)"
     continue

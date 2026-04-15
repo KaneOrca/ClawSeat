@@ -578,8 +578,8 @@ def render_tool_guide(instance: SeatInstance) -> str:
             "## Protocol",
             "",
             "- treat `WORKSPACE_CONTRACT.toml` as the durable seat contract",
-            f"- reply_to role: `{instance.template.reply_to_role or '-'}'",
-            f"- dispatch target role: `{instance.template.dispatch_target_role or '-'}'",
+            f"- reply_to role: `{instance.template.reply_to_role or '-'}`",
+            f"- dispatch target role: `{instance.template.dispatch_target_role or '-'}`",
         ]
     )
     if instance.template.skills:
