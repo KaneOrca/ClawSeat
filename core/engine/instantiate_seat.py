@@ -28,11 +28,11 @@ if str(AGENT_ADMIN_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(AGENT_ADMIN_SCRIPTS))
 
 import agent_admin_runtime
-from agent_admin_capabilities import validate_runtime_combo
 from agent_admin_config import (
     CODEX_API_PROVIDER_CONFIGS,
     DEFAULT_TOOL_ARGS,
     TOOL_BINARIES,
+    validate_runtime_combo,
 )
 from agent_admin_runtime import (
     ensure_empty_env_file,

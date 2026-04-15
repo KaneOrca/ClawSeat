@@ -218,3 +218,57 @@ CODEX_API_PROVIDER_CONFIGS = {
         "wire_api": "responses",
     },
 }
+
+
+SUPPORTED_RUNTIME_MATRIX = {
+    "claude": {
+        "oauth": ("anthropic",),
+        "api": ("xcode-best", "minimax"),
+    },
+    "codex": {
+        "oauth": ("openai",),
+        "api": ("xcode-best",),
+    },
+    "gemini": {
+        "oauth": ("google",),
+    },
+}
+
+
+def supported_providers(tool: str, auth_mode: str) -> tuple[str, ...]:
+    return SUPPORTED_RUNTIME_MATRIX.get(tool, {}).get(auth_mode, ())
+
+
+def is_supported_runtime_combo(tool: str, auth_mode: str, provider: str) -> bool:
+    return provider in supported_providers(tool, auth_mode)
+
+
+def supported_runtime_summary_lines() -> list[str]:
+    lines: list[str] = []
+    for tool in ("claude", "codex", "gemini"):
+        tool_map = SUPPORTED_RUNTIME_MATRIX.get(tool, {})
+        for auth_mode in ("oauth", "api"):
+            providers = tool_map.get(auth_mode)
+            if not providers:
+                continue
+            provider_text = ", ".join(providers)
+            lines.append(f"- `{tool}` + `{auth_mode}`: {provider_text}")
+    return lines
+
+
+def validate_runtime_combo(
+    tool: str,
+    auth_mode: str,
+    provider: str,
+    *,
+    error_cls: type[Exception] = ValueError,
+    context: str | None = None,
+) -> None:
+    if is_supported_runtime_combo(tool, auth_mode, provider):
+        return
+    provider_text = ", ".join(supported_providers(tool, auth_mode)) or "none"
+    prefix = f"{context}: " if context else ""
+    raise error_cls(
+        f"{prefix}unsupported runtime combination `{tool}/{auth_mode}/{provider}`. "
+        f"Supported providers for `{tool}/{auth_mode}`: {provider_text}."
+    )
