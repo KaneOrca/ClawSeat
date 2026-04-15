@@ -5,6 +5,19 @@ ClawSeat is an independent skill-first multi-agent control plane.
 It is not `cartooner`, `openclaw`, or `arena-pretext-ui`.
 Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core source tree.
 
+## Quick Install
+
+```bash
+# Clone to any user-level directory (NOT inside ~/.openclaw/)
+git clone https://github.com/KaneOrca/ClawSeat.git
+export CLAWSEAT_ROOT="$(pwd)/ClawSeat"
+
+# Install skill symlinks into OpenClaw
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
+```
+
+After install, say "启动 ClawSeat" in OpenClaw/Feishu, or run `/cs` in Claude Code.
+
 ## Positioning
 
 Externally, ClawSeat should be understood as an installable skill/plugin

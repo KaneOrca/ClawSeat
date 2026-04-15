@@ -58,8 +58,8 @@ When cloning from git, install ClawSeat to a user-level directory, NOT inside
 `~/.openclaw/`. ClawSeat is a standalone project, not an OpenClaw internal
 component.
 
-- Correct: `git clone <url> ~/coding/ClawSeat`
-- Wrong: `git clone <url> ~/.openclaw/workspace-clawseat`
+- Correct: `git clone <url>` in any user-level directory (e.g. home dir, projects dir)
+- Wrong: `git clone <url> ~/.openclaw/workspace-clawseat` or anywhere inside `~/.openclaw/`
 
 Then run `install_openclaw_bundle.py` to create symlinks from `~/.openclaw/skills/`
 into the repo. Do NOT manually copy skill directories — use the script so that
