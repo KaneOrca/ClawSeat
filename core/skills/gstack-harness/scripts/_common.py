@@ -1199,30 +1199,9 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
 
 
 def seed_empty_oauth_runtime_from_peer(profile: HarnessProfile, seat: str) -> Path | None:
-    agents_root = profile.workspace_root.parent.parent
-    session_path = agents_root / "sessions" / profile.project_name / seat / "session.toml"
-    if not session_path.exists():
-        return None
-    session_data = load_toml(session_path)
-    if str(session_data.get("auth_mode", "")).strip() != "oauth":
-        return None
-    if str(session_data.get("tool", "")).strip() != "claude":
-        return None
-    provider = str(session_data.get("provider", "")).strip()
-    runtime_dir = Path(str(session_data.get("runtime_dir", "")).strip()).expanduser()
-    credentials = runtime_dir / "home" / ".claude" / ".credentials.json"
-    if credentials.exists() and credentials.stat().st_size > 0:
-        return None
-    parent = runtime_dir.parent
-    if not parent.exists():
-        return None
-    for peer_runtime in sorted(parent.glob(f"claude.oauth.{provider}.*")):
-        if peer_runtime == runtime_dir:
-            continue
-        peer_credentials = peer_runtime / "home" / ".claude" / ".credentials.json"
-        if not peer_credentials.exists() or peer_credentials.stat().st_size == 0:
-            continue
-        ensure_parent(credentials)
-        shutil.copy2(peer_credentials, credentials)
-        return peer_credentials
+    """Disabled: Claude Code OAuth tokens are bound to a specific identity and
+    cannot be shared across seats.  Copying credentials.json from a peer causes
+    the new seat to fail with 'OAuth error: timeout of 15000ms exceeded' because
+    it tries to reuse a token that belongs to a different runtime identity.
+    Each seat must complete its own OAuth flow independently."""
     return None
