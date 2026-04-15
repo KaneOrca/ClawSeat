@@ -80,12 +80,27 @@ def render_authority_lines(engineer: Any) -> list[str]:
     return lines
 
 
+def _resolve_tasks_root(project: Any) -> str:
+    """Resolve the actual tasks root for a project.
+
+    Priority: ~/.agents/tasks/{project} if it exists, else repo_root/.tasks.
+    This handles the case where the profile configures tasks_root outside
+    the repo (e.g. ~/.agents/tasks/install) but the Project dataclass only
+    carries repo_root.
+    """
+    agents_tasks = Path.home() / ".agents" / "tasks" / project.name
+    if agents_tasks.exists():
+        return str(agents_tasks)
+    return f"{project.repo_root}/.tasks"
+
+
 def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[str]:
+    tasks_root = _resolve_tasks_root(project)
     repo_root = project.repo_root
-    todo_path = f"{repo_root}/.tasks/{session.engineer_id}/TODO.md"
-    project_doc = f"{repo_root}/.tasks/PROJECT.md"
-    tasks_doc = f"{repo_root}/.tasks/TASKS.md"
-    status_doc = f"{repo_root}/.tasks/STATUS.md"
+    todo_path = f"{tasks_root}/{session.engineer_id}/TODO.md"
+    project_doc = f"{tasks_root}/PROJECT.md"
+    tasks_doc = f"{tasks_root}/TASKS.md"
+    status_doc = f"{tasks_root}/STATUS.md"
     lines = [
         "## Read First",
         "",
@@ -98,11 +113,11 @@ def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[s
         lines.append(f"{next_index}. `{status_doc}`")
         next_index += 1
     if engineer.role == "planner-dispatcher":
-        planner_brief = Path(repo_root) / ".tasks/planner/PLANNER_BRIEF.md"
+        planner_brief = Path(tasks_root) / "planner/PLANNER_BRIEF.md"
         if planner_brief.exists():
             lines.append(f"{next_index}. `{planner_brief}`")
             next_index += 1
-        warden_brief = Path(repo_root) / ".tasks/warden/WARDEN_BRIEF.md"
+        warden_brief = Path(tasks_root) / "warden/WARDEN_BRIEF.md"
         if warden_brief.exists():
             lines.append(f"{next_index}. `{warden_brief}`")
             next_index += 1
@@ -362,7 +377,13 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
 
 def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) -> list[str]:
     profile_path = HARNESS_PROFILE_ROOT / f"{project.name}.toml"
-    profile_ref = str(profile_path) if profile_path.exists() else "<profile-path>"
+    dynamic_profile_path = Path(f"/tmp/{project.name}-profile-dynamic.toml")
+    if profile_path.exists():
+        profile_ref = str(profile_path)
+    elif dynamic_profile_path.exists():
+        profile_ref = str(dynamic_profile_path)
+    else:
+        profile_ref = "<profile-path>"
     root = str(HARNESS_SCRIPTS_ROOT)
     lines: list[str] = []
     planner_seat = (
@@ -462,6 +483,22 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "```",
             "",
             "If a closeout is visible in the bound group, read the linked delivery trail, reconcile the wrap-up, and update the project docs before giving the user the summary.",
+            "",
+            "Start or reconfigure a specialist seat (override tool/auth/provider as needed):",
+            "```bash",
+            f"python3 {root}/start_seat.py \\",
+            f"  --profile {profile_ref} \\",
+            f"  --seat {builder_seat} \\",
+            "  --tool claude --auth-mode oauth --provider anthropic",
+            "```",
+            "This shows a launch summary; re-run with `--confirm-start` to actually start.",
+            "Use `--tool`, `--auth-mode`, `--provider` to override the template defaults.",
+            "",
+            "Open the project iTerm window with one tab per running seat:",
+            "```bash",
+            f"python3 {project.repo_root}/core/scripts/agent_admin.py \\",
+            f"  window open-monitor {project.name}",
+            "```",
         ]
     elif engineer.role in {"builder", "reviewer", "qa", "designer"}:
         lines = [
@@ -515,18 +552,19 @@ def workspace_contract_payload(
         for line in render_read_first_lines(session, project, engineer)
         if line and line[0].isdigit() and "`" in line
     ]
+    resolved_tasks_root = _resolve_tasks_root(project)
     source_paths: list[str] = [
-        f"{project.repo_root}/.tasks/{session.engineer_id}/TODO.md",
-        f"{project.repo_root}/.tasks/PROJECT.md",
-        f"{project.repo_root}/.tasks/TASKS.md",
+        f"{resolved_tasks_root}/{session.engineer_id}/TODO.md",
+        f"{resolved_tasks_root}/PROJECT.md",
+        f"{resolved_tasks_root}/TASKS.md",
     ]
     if engineer.role in {"frontstage-supervisor", "planner-dispatcher"}:
-        source_paths.append(f"{project.repo_root}/.tasks/STATUS.md")
+        source_paths.append(f"{resolved_tasks_root}/STATUS.md")
     if engineer.role == "frontstage-supervisor":
         candidate = Path(project.repo_root) / "KODER.md"
         if candidate.exists():
             source_paths.append(str(candidate))
-        roster = Path(project.repo_root) / ".tasks/FE-003-SPECIALIST-ROSTER.md"
+        roster = Path(resolved_tasks_root) / "FE-003-SPECIALIST-ROSTER.md"
         if roster.exists():
             source_paths.append(str(roster))
     project_seat_map = [
