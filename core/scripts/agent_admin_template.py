@@ -38,20 +38,41 @@ class TemplateHandlers:
 
     def _render_claude_settings(self, session: Any, engineer: Any = None) -> str:
         import json
+        import tomllib as _tomllib
         from agent_admin_config import CLAUDE_API_PROVIDER_CONFIGS
 
         settings: dict[str, object] = {"workspace_label": session.engineer_id}
 
-        # Model priority: template field on session > API provider config > omit
+        # Model/effort resolution chain:
+        # 1. _template_model/_template_effort (set by project_bootstrap on session)
+        # 2. template.toml engineer spec (direct file read — reliable fallback)
+        # 3. CLAUDE_API_PROVIDER_CONFIGS (for third-party API providers)
         model = getattr(session, "_template_model", "") or ""
+        effort = getattr(session, "_template_effort", "") or ""
+
+        if not model or not effort:
+            template_name = getattr(getattr(session, "project_record", None), "template_name", "") or ""
+            if template_name:
+                from pathlib import Path
+                from agent_admin_config import REPO_ROOT
+                tpl_path = REPO_ROOT / "core" / "templates" / template_name / "template.toml"
+                if tpl_path.exists():
+                    with open(tpl_path, "rb") as f:
+                        tpl = _tomllib.load(f)
+                    for eng in tpl.get("engineers", []):
+                        if eng.get("id") == session.engineer_id:
+                            if not model:
+                                model = str(eng.get("model", "")).strip()
+                            if not effort:
+                                effort = str(eng.get("effort", "")).strip()
+                            break
+
         if not model and session.auth_mode == "api":
             provider_config = CLAUDE_API_PROVIDER_CONFIGS.get(session.provider, {})
             model = provider_config.get("model", "")
+
         if model:
             settings["model"] = model
-
-        # Effort level from template
-        effort = getattr(session, "_template_effort", "") or ""
         if effort:
             settings["effortLevel"] = effort
 
