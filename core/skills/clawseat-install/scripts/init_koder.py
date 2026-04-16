@@ -120,39 +120,91 @@ def render_tools(clawseat_root: Path) -> str:
     shell = clawseat_root / "core" / "shell-scripts"
     return f"""# TOOLS.md — koder available commands
 
-## ClawSeat 调度脚本
+## 强制规则
 
-| 命令 | 用途 |
-|------|------|
-| `python3 {scripts}/dispatch_task.py --profile <profile> --source koder --target <seat> ...` | 派发任务给 seat |
-| `python3 {scripts}/complete_handoff.py --profile <profile> ...` | 完成交接 |
-| `python3 {scripts}/notify_seat.py --profile <profile> --target <seat> --message "..."` | 发送通知 |
-| `python3 {scripts}/render_console.py --profile <profile>` | 渲染控制台状态 |
-| `python3 {scripts}/start_seat.py --profile <profile> --seat <id> --confirm-start` | 启动后端 seat |
-| `python3 {scripts}/send_delegation_report.py --profile <profile> --check-auth` | 检查飞书认证 |
+**禁止直接用 tmux send-keys 给 seat 发自然语言消息来派发任务。**
+**必须使用 dispatch_task.py 来派发，使用 notify_seat.py 来发通知。**
 
-## Shell 工具
+每次向 seat 派发任务或完成交接时，必须使用下表中的脚本。
+这些脚本会自动写入 TODO.md、更新 TASKS.md/STATUS.md、创建 handoff receipt、
+并通过 send-and-verify.sh 通知目标 seat。
+直接发消息会跳过所有这些持久化步骤，导致链路不可追踪。
 
-| 命令 | 用途 |
-|------|------|
-| `bash {shell}/send-and-verify.sh --project <project> <seat> "message"` | 发送 tmux 消息并验证 |
-| `bash {shell}/check-engineer-status.sh <seat1> <seat2> ...` | 检查 seat 状态 |
-| `bash {shell}/detect-prompt-state.sh <session>` | 检测 seat 提示状态 |
-| `bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>` | 等待 pane 输出 |
+## 调度脚本（必须使用）
 
-## Preflight
+**派发任务**（koder → planner，或任意 source → target）:
+```bash
+python3 {scripts}/dispatch_task.py \\
+  --profile <profile.toml 路径> \\
+  --source koder \\
+  --target planner \\
+  --task-id <TASK-ID> \\
+  --title "<任务标题>" \\
+  --objective "<任务目标和验收标准>"
+```
 
-| 命令 | 用途 |
-|------|------|
-| `python3 {clawseat_root}/core/preflight.py <project>` | 环境预检 |
-| `python3 {clawseat_root}/core/scripts/skill_manager.py check` | 技能注册表验证 |
+**完成交接**（specialist → planner，或 planner → koder）:
+```bash
+python3 {scripts}/complete_handoff.py \\
+  --profile <profile.toml 路径> \\
+  --source <完成方> \\
+  --target <接收方> \\
+  --task-id <TASK-ID> \\
+  --title "<交付标题>" \\
+  --summary "<交付摘要>"
+```
+
+**发送通知**（非任务性消息、提醒、unblock）:
+```bash
+python3 {scripts}/notify_seat.py \\
+  --profile <profile.toml 路径> \\
+  --target <seat> \\
+  --message "<消息内容>"
+```
+
+**启动后端 seat**:
+```bash
+python3 {scripts}/start_seat.py \\
+  --profile <profile.toml 路径> \\
+  --seat <seat-id> \\
+  --tool <claude|codex|gemini> \\
+  --auth-mode <oauth|api> \\
+  --provider <provider> \\
+  --confirm-start
+```
+
+## 状态检查
+
+```bash
+python3 {scripts}/render_console.py --profile <profile.toml 路径>
+bash {shell}/check-engineer-status.sh <seat1> <seat2> ...
+bash {shell}/detect-prompt-state.sh <tmux-session-name>
+```
+
+## tmux 通信（仅用于非结构化消息）
+
+```bash
+bash {shell}/send-and-verify.sh --project <project> <seat> "message"
+```
+
+> 只用于 notify_seat.py 不可用时的 fallback，或需要直接在 seat 的 TUI 里输入命令的场景。
+> 日常任务派发和交接**禁止**用这个。
+
+## 环境检查
+
+```bash
+python3 {clawseat_root}/core/preflight.py <project>
+python3 {clawseat_root}/core/scripts/skill_manager.py check
+bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>
+```
 
 ## 安装
 
-| 命令 | 用途 |
-|------|------|
-| `python3 {clawseat_root}/shells/openclaw-plugin/install_openclaw_bundle.py` | 安装/更新 skill symlinks |
-| `python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>` | 项目 bootstrap |
+```bash
+python3 {clawseat_root}/shells/openclaw-plugin/install_openclaw_bundle.py
+python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
+python3 {clawseat_root}/core/skills/clawseat-install/scripts/init_koder.py --workspace <workspace> --project <project>
+```
 """
 
 
