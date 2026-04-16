@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+from pathlib import Path
 
 from _common import (
+    OPENCLAW_HOME,
     REPO_ROOT,
     capture_session_pane,
     detect_claude_onboarding_step,
@@ -71,6 +73,32 @@ def write_frontstage_receipt(profile, seat: str) -> str:
 
 
 SEND_SCRIPT_PATH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
+
+
+def find_openclaw_frontstage_contract(profile, seat: str, *, cwd: Path | None = None) -> Path | None:
+    if seat != profile.heartbeat_owner:
+        return None
+    openclaw_root = OPENCLAW_HOME.expanduser().resolve()
+    search_root = (cwd or Path.cwd()).expanduser().resolve()
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for base in [search_root, *search_root.parents]:
+        contract = (base / "WORKSPACE_CONTRACT.toml").resolve()
+        if contract in seen or not contract.exists():
+            continue
+        seen.add(contract)
+        candidates.append(contract)
+    for contract in candidates:
+        try:
+            contract.relative_to(openclaw_root)
+        except ValueError:
+            continue
+        contract_data = load_toml(contract) or {}
+        contract_seat = str(contract_data.get("seat_id", "")).strip()
+        contract_project = str(contract_data.get("project", "")).strip()
+        if contract_seat == seat and contract_project == profile.project_name:
+            return contract
+    return None
 
 
 def _send_frontstage_via_send_and_verify(project: str, seat: str) -> subprocess.CompletedProcess[str]:
@@ -212,6 +240,26 @@ def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
     materialize_profile_runtime(profile)
+    openclaw_frontstage_contract = find_openclaw_frontstage_contract(profile, args.seat)
+    if openclaw_frontstage_contract is not None:
+        print(
+            "openclaw_frontstage_self_start_blocked: "
+            f"the current OpenClaw agent already owns frontstage seat '{args.seat}' "
+            f"via {openclaw_frontstage_contract}. "
+            f"Do not run start_seat.py --seat {args.seat} from the OpenClaw koder workspace."
+        )
+        if profile.default_start_seats:
+            backend_defaults = [
+                seat_id
+                for seat_id in profile.default_start_seats
+                if seat_id != profile.heartbeat_owner
+            ]
+            if backend_defaults:
+                print(
+                    "next_step: "
+                    f"start a backend seat instead, for example {backend_defaults[0]!r}."
+                )
+        return 1
     # Per-seat skill validation
     try:
         import importlib.util as _ilu

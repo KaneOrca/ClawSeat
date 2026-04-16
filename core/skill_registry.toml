@@ -82,7 +82,7 @@ name = "tmux-basics"
 source = "bundled"
 path = "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md"
 required = false
-roles = ["frontstage-supervisor", "planner-dispatcher"]
+roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "qa"]
 description = "tmux session control: commands, ClawSeat wrappers, pitfalls, self-diagnosis"
 
 # ── Gstack external skills ─────────────────────────────────────────
@@ -124,7 +124,7 @@ name = "gstack-browse"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md"
 required = false
-roles = ["builder", "qa", "designer"]
+roles = ["builder", "reviewer", "qa", "designer"]
 description = "Headless browser for QA testing and visual inspection"
 
 [[skills]]

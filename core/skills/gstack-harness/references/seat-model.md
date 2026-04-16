@@ -45,6 +45,30 @@ runtime surprise to discover later during launch.
   - pure frontend projects: `planner = gemini`, `designer-1` stays optional
     unless design work is active
 
+## Dynamic Roster Fields
+
+For dynamic-roster profiles, keep these fields distinct:
+
+- `seats`
+  - the canonical project roster
+  - use this for role semantics, dispatch intent, and generated docs
+- `materialized_seats`
+  - the seats whose session/workspace scaffold should be pre-created at bootstrap
+  - for starter profiles, this normally matches `seats`
+- `default_start_seats`
+  - the seats frontstage should suggest or autostart first
+  - this is a launch-order hint, not the roster definition
+- `bootstrap_seats`
+  - compatibility/frontstage-bootstrap field kept for older flows
+  - do not treat this as the source of truth for “which seats get session records”
+
+Recommended rule:
+
+1. put the full team in `seats`
+2. set `materialized_seats` to the seats that should already have runtime scaffolding after bootstrap
+3. use `default_start_seats` for first-launch suggestions
+4. keep `bootstrap_seats` only for backward-compatible frontstage/bootstrap behavior
+
 ## Configuration workflow
 
 Frontstage must configure seats through the runtime tooling, not by editing

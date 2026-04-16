@@ -18,12 +18,16 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[3]  # clawseat-install/scripts/ → core/skills/ → core/ → ClawSeat
 _core = str(REPO_ROOT / "core")
 if _core not in sys.path:
     sys.path.insert(0, _core)
+_harness_scripts = str(REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts")
+if _harness_scripts not in sys.path:
+    sys.path.insert(0, _harness_scripts)
 
 try:
     import tomllib
@@ -46,11 +50,11 @@ def load_template() -> dict:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
-def koder_spec(template: dict) -> dict:
+def _find_template_engineer(template: dict, seat_id: str) -> dict:
     for eng in template.get("engineers", []):
-        if eng.get("id") == "koder":
-            return eng
-    raise RuntimeError("koder seat not found in gstack-harness template")
+        if eng.get("id") == seat_id:
+            return dict(eng)
+    raise RuntimeError(f"{seat_id} seat not found in gstack-harness template")
 
 
 def resolve_profile(project: str, explicit: str | None) -> Path:
@@ -62,8 +66,94 @@ def resolve_profile(project: str, explicit: str | None) -> Path:
     return dynamic_profile_path(project)
 
 
-def all_seats(template: dict) -> list[str]:
-    return [eng["id"] for eng in template.get("engineers", []) if eng.get("id")]
+def load_profile_context(project: str, explicit: str | None) -> tuple[Path, Any]:
+    from _common import load_profile
+
+    profile_path = resolve_profile(project, explicit)
+    return profile_path, load_profile(profile_path)
+
+
+def koder_spec(template: dict, profile: Any) -> dict:
+    seat_id = str(profile.heartbeat_owner).strip() or "koder"
+    spec = _find_template_engineer(template, seat_id)
+    override = profile.seat_overrides.get(seat_id, {})
+    if override:
+        spec.update(override)
+        spec["id"] = seat_id
+    role = str(profile.seat_roles.get(seat_id, spec.get("role", "frontstage-supervisor"))).strip()
+    if role:
+        spec["role"] = role
+    return spec
+
+
+def roster_seats(profile: Any) -> list[str]:
+    return [str(seat) for seat in profile.seats if str(seat).strip()]
+
+
+def backend_seats(profile: Any) -> list[str]:
+    heartbeat_owner = str(profile.heartbeat_owner).strip()
+    return [seat for seat in roster_seats(profile) if seat != heartbeat_owner]
+
+
+def default_backend_start_seats(profile: Any) -> list[str]:
+    heartbeat_owner = str(profile.heartbeat_owner).strip()
+    return [
+        str(seat)
+        for seat in (profile.default_start_seats or [])
+        if str(seat).strip() and str(seat).strip() != heartbeat_owner
+    ]
+
+
+def build_workspace_files(
+    *,
+    project: str,
+    profile_path: Path,
+    profile: Any,
+    feishu_group_id: str,
+) -> dict[str, str]:
+    template = load_template()
+    spec = koder_spec(template, profile)
+    seats = roster_seats(profile)
+    backend = backend_seats(profile)
+    default_backend = default_backend_start_seats(profile)
+    heartbeat_owner = str(profile.heartbeat_owner).strip() or "koder"
+    active_loop_owner = str(profile.active_loop_owner).strip() or "planner"
+    default_notify_target = str(profile.default_notify_target).strip() or active_loop_owner
+    return {
+        "IDENTITY.md": render_identity(project, profile_path),
+        "SOUL.md": render_soul(),
+        "TOOLS.md": render_tools(
+            REPO_ROOT,
+            heartbeat_owner=heartbeat_owner,
+            backend_seats=backend,
+            default_backend_start_seats=default_backend,
+        ),
+        "MEMORY.md": render_memory(
+            project,
+            profile_path,
+            seats,
+            heartbeat_owner=heartbeat_owner,
+            backend_seats=backend,
+            default_backend_start_seats=default_backend,
+        ),
+        "AGENTS.md": render_agents(
+            spec,
+            REPO_ROOT,
+            heartbeat_owner=heartbeat_owner,
+            backend_seats=backend,
+        ),
+        "WORKSPACE_CONTRACT.toml": render_contract(
+            project,
+            profile_path,
+            seats,
+            heartbeat_owner=heartbeat_owner,
+            active_loop_owner=active_loop_owner,
+            default_notify_target=default_notify_target,
+            backend_seats=backend,
+            default_backend_start_seats=default_backend,
+            feishu_group_id=feishu_group_id,
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -116,15 +206,29 @@ def render_soul() -> str:
 """
 
 
-def render_tools(clawseat_root: Path) -> str:
+def render_tools(
+    clawseat_root: Path,
+    *,
+    heartbeat_owner: str,
+    backend_seats: list[str],
+    default_backend_start_seats: list[str],
+) -> str:
     scripts = clawseat_root / "core" / "skills" / "gstack-harness" / "scripts"
     shell = clawseat_root / "core" / "shell-scripts"
+    backend_choices = "|".join(backend_seats) if backend_seats else "seat-id"
+    backend_list = ", ".join(f"`{seat}`" for seat in backend_seats) if backend_seats else "(none)"
+    default_backend = (
+        ", ".join(f"`{seat}`" for seat in default_backend_start_seats)
+        if default_backend_start_seats
+        else "(none)"
+    )
     return f"""# TOOLS.md — koder available commands
 
 ## 强制规则
 
 **禁止直接用 tmux send-keys 给 seat 发自然语言消息来派发任务。**
 **必须使用 dispatch_task.py 来派发，使用 notify_seat.py 来发通知。**
+**在 OpenClaw 模式下，你当前就是 `{heartbeat_owner}`，禁止运行 `start_seat.py --seat {heartbeat_owner}`。**
 
 每次向 seat 派发任务或完成交接时，必须使用下表中的脚本。
 这些脚本会自动写入 TODO.md、更新 TASKS.md/STATUS.md、创建 handoff receipt、
@@ -167,12 +271,16 @@ python3 {scripts}/notify_seat.py \\
 ```bash
 python3 {scripts}/start_seat.py \\
   --profile <profile.toml 路径> \\
-  --seat <seat-id> \\
+  --seat <{backend_choices}> \\
   --tool <claude|codex|gemini> \\
   --auth-mode <oauth|api> \\
   --provider <provider> \\
   --confirm-start
 ```
+
+- 可由 frontstage 拉起的 backend seats: {backend_list}
+- 推荐优先启动: {default_backend}
+- 当前 OpenClaw agent 已经占据 `{heartbeat_owner}` frontstage，不要再为它创建 tmux session
 
 ## 状态检查
 
@@ -213,9 +321,19 @@ python3 {clawseat_root}/core/skills/clawseat-install/scripts/refresh_workspaces.
 """
 
 
-def render_memory(project: str, profile_path: Path, seats: list[str]) -> str:
+def render_memory(
+    project: str,
+    profile_path: Path,
+    seats: list[str],
+    *,
+    heartbeat_owner: str,
+    backend_seats: list[str],
+    default_backend_start_seats: list[str],
+) -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     seat_list = "\n".join(f"- `{s}`" for s in seats)
+    backend_list = "\n".join(f"- `{s}`" for s in backend_seats) or "- (none)"
+    default_backend_list = "\n".join(f"- `{s}`" for s in default_backend_start_seats) or "- (none)"
     return f"""# MEMORY.md — koder project memory
 
 ## 项目绑定
@@ -228,6 +346,15 @@ def render_memory(project: str, profile_path: Path, seats: list[str]) -> str:
 
 {seat_list}
 
+## Backend seats you may start
+
+- frontstage owner: `{heartbeat_owner}` (already live in OpenClaw; never self-start)
+{backend_list}
+
+## Recommended startup order
+
+{default_backend_list}
+
 ## 状态
 
 - bootstrap: pending
@@ -236,7 +363,13 @@ def render_memory(project: str, profile_path: Path, seats: list[str]) -> str:
 """
 
 
-def render_agents(spec: dict, clawseat_root: Path) -> str:
+def render_agents(
+    spec: dict,
+    clawseat_root: Path,
+    *,
+    heartbeat_owner: str,
+    backend_seats: list[str],
+) -> str:
     skills_section = []
     for skill_path in spec.get("skills", []):
         expanded = skill_path.replace("{CLAWSEAT_ROOT}", str(clawseat_root))
@@ -247,6 +380,7 @@ def render_agents(spec: dict, clawseat_root: Path) -> str:
     role_details = []
     for detail in spec.get("role_details", []):
         role_details.append(f"- {detail}")
+    backend_list = ", ".join(f"`{seat}`" for seat in backend_seats) if backend_seats else "(none)"
 
     return f"""# AGENTS.md — ClawSeat koder workspace
 
@@ -283,22 +417,39 @@ def render_agents(spec: dict, clawseat_root: Path) -> str:
 - Use `notify_seat.py` for ad hoc messages
 - Use `send-and-verify.sh` for tmux transport
 - Every dispatch must produce a handoff receipt in `.tasks/patrol/handoffs/`
+- In OpenClaw mode, the current agent already is `{heartbeat_owner}` — never run `start_seat.py --seat {heartbeat_owner}`
+- Only backend seats may be started from this workspace: {backend_list}
 """
 
 
-def render_contract(project: str, profile_path: Path, seats: list[str], feishu_group_id: str = "") -> str:
+def render_contract(
+    project: str,
+    profile_path: Path,
+    seats: list[str],
+    *,
+    heartbeat_owner: str,
+    active_loop_owner: str,
+    default_notify_target: str,
+    backend_seats: list[str],
+    default_backend_start_seats: list[str],
+    feishu_group_id: str = "",
+) -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     seat_toml = ", ".join(f'"{s}"' for s in seats)
+    backend_toml = ", ".join(f'"{s}"' for s in backend_seats)
+    default_backend_toml = ", ".join(f'"{s}"' for s in default_backend_start_seats)
     return f"""version = 1
-seat_id = "koder"
+seat_id = "{heartbeat_owner}"
 role = "frontstage-supervisor"
 project = "{project}"
 profile = "{profile_path}"
 initialized_at = "{now}"
 seats = [{seat_toml}]
-heartbeat_owner = "koder"
-active_loop_owner = "planner"
-default_notify_target = "planner"
+backend_seats = [{backend_toml}]
+default_backend_start_seats = [{default_backend_toml}]
+heartbeat_owner = "{heartbeat_owner}"
+active_loop_owner = "{active_loop_owner}"
+default_notify_target = "{default_notify_target}"
 feishu_group_id = "{feishu_group_id}"
 """
 
@@ -350,19 +501,13 @@ def main() -> int:
         print(f"error: workspace does not exist: {workspace}", file=sys.stderr)
         return 1
 
-    profile_path = resolve_profile(args.project, args.profile)
-    template = load_template()
-    spec = koder_spec(template)
-    seats = all_seats(template)
-
-    files = {
-        "IDENTITY.md": render_identity(args.project, profile_path),
-        "SOUL.md": render_soul(),
-        "TOOLS.md": render_tools(REPO_ROOT),
-        "MEMORY.md": render_memory(args.project, profile_path, seats),
-        "AGENTS.md": render_agents(spec, REPO_ROOT),
-        "WORKSPACE_CONTRACT.toml": render_contract(args.project, profile_path, seats, args.feishu_group_id),
-    }
+    profile_path, profile = load_profile_context(args.project, args.profile)
+    files = build_workspace_files(
+        project=args.project,
+        profile_path=profile_path,
+        profile=profile,
+        feishu_group_id=args.feishu_group_id,
+    )
 
     for filename, content in files.items():
         target = workspace / filename

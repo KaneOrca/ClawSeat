@@ -212,10 +212,15 @@ def append_task_to_queue(
     existing = read_text(path)
 
     # Backward compat: old format (task_id: header) auto-wrapped as queue head.
+    # Special case: task_id: null is a bootstrap placeholder — discard it entirely.
     if existing.strip() and existing.lstrip().startswith("task_id:"):
         old_task_id_match = re.search(r"^task_id: (.+)$", existing, re.MULTILINE)
         old_task_id = old_task_id_match.group(1).strip() if old_task_id_match else "legacy"
-        existing = f"# Queue: {owner}\n\n## [pending] {old_task_id}\n{existing.strip()}\n"
+        if old_task_id == "null":
+            # Bootstrap placeholder — replace with empty queue
+            existing = ""
+        else:
+            existing = f"# Queue: {owner}\n\n## [pending] {old_task_id}\n{existing.strip()}\n"
 
     has_active = bool(re.search(r"^## \[(pending|queued)\]", existing, re.MULTILINE))
     status = "queued" if has_active else "pending"

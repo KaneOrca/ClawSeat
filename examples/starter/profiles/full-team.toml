@@ -32,6 +32,8 @@ designer-1 = "designer"
 [dynamic_roster]
 enabled = true
 session_root = "~/.agents/sessions"
+materialized_seats = ["koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"]
+# bootstrap_seats is kept for compatibility and frontstage bootstrap intent.
 bootstrap_seats = ["koder"]
 default_start_seats = ["koder"]
 compat_legacy_seats = false

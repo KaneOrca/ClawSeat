@@ -91,6 +91,7 @@ def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, boot
         "[dynamic_roster]",
         "enabled = true",
         'session_root = "~/.agents/sessions"',
+        'materialized_seats = ["koder"]',
         'bootstrap_seats = ["koder"]',
         'default_start_seats = ["koder"]',
         f"compat_legacy_seats = {'false' if bootstrap_only else 'true'}",

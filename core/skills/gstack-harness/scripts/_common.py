@@ -133,6 +133,7 @@ class HarnessProfile:
     seat_overrides: dict[str, dict[str, str]]
     dynamic_roster_enabled: bool = False
     session_root: Path = Path()
+    materialized_seats: list[str] | None = None
     bootstrap_seats: list[str] | None = None
     default_start_seats: list[str] | None = None
     compat_legacy_seats: bool = False
@@ -234,7 +235,7 @@ def resolve_dynamic_seats(
     *,
     heartbeat_owner: str,
     declared_seats: list[str],
-    bootstrap_seats: list[str],
+    materialized_seats: list[str],
     compat_legacy_seats: bool,
     legacy_seats: list[str],
     discovered_sessions: dict[str, dict[str, Any]],
@@ -245,7 +246,7 @@ def resolve_dynamic_seats(
     groups = [
         [heartbeat_owner],
         declared_seats,
-        bootstrap_seats,
+        materialized_seats,
         legacy_seats if compat_legacy_seats else [],
         sorted(
             discovered_sessions.keys(),
@@ -280,10 +281,18 @@ def load_profile(path: str | Path) -> HarnessProfile:
         for key, value in data.get("legacy_seat_roles", {}).items()
     }
     legacy_seats = [str(item) for item in data.get("legacy_seats", list(legacy_seat_roles.keys()))]
-    bootstrap_seats = [str(item) for item in dynamic.get("bootstrap_seats", data.get("seats", []))]
     declared_seats = [str(item) for item in data.get("seats", [])]
+    materialized_seats = [
+        str(item)
+        for item in dynamic.get("materialized_seats", declared_seats)
+    ]
+    bootstrap_seats = [
+        str(item)
+        for item in dynamic.get("bootstrap_seats", [heartbeat_owner])
+    ]
     default_start_seats = [
-        str(item) for item in dynamic.get("default_start_seats", bootstrap_seats)
+        str(item)
+        for item in dynamic.get("default_start_seats", bootstrap_seats or materialized_seats)
     ]
     compat_legacy_seats = bool(dynamic.get("compat_legacy_seats", False))
     discovered = discovered_session_data(session_root, str(data["project_name"])) if dynamic_enabled else {}
@@ -296,7 +305,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         resolve_dynamic_seats(
             heartbeat_owner=heartbeat_owner,
             declared_seats=declared_seats,
-            bootstrap_seats=bootstrap_seats,
+            materialized_seats=materialized_seats,
             compat_legacy_seats=compat_legacy_seats,
             legacy_seats=legacy_seats,
             discovered_sessions=discovered,
@@ -334,6 +343,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         },
         dynamic_roster_enabled=dynamic_enabled,
         session_root=session_root,
+        materialized_seats=materialized_seats,
         bootstrap_seats=bootstrap_seats,
         default_start_seats=default_start_seats,
         compat_legacy_seats=compat_legacy_seats,
@@ -423,14 +433,16 @@ def is_managed_runtime_path(profile: HarnessProfile, path: Path) -> bool:
 
 
 def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
-    materialized_seats = list(profile.seats)
+    materialized_seats = list(profile.materialized_seats or profile.seats)
     lines = [
         "version = 1",
         "",
         f'project_name = "{project_name}"',
         f'repo_root = "{repo_root}"',
         f"seat_order = {json.dumps(materialized_seats)}",
-        f"bootstrap_seats = {json.dumps(materialized_seats)}",
+        f"materialized_seats = {json.dumps(materialized_seats)}",
+        f"bootstrap_seats = {json.dumps(list(profile.bootstrap_seats or []))}",
+        f"default_start_seats = {json.dumps(list(profile.default_start_seats or []))}",
     ]
     for seat_id, override in profile.seat_overrides.items():
         if not override:
@@ -705,7 +717,7 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
     ensure_dir(profile.tasks_root)
     ensure_dir(profile.handoff_dir)
     all_seats: list[str] = []
-    for seat in [*(profile.bootstrap_seats or []), *profile.seats]:
+    for seat in [*(profile.materialized_seats or []), *profile.seats]:
         if seat and seat not in all_seats:
             all_seats.append(seat)
     if not all_seats:

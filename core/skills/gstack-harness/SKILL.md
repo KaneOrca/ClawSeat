@@ -129,10 +129,12 @@ Keep those under:
 - if transport falls back to raw tmux, it must still honor the send contract: text, wait 1 second, `Enter`, then verify the message did not stay queued in the input buffer
 - frontstage and planner seats should prefer `scripts/notify_seat.py` for ad hoc reminders/unblocks rather than composing transport by hand
 - `gstack` specialist skills stay in place; this skill only orchestrates them.
-- Declared seats must be fully materialized at bootstrap time, not lazily on
-  first dispatch. If `planner`, `builder`, `reviewer`, `qa`, or `designer`
-  already belong to the roster, their session record, runtime home, workspace
-  scaffold, and empty inbox should already exist before the first task handoff.
+- Treat dynamic-roster fields as separate concerns:
+  - `seats` = canonical roster
+  - `materialized_seats` = seats that get precreated session/runtime scaffolding
+  - `default_start_seats` = first-launch / operator-start hint
+  - `bootstrap_seats` = backward-compatible bootstrap/frontstage intent only
+- Starter profiles should normally set `materialized_seats = seats`, so declared seats are still fully materialized before the first task handoff.
 - The frontstage-supervisor seat owns seat startup and operator window layout.
   It is responsible for:
   - deciding when a seat should be launched

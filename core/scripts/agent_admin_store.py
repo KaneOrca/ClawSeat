@@ -256,27 +256,37 @@ class StoreHandlers:
             for item in local.get("seat_order", [])
             if str(item).strip()
         ]
+        materialized_seats_raw = [
+            self.hooks.normalize_name(str(item))
+            for item in local.get("materialized_seats", [])
+            if str(item).strip()
+        ]
         bootstrap_seats_raw = [
             self.hooks.normalize_name(str(item))
             for item in local.get("bootstrap_seats", [])
             if str(item).strip()
         ]
+        available_ids = {str(engineer["id"]) for engineer in final_engineers}
         if bootstrap_seats_raw:
-            final_ids = {str(engineer["id"]) for engineer in final_engineers}
-            unknown = [seat_id for seat_id in bootstrap_seats_raw if seat_id not in final_ids]
+            unknown = [seat_id for seat_id in bootstrap_seats_raw if seat_id not in available_ids]
             if unknown:
                 raise self.hooks.error_cls(
                     f"bootstrap_seats references unknown/disabled engineer ids: {', '.join(unknown)}"
                 )
-            bootstrap_set = set(bootstrap_seats_raw)
+        if materialized_seats_raw:
+            unknown = [seat_id for seat_id in materialized_seats_raw if seat_id not in available_ids]
+            if unknown:
+                raise self.hooks.error_cls(
+                    f"materialized_seats references unknown/disabled engineer ids: {', '.join(unknown)}"
+                )
+            materialized_set = set(materialized_seats_raw)
             final_engineers = [
                 engineer
                 for engineer in final_engineers
-                if str(engineer["id"]) in bootstrap_set
+                if str(engineer["id"]) in materialized_set
             ]
         if seat_order_raw:
-            final_ids = {str(engineer["id"]) for engineer in final_engineers}
-            unknown = [seat_id for seat_id in seat_order_raw if seat_id not in final_ids]
+            unknown = [seat_id for seat_id in seat_order_raw if seat_id not in available_ids]
             if unknown:
                 raise self.hooks.error_cls(
                     f"seat_order references unknown/disabled engineer ids: {', '.join(unknown)}"

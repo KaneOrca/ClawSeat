@@ -66,6 +66,7 @@ class HarnessProfile:
     seat_overrides: dict[str, dict[str, str]]
     dynamic_roster_enabled: bool
     session_root: Path
+    materialized_seats: list[str]
     bootstrap_seats: list[str]
     default_start_seats: list[str]
     compat_legacy_seats: bool
@@ -213,7 +214,7 @@ def resolve_roles(
 def resolve_dynamic_seats(
     *,
     heartbeat_owner: str,
-    bootstrap_seats: list[str],
+    materialized_seats: list[str],
     compat_legacy_seats: bool,
     legacy_seats: list[str],
     discovered_sessions: dict[str, dict[str, Any]],
@@ -225,7 +226,7 @@ def resolve_dynamic_seats(
     )
     seats = unique_ordered(
         [heartbeat_owner],
-        bootstrap_seats,
+        materialized_seats,
         legacy_seats if compat_legacy_seats else [],
         discovered,
     )
@@ -248,9 +249,11 @@ def load_profile(path: str | Path) -> HarnessProfile:
     legacy_seats = [str(item) for item in data.get("legacy_seats", list(legacy_roles.keys()))]
     top_level_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items()}
     session_root = Path(str(dynamic.get("session_root", str(Path.home() / ".agents" / "sessions")))).expanduser()
-    bootstrap_seats = [str(item) for item in dynamic.get("bootstrap_seats", data.get("seats", []))]
-    default_start_seats = [str(item) for item in dynamic.get("default_start_seats", bootstrap_seats)]
     heartbeat_owner = str(data["heartbeat_owner"])
+    declared_seats = [str(item) for item in data.get("seats", [heartbeat_owner])]
+    materialized_seats = [str(item) for item in dynamic.get("materialized_seats", declared_seats)]
+    bootstrap_seats = [str(item) for item in dynamic.get("bootstrap_seats", [heartbeat_owner])]
+    default_start_seats = [str(item) for item in dynamic.get("default_start_seats", bootstrap_seats or materialized_seats)]
     dynamic_enabled = bool(dynamic.get("enabled", False))
     compat_legacy_seats = bool(dynamic.get("compat_legacy_seats", False))
     discovered = discovered_session_data(session_root, str(data["project_name"])) if dynamic_enabled else {}
@@ -262,7 +265,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
     seats = (
         resolve_dynamic_seats(
             heartbeat_owner=heartbeat_owner,
-            bootstrap_seats=bootstrap_seats,
+            materialized_seats=materialized_seats,
             compat_legacy_seats=compat_legacy_seats,
             legacy_seats=legacy_seats,
             discovered_sessions=discovered,
@@ -313,6 +316,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         },
         dynamic_roster_enabled=dynamic_enabled,
         session_root=session_root,
+        materialized_seats=materialized_seats,
         bootstrap_seats=bootstrap_seats,
         default_start_seats=default_start_seats,
         compat_legacy_seats=compat_legacy_seats,
