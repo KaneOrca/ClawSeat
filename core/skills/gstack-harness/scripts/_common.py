@@ -1275,16 +1275,31 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
 
     sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(AGENTS_ROOT / "sessions")))
 
+    # Load provider configs from agent_admin_config (lives in core/scripts/)
+    _admin_scripts = REPO_ROOT / "core" / "scripts"
+    _provider_configs: dict = {}
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location("agent_admin_config", _admin_scripts / "agent_admin_config.py")
+        if _spec and _spec.loader:
+            _mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            _provider_configs = getattr(_mod, "CLAUDE_API_PROVIDER_CONFIGS", {})
+    except Exception:
+        pass
+
     for seat in seats:
         spec = engineer_map.get(seat, {})
         model = str(spec.get("model", "")).strip()
         effort = str(spec.get("effort", "")).strip()
         auth_mode = str(spec.get("auth_mode", "")).strip()
+        provider = str(spec.get("provider", "")).strip()
         session_path = sessions_root / profile.project_name / seat / "session.toml"
         runtime_dir = None
         if session_path.exists():
             session_data = load_toml(session_path)
             auth_mode = str(session_data.get("auth_mode", auth_mode)).strip()
+            provider = str(session_data.get("provider", provider)).strip()
             runtime_dir = str(session_data.get("runtime_dir", "")).strip()
             # Use session tool to skip non-claude seats
             tool = str(session_data.get("tool", "")).strip()
@@ -1326,6 +1341,21 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
             if "skipDangerousModePermissionPrompt" not in rt_settings:
                 rt_settings["skipDangerousModePermissionPrompt"] = True
                 rt_changed = True
+
+            # Inject provider-specific env vars (e.g., MiniMax timeout, traffic control)
+            prov_config = _provider_configs.get(provider, {})
+            extra_env = prov_config.get("extra_env")
+            if extra_env:
+                env_block = rt_settings.get("env", {})
+                if not isinstance(env_block, dict):
+                    env_block = {}
+                for env_key, env_val in extra_env.items():
+                    if env_block.get(env_key) != env_val:
+                        env_block[env_key] = env_val
+                        rt_changed = True
+                if env_block:
+                    rt_settings["env"] = env_block
+
             if rt_changed:
                 write_text(runtime_settings_path, json.dumps(rt_settings, indent=2, ensure_ascii=False) + "\n")
 
@@ -1373,7 +1403,9 @@ GLOBAL_ENV_PATH = AGENTS_ROOT / ".env.global"
 # Maps (tool, provider) to the env var names in .env.global
 GLOBAL_SECRET_MAP: dict[tuple[str, str], dict[str, str]] = {
     ("claude", "minimax"): {
-        "ANTHROPIC_API_KEY": "MINIMAX_API_KEY",
+        # MiniMax Anthropic-compatible endpoint uses ANTHROPIC_AUTH_TOKEN,
+        # not ANTHROPIC_API_KEY.  URL must include /anthropic path.
+        "ANTHROPIC_AUTH_TOKEN": "MINIMAX_API_KEY",
         "ANTHROPIC_BASE_URL": "MINIMAX_BASE_URL",
     },
     ("claude", "xcode-best"): {

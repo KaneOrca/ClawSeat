@@ -209,7 +209,14 @@ XCODE_PROVIDER_ENDPOINT_RULES = {
 CLAUDE_API_PROVIDER_CONFIGS = {
     "minimax": {
         "model": "MiniMax-M2.7-highspeed",
-        "base_url": "https://api.minimaxi.com",
+        "base_url": "https://api.minimaxi.com/anthropic",
+        # MiniMax Anthropic-compatible endpoint requires ANTHROPIC_AUTH_TOKEN
+        # instead of ANTHROPIC_API_KEY, plus extended timeout and traffic control.
+        "auth_token_var": "ANTHROPIC_AUTH_TOKEN",
+        "extra_env": {
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        },
     },
 }
 

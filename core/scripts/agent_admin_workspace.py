@@ -639,13 +639,29 @@ def render_workspace_contract_text(
     return "\n".join(lines)
 
 
+def _expand_skill_path(raw: str) -> str:
+    """Expand portable placeholders in a skill path.
+
+    - ``{CLAWSEAT_ROOT}`` is replaced with the resolved ``REPO_ROOT``.
+    - ``~`` is expanded via :func:`os.path.expanduser`.
+    """
+    expanded = raw.replace("{CLAWSEAT_ROOT}", str(REPO_ROOT))
+    expanded = os.path.expanduser(expanded)
+    return expanded
+
+
 def render_loaded_skills_lines(engineer: Any, engineer_id: str) -> list[str]:
     skills = list(getattr(engineer, "skills", []) or [])
     if not skills:
         return []
     header = "## Loaded Skills"
     lines = [header, "", f"Use these as the default skill set for `{engineer_id}`:", ""]
-    lines.extend(f"- `{skill}`" for skill in skills)
+    for raw_skill in skills:
+        expanded = _expand_skill_path(raw_skill)
+        if Path(expanded).exists():
+            lines.append(f"- `{expanded}`")
+        else:
+            lines.append(f"- `{expanded}` (WARNING: path not found on this machine)")
     return lines
 
 
