@@ -98,6 +98,18 @@ post-install convenience command.
 - When a Feishu group is bound, planner should use `OC_DELEGATION_REPORT_V1` over the user-identity bridge for koder-facing closeouts; legacy auto-broadcast is opt-in only and should stay disabled by default.
 - When the stage closeout later returns to frontstage, koder should read the linked delivery trail, reconcile the wrap-up, and update the project docs before summarizing to the user.
 
+## Update / Refresh
+
+After `git pull` or any ClawSeat code update, workspace MD files (AGENTS.md, TOOLS.md, WORKSPACE_CONTRACT.toml, settings.local.json) are stale. Run:
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
+  --profile <profile.toml> --project <project> \
+  --koder-workspace <koder工作区路径> --feishu-group-id <oc_xxx>
+```
+
+This regenerates all seat workspace files using the latest template and profile. Koder must **re-read AGENTS.md and TOOLS.md** after refresh.
+
 ## Troubleshooting
 
 - If `tmux new-session` or `openpty` fails with `Device not configured`, report a host terminal limitation instead of a ClawSeat config failure.

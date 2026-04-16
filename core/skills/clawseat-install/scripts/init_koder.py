@@ -199,12 +199,18 @@ python3 {clawseat_root}/core/scripts/skill_manager.py check
 bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>
 ```
 
-## 安装
+## 安装与更新
 
 ```bash
+# 首次安装
 python3 {clawseat_root}/shells/openclaw-plugin/install_openclaw_bundle.py
 python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
 python3 {clawseat_root}/core/skills/clawseat-install/scripts/init_koder.py --workspace <workspace> --project <project>
+
+# 更新后刷新所有 workspace（git pull 之后必须跑）
+python3 {clawseat_root}/core/skills/clawseat-install/scripts/refresh_workspaces.py \\
+  --profile <profile> --project <project> \\
+  --koder-workspace <koder工作区路径> --feishu-group-id <oc_xxx>
 ```
 """
 
