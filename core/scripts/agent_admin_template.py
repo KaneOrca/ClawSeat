@@ -156,13 +156,20 @@ class TemplateHandlers:
         if engineer.skills:
             codex_lines.extend(["", *self.hooks.render_loaded_skills_lines(engineer, session.engineer_id)])
 
+        tasks_root = getattr(project, "tasks_root", f"{repo_root}/.tasks")
+        profile_display = getattr(project, "profile_path", "")
+        from resolve import dynamic_profile_path as _dpp
+        if not profile_display:
+            profile_display = str(_dpp(project.name))
+
         claude_lines = [
             f"# {session.engineer_id}",
             "",
             f"Managed Claude workspace for project `{project.name}`.",
             "",
             f"Primary repo root: `{repo_root}`",
-            f"Task inbox: `{repo_root}/.tasks/{session.engineer_id}`",
+            f"Task inbox: `{tasks_root}/{session.engineer_id}`",
+            f"Profile: `{profile_display}`",
             f"Contract fingerprint: `{contract_fingerprint}`",
         ]
         role_text_line = self.hooks.render_role_line(engineer, False)
@@ -191,7 +198,8 @@ class TemplateHandlers:
             f"Managed Gemini workspace for project `{project.name}`.",
             "",
             f"Primary repo root: `{repo_root}`",
-            f"Task inbox: `{repo_root}/.tasks/{session.engineer_id}`",
+            f"Task inbox: `{tasks_root}/{session.engineer_id}`",
+            f"Profile: `{profile_display}`",
             f"Contract fingerprint: `{contract_fingerprint}`",
         ]
         if role_text_line:

@@ -613,10 +613,15 @@ def render_workspace_contract_text(
         engineer_order=engineer_order,
     )
     fingerprint = workspace_contract_fingerprint(payload)
+    # Resolve profile path for this project
+    from resolve import dynamic_profile_path as _dpp
+    _profile_path = str(_dpp(project.name))
+
     lines = [
         'version = 1',
         f"engineer_id = {q(session.engineer_id)}",
         f"project = {q(project.name)}",
+        f"profile = {q(_profile_path)}",
         f"tool = {q(session.tool)}",
         f"workspace = {q(session.workspace)}",
         f"role = {q(engineer.role)}",
