@@ -155,6 +155,7 @@ def render_harness_runtime_lines(engineer: Any) -> list[str]:
         "- heartbeat / patrol / unblock loop",
         "- CLI control console",
     ]
+    # TODO: cartooner-koder skill extracted to /tmp/cartooner-clawseat-adapter/adapters/cartooner/skills/
     if any("cartooner-koder/SKILL.md" in skill for skill in skills):
         lines.extend(
             [
@@ -379,7 +380,8 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
 
 def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) -> list[str]:
     profile_path = HARNESS_PROFILE_ROOT / f"{project.name}.toml"
-    dynamic_profile_path = Path(f"/tmp/{project.name}-profile-dynamic.toml")
+    from resolve import dynamic_profile_path as _dpp
+    dynamic_profile_path = _dpp(project.name)
     if profile_path.exists():
         profile_ref = str(profile_path)
     elif dynamic_profile_path.exists():

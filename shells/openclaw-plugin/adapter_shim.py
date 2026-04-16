@@ -22,20 +22,14 @@ from typing import Any
 
 
 def resolve_clawseat_root() -> Path:
-    """Resolve CLAWSEAT_ROOT from env or by traversing from this file."""
-    configured = os.environ.get("CLAWSEAT_ROOT", "").strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
-
-    # Traverse upward looking for core/harness_adapter.py marker
-    module_path = Path(__file__).resolve()
-    for parent in module_path.parents:
-        candidate = parent / "core" / "harness_adapter.py"
-        if candidate.exists():
-            return parent
-    raise RuntimeError(
-        "CLAWSEAT_ROOT is not set and no local ClawSeat checkout was discovered"
-    )
+    """Resolve CLAWSEAT_ROOT via shared core/resolve.py."""
+    _script_dir = Path(__file__).resolve().parent
+    _repo_root = _script_dir.parents[1]  # shells/openclaw-plugin/ -> shells/ -> ClawSeat root
+    _core_path = str(_repo_root / "core")
+    if _core_path not in sys.path:
+        sys.path.insert(0, _core_path)
+    from resolve import resolve_clawseat_root as _shared
+    return _shared()
 
 
 def _load_module(name: str, path: Path) -> Any:

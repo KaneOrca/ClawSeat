@@ -9,7 +9,9 @@ from pathlib import Path
 
 # Ensure core/ is importable.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO_ROOT / "core"))
+_CORE_PATH = str(_REPO_ROOT / "core")
+if _CORE_PATH not in sys.path:
+    sys.path.insert(0, _CORE_PATH)
 
 from skill_registry import (
     SkillCheckResult,

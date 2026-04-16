@@ -16,6 +16,7 @@ Read in this order:
 4. `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
 5. project adapter skill when needed
    Example:
+   <!-- TODO: cartooner adapter extracted out of ClawSeat core tree -->
    `{CLAWSEAT_ROOT}/adapters/projects/cartooner/skills/cartooner-koder/SKILL.md`
 6. `{CLAWSEAT_ROOT}/shells/codex-bundle/adapter_shim.py`
 

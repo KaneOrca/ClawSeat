@@ -1,4 +1,0 @@
-interface:
-  display_name: "cartooner-koder"
-  short_description: "Cartooner frontstage wrapper for koder routing and patrol."
-  default_prompt: "Use $cartooner-koder to run Cartooner frontstage routing, seat launch, patrol, and unblock flow."

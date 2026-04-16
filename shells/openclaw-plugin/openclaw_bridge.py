@@ -39,61 +39,20 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
-# Resolve CLAWSEAT_ROOT using the same 4-layer chain as TmuxCliAdapter:
-# 1. CLAWSEAT_ROOT env var
-# 2. Traverse upward from __file__ looking for core marker files
-# 3. AGENTS_ROOT parent / coding / ClawSeat
-# 4. ~/coding/ClawSeat with a warning
-
-
-def _resolve_clawseat_root(agents_root: Path | None = None) -> Path:
-    """Resolve CLAWSEAT_ROOT using the same 4-layer chain as TmuxCliAdapter."""
-    configured = os.environ.get("CLAWSEAT_ROOT", "").strip()
-    if configured:
-        return Path(configured).expanduser()
-
-    helper_markers = (
-        Path("core/scripts/agent_admin.py"),
-        Path("core/skills/gstack-harness/scripts/_common.py"),
-    )
-    module_path = Path(__file__).resolve()
-    candidates: list[Path] = []
-    for parent in module_path.parents:
-        candidates.append(parent)
-        candidates.append(parent / "ClawSeat")
-
-    seen: set[Path] = set()
-    for candidate in candidates:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if all((candidate / marker).exists() for marker in helper_markers):
-            return candidate
-
-    if agents_root is not None:
-        agents_root_candidate = agents_root.parent / "coding" / "ClawSeat"
-        if all((agents_root_candidate / marker).exists() for marker in helper_markers):
-            return agents_root_candidate
-
-    # Try the real home directory path explicitly
-    fallback = Path.home() / "coding" / "ClawSeat"
-    if all((fallback / marker).exists() for marker in helper_markers):
-        return fallback
-
-    fallback = Path.home() / "coding" / "ClawSeat"
-    print(
-        f"warning: CLAWSEAT_ROOT not set and no repo-relative helper root found; "
-        f"falling back to {fallback}",
-        file=sys.stderr,
-    )
-    return fallback
-
+# Resolve CLAWSEAT_ROOT via shared core/resolve.py
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_REPO_ROOT_BRIDGE = _SCRIPT_DIR.parents[1]  # shells/openclaw-plugin/ → shells/ → ClawSeat root
+_core_path = str(_REPO_ROOT_BRIDGE / "core")
+if _core_path not in sys.path:
+    sys.path.insert(0, _core_path)
+from resolve import resolve_clawseat_root as _resolve_clawseat_root
 
 _CLAWSEAT_ROOT = _resolve_clawseat_root()
 _BRIDGE_BINDING_LOCK = threading.RLock()
 
 # Add ClawSeat root to sys.path for canonical imports
-sys.path.insert(0, str(_CLAWSEAT_ROOT))
+if str(_CLAWSEAT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CLAWSEAT_ROOT))
 
 # Canonical imports from ClawSeat core/
 from core.adapter.clawseat_adapter import (
@@ -245,7 +204,8 @@ def ensure_clawseat_profile(
             return str(candidate)
 
     # Check standard locations
-    dynamic_path = Path(f"/tmp/{project_name}-profile-dynamic.toml")
+    from resolve import dynamic_profile_path as _dpp
+    dynamic_path = _dpp(project_name)
     if dynamic_path.exists():
         return str(dynamic_path)
 
@@ -855,6 +815,93 @@ class AuthNotConfigured(Exception):
         super().__init__(f"auth not configured for {seat_id}: {instructions}")
 
 
+def _run_preflight(project_name: str) -> None:
+    """Run preflight checks with auto-fix retry. Raises EnvironmentNotReady on failure."""
+    from core import preflight
+
+    result = preflight.preflight_check(project_name)
+    if result.has_hard_blocked:
+        raise EnvironmentNotReady(result.hard_blocked_items)
+
+    for item in result.retryable_items:
+        preflight.auto_fix(item, project_name)
+
+    result = preflight.preflight_check(project_name)
+    if not result.all_pass:
+        raise EnvironmentNotReady(result.hard_blocked_items + result.retryable_items)
+
+
+_CLI_MAP: dict[str, tuple[str, str]] = {
+    "claude": ("claude", "npm install -g @anthropic-ai/claude-code"),
+    "codex": ("codex", "npm install -g @anthropic-ai/codex"),
+    "gemini": ("gemini", "pip install google-generativeai && set API_KEY in secrets"),
+}
+
+
+def _check_cli_available(template_id: str) -> None:
+    """Verify the tool CLI is installed. Raises CLINotAvailable if missing."""
+    import shutil as _sh
+
+    cli_name, cli_install = _CLI_MAP.get(template_id, (template_id, f"install {template_id}"))
+    if not _sh.which(cli_name):
+        raise CLINotAvailable(
+            template_id,
+            f"CLI {cli_name!r} not found in PATH. Install: {cli_install}",
+        )
+
+
+_TOOL_SECRET_TEMPLATES: dict[str, str] = {
+    "claude": "~/.agents/secrets/claude/anthropic/{project}/{seat}.env",
+    "codex": "~/.agents/secrets/codex/openai/{project}/{seat}.env",
+    "gemini": "~/.agents/secrets/gemini/google/{project}/{seat}.env",
+}
+
+
+def _check_auth(project_name: str, seat_id: str, template_id: str) -> None:
+    """Verify seat auth credentials exist. Raises AuthNotConfigured if missing."""
+    try:
+        import tomllib as _tomllib
+    except ModuleNotFoundError:
+        import tomli as _tomllib  # type: ignore
+
+    session_path = (
+        Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions")))
+        / project_name / seat_id / "session.toml"
+    )
+
+    # Try session binding first
+    if session_path.exists():
+        try:
+            with session_path.open("rb") as f:
+                binding = _tomllib.load(f)
+            secret_file = binding.get("secret_file", "")
+            if secret_file:
+                sf = Path(secret_file).expanduser()
+                if not sf.exists():
+                    raise AuthNotConfigured(
+                        seat_id, secret_file,
+                        f"Secret file does not exist: {sf}. Create it and add your API key.",
+                    )
+                if sf.read_text().strip() == "":
+                    raise AuthNotConfigured(
+                        seat_id, secret_file,
+                        f"Secret file is empty: {sf}. Add your API key.",
+                    )
+                return  # auth OK via session binding
+        except (OSError, KeyError, ValueError) as exc:
+            print(f"warning: could not read session binding {session_path}: {exc}", file=sys.stderr)
+
+    # Fallback: tool-specific default secret path
+    tpl = _TOOL_SECRET_TEMPLATES.get(template_id, "~/.agents/secrets/unknown/{seat}.env")
+    default_secret = Path(tpl.format(project=project_name, seat=seat_id)).expanduser()
+    if not default_secret.exists():
+        raise AuthNotConfigured(
+            seat_id, str(default_secret),
+            f"No auth configured for {template_id} seat {seat_id}. "
+            f"Create {default_secret} with your API key.",
+        )
+
+
 def safe_start_seat(
     project_name: str,
     seat_id: str,
@@ -869,109 +916,21 @@ def safe_start_seat(
     Raises EnvironmentNotReady, CLINotAvailable, or AuthNotConfigured on failure.
     Returns the session handle on success.
     """
-    from core import preflight
-
     if clawseat_adapter is None:
         clawseat_adapter = init_clawseat_adapter(project_name=project_name)
     if tmux_adapter is None:
         tmux_adapter = init_tmux_adapter()
 
-    # 1. preflight check
-    result = preflight.preflight_check(project_name)
-    if result.has_hard_blocked:
-        raise EnvironmentNotReady(result.hard_blocked_items)
+    _run_preflight(project_name)
+    _check_cli_available(template_id)
+    _check_auth(project_name, seat_id, template_id)
 
-    # 2. auto-fix retryable items
-    for item in result.retryable_items:
-        fixed = preflight.auto_fix(item, project_name)
-        # Update in result for re-check
-        idx = result.retryable_items.index(item)
-        result.retryable_items[idx] = fixed
-
-    # 3. re-check after auto-fix
-    result = preflight.preflight_check(project_name)
-    if not result.all_pass:
-        raise EnvironmentNotReady(
-            result.hard_blocked_items + result.retryable_items
-        )
-
-    # 4. CLI availability — tool-specific guidance
-    cli_map = {
-        "claude": ("claude", "npm install -g @anthropic-ai/claude-code"),
-        "codex": ("codex", "npm install -g @anthropic-ai/codex"),
-        "gemini": ("gemini", "pip install google-generativeai && set API_KEY in secrets"),
-    }
-    cli_name, cli_install = cli_map.get(template_id, (template_id, f"install {template_id}"))
-    import shutil as _sh
-
-    if not _sh.which(cli_name):
-        raise CLINotAvailable(
-            template_id,
-            f"CLI {cli_name!r} not found in PATH. Install: {cli_install}",
-        )
-
-    # 5. Auth check — tool-specific secret paths and instructions
-    session_path = Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions"))) / project_name / seat_id / "session.toml"
-    auth_status = "ok"
-    auth_instructions = ""
-    auth_missing_path = ""
-
-    # Tool-specific secret file templates
-    tool_secrets = {
-        "claude": lambda seat: Path(f"~/.agents/secrets/claude/anthropic/{project_name}/{seat}.env"),
-        "codex": lambda seat: Path(f"~/.agents/secrets/codex/openai/{project_name}/{seat}.env"),
-        "gemini": lambda seat: Path(f"~/.agents/secrets/gemini/google/{project_name}/{seat}.env"),
-    }
-
-    if session_path.exists():
-        try:
-            try:
-                import tomllib as _tomllib
-            except ModuleNotFoundError:
-                import tomli as _tomllib  # type: ignore
-
-            with session_path.open("rb") as f:
-                binding = _tomllib.load(f)
-            secret_file = binding.get("secret_file", "")
-            auth_missing_path = secret_file
-            if secret_file:
-                sf = Path(secret_file).expanduser()
-                if not sf.exists():
-                    auth_status = "missing"
-                    auth_instructions = (
-                        f"Secret file does not exist: {sf}. "
-                        f"Create it and add your API key."
-                    )
-                elif sf.read_text().strip() == "":
-                    auth_status = "missing"
-                    auth_instructions = f"Secret file is empty: {sf}. Add your API key."
-        except Exception:
-            pass
-
-    # If no session binding, use tool-specific default secret path
-    if auth_status == "ok" and not auth_missing_path:
-        default_secret = tool_secrets.get(
-            template_id, lambda _seat: Path("~/.agents/secrets/unknown")
-        )(seat_id)
-        auth_missing_path = str(default_secret.expanduser())
-        if not default_secret.exists():
-            auth_status = "missing"
-            auth_instructions = (
-                f"No auth configured for {template_id} seat {seat_id}. "
-                f"Create {default_secret} with your API key."
-            )
-
-    if auth_status == "missing":
-        raise AuthNotConfigured(seat_id, auth_missing_path, auth_instructions)
-
-    # 6. start the session
-    handle = start_seat_via_tmux(
+    return start_seat_via_tmux(
         seat_id=seat_id,
         project_name=project_name,
         tmux_adapter=tmux_adapter,
         clawseat_adapter=clawseat_adapter,
     )
-    return handle
 
 
 # ---------------------------------------------------------------------------

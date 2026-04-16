@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# TODO: cartooner adapter extracted to /tmp/cartooner-clawseat-adapter/adapters/cartooner/
 CARTOONER_ADAPTER_ROOT = REPO_ROOT / "adapters" / "cartooner"
 CARTOONER_CHECK_SCRIPT = CARTOONER_ADAPTER_ROOT / "scripts" / "check-cartooner-status.sh"
 CARTOONER_SUPERVISOR_SCRIPT = CARTOONER_ADAPTER_ROOT / "scripts" / "patrol_supervisor.py"
@@ -267,6 +268,7 @@ class HeartbeatHandlers:
         lines.append("")
         self.hooks.write_text(receipt_path, "\n".join(lines))
 
+    # TODO: cartooner-specific heartbeat — adapter extracted out of ClawSeat
     def render_heartbeat_text(self, session: Any, project: Any, engineer: Any) -> str | None:
         if not (engineer.patrol_authority and engineer.remind_active_loop_owner):
             return None
@@ -349,6 +351,7 @@ class HeartbeatHandlers:
     ) -> str | None:
         if not (engineer.patrol_authority and engineer.remind_active_loop_owner):
             return None
+        # TODO: cartooner-specific patrol — adapter extracted out of ClawSeat
         if project.name != "cartooner":
             return None
 

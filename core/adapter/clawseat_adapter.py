@@ -128,7 +128,8 @@ class ClawseatAdapter:
         if profile_path is not None:
             candidate = Path(profile_path).expanduser()
         else:
-            dynamic = Path(f"/tmp/{project_name}-profile-dynamic.toml")
+            from resolve import dynamic_profile_path
+            dynamic = dynamic_profile_path(project_name)
             if dynamic.exists():
                 candidate = dynamic
             else:

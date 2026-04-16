@@ -25,52 +25,19 @@ OPENCLAW_SESSIONS_ROOT = os.environ.get("SESSIONS_ROOT", f"{OPENCLAW_AGENTS_ROOT
 OPENCLAW_WORKSPACES_ROOT = os.environ.get("WORKSPACES_ROOT", f"{OPENCLAW_AGENTS_ROOT}/workspaces")
 
 
-def _resolve_clawseat_root(agents_root: Path | None = None) -> Path:
-    """Resolve CLAWSEAT_ROOT using the same 4-layer chain as TmuxCliAdapter."""
-    configured = os.environ.get("CLAWSEAT_ROOT", "").strip()
-    if configured:
-        return Path(configured).expanduser()
-
-    helper_markers = (
-        Path("core/scripts/agent_admin.py"),
-        Path("core/skills/gstack-harness/scripts/_common.py"),
-    )
-    script_path = Path(__file__).resolve()
-    candidates: list[Path] = []
-    for parent in script_path.parents:
-        candidates.append(parent)
-        candidates.append(parent / "ClawSeat")
-
-    seen: set[Path] = set()
-    for candidate in candidates:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if all((candidate / marker).exists() for marker in helper_markers):
-            return candidate
-
-    if agents_root is not None:
-        agents_root_candidate = agents_root.parent / "coding" / "ClawSeat"
-        if all((agents_root_candidate / marker).exists() for marker in helper_markers):
-            return agents_root_candidate
-
-    fallback = Path.home() / "coding" / "ClawSeat"
-    if all((fallback / marker).exists() for marker in helper_markers):
-        return fallback
-
-    fallback = Path.home() / "coding" / "ClawSeat"
-    print(
-        f"warning: CLAWSEAT_ROOT not set; falling back to {fallback}",
-        file=sys.stderr,
-    )
-    return fallback
-
-
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]  # shells/openclaw-plugin/ → shells/ → ClawSeat root
+
+# Add core/ to sys.path so we can import the shared resolver
+_core_path = str(REPO_ROOT / "core")
+if _core_path not in sys.path:
+    sys.path.insert(0, _core_path)
+from resolve import resolve_clawseat_root as _resolve_clawseat_root
+
 CLAWSEAT_ROOT = _resolve_clawseat_root(Path(OPENCLAW_AGENTS_ROOT))
 
-sys.path.insert(0, str(CLAWSEAT_ROOT))
+if str(CLAWSEAT_ROOT) not in sys.path:
+    sys.path.insert(0, str(CLAWSEAT_ROOT))
 
 
 def main() -> dict[str, str]:

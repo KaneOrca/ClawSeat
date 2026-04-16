@@ -17,6 +17,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root
+from resolve import dynamic_profile_path as _dynamic_profile_path
+
 
 class PreflightStatus(Enum):
     PASS = "PASS"
@@ -276,7 +279,7 @@ def _check_repo_integrity(clawseat_root: Path) -> PreflightItem:
 def _check_dynamic_profile(project: str) -> PreflightItem:
     """Check dynamic profile exists for the project."""
     candidates = [
-        Path(f"/tmp/{project}-profile-dynamic.toml"),
+        _dynamic_profile_path(project),
         Path(f"/tmp/{project}-profile.toml"),
     ]
     for candidate in candidates:
@@ -406,7 +409,7 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                 else:
                     template_root = Path.home() / "coding" / "ClawSeat"
                 template_path = template_root / "examples" / "starter" / "profiles" / "install.toml"
-                output_profile = Path(f"/tmp/{project}-profile-dynamic.toml")
+                output_profile = _dynamic_profile_path(project)
                 if not template_path.exists():
                     return PreflightItem(
                         name=item.name,
@@ -436,7 +439,7 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                     fix_command=item.fix_command,
                 )
             source_profile = Path(f"/tmp/{project}-profile.toml")
-            output_profile = Path(f"/tmp/{project}-profile-dynamic.toml")
+            output_profile = _dynamic_profile_path(project)
             if not source_profile.exists():
                 return PreflightItem(
                     name=item.name,
@@ -627,31 +630,7 @@ def preflight_check(project: str) -> PreflightResult:
 
 def _resolve_clawseat_root_from_env() -> Path | None:
     """Resolve CLAWSEAT_ROOT, trying env then filesystem inference."""
-    env_val = os.environ.get("CLAWSEAT_ROOT", "").strip()
-    if env_val:
-        p = Path(env_val).expanduser()
-        if p.exists():
-            return p
-
-    helpers = (
-        Path("core/scripts/agent_admin.py"),
-        Path("core/skills/gstack-harness/scripts/_common.py"),
-    )
-    candidates: list[Path] = []
-    script_path = Path(__file__).resolve()
-    for parent in script_path.parents:
-        candidates.append(parent)
-        candidates.append(parent / "ClawSeat")
-    candidates.append(Path.home() / "coding" / "ClawSeat")
-
-    seen: set[Path] = set()
-    for candidate in candidates:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if all((candidate / m).exists() for m in helpers):
-            return candidate
-    return None
+    return _try_resolve_clawseat_root()
 
 
 # ---------------------------------------------------------------------------

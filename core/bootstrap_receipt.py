@@ -15,6 +15,8 @@ from pathlib import Path
 
 import tomllib
 
+from resolve import try_resolve_clawseat_root as _resolve_clawseat_root
+
 
 # ---------------------------------------------------------------------------
 # Path resolution
@@ -29,36 +31,6 @@ def _resolve_agents_root() -> Path:
     if (home / ".agents").exists():
         return home / ".agents"
     return home / ".agents"
-
-
-def _resolve_clawseat_root() -> Path | None:
-    """Resolve CLAWSEAT_ROOT, trying env then filesystem inference."""
-    env_val = os.environ.get("CLAWSEAT_ROOT", "").strip()
-    if env_val:
-        p = Path(env_val).expanduser()
-        if p.exists():
-            return p
-
-    helpers = (
-        Path("core/scripts/agent_admin.py"),
-        Path("core/skills/gstack-harness/scripts/_common.py"),
-    )
-    candidates: list[Path] = []
-    script_path = Path(__file__).resolve()
-    for parent in script_path.parents:
-        candidates.append(parent)
-        candidates.append(parent / "ClawSeat")
-    candidates.append(Path.home() / "coding" / "ClawSeat")
-    candidates.append(Path.home() / "coding" / "ClawSeat")
-
-    seen: set[Path] = set()
-    for candidate in candidates:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if all((candidate / m).exists() for m in helpers):
-            return candidate
-    return None
 
 
 def _receipt_path(project: str) -> Path:
@@ -104,7 +76,7 @@ def write_receipt(
                 check=True,
             )
             python_version = result.stdout.strip()
-        except Exception:
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
             python_version = "unknown"
 
     # Resolve tmux version
@@ -119,13 +91,14 @@ def write_receipt(
                     check=True,
                 )
                 tmux_version = result.stdout.strip()
-            except Exception:
+            except (subprocess.SubprocessError, FileNotFoundError, OSError):
                 tmux_version = "unknown"
         else:
             tmux_version = "not installed"
 
     # Profile path
-    profile_path = f"/tmp/{project}-profile-dynamic.toml"
+    from resolve import dynamic_profile_path as _dpp
+    profile_path = str(_dpp(project))
     if not Path(profile_path).exists():
         profile_path = f"/tmp/{project}-profile.toml"
 
@@ -173,7 +146,7 @@ def read_receipt(project: str) -> dict[str, object] | None:
     try:
         with path.open("rb") as f:
             return tomllib.load(f)
-    except Exception:
+    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
         return None
 
 
@@ -205,7 +178,7 @@ def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
             age = datetime.now(timezone.utc) - ts
             if age.total_seconds() > RECEIPT_VALID_FOR_SECONDS:
                 return False, f"receipt expired ({age.days}d old)"
-    except Exception:
+    except (ValueError, TypeError, OverflowError):
         return False, "invalid timestamp in receipt"
 
     return True, "valid"

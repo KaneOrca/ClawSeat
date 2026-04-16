@@ -104,6 +104,7 @@ def write_codex_api_config(
         raise ValueError(f"Unsupported Codex API provider: {session.provider}")
 
     trust_paths = [str(HOME), str(REPO_ROOT)]
+    # TODO: "cartooner" trust path — cartooner adapter extracted out of ClawSeat
     for path in (project_repo, project_repo / "cartooner", project_repo / "openclaw"):
         if path.exists():
             trust_paths.append(str(path))

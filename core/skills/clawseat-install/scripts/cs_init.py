@@ -9,9 +9,14 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+_core_path = str(REPO_ROOT / "core")
+if _core_path not in sys.path:
+    sys.path.insert(0, _core_path)
+from resolve import dynamic_profile_path as _dpp
+
 PROJECT = "install"
 PROFILE_TEMPLATE = REPO_ROOT / "examples" / "starter" / "profiles" / "install.toml"
-DYNAMIC_PROFILE = Path("/tmp") / f"{PROJECT}-profile-dynamic.toml"
+DYNAMIC_PROFILE = _dpp(PROJECT)
 AGENT_ADMIN = REPO_ROOT / "core" / "scripts" / "agent_admin.py"
 PRECHECK = REPO_ROOT / "core" / "preflight.py"
 BOOTSTRAP = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "bootstrap_harness.py"

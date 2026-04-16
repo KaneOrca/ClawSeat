@@ -22,6 +22,7 @@ CORE_ROOT = CLAWSEAT_ROOT / "core"
 if str(CORE_ROOT) not in sys.path:
     sys.path.insert(0, str(CORE_ROOT))
 
+from resolve import resolve_clawseat_root as _shared_resolve_clawseat_root
 from harness_adapter import (
     AuthConfig,
     HarnessAdapter,
@@ -67,10 +68,13 @@ TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 SEND_AND_VERIFY_SH = str(CORE_ROOT / "shell-scripts" / "send-and-verify.sh")
 
 # Input-reason detection
-RATE_LIMIT_INPUT_KEYWORDS = ("rate limit", "exceeded retry", "usage limit", "quota exceeded", "too many requests")
-AUTH_PROMPT_INPUT_KEYWORDS = ("sign in", "api key", "oauth", "authentication", "paste code here")
-IDLE_PROMPT_INPUT_KEYWORDS = ("?", "press enter to continue", "press return", "continue?", "proceed?")
-USER_QUESTION_INPUT_KEYWORDS = ("what would you like", "which would you prefer", "how should i", "should i")
+# (keywords, reason) — checked in order; first match wins
+_INPUT_REASON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("rate limit", "exceeded retry", "usage limit", "quota exceeded", "too many requests"), "rate_limit"),
+    (("sign in", "api key", "oauth", "authentication", "paste code here"), "auth_prompt"),
+    (("what would you like", "which would you prefer", "how should i", "should i"), "user_question"),
+    (("?", "press enter to continue", "press return", "continue?", "proceed?"), "idle_prompt"),
+)
 
 # Sub-reasons for DEGRADED state — used to distinguish authz (403) vs quota (429)
 AUTHZ_DEGRADED_KEYWORDS = ("forbidden", "access forbidden", "permission denied", "unauthorized")
@@ -171,29 +175,11 @@ class TmuxCliAdapter(HarnessAdapter):
         input_reason = ""
         lowered = output.lower()
 
-        for kw in RATE_LIMIT_INPUT_KEYWORDS:
-            if kw in lowered:
+        for keywords, reason in _INPUT_REASON_RULES:
+            if any(kw in lowered for kw in keywords):
                 needs_input = True
-                input_reason = "rate_limit"
+                input_reason = reason
                 break
-        if not needs_input:
-            for kw in AUTH_PROMPT_INPUT_KEYWORDS:
-                if kw in lowered:
-                    needs_input = True
-                    input_reason = "auth_prompt"
-                    break
-        if not needs_input:
-            for kw in USER_QUESTION_INPUT_KEYWORDS:
-                if kw in lowered:
-                    needs_input = True
-                    input_reason = "user_question"
-                    break
-        if not needs_input:
-            for kw in IDLE_PROMPT_INPUT_KEYWORDS:
-                if kw in lowered:
-                    needs_input = True
-                    input_reason = "idle_prompt"
-                    break
 
         # Also flag needs_input if last non-empty line ends with "?" and suggests waiting
         if not needs_input and tail:
@@ -626,39 +612,7 @@ class TmuxCliAdapter(HarnessAdapter):
         self._load_helpers()
 
     def _resolve_clawseat_root(self, agents_root: Path) -> Path:
-        configured = os.environ.get("CLAWSEAT_ROOT", "").strip()
-        if configured:
-            return Path(configured).expanduser()
-
-        helper_markers = (
-            Path("core/scripts/agent_admin.py"),
-            Path("core/skills/gstack-harness/scripts/_common.py"),
-        )
-        module_path = Path(__file__).resolve()
-        candidates: list[Path] = []
-        for parent in module_path.parents:
-            candidates.append(parent)
-            candidates.append(parent / "ClawSeat")
-
-        seen: set[Path] = set()
-        for candidate in candidates:
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            if all((candidate / marker).exists() for marker in helper_markers):
-                return candidate
-
-        agents_root_candidate = agents_root.parent / "coding" / "ClawSeat"
-        if all((agents_root_candidate / marker).exists() for marker in helper_markers):
-            return agents_root_candidate
-
-        fallback = (Path.home() / "coding" / "ClawSeat").expanduser()
-        print(
-            f"warning: CLAWSEAT_ROOT not set and no repo-relative helper root found; "
-            f"falling back to {fallback}",
-            file=sys.stderr,
-        )
-        return fallback
+        return _shared_resolve_clawseat_root(agents_root)
 
     def _profile_for_handle(self, handle: SessionHandle) -> Any:
         binding = self._load_session_binding(handle)

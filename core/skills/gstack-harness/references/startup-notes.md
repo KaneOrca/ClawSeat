@@ -50,5 +50,6 @@ runtime 时，第一次启动可能不是“自动进入可用状态”，而是
 
 复核方式：
 
+<!-- TODO: cartooner adapter extracted out of ClawSeat core tree -->
 - `python3 {CLAWSEAT_ROOT}/core/scripts/agent_admin.py show-engineer <engineer> --project cartooner`
 - `tmux capture-pane -pt <session>:0.0`
