@@ -209,7 +209,28 @@ def build_delegation_report_text(
 # ── Auth & CLI helpers ───────────────────────────────────────────────
 
 def _lark_cli_real_home() -> str:
-    return str(AGENT_HOME) if str(AGENT_HOME) != str(Path.home()) else str(Path.home())
+    """Return the REAL user home for lark-cli, bypassing any seat runtime isolation.
+
+    lark-cli stores config at $HOME/.lark-cli/ and auth tokens at
+    $HOME/Library/Application Support/lark-cli/. These are user-level,
+    not seat-level. When a seat runs with an isolated HOME (ClawSeat
+    runtime identity), we must restore the real user HOME so lark-cli
+    can find its config and tokens.
+    """
+    # Explicit override: user told us where the real home is
+    override = os.environ.get("LARK_CLI_HOME") or os.environ.get("CLAWSEAT_REAL_HOME")
+    if override:
+        return str(Path(override).expanduser())
+    # AGENT_HOME is the real home when it differs from the (possibly isolated) Path.home()
+    if str(AGENT_HOME) != str(Path.home()):
+        return str(AGENT_HOME)
+    # Fallback: try to detect isolation by checking if .lark-cli exists at Path.home()
+    if (Path.home() / ".lark-cli" / "config.json").exists():
+        return str(Path.home())
+    # Last resort: use /Users/<username> on macOS (pwd module gives the real home)
+    import pwd
+    real_home = pwd.getpwuid(os.getuid()).pw_dir
+    return real_home
 
 
 def _lark_cli_env() -> dict[str, str]:
