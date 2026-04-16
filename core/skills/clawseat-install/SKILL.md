@@ -51,9 +51,26 @@ post-install convenience command.
      - Auth: OAuth (recommended) or API key?
      - Provider: which provider?
    - Ask about planner first, then each specialist (builder-1, reviewer-1, etc.) one by one
-   - Only after the user confirms each seat's config, start planner with the confirmed overrides: `start_seat.py --seat planner --tool <X> --auth-mode <Y> --provider <Z> --confirm-start`
+   - Only after the user confirms each seat's config, start planner:
+     ```bash
+     python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+       --profile <profile.toml> --seat planner \
+       --tool <X> --auth-mode <Y> --provider <Z> --confirm-start
+     ```
    - Wait for user to confirm planner OAuth/auth is complete
-   - Then delegate **ALL** remaining specialist seat startups to planner via `dispatch_task.py` — include every declared seat with the user-confirmed `--tool`/`--auth-mode`/`--provider` overrides
+   - Then dispatch remaining specialist seat startups to planner. **You MUST use `dispatch_task.py`** — do NOT use raw `tmux send-keys`:
+     ```bash
+     python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+       --profile <profile.toml> \
+       --source koder --target planner \
+       --task-id SEAT-STARTUP \
+       --title "Start remaining specialist seats" \
+       --objective "Start these seats with user-confirmed configs:
+         builder-1: tool=<X> auth-mode=<Y> provider=<Z>
+         reviewer-1: tool=<X> auth-mode=<Y> provider=<Z>
+         (include all remaining seats with their confirmed configs)"
+     ```
+   - **CRITICAL: 禁止直接用 `tmux send-keys` 给 seat 发消息。** `tmux send-keys` 没有 1 秒延迟，消息会卡在 TUI 输入框不提交。所有 seat 通信必须用 `dispatch_task.py`（派发任务）、`notify_seat.py`（发通知）、或 `send-and-verify.sh`（tmux transport with auto-retry）。
    - **Never let planner choose seat configs on its own** — all config decisions come from the user through koder
 7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
 8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
