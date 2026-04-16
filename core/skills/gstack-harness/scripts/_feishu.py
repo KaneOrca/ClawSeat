@@ -15,6 +15,7 @@ from _utils import (
     OPENCLAW_FEISHU_SEND_SH,
     OPENCLAW_HOME,
     load_json,
+    load_toml,
     run_command_with_env,
 )
 
@@ -105,6 +106,14 @@ def collect_feishu_group_ids_from_sessions() -> list[str]:
 
 
 def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
+    """Resolve the feishu group ID for this project.
+
+    Priority:
+    1. Env var override (CLAWSEAT_FEISHU_GROUP_ID / OPENCLAW_FEISHU_GROUP_ID)
+    2. Project WORKSPACE_CONTRACT.toml feishu_group_id field
+    3. OpenClaw config (fallback, may return wrong group for multi-project setups)
+    """
+    # 1. Env var override
     override = (
         os.environ.get("CLAWSEAT_FEISHU_GROUP_ID")
         or os.environ.get("OPENCLAW_FEISHU_GROUP_ID")
@@ -113,6 +122,25 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
         resolved = override.strip()
         if resolved:
             return resolved
+
+    # 2. Project contract binding (SSOT for per-project group)
+    if project:
+        from pathlib import Path as _P
+        contract_paths = [
+            # OpenClaw koder workspace
+            _P.home() / ".openclaw" / "workspace-koder" / "WORKSPACE_CONTRACT.toml",
+            # ClawSeat managed workspace
+            AGENT_HOME / ".agents" / "workspaces" / project / "koder" / "WORKSPACE_CONTRACT.toml",
+        ]
+        for cp in contract_paths:
+            if cp.exists():
+                contract = load_toml(cp)
+                if contract:
+                    gid = str(contract.get("feishu_group_id", "")).strip()
+                    if gid:
+                        return gid
+
+    # 3. OpenClaw config fallback (may return wrong group in multi-project)
     config = load_json(OPENCLAW_CONFIG_PATH) or {}
     group_ids = collect_feishu_group_ids_from_config(config)
     if group_ids:

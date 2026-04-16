@@ -39,7 +39,8 @@ post-install convenience command.
 6. If the runtime is **OpenClaw or Feishu-facing**:
    - After running `install_openclaw_bundle.py` (step 5), **initialize yourself as koder**:
      - First, determine your own workspace path. You can find it by checking your current working directory, or by reading your own environment/config. The path is typically `~/.openclaw/workspace-koder/` but may vary.
-     - Run: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" --workspace <your_workspace_path> --project install`
+     - **Ask the user for their Feishu group ID** (format: `oc_xxx`). If the user doesn't have one yet, pass empty string and configure later.
+     - Run: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" --workspace <your_workspace_path> --project install --feishu-group-id <group_id>`
      - This writes IDENTITY.md, SOUL.md, TOOLS.md, MEMORY.md, AGENTS.md, WORKSPACE_CONTRACT.toml, and skill symlinks into YOUR workspace
      - After init_koder completes, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder

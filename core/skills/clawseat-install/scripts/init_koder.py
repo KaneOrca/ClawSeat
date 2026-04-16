@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--workspace", required=True, help="Path to the OpenClaw agent workspace directory.")
     p.add_argument("--project", default="install", help="ClawSeat project name.")
     p.add_argument("--profile", help="Path to the dynamic profile TOML. Auto-resolved if omitted.")
+    p.add_argument("--feishu-group-id", default="", help="Feishu group ID for this project (oc_xxx). Leave empty to configure later.")
     p.add_argument("--dry-run", action="store_true", help="Print what would be written without changing files.")
     return p.parse_args()
 
@@ -281,7 +282,7 @@ def render_agents(spec: dict, clawseat_root: Path) -> str:
 """
 
 
-def render_contract(project: str, profile_path: Path, seats: list[str]) -> str:
+def render_contract(project: str, profile_path: Path, seats: list[str], feishu_group_id: str = "") -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     seat_toml = ", ".join(f'"{s}"' for s in seats)
     return f"""version = 1
@@ -294,6 +295,7 @@ seats = [{seat_toml}]
 heartbeat_owner = "koder"
 active_loop_owner = "planner"
 default_notify_target = "planner"
+feishu_group_id = "{feishu_group_id}"
 """
 
 
@@ -354,7 +356,7 @@ def main() -> int:
         "TOOLS.md": render_tools(REPO_ROOT),
         "MEMORY.md": render_memory(args.project, profile_path, seats),
         "AGENTS.md": render_agents(spec, REPO_ROOT),
-        "WORKSPACE_CONTRACT.toml": render_contract(args.project, profile_path, seats),
+        "WORKSPACE_CONTRACT.toml": render_contract(args.project, profile_path, seats, args.feishu_group_id),
     }
 
     for filename, content in files.items():
