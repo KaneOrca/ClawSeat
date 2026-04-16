@@ -11,6 +11,9 @@ CLAWSEAT_ROOT = SCRIPT_PATH.parents[2]
 DEFAULT_OPENCLAW_HOME = Path.home() / ".openclaw"
 
 GLOBAL_SKILLS = {
+    # Core runtime — loaded by ALL seats
+    "gstack-harness": CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness",
+    # Entry points + install
     "clawseat": CLAWSEAT_ROOT / "core" / "skills" / "clawseat",
     "clawseat-install": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-install",
     "clawseat-koder-frontstage": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-koder-frontstage",
@@ -19,6 +22,8 @@ GLOBAL_SKILLS = {
     "agent-monitor": CLAWSEAT_ROOT / "core" / "skills" / "agent-monitor",
     "lark-shared": CLAWSEAT_ROOT / "core" / "skills" / "lark-shared",
     "lark-im": CLAWSEAT_ROOT / "core" / "skills" / "lark-im",
+    # Local convenience entrypoint
+    "cs": CLAWSEAT_ROOT / "core" / "skills" / "cs",
 }
 
 WORKSPACE_KODER_SKILLS = {

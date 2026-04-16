@@ -416,7 +416,7 @@ def is_managed_runtime_path(profile: HarnessProfile, path: Path) -> bool:
     try:
         path.resolve().relative_to(profile.tasks_root.resolve())
         return True
-    except Exception:
+    except ValueError:
         return False
 
 

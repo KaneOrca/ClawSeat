@@ -63,7 +63,7 @@ def load_learning_state(profile: HarnessProfile) -> dict[str, float]:
         return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return {}
     if not isinstance(payload, dict):
         return {}
@@ -376,7 +376,7 @@ def should_suppress(profile: HarnessProfile, payload: str, cooldown_minutes: int
     try:
         last_ts_raw, last_payload = path.read_text(encoding="utf-8").split("\n", 1)
         last_ts = float(last_ts_raw.strip())
-    except Exception:
+    except (ValueError, OSError, UnicodeDecodeError):
         return False
     if time.time() - last_ts > cooldown_minutes * 60:
         return False
