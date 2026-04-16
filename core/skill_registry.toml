@@ -174,3 +174,61 @@ path = "~/.gstack/repos/gstack/.agents/skills/gstack-design-html/SKILL.md"
 required = false
 roles = ["designer"]
 description = "Production-quality HTML/CSS from approved designs"
+
+# ── Gstack extended skills (first batch) ───────────────────────────
+
+[[skills]]
+name = "gstack-office-hours"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-office-hours/SKILL.md"
+required = false
+roles = ["frontstage-supervisor"]
+description = "YC Office Hours: product diagnostic (startup mode) and design brainstorm (builder mode)"
+
+[[skills]]
+name = "gstack-plan-ceo-review"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-plan-ceo-review/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "CEO/founder-mode plan review: scope expansion/reduction, strategy challenge"
+
+[[skills]]
+name = "gstack-plan-design-review"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-plan-design-review/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Designer's eye plan review: rate design dimensions, fix UX gaps"
+
+[[skills]]
+name = "gstack-plan-devex-review"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-plan-devex-review/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Developer experience plan review: DX scorecard, TTHW benchmarks"
+
+[[skills]]
+name = "gstack-unfreeze"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-unfreeze/SKILL.md"
+required = false
+roles = ["builder"]
+description = "Clear freeze boundary, allow edits to all directories"
+
+[[skills]]
+name = "gstack-land-and-deploy"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-land-and-deploy/SKILL.md"
+required = false
+roles = ["planner-dispatcher", "builder"]
+description = "Merge PR, wait for CI, verify production health via canary"
+
+[[skills]]
+name = "gstack-checkpoint"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-checkpoint/SKILL.md"
+required = false
+roles = ["planner-dispatcher", "builder"]
+description = "Save and resume working state checkpoints across sessions"

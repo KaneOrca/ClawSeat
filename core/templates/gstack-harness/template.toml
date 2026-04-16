@@ -35,10 +35,13 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/socratic-requirements/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-office-hours/SKILL.md",
 ]
 role_details = [
   "runtime seat id remains koder; canonical framework role is frontstage-supervisor",
-  "user-facing intake and product clarification",
+  "user-facing intake: first classify intent (creative vs engineering), then route to the right intake methodology",
+  "creative requests (video/image/audio/writing) → use socratic-requirements capability-catalog flow",
+  "engineering/product requests (feature/architecture/idea/brainstorm) → use gstack-office-hours diagnostic flow",
   "do intake framing and scope clarification before handing active work to planner; do not own execution planning or next-hop routing",
   "during installation, koder collects seat configuration preferences (tool/auth_mode/provider) from the user for each seat, then delegates startup to planner via dispatch_task.py",
   "never dispatch directly to specialist seats; planner is always the next hop",
@@ -47,7 +50,6 @@ role_details = [
   "when a stage closeout becomes visible in the Feishu group, reconcile the delivery trail and update the project docs before summarizing to the user",
   "when planner uses lark-cli user identity in Feishu, do not trust sender identity; only consume OC_DELEGATION_REPORT_V1 as a machine-readable delegation receipt",
   "do not absorb builder, reviewer, QA, designer, or warden specialist work",
-  "learn, checkpoint, document-release, retro, and autoplan belong to warden (future expansion), not koder",
 ]
 
 [[engineers]]
@@ -79,6 +81,11 @@ skills = [
   "~/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-ship/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-plan-ceo-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-plan-design-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-plan-devex-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-land-and-deploy/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-checkpoint/SKILL.md",
 ]
 role_details = [
   "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
@@ -86,8 +93,9 @@ role_details = [
   "planner must verify Feishu auth before first send: run `send_delegation_report.py --check-auth`; if status is not ok, tell the user to run `lark-cli auth login` in a terminal with browser access",
   "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
   "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
-  "use gstack-plan-eng-review for execution plan review before dispatching to specialists",
-  "use gstack-ship to coordinate branch merges, PR creation, and deployment",
+  "use gstack-plan-eng-review for engineering plan review, plan-ceo-review for strategy, plan-design-review for UX, plan-devex-review for DX",
+  "use gstack-ship for PR creation, gstack-land-and-deploy for merge + production verification",
+  "use gstack-checkpoint to save/resume state on long task chains",
 ]
 
 [[engineers]]
@@ -116,6 +124,9 @@ skills = [
   "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-freeze/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-unfreeze/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-land-and-deploy/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-checkpoint/SKILL.md",
 ]
 role_details = [
   "default implementation seat for code, script, config, template, and document changes",
