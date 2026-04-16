@@ -178,39 +178,53 @@ class ClawseatAdapter:
         return list(self._pending_inbox.get(selected, []))
 
     def drain_pending_ops(self, *, project_name: str | None = None) -> list[AdapterResult]:
+        """Execute all pending operations and return results.
+
+        Operations are removed from the queue only after successful execution.
+        If an operation fails, remaining operations stay in the queue for retry.
+        """
         selected = project_name or self.current_project
         if not selected:
             return []
         if self.current_project and selected != self.current_project:
             raise RuntimeError("may only drain the current_project inbox")
-        queued = list(self._pending_inbox.get(selected, []))
-        self._pending_inbox[selected] = []
+        queue = self._pending_inbox.get(selected, [])
         results: list[AdapterResult] = []
-        for operation in queued:
-            if operation.kind == "dispatch":
-                results.append(
-                    self._execute_dispatch(
+        while queue:
+            operation = queue[0]
+            try:
+                if operation.kind == "dispatch":
+                    result = self._execute_dispatch(
                         project_name=operation.project_name,
                         profile_path=operation.profile_path,
                         **operation.payload,
                     )
-                )
-            elif operation.kind == "notify":
-                results.append(
-                    self._execute_notify(
+                elif operation.kind == "notify":
+                    result = self._execute_notify(
                         project_name=operation.project_name,
                         profile_path=operation.profile_path,
                         **operation.payload,
                     )
-                )
-            elif operation.kind == "complete":
-                results.append(
-                    self._execute_complete(
+                elif operation.kind == "complete":
+                    result = self._execute_complete(
                         project_name=operation.project_name,
                         profile_path=operation.profile_path,
                         **operation.payload,
                     )
-                )
+                else:
+                    result = AdapterResult(
+                        command=[], returncode=1,
+                        stdout="", stderr=f"unknown operation kind: {operation.kind}",
+                    )
+            except Exception as exc:
+                # Stop draining — remaining ops stay in queue for retry
+                results.append(AdapterResult(
+                    command=[], returncode=1,
+                    stdout="", stderr=f"{operation.kind} failed: {exc}",
+                ))
+                break
+            results.append(result)
+            queue.pop(0)  # Remove only after successful execution
         return results
 
     def instantiate_seat(
