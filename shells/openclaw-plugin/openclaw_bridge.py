@@ -793,7 +793,15 @@ class EnvironmentNotReady(Exception):
 
     def __init__(self, items: list[Any]) -> None:
         self.items = items
-        super().__init__(f"environment not ready: {[i.name for i in items]}")
+        details = []
+        for i in items:
+            line = f"  [{i.name}] {getattr(i, 'message', '')}"
+            fix = getattr(i, "fix_command", None)
+            if fix:
+                line += f"\n    fix: {fix}"
+            details.append(line)
+        summary = "\n".join(details)
+        super().__init__(f"environment not ready ({len(items)} issue(s)):\n{summary}")
 
 
 class CLINotAvailable(Exception):

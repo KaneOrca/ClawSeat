@@ -248,8 +248,25 @@ def main() -> int:
         )
     if result.stdout.strip():
         print(result.stdout.strip())
+    # Retry pane capture with delay — the TUI may not have rendered yet
+    import time as _time
     pane_text = capture_session_pane(profile, args.seat)
     onboarding_step = detect_claude_onboarding_step(pane_text)
+    if onboarding_step is None and not pane_text.strip():
+        # Pane empty — TUI still loading, retry after delay
+        for _retry in range(3):
+            _time.sleep(2)
+            pane_text = capture_session_pane(profile, args.seat)
+            onboarding_step = detect_claude_onboarding_step(pane_text)
+            if onboarding_step is not None or pane_text.strip():
+                break
+        if not pane_text.strip():
+            print(
+                "onboarding_check_inconclusive: "
+                f"pane for {args.seat} is still empty after 6s. "
+                "The seat may be loading or stuck. Check the tmux pane manually: "
+                f"tmux attach -t $(agentctl.sh session-name {args.seat} --project {profile.project_name})"
+            )
     if onboarding_step is not None:
         hint = ""
         if onboarding_step in ("oauth_login", "oauth_code", "oauth_error"):

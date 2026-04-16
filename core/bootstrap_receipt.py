@@ -181,6 +181,24 @@ def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
     except (ValueError, TypeError, OverflowError):
         return False, "invalid timestamp in receipt"
 
+    # Check tmux server is still running
+    import shutil as _sh
+    tmux_bin = _sh.which("tmux")
+    if tmux_bin:
+        import subprocess as _sp
+        try:
+            _sp.run([tmux_bin, "list-sessions"], capture_output=True, check=True, timeout=5)
+        except (_sp.CalledProcessError, _sp.TimeoutExpired, FileNotFoundError):
+            return False, "tmux server not running (receipt stale)"
+
+    # Check dynamic profile still exists
+    project = bootstrap.get("project", "")
+    if project:
+        from resolve import dynamic_profile_path as _dpp
+        profile = _dpp(str(project))
+        if not profile.exists():
+            return False, f"dynamic profile missing: {profile} (receipt stale)"
+
     return True, "valid"
 
 

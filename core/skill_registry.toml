@@ -107,7 +107,7 @@ description = "Ship workflow: PR creation, merge, deploy"
 name = "gstack-investigate"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-investigate/SKILL.md"
-required = false
+required = true
 roles = ["builder"]
 description = "Systematic debugging with root cause investigation"
 
@@ -131,7 +131,7 @@ description = "Directory-scoped edit restriction"
 name = "gstack-review"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-review/SKILL.md"
-required = false
+required = true
 roles = ["reviewer"]
 description = "Pre-landing PR review and canonical verdicts"
 
@@ -139,7 +139,7 @@ description = "Pre-landing PR review and canonical verdicts"
 name = "gstack-qa"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md"
-required = false
+required = true
 roles = ["qa"]
 description = "Full QA testing with bug fixing"
 
@@ -155,7 +155,7 @@ description = "Report-only QA testing without fixing"
 name = "gstack-design-review"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-design-review/SKILL.md"
-required = false
+required = true
 roles = ["designer"]
 description = "Visual QA and design corrections"
 

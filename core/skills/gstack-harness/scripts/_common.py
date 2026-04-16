@@ -782,6 +782,21 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
         for peer in sorted(provider_dir.glob("*.env")):
             if peer == secret_file or peer.stat().st_size == 0:
                 continue
+            # Validate peer secret has at least one KEY=VALUE line with non-empty value
+            peer_content = peer.read_text(encoding="utf-8").strip()
+            has_valid_key = False
+            for line in peer_content.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    _k, _, _v = line.partition("=")
+                    if _k.strip() and _v.strip().strip('"').strip("'"):
+                        has_valid_key = True
+                        break
+            if not has_valid_key:
+                print(f"secret_seed_skipped: {peer} has no valid KEY=VALUE entries", file=__import__('sys').stderr)
+                continue
             shutil.copy2(peer, secret_file)
             secret_file.chmod(0o600)
             return peer
