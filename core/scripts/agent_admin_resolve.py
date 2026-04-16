@@ -65,7 +65,22 @@ class ResolveHandlers:
 
         if mode == "api":
             if not session.secret_file:
-                raise self.hooks.error_cls(f"{session.engineer_id} is missing secret_file")
+                session_path = (
+                    self.hooks.sessions_root
+                    / session.project
+                    / session.engineer_id
+                    / "session.toml"
+                )
+                raise self.hooks.error_cls(
+                    f"{session.engineer_id} is missing 'secret_file' in session.toml "
+                    f"(auth_mode=api requires it). "
+                    f"Edit {session_path} and add:\n"
+                    f"  secret_file = \"/path/to/{session.engineer_id}.env\"\n"
+                    f"Or run: agent-admin session switch-harness "
+                    f"--engineer {session.engineer_id} "
+                    f"--project {session.project} "
+                    f"--tool {session.tool} --mode api --provider {session.provider}"
+                )
             secret_env = self.hooks.parse_env_file(Path(session.secret_file))
             env.update(secret_env)
             if tool == "codex":

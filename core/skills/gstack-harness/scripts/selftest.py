@@ -391,7 +391,7 @@ def main() -> int:
         if "UserSummary: Review and QA passed. We can keep moving." not in planner_delivery:
             raise RuntimeError("planner closeout missing UserSummary")
         frontstage_todo = (tasks_root / "koder" / "TODO.md").read_text(encoding="utf-8")
-        if "task_id: FE-CLOSEOUT" not in frontstage_todo:
+        if "## [pending] FE-CLOSEOUT" not in frontstage_todo:
             raise RuntimeError("planner closeout did not refresh frontstage TODO")
         if "reply_to: planner" not in frontstage_todo:
             raise RuntimeError("frontstage TODO missing reply_to for planner closeout")

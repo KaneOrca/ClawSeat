@@ -1,10 +1,27 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
+def _resolve_real_home() -> Path:
+    """Return the real user home, even when running inside an isolated seat runtime.
+
+    Harness seats run with HOME overridden to an isolated runtime directory such as:
+      ~/.agents/runtime/identities/claude/oauth/<identity>/home
+    Path.home() returns that isolated path instead of /Users/<user>.
+    This helper detects the pattern and walks up to the true user home.
+    """
+    candidate = Path.home()
+    parts = candidate.parts
+    for i, part in enumerate(parts):
+        if part == ".agents" and i + 1 < len(parts) and parts[i + 1] == "runtime":
+            return Path(*parts[:i])
+    return candidate
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-HOME = Path.home()
+HOME = Path(os.environ.get("AGENT_HOME", str(_resolve_real_home())))
 AGENTS_ROOT = HOME / ".agents"
 PROJECTS_ROOT = AGENTS_ROOT / "projects"
 ENGINEERS_ROOT = AGENTS_ROOT / "engineers"
@@ -209,7 +226,11 @@ XCODE_PROVIDER_ENDPOINT_RULES = {
 CLAUDE_API_PROVIDER_CONFIGS = {
     "minimax": {
         "model": "MiniMax-M2.7-highspeed",
-        "base_url": "https://api.minimaxi.com",
+        "base_url": "https://api.minimaxi.com/anthropic",
+    },
+    "minimax-portal": {
+        "model": "MiniMax-M2.7-highspeed",
+        "base_url": "https://api.minimaxi.com/anthropic",
     },
 }
 
@@ -230,7 +251,7 @@ CODEX_API_PROVIDER_CONFIGS = {
 SUPPORTED_RUNTIME_MATRIX = {
     "claude": {
         "oauth": ("anthropic",),
-        "api": ("xcode-best", "minimax"),
+        "api": ("xcode-best", "minimax", "minimax-portal"),
     },
     "codex": {
         "oauth": ("openai",),

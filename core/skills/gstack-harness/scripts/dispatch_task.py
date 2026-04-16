@@ -6,12 +6,14 @@ import sys
 
 from _common import (
     append_status_note,
+    append_task_to_queue,
     broadcast_feishu_group_message,
     build_notify_message,
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
+    resolve_primary_feishu_group_id,
     upsert_tasks_row,
     utc_now_iso,
     write_json,
@@ -31,26 +33,53 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--notes", default="dispatched via gstack-harness", help="TASKS.md note.")
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
     parser.add_argument("--skip-notify", action="store_true", help="Write docs but skip tmux notification.")
+    parser.add_argument(
+        "--task-type",
+        default="unspecified",
+        help="Task type hint (implementation/review/research/unspecified).",
+    )
+    parser.add_argument(
+        "--review-required",
+        action="store_true",
+        help="Mark task as requiring reviewer sign-off.",
+    )
+    parser.add_argument(
+        "--skill-refs",
+        nargs="*",
+        metavar="SKILL_REF",
+        default=None,
+        help=(
+            "Optional skill documentation pointers to include in the dispatched TODO.md "
+            "(e.g. 'references/feishu-bridge-setup.md'). Appended as a '# Skill Refs' section."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
+    if args.target not in profile.seats:
+        raise SystemExit(
+            f"dispatch target {args.target!r} is not a declared seat for project "
+            f"{profile.project_name!r}; known seats: {profile.seats}"
+        )
     todo_path = profile.todo_path(args.target)
     reply_to = args.reply_to or args.source
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
-    write_todo(
+    append_task_to_queue(
         todo_path,
         task_id=args.task_id,
         project=profile.project_name,
         owner=args.target,
-        status="pending",
         title=args.title,
         objective=args.objective,
         source=args.source,
         reply_to=reply_to,
+        skill_refs=args.skill_refs,
+        task_type=args.task_type,
+        review_required=args.review_required,
     )
     upsert_tasks_row(
         profile.tasks_doc,
@@ -84,50 +113,66 @@ def main() -> int:
             source=args.source,
             reply_to=reply_to,
         )
-        result = notify(profile, args.target, message)
-        require_success(result, "dispatch notify")
-        receipt["notified_at"] = utc_now_iso()
-        receipt["notify_message"] = message
-        should_broadcast = (
-            source_role in {"planner", "planner-dispatcher"}
-            or target_role in {"planner", "planner-dispatcher"}
-            or args.source == profile.active_loop_owner
-            or args.target == profile.active_loop_owner
+        is_openclaw_frontstage = (
+            args.target == profile.heartbeat_owner
+            and bool(resolve_primary_feishu_group_id(project=profile.project_name))
         )
-        if should_broadcast and legacy_feishu_group_broadcast_enabled():
-            if source_role in {"planner", "planner-dispatcher"} and target_role not in {
-                "planner",
-                "planner-dispatcher",
-            }:
-                group_message = (
-                    f"{profile.project_name} 项目 planner 已向 {args.target} 发布任务 {args.task_id}："
-                    f"{args.title}. 回复链路 {reply_to}."
-                )
-            elif target_role in {"planner", "planner-dispatcher"} and source_role not in {
-                "planner",
-                "planner-dispatcher",
-            }:
-                group_message = (
-                    f"{profile.project_name} 项目 planner 已收到任务 {args.task_id}，"
-                    f"来自 {args.source}：{args.title}. 回复链路 {reply_to}."
-                )
-            else:
-                group_message = (
-                    f"{profile.project_name} 项目 planner 任务流转 {args.task_id}："
-                    f"{args.source} -> {args.target}，{args.title}."
-                )
-            broadcast = broadcast_feishu_group_message(group_message)
-            receipt["feishu_group_broadcast"] = broadcast
-            if broadcast.get("status") == "failed":
-                print(
-                    f"warn: feishu group broadcast failed for {args.task_id}: "
-                    f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
-                    file=sys.stderr,
-                )
-        elif should_broadcast:
+        if not is_openclaw_frontstage:
+            result = notify(profile, args.target, message)
+            require_success(result, "dispatch notify")
+            receipt["notified_at"] = utc_now_iso()
+            receipt["notify_message"] = message
+            should_broadcast = (
+                source_role in {"planner", "planner-dispatcher"}
+                or target_role in {"planner", "planner-dispatcher"}
+                or args.source == profile.active_loop_owner
+                or args.target == profile.active_loop_owner
+            )
+            if should_broadcast and legacy_feishu_group_broadcast_enabled():
+                if source_role in {"planner", "planner-dispatcher"} and target_role not in {
+                    "planner",
+                    "planner-dispatcher",
+                }:
+                    group_message = (
+                        f"{profile.project_name} 项目 planner 已向 {args.target} 发布任务 {args.task_id}："
+                        f"{args.title}. 回复链路 {reply_to}."
+                    )
+                elif target_role in {"planner", "planner-dispatcher"} and source_role not in {
+                    "planner",
+                    "planner-dispatcher",
+                }:
+                    group_message = (
+                        f"{profile.project_name} 项目 planner 已收到任务 {args.task_id}，"
+                        f"来自 {args.source}：{args.title}. 回复链路 {reply_to}."
+                    )
+                else:
+                    group_message = (
+                        f"{profile.project_name} 项目 planner 任务流转 {args.task_id}："
+                        f"{args.source} -> {args.target}，{args.title}."
+                    )
+                broadcast = broadcast_feishu_group_message(group_message, project=profile.project_name)
+                receipt["feishu_group_broadcast"] = broadcast
+                if broadcast.get("status") == "failed":
+                    print(
+                        f"warn: feishu group broadcast failed for {args.task_id}: "
+                        f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
+                        file=sys.stderr,
+                    )
+            elif should_broadcast:
+                receipt["feishu_group_broadcast"] = {
+                    "status": "skipped",
+                    "reason": "legacy_group_broadcast_disabled",
+                }
+        else:
+            print(
+                f"warn: dispatch target {args.target!r} is the OpenClaw frontstage — "
+                "tmux notify skipped. Use complete_handoff.py for the koder closeout path.",
+                file=sys.stderr,
+            )
+            receipt["notify_message"] = message
             receipt["feishu_group_broadcast"] = {
                 "status": "skipped",
-                "reason": "legacy_group_broadcast_disabled",
+                "reason": "openclaw_frontstage_target_no_tmux",
             }
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     write_json(receipt_path, receipt)

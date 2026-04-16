@@ -3,17 +3,21 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 
 from _common import (
     append_consumed_ack,
+    append_task_to_queue,
     broadcast_feishu_group_message,
     build_delegation_report_text,
     build_completion_message,
+    complete_task_in_queue,
     load_json,
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
+    resolve_primary_feishu_group_id,
     send_feishu_user_message,
     stable_dispatch_nonce,
     utc_now_iso,
@@ -150,6 +154,11 @@ def main() -> int:
         user_summary=args.user_summary,
         next_action=args.next_action,
     )
+    complete_task_in_queue(
+        profile.todo_path(args.source),
+        task_id=args.task_id,
+        summary=args.summary or f"completed by {args.source}",
+    )
     receipt["delivery_path"] = str(delivery_path)
     receipt["delivered_at"] = utc_now_iso()
     receipt["verdict"] = args.verdict
@@ -158,12 +167,11 @@ def main() -> int:
     receipt["next_action"] = args.next_action
     if planner_to_frontstage:
         frontstage_todo = profile.todo_path(args.target)
-        write_todo(
+        append_task_to_queue(
             frontstage_todo,
             task_id=args.task_id,
             project=profile.project_name,
             owner=args.target,
-            status="pending",
             title=title,
             objective=build_frontstage_objective(
                 source=args.source,
@@ -176,6 +184,12 @@ def main() -> int:
             source=args.source,
             reply_to=args.source,
         )
+        print(
+            f"warn: planner is closing task {args.task_id!r} directly to koder"
+            " (self-close path). If this involved implementation, ensure"
+            " builder-1 and reviewer-1 were in the loop (R-03 Review Gate).",
+            file=sys.stderr,
+        )
         receipt["todo_path"] = str(frontstage_todo)
         receipt["assigned_at"] = utc_now_iso()
     if not args.skip_notify:
@@ -185,17 +199,15 @@ def main() -> int:
             source=args.source,
             target=args.target,
         )
-        result = notify(profile, args.target, message)
-        require_success(result, "completion notify")
-        receipt["notified_at"] = utc_now_iso()
-        receipt["notify_message"] = message
-        should_broadcast = (
-            source_role in {"planner", "planner-dispatcher"}
-            or target_role in {"planner", "planner-dispatcher"}
-            or args.source == profile.active_loop_owner
-            or args.target == profile.active_loop_owner
-        )
-        if planner_to_frontstage:
+        # Determine koder type once: OpenClaw koder has a Feishu group configured.
+        # In OpenClaw mode koder is NOT a tmux session — Feishu is the only notify channel.
+        # In local CLI mode (no Feishu group) koder runs as a tmux session.
+        openclaw_koder = planner_to_frontstage and bool(resolve_primary_feishu_group_id(project=profile.project_name))
+        if openclaw_koder:
+            # ── OpenClaw koder path ────────────────────────────────────────────
+            # Send OC_DELEGATION_REPORT_V1 directly. Never attempt tmux for this case.
+            # Pass project so send_feishu_user_message resolves the group from BRIDGE.toml
+            # rather than the first global entry in openclaw.json.
             delegation_report = build_delegation_report_text(
                 project=profile.project_name,
                 lane="planning",
@@ -228,50 +240,80 @@ def main() -> int:
                 summary=args.user_summary or args.summary or args.title or args.task_id,
                 human_summary=args.user_summary or args.summary or args.title,
             )
-            broadcast = send_feishu_user_message(delegation_report)
+            _broadcast = None
+            for _attempt in range(3):
+                _broadcast = send_feishu_user_message(
+                    delegation_report, project=profile.project_name
+                )
+                if _broadcast.get("status") != "failed":
+                    break
+                if _attempt < 2:
+                    time.sleep(2 ** _attempt)  # 1s then 2s
+            broadcast = _broadcast
             receipt["feishu_delegation_report"] = broadcast
             if broadcast.get("status") == "failed":
+                detail = (
+                    broadcast.get("stderr")
+                    or broadcast.get("stdout")
+                    or broadcast.get("reason", "unknown")
+                )
                 print(
-                    f"warn: feishu delegation report failed for {args.task_id}: "
-                    f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
+                    f"warn: completion notify (feishu openclaw koder) failed after 3 attempts"
+                    f" for {args.task_id}: {detail}",
                     file=sys.stderr,
                 )
-        elif should_broadcast and legacy_feishu_group_broadcast_enabled():
-            if source_role in {"planner", "planner-dispatcher"} and target_role not in {
-                "planner",
-                "planner-dispatcher",
-            }:
-                broadcast_message = (
-                    f"{profile.project_name} 项目 planner 阶段收尾 {args.task_id}："
-                    f"{args.user_summary or args.summary or args.title or args.task_id}。"
-                    f" FrontstageDisposition={args.frontstage_disposition or 'n/a'}."
-                )
-            elif target_role in {"planner", "planner-dispatcher"} and source_role not in {
-                "planner",
-                "planner-dispatcher",
-            }:
-                broadcast_message = (
-                    f"{profile.project_name} 项目 planner 已收到回执 {args.task_id}，"
-                    f"来自 {args.source}。{args.summary or args.title or ''}".strip()
-                )
-            else:
-                broadcast_message = (
-                    f"{profile.project_name} 项目 planner 完成任务流转 {args.task_id}："
-                    f"{args.source} -> {args.target}。"
-                )
-            broadcast = broadcast_feishu_group_message(broadcast_message)
-            receipt["feishu_group_broadcast"] = broadcast
-            if broadcast.get("status") == "failed":
-                print(
-                    f"warn: feishu group broadcast failed for {args.task_id}: "
-                    f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
-                    file=sys.stderr,
-                )
-        elif should_broadcast:
-            receipt["feishu_group_broadcast"] = {
-                "status": "skipped",
-                "reason": "legacy_group_broadcast_disabled",
-            }
+            if broadcast.get("status") != "failed":
+                receipt["notified_at"] = utc_now_iso()
+            receipt["notify_message"] = message
+        else:
+            # ── tmux seat path (local CLI koder or any non-frontstage seat) ───
+            result = notify(profile, args.target, message)
+            require_success(result, "completion notify")
+            receipt["notified_at"] = utc_now_iso()
+            receipt["notify_message"] = message
+            # Legacy group broadcast is opt-in and only applies to tmux-mode transitions.
+            should_broadcast = (
+                source_role in {"planner", "planner-dispatcher"}
+                or target_role in {"planner", "planner-dispatcher"}
+                or args.source == profile.active_loop_owner
+                or args.target == profile.active_loop_owner
+            )
+            if should_broadcast and legacy_feishu_group_broadcast_enabled():
+                if source_role in {"planner", "planner-dispatcher"} and target_role not in {
+                    "planner",
+                    "planner-dispatcher",
+                }:
+                    broadcast_message = (
+                        f"{profile.project_name} 项目 planner 阶段收尾 {args.task_id}："
+                        f"{args.user_summary or args.summary or args.title or args.task_id}。"
+                        f" FrontstageDisposition={args.frontstage_disposition or 'n/a'}."
+                    )
+                elif target_role in {"planner", "planner-dispatcher"} and source_role not in {
+                    "planner",
+                    "planner-dispatcher",
+                }:
+                    broadcast_message = (
+                        f"{profile.project_name} 项目 planner 已收到回执 {args.task_id}，"
+                        f"来自 {args.source}。{args.summary or args.title or ''}".strip()
+                    )
+                else:
+                    broadcast_message = (
+                        f"{profile.project_name} 项目 planner 完成任务流转 {args.task_id}："
+                        f"{args.source} -> {args.target}。"
+                    )
+                broadcast = broadcast_feishu_group_message(broadcast_message, project=profile.project_name)
+                receipt["feishu_group_broadcast"] = broadcast
+                if broadcast.get("status") == "failed":
+                    print(
+                        f"warn: feishu group broadcast failed for {args.task_id}: "
+                        f"{broadcast.get('stderr') or broadcast.get('stdout') or broadcast.get('reason', 'unknown')}",
+                        file=sys.stderr,
+                    )
+            elif should_broadcast:
+                receipt["feishu_group_broadcast"] = {
+                    "status": "skipped",
+                    "reason": "legacy_group_broadcast_disabled",
+                }
     write_json(receipt_path, receipt)
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")

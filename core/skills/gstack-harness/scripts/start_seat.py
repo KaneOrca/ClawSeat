@@ -42,7 +42,14 @@ def write_frontstage_receipt(profile, seat: str) -> str:
     Write a durable frontstage binding receipt proving koder has entered frontstage
     with the correct identity and project binding.
     """
-    session_data = load_toml(session_path_for(profile, seat))
+    session_path = session_path_for(profile, seat)
+    session_data = load_toml(session_path)
+    if session_data is None:
+        raise RuntimeError(
+            f"session.toml not found for seat '{seat}' in project '{profile.project_name}': "
+            f"expected at {session_path}. "
+            "Run bootstrap_harness.py or agent_admin session switch-harness to create it."
+        )
     role = profile.seat_roles.get(seat, "specialist")
     workspace = profile.workspace_for(seat)
     receipt_path = workspace / "FRONTSTAGE_RECEIPT.toml"
@@ -115,7 +122,14 @@ def apply_config_overrides(profile, seat: str, *, tool: str | None, auth_mode: s
     """
     if not tool and not auth_mode and not provider:
         return False
-    session_data = load_toml(session_path_for(profile, seat))
+    session_path = session_path_for(profile, seat)
+    session_data = load_toml(session_path)
+    if session_data is None:
+        raise RuntimeError(
+            f"session.toml not found for seat '{seat}' in project '{profile.project_name}': "
+            f"expected at {session_path}. "
+            "Run bootstrap_harness.py or agent_admin session switch-harness to create it."
+        )
     current_tool = session_data.get("tool", "")
     current_auth = session_data.get("auth_mode", "")
     current_provider = session_data.get("provider", "")
@@ -148,7 +162,14 @@ def apply_config_overrides(profile, seat: str, *, tool: str | None, auth_mode: s
 
 
 def render_launch_summary(profile, seat: str) -> str:
-    session_data = load_toml(session_path_for(profile, seat))
+    session_path = session_path_for(profile, seat)
+    session_data = load_toml(session_path)
+    if session_data is None:
+        return (
+            f"launch_summary_unavailable: session.toml not found for seat '{seat}' "
+            f"in project '{profile.project_name}' at {session_path}. "
+            "Run bootstrap_harness.py first."
+        )
     role = profile.seat_roles.get(seat, "specialist")
     lines = [
         "launch_summary:",
@@ -179,6 +200,9 @@ def main() -> int:
         )
         if switched:
             print(f"config_updated: {args.seat} session updated before start")
+            # After a harness switch, always reset the tmux session so the old
+            # session (running with stale auth/tool config) is not reused.
+            args.reset = True
     if args.seat not in profile.heartbeat_seats and not args.confirm_start:
         print(render_launch_summary(profile, args.seat))
         print(

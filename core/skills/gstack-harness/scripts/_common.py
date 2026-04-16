@@ -22,11 +22,29 @@ except ModuleNotFoundError:  # pragma: no cover
 REPO_ROOT = Path(
     os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[4]))
 )
-AGENT_HOME = Path(os.environ.get("AGENT_HOME", str(Path.home()))).expanduser()
+
+
+def _resolve_real_home() -> Path:
+    """Return the real user home, even when running inside an isolated seat runtime.
+
+    Harness seats run with HOME overridden to an isolated runtime directory such as:
+      ~/.agents/runtime/identities/claude/oauth/<identity>/home
+    Path.home() would return that isolated path instead of /Users/<user>.
+    This helper detects the pattern and walks up to the true user home.
+    """
+    candidate = Path.home()
+    parts = candidate.parts
+    for i, part in enumerate(parts):
+        if part == ".agents" and i + 1 < len(parts) and parts[i + 1] == "runtime":
+            return Path(*parts[:i])
+    return candidate
+
+
+AGENT_HOME = Path(os.environ.get("AGENT_HOME", str(_resolve_real_home()))).expanduser()
 AGENTS_ROOT = AGENT_HOME / ".agents"
 SCRIPTS_ROOT = REPO_ROOT / "core" / "shell-scripts"
 OPENCLAW_HOME = Path(
-    os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))
+    os.environ.get("OPENCLAW_HOME", str(_resolve_real_home() / ".openclaw"))
 ).expanduser()
 OPENCLAW_CONFIG_PATH = Path(
     os.environ.get("OPENCLAW_CONFIG_PATH", str(OPENCLAW_HOME / "openclaw.json"))
@@ -164,7 +182,14 @@ def expand_profile_value(value: str) -> Path:
         key = match.group(1)
         return os.environ.get(key, defaults.get(key, match.group(0)))
 
-    return Path(PLACEHOLDER_RE.sub(replace, value)).expanduser()
+    expanded = PLACEHOLDER_RE.sub(replace, value)
+    # Use AGENT_HOME for ~ expansion instead of Path.expanduser(), which would
+    # resolve ~ to the isolated seat runtime HOME rather than the real user home.
+    if expanded.startswith("~/"):
+        expanded = str(AGENT_HOME) + expanded[1:]
+    elif expanded == "~":
+        expanded = str(AGENT_HOME)
+    return Path(expanded)
 
 
 def normalize_role(role: str) -> str:
@@ -419,7 +444,7 @@ def collect_feishu_group_ids_from_sessions() -> list[str]:
     return found
 
 
-def resolve_primary_feishu_group_id() -> str | None:
+def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     override = (
         os.environ.get("CLAWSEAT_FEISHU_GROUP_ID")
         or os.environ.get("OPENCLAW_FEISHU_GROUP_ID")
@@ -428,6 +453,15 @@ def resolve_primary_feishu_group_id() -> str | None:
         resolved = override.strip()
         if resolved:
             return resolved
+    # Project-specific binding takes precedence over the global openclaw.json list.
+    # BRIDGE.toml is the authoritative project ↔ Feishu group mapping.
+    if project:
+        bridge_path = AGENTS_ROOT / "projects" / project / "BRIDGE.toml"
+        bridge_data = load_toml(bridge_path)
+        if bridge_data:
+            bridge_group = str(bridge_data.get("bridge", {}).get("group_id", "")).strip()
+            if bridge_group:
+                return bridge_group
     config = load_json(OPENCLAW_CONFIG_PATH) or {}
     group_ids = collect_feishu_group_ids_from_config(config)
     if group_ids:
@@ -495,8 +529,9 @@ def send_feishu_user_message(
     message: str,
     *,
     group_id: str | None = None,
+    project: str | None = None,
 ) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
+    resolved_group_id = (group_id or resolve_primary_feishu_group_id(project=project) or "").strip()
     payload: dict[str, str] = {
         "status": "skipped",
         "reason": "no_group_id_found",
@@ -559,8 +594,9 @@ def broadcast_feishu_group_message(
     message: str,
     *,
     group_id: str | None = None,
+    project: str | None = None,
 ) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
+    resolved_group_id = (group_id or resolve_primary_feishu_group_id(project=project) or "").strip()
     payload: dict[str, str] = {
         "status": "skipped",
         "reason": "no_group_id_found",
@@ -717,6 +753,105 @@ def append_status_note(path: Path, note: str) -> None:
         write_text(path, "# Status\n\n" + block)
 
 
+def append_task_to_queue(
+    path: Path,
+    *,
+    task_id: str,
+    project: str,
+    owner: str,
+    title: str,
+    objective: str,
+    source: str,
+    reply_to: str,
+    skill_refs: list[str] | None = None,
+    task_type: str = "unspecified",
+    review_required: bool = False,
+) -> None:
+    existing = read_text(path)
+
+    # Backward compat: old format (task_id: header) auto-wrapped as queue head.
+    if existing.strip() and existing.lstrip().startswith("task_id:"):
+        old_task_id_match = re.search(r"^task_id: (.+)$", existing, re.MULTILINE)
+        old_task_id = old_task_id_match.group(1).strip() if old_task_id_match else "legacy"
+        existing = f"# Queue: {owner}\n\n## [pending] {old_task_id}\n{existing.strip()}\n"
+
+    has_active = bool(re.search(r"^## \[(pending|queued)\]", existing, re.MULTILINE))
+    status = "queued" if has_active else "pending"
+
+    entry_lines = [
+        f"## [{status}] {task_id}",
+        f"task_id: {task_id}",
+        f"title: {title}",
+        f"task_type: {task_type}",
+        f"review_required: {'true' if review_required else 'false'}",
+        f"source: {source}",
+        f"reply_to: {reply_to}",
+        f"dispatched_at: {utc_now_iso()}",
+        "",
+        "### Objective",
+        "",
+        objective.strip(),
+    ]
+    if skill_refs:
+        entry_lines += ["", "### Skill Refs", ""] + [f"- {ref}" for ref in skill_refs]
+
+    entry = "\n".join(entry_lines)
+
+    if not existing.strip():
+        content = f"# Queue: {owner}\n\n{entry}\n"
+    elif "\n# Completed" in existing:
+        idx = existing.index("\n# Completed")
+        content = existing[:idx].rstrip() + f"\n\n---\n\n{entry}\n" + existing[idx:]
+    else:
+        content = existing.rstrip() + f"\n\n---\n\n{entry}\n"
+
+    write_text(path, content)
+
+
+def complete_task_in_queue(
+    path: Path,
+    *,
+    task_id: str,
+    summary: str,
+) -> str | None:
+    """Mark task_id as [completed], activate next [queued] task.
+    Returns next task_id if one was activated, else None."""
+    content = read_text(path)
+    if not content.strip():
+        return None
+
+    # [pending] → [completed]
+    content, n = re.subn(
+        rf"^## \[pending\] {re.escape(task_id)}",
+        f"## [completed] {task_id}",
+        content,
+        flags=re.MULTILINE,
+    )
+    if n == 0:
+        return None  # task_id is not the current [pending] task; abort to avoid polluting the queue
+
+    # Activate next [queued] task.
+    next_task_id = None
+    m = re.search(r"^## \[queued\] (\S+)", content, re.MULTILINE)
+    if m:
+        next_task_id = m.group(1)
+        content = (
+            content[: m.start()]
+            + f"## [pending] {next_task_id}"
+            + content[m.end() :]
+        )
+
+    # Append to # Completed summary.
+    completed_line = f"- [{utc_now_iso()[:10]}] {task_id} — {summary}"
+    if "# Completed" not in content:
+        content = content.rstrip() + f"\n\n# Completed\n\n{completed_line}\n"
+    else:
+        content = content.replace("# Completed\n", f"# Completed\n{completed_line}\n", 1)
+
+    write_text(path, content)
+    return next_task_id
+
+
 def write_todo(
     path: Path,
     *,
@@ -728,20 +863,39 @@ def write_todo(
     objective: str,
     source: str,
     reply_to: str,
+    skill_refs: list[str] | None = None,
+    task_type: str = "unspecified",
+    review_required: bool = False,
 ) -> None:
-    text = (
-        f"task_id: {task_id}\n"
-        f"project: {project}\n"
-        f"owner: {owner}\n"
-        f"status: {status}\n"
-        f"title: {title}\n\n"
-        f"# Objective\n\n{objective.strip()}\n\n"
-        f"# Dispatch\n\n"
-        f"source: {source}\n"
-        f"reply_to: {reply_to}\n"
-        f"dispatched_at: {utc_now_iso()}\n"
-    )
-    write_text(path, text)
+    # DEPRECATED: use append_task_to_queue() instead.
+    # Retained for legacy callers; will be removed after full migration.
+    parts = [
+        f"task_id: {task_id}",
+        f"project: {project}",
+        f"owner: {owner}",
+        f"status: {status}",
+        f"title: {title}",
+        f"task_type: {task_type}",
+        f"review_required: {'true' if review_required else 'false'}",
+        "",
+        "# Objective",
+        "",
+        objective.strip(),
+        "",
+        "# Dispatch",
+        "",
+        f"source: {source}",
+        f"reply_to: {reply_to}",
+        f"dispatched_at: {utc_now_iso()}",
+    ]
+    if skill_refs:
+        parts += [
+            "",
+            "# Skill Refs",
+            "",
+            *(f"- {ref}" for ref in skill_refs),
+        ]
+    write_text(path, "\n".join(parts))
 
 
 def write_delivery(
@@ -1312,6 +1466,17 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
             if peer == secret_file or peer.stat().st_size == 0:
                 continue
             shutil.copy2(peer, secret_file)
+            secret_file.chmod(0o600)
+            # Patch ANTHROPIC_BASE_URL to match the provider's canonical endpoint.
+            # Peer env files may carry stale URLs; sync them to the correct path.
+            content = secret_file.read_text(encoding="utf-8")
+            corrected_lines = []
+            for line in content.splitlines():
+                if line.startswith("ANTHROPIC_BASE_URL=") and not line.endswith("/anthropic"):
+                    corrected_lines.append(line.rstrip("/\n") + "/anthropic")
+                else:
+                    corrected_lines.append(line)
+            secret_file.write_text("\n".join(corrected_lines) + "\n", encoding="utf-8")
             secret_file.chmod(0o600)
             return peer
     # Fallback: seed from ~/.agents/.env.global
