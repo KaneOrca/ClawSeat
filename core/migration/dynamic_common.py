@@ -214,6 +214,7 @@ def resolve_roles(
 def resolve_dynamic_seats(
     *,
     heartbeat_owner: str,
+    declared_seats: list[str],
     materialized_seats: list[str],
     compat_legacy_seats: bool,
     legacy_seats: list[str],
@@ -226,6 +227,7 @@ def resolve_dynamic_seats(
     )
     seats = unique_ordered(
         [heartbeat_owner],
+        declared_seats,
         materialized_seats,
         legacy_seats if compat_legacy_seats else [],
         discovered,
@@ -265,6 +267,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
     seats = (
         resolve_dynamic_seats(
             heartbeat_owner=heartbeat_owner,
+            declared_seats=declared_seats,
             materialized_seats=materialized_seats,
             compat_legacy_seats=compat_legacy_seats,
             legacy_seats=legacy_seats,

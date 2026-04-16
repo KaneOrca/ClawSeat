@@ -29,12 +29,19 @@ ${CLAWSEAT_ROOT}/core/shell-scripts/check-engineer-status.sh <session-1> <sessio
 ## skill 自带脚本
 
 位于 `${CLAWSEAT_ROOT}/core/skills/agent-monitor/script/`：
-- `send-and-verify.sh` — 发送指令并验证 tmux 已接收
+
+通用脚本（所有机器可用）：
+- `send-and-verify.sh` → symlink 到 `core/shell-scripts/send-and-verify.sh`
 - `tmux-send-delayed.sh` — 带延迟的 tmux 发送（适合 TUI 较慢的 seat）
-- `msg_focus.sh` — 聚焦 Claude Desktop 输入框
-- `msg_paste.sh` — 粘贴消息文本
-- `msg_send.sh` — 提交消息
-- `screenshot-to-feishu.sh` — 截图上传飞书
+
+机器专属脚本（需要 macOS + Claude Desktop + mouseutil）：
+- `msg_focus.sh` — 通过 AppleScript + 鼠标坐标聚焦 Claude Desktop 输入框
+- `msg_paste.sh` — 通过剪贴板 + 菜单粘贴消息（绕过输入法）
+- `msg_send.sh` — 通过 AppleScript 按回车发送
+- `screenshot-to-feishu.sh` — 截取屏幕区域并保存（区域坐标硬编码，需按屏幕调整）
+
+> msg_* 脚本依赖 `/tmp/mouseutil` 二进制和特定屏幕坐标。
+> 首次使用前需确认 mouseutil 已安装且坐标匹配你的屏幕布局。
 
 ## 默认工作流
 

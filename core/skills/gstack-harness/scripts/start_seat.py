@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from pathlib import Path
 
 from _common import (
@@ -336,7 +337,16 @@ def main() -> int:
         ],
         cwd=profile.repo_root,
     )
-    require_success(open_result, "start_seat open-engineer")
+    if open_result.returncode != 0:
+        # Window open is non-fatal — the tmux session is already running.
+        # iTerm may not be installed, or AppleScript access may be denied.
+        session_name = session_data.get("session", f"{profile.project_name}-{args.seat}")
+        print(
+            f"window_open_skipped: iTerm window for {args.seat} could not be opened "
+            f"(rc={open_result.returncode}). The tmux session is running — connect with:\n"
+            f"  tmux attach -t {session_name}",
+            file=sys.stderr,
+        )
     if seeded_from is not None:
         print(f"seeded secret for {args.seat} from {seeded_from}")
     if oauth_seeded_from is not None:

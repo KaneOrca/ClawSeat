@@ -48,8 +48,8 @@ Do not load every reference by default. Start from the project profile under
   - [Console model](references/console-model.md)
   - [Heartbeat policy](references/heartbeat-policy.md)
 - tmux transport / diagnostics / self-diagnosis
-  - [tmux environment](references/tmux-environment.md) — commands, ClawSeat
-    tools, common pitfalls, self-diagnosis for stuck sessions
+  - loaded automatically via `tmux-basics` skill (all seats)
+  - advanced takeover patterns via `agent-monitor` skill (koder + planner)
 - bootstrap / project setup
   - [Seat model](references/seat-model.md)
   - [Console model](references/console-model.md)

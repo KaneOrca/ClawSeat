@@ -10,6 +10,7 @@ target="$1"
 shift
 message="$*"
 
-tmux send-keys -t "$target" "$message"
+# env -u TMUX: allow running from inside a tmux session
+env -u TMUX tmux send-keys -t "$target" "$message"
 sleep 1
-tmux send-keys -t "$target" Enter
+env -u TMUX tmux send-keys -t "$target" Enter

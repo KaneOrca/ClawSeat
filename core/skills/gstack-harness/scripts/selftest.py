@@ -465,6 +465,27 @@ def main() -> int:
         console_payload = json.loads(console.stdout)
         if console_payload["heartbeat"]["configured"]:
             raise RuntimeError("render_console incorrectly treated an unverified heartbeat receipt as configured")
+        if console_payload.get("seat_sets", {}).get("roster") != [
+            "koder",
+            "planner",
+            "builder-1",
+            "reviewer-1",
+            "qa-1",
+            "designer-1",
+        ]:
+            raise RuntimeError("render_console seat_sets.roster drifted from the expected roster")
+        if console_payload.get("seat_sets", {}).get("backend") != [
+            "planner",
+            "builder-1",
+            "reviewer-1",
+            "qa-1",
+            "designer-1",
+        ]:
+            raise RuntimeError("render_console seat_sets.backend drifted from the expected backend seats")
+        if console_payload.get("seat_sets", {}).get("default_start") != [
+            "koder",
+        ]:
+            raise RuntimeError("render_console seat_sets.default_start drifted from the expected autostart view")
         for seat in ("koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"):
             todo_path = tasks_root / seat / "TODO.md"
             if not todo_path.exists():

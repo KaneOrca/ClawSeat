@@ -61,7 +61,12 @@ Preflight (`python3 "$CLAWSEAT_ROOT/core/preflight.py" install`) will check all 
      - After init_koder completes, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`
-   - Run preflight and bootstrap (bootstrap creates workspaces for backend seats only)
+   - Run preflight and bootstrap
+   - Read the profile fields correctly:
+     - `seats` = full roster
+     - `materialized_seats` = seats whose runtime/session scaffold already exists after bootstrap
+     - `default_start_seats` = first seats frontstage should offer/start
+     - `bootstrap_seats` = compatibility/frontstage-bootstrap field, not the backend roster
    - After bootstrap, **you MUST ask the user** for each backend seat's configuration before starting ANY seat. Do NOT use template defaults without user confirmation. For each seat, ask:
      - Tool: Claude Code / Codex / Gemini?
      - Auth: OAuth (recommended) or API key?

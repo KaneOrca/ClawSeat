@@ -313,8 +313,9 @@ def _sanitize_applescript_text(value: str) -> str:
 
 
 def run_iterm_script(script_factory: Any) -> None:
-    # iTerm-first hard-stop policy: do not downgrade to non-iTerm terminal tooling.
-    # If this fails, caller should surface the error and ask operator for remediation.
+    # iTerm-preferred with graceful degradation: try iTerm AppleScript first,
+    # raise AgentAdminWindowError if unavailable. Callers should catch this
+    # and fall back to tmux-only mode (tmux attach -t <session>).
     attempts = 0
     last_error: subprocess.CalledProcessError | None = None
     for app_name in ITERM_SCRIPT_APPS:

@@ -25,6 +25,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _unique_ordered(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+def seat_sets(profile: HarnessProfile) -> dict[str, list[str]]:
+    roster = _unique_ordered(list(profile.seats))
+    materialized = _unique_ordered(list(getattr(profile, "materialized_seats", None) or roster))
+    bootstrap = _unique_ordered(list(profile.bootstrap_seats or []))
+    default_start = _unique_ordered(list(profile.default_start_seats or bootstrap or materialized))
+    backend = [seat for seat in roster if seat != profile.heartbeat_owner]
+    return {
+        "roster": roster,
+        "materialized": materialized,
+        "bootstrap": bootstrap,
+        "default_start": default_start,
+        "backend": backend,
+    }
+
+
 def seat_summary(profile: HarnessProfile) -> list[dict[str, str]]:
     result = run_command(executable_command(profile.status_script), cwd=profile.repo_root)
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -118,6 +144,7 @@ def main() -> int:
         "profile": profile.profile_name,
         "active_loop_owner": profile.active_loop_owner,
         "heartbeat_owner": profile.heartbeat_owner,
+        "seat_sets": seat_sets(profile),
         "seats": seat_summary(profile),
         "handoffs": handoff_summary(profile),
         "heartbeat": heartbeat_summary(profile),
@@ -130,6 +157,10 @@ def main() -> int:
     print(f"profile: {profile.profile_name}")
     print(f"active loop owner: {profile.active_loop_owner}")
     print(f"heartbeat owner: {profile.heartbeat_owner}")
+    print("\n== Seat Sets ==")
+    for label, items in payload["seat_sets"].items():
+        rendered = ", ".join(items) if items else "(none)"
+        print(f"- {label}: {rendered}")
     print("\n== Seats ==")
     for seat in payload["seats"]:
         print(f"- {seat['seat']}: {seat['status']}")

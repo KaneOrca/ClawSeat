@@ -1,12 +1,14 @@
 #!/bin/bash
 # screenshot-to-feishu.sh
-# 截取屏幕区域并发送到飞书 DM
+# 截取屏幕区域并保存为 JPG
 #
 # 用法:
 #   ./screenshot-to-feishu.sh [消息文字]
 #
 # 默认输出: ${OPENCLAW_HOME:-$HOME/.openclaw}/workspace-warden/media/screenshot.jpg
-# 截取区域: x=50, 从屏幕顶部到当前鼠标 Y 坐标, 宽=1300
+#
+# ⚠️ 机器专属脚本：截图区域 (x=400, y=0, w=850, h=1300) 是硬编码的，
+#    只适合特定屏幕分辨率。使用前请调整 R400,0,850,$MOUSE_Y 参数。
 #
 # 依赖: cliclick (brew install cliclick)
 

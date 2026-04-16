@@ -14,6 +14,8 @@ for _path in (str(_HARNESS_SCRIPTS), str(_INSTALL_SCRIPTS), str(_REPO)):
         sys.path.insert(0, _path)
 
 import init_koder
+import migrate_profile
+import render_console
 import start_seat
 from _common import load_profile
 from core.scripts.agent_admin_store import StoreHandlers, StoreHooks
@@ -131,6 +133,8 @@ def test_init_koder_builds_workspace_from_profile_backend_seats(tmp_path):
     assert 'seats = ["koder", "planner", "reviewer-1"]' in contract
     assert 'backend_seats = ["planner", "reviewer-1"]' in contract
     assert 'default_backend_start_seats = ["planner"]' in contract
+    assert profile.materialized_seats == ["koder", "planner", "reviewer-1"]
+    assert profile.bootstrap_seats == ["koder"]
 
 
 def test_make_local_override_separates_materialized_and_bootstrap_seats(tmp_path):
@@ -152,6 +156,106 @@ def test_make_local_override_separates_materialized_and_bootstrap_seats(tmp_path
     assert 'materialized_seats = ["koder", "planner", "reviewer-1"]' in payload
     assert 'bootstrap_seats = ["koder"]' in payload
     assert 'default_start_seats = ["koder", "planner"]' in payload
+
+
+def test_load_profile_defaults_materialized_seats_to_declared_roster(tmp_path):
+    profile_path = tmp_path / "starter-profile.toml"
+    profile_path.write_text(
+        "\n".join(
+            [
+                'version = 1',
+                'profile_name = "starter-openclaw-test"',
+                'template_name = "gstack-harness"',
+                'project_name = "starter"',
+                f'repo_root = "{_REPO}"',
+                f'tasks_root = "{tmp_path / "tasks" / "starter"}"',
+                f'project_doc = "{tmp_path / "tasks" / "starter" / "PROJECT.md"}"',
+                f'tasks_doc = "{tmp_path / "tasks" / "starter" / "TASKS.md"}"',
+                f'status_doc = "{tmp_path / "tasks" / "starter" / "STATUS.md"}"',
+                f'send_script = "{_REPO / "core" / "shell-scripts" / "send-and-verify.sh"}"',
+                f'status_script = "{tmp_path / "tasks" / "starter" / "patrol" / "check-status.sh"}"',
+                f'patrol_script = "{tmp_path / "tasks" / "starter" / "patrol" / "patrol-supervisor.sh"}"',
+                f'agent_admin = "{_REPO / "core" / "scripts" / "agent_admin.py"}"',
+                f'workspace_root = "{tmp_path / "workspaces" / "starter"}"',
+                f'handoff_dir = "{tmp_path / "tasks" / "starter" / "patrol" / "handoffs"}"',
+                'heartbeat_owner = "koder"',
+                'active_loop_owner = "planner"',
+                'default_notify_target = "planner"',
+                f'heartbeat_receipt = "{tmp_path / "workspaces" / "starter" / "koder" / "HEARTBEAT_RECEIPT.toml"}"',
+                'seats = ["koder", "planner"]',
+                'heartbeat_seats = ["koder"]',
+                '',
+                '[seat_roles]',
+                'koder = "frontstage-supervisor"',
+                'planner = "planner-dispatcher"',
+                '',
+                '[dynamic_roster]',
+                'enabled = true',
+                f'session_root = "{tmp_path / "sessions"}"',
+                'bootstrap_seats = ["koder"]',
+                'default_start_seats = ["koder", "planner"]',
+                'compat_legacy_seats = false',
+                '',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    profile = load_profile(profile_path)
+
+    assert profile.materialized_seats == ["koder", "planner"]
+    assert profile.bootstrap_seats == ["koder"]
+    assert profile.default_start_seats == ["koder", "planner"]
+
+
+def test_migrate_profile_emits_materialized_seats(tmp_path):
+    source = {
+        "profile_name": "legacy",
+        "description": "legacy profile",
+        "send_script": "/tmp/send.sh",
+        "agent_admin": "/tmp/agent_admin.py",
+        "heartbeat_owner": "koder",
+        "active_loop_owner": "planner",
+        "default_notify_target": "planner",
+        "seats": ["koder", "planner", "builder-1"],
+        "seat_roles": {
+            "koder": "frontstage-supervisor",
+            "planner": "planner-dispatcher",
+            "builder-1": "builder",
+        },
+    }
+
+    lines = migrate_profile.build_lines(
+        source,
+        project_name="install",
+        repo_root=str(_REPO),
+        bootstrap_only=False,
+    )
+    text = "\n".join(lines)
+
+    assert 'materialized_seats = ["koder"]' in text
+    assert 'bootstrap_seats = ["koder"]' in text
+    assert 'default_start_seats = ["koder"]' in text
+
+
+def test_render_console_seat_sets_exposes_runtime_collections():
+    profile = SimpleNamespace(
+        seats=["koder", "planner", "reviewer-1"],
+        materialized_seats=["koder", "planner", "reviewer-1"],
+        bootstrap_seats=["koder"],
+        default_start_seats=["koder", "planner"],
+        heartbeat_owner="koder",
+    )
+
+    sets = render_console.seat_sets(profile)
+
+    assert sets == {
+        "roster": ["koder", "planner", "reviewer-1"],
+        "materialized": ["koder", "planner", "reviewer-1"],
+        "bootstrap": ["koder"],
+        "default_start": ["koder", "planner"],
+        "backend": ["planner", "reviewer-1"],
+    }
 
 
 def test_merge_template_local_materializes_declared_roster_without_bootstrap_filter(tmp_path):
