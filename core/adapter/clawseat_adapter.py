@@ -7,7 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,23 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
+
+from ._adapter_types import (
+    AdapterResult,
+    BriefAction,
+    BriefState,
+    PendingFrontstageItem,
+    PendingProjectOperation,
+    SessionStatus,
+)
+from ._adapter_exec import (
+    load_toml_like,
+    parse_brief,
+    parse_pending_frontstage,
+    render_pending_item,
+    serialize_adapter_result,
+    write_pending_frontstage,
+)
 
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[3]
@@ -30,84 +47,6 @@ def _get_migration_root() -> Path:
     if clawseat_root:
         return Path(clawseat_root) / "core" / "migration"
     return Path.home() / "coding" / "ClawSeat" / "core" / "migration"
-
-
-@dataclass
-class AdapterResult:
-    command: list[str]
-    returncode: int
-    stdout: str
-    stderr: str
-
-    @property
-    def ok(self) -> bool:
-        return self.returncode == 0
-
-
-@dataclass
-class BriefAction:
-    requested_operation: str
-    target_role: str
-    target_instance: str
-    template_id: str
-    reason: str
-    resume_task: str
-
-
-@dataclass
-class BriefState:
-    project_name: str
-    profile_path: str
-    brief_path: str
-    title: str
-    owner: str
-    status: str
-    updated: str
-    frontstage_disposition: str
-    user_summary: str
-    action: BriefAction
-
-
-@dataclass
-class SessionStatus:
-    project_name: str
-    seat_id: str
-    session_path: str
-    session_name: str
-    exists: bool
-    tmux_running: bool
-    runtime_dir: str
-    workspace: str
-    tool: str
-    provider: str
-    auth_mode: str
-
-
-@dataclass
-class PendingFrontstageItem:
-    item_id: str
-    item_type: str
-    related_task: str
-    summary: str
-    planner_recommendation: str
-    koder_default_action: str
-    user_input_needed: bool
-    blocking: bool
-    options: list[str]
-    resolved: bool
-    resolved_by: str
-    resolved_at: str
-    resolution: str
-    section: str
-
-
-@dataclass
-class PendingProjectOperation:
-    kind: str
-    project_name: str
-    frontstage_epoch: int
-    profile_path: str
-    payload: dict[str, Any]
 
 
 def _default_python_bin() -> str:
@@ -166,7 +105,7 @@ class ClawseatAdapter:
             "current_project": self.current_project,
             "frontstage_epoch": self.frontstage_epoch,
             "profile_path": str(resolved_profile),
-            "drained_operations": [self._serialize_adapter_result(item) for item in drained],
+            "drained_operations": [serialize_adapter_result(item) for item in drained],
             "pending_inbox_depth": len(self._pending_inbox.get(project_name, [])),
             "brief": asdict(brief),
         }
@@ -534,7 +473,7 @@ class ClawseatAdapter:
         resolved_profile = self.profile_path_for(project_name, profile_path)
         snapshot = self._profile_snapshot(resolved_profile)
         brief_path = Path(snapshot.get("planner_brief_path", f"/tmp/{project_name}/.tasks/planner/PLANNER_BRIEF.md"))
-        parsed = self._parse_brief(Path(brief_path))
+        parsed = parse_brief(Path(brief_path))
         return BriefState(
             project_name=project_name,
             profile_path=snapshot.get("profile_path", str(resolved_profile)),
@@ -571,7 +510,7 @@ class ClawseatAdapter:
                 provider="",
                 auth_mode="",
             )
-        session_data = self._load_toml_like(session_path)
+        session_data = load_toml_like(session_path)
         session_name = session_data.get("session", "")
         running = False
         if session_name:
@@ -620,7 +559,7 @@ class ClawseatAdapter:
         profile_path: str | Path | None = None,
     ) -> list[PendingFrontstageItem]:
         path = self._pending_frontstage_path(project_name, profile_path)
-        items = self._parse_pending_frontstage(path)
+        items = parse_pending_frontstage(path)
         return [item for item in items if not item.resolved]
 
     def resolve_frontstage_item(
@@ -635,7 +574,7 @@ class ClawseatAdapter:
         if resolved_by not in {"koder", "user"}:
             raise ValueError("resolved_by must be 'koder' or 'user'")
         path = self._pending_frontstage_path(project_name, profile_path)
-        items = self._parse_pending_frontstage(path)
+        items = parse_pending_frontstage(path)
         target: PendingFrontstageItem | None = None
         updated: list[PendingFrontstageItem] = []
         for item in items:
@@ -661,7 +600,7 @@ class ClawseatAdapter:
             updated.append(item)
         if target is None:
             raise FileNotFoundError(f"pending frontstage item not found: {item_id}")
-        self._write_pending_frontstage(path, updated)
+        write_pending_frontstage(path, updated)
         return target
 
     def _run(self, command: list[str]) -> AdapterResult:
@@ -737,74 +676,6 @@ class ClawseatAdapter:
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"invalid profile snapshot output for {profile_path}: {exc}") from exc
 
-    def _load_toml_like(self, path: Path) -> dict[str, str]:
-        data: dict[str, str] = {}
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if "=" not in line:
-                continue
-            key, raw_value = line.split("=", 1)
-            key = key.strip()
-            raw_value = raw_value.strip()
-            if raw_value.startswith('"') and raw_value.endswith('"'):
-                data[key] = raw_value[1:-1]
-            elif raw_value in {"true", "false"}:
-                data[key] = raw_value
-        return data
-
-    def _parse_brief(self, path: Path) -> dict[str, str]:
-        parsed = {
-            "title": "",
-            "owner": "",
-            "status": "",
-            "updated": "",
-            "frontstage_disposition": "",
-            "user_summary": "",
-            "requested_operation": "",
-            "target_role": "",
-            "target_instance": "",
-            "template_id": "",
-            "reason": "",
-            "resume_task": "",
-        }
-        if not path.exists():
-            return parsed
-        in_user_summary = False
-        summary_lines: list[str] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if not parsed["title"] and stripped.startswith("# "):
-                parsed["title"] = stripped[2:].strip()
-                continue
-            for field in (
-                "owner",
-                "status",
-                "updated",
-                "frontstage_disposition",
-                "requested_operation",
-                "target_role",
-                "target_instance",
-                "template_id",
-                "reason",
-                "resume_task",
-            ):
-                prefix = f"{field}:"
-                if not parsed[field] and stripped.startswith(prefix):
-                    parsed[field] = stripped.split(":", 1)[1].strip()
-                    break
-            else:
-                if stripped == "## 用户摘要":
-                    in_user_summary = True
-                    continue
-                if in_user_summary and stripped.startswith("## "):
-                    in_user_summary = False
-                    continue
-                if in_user_summary:
-                    summary_lines.append(stripped)
-        parsed["user_summary"] = " ".join(summary_lines).strip()
-        return parsed
-
     def _profile_project_name(self, path: Path) -> str:
         with path.open("rb") as handle:
             data = tomllib.load(handle)
@@ -841,174 +712,11 @@ class ClawseatAdapter:
             stderr="",
         )
 
-    def _serialize_adapter_result(self, result: AdapterResult) -> dict[str, Any]:
-        return {
-            "command": result.command,
-            "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        }
-
     def _pending_frontstage_path(self, project_name: str, profile_path: str | Path | None = None) -> Path:
         resolved_profile = self.profile_path_for(project_name, profile_path)
         snapshot = self._profile_snapshot(resolved_profile)
         tasks_root = Path(snapshot.get("tasks_root", f"/tmp/{project_name}/.tasks"))
         return tasks_root / "planner" / "PENDING_FRONTSTAGE.md"
-
-    def _parse_pending_frontstage(self, path: Path) -> list[PendingFrontstageItem]:
-        if not path.exists():
-            return []
-        lines = path.read_text(encoding="utf-8").splitlines()
-        section = ""
-        current_heading = ""
-        current_lines: list[str] = []
-        items: list[PendingFrontstageItem] = []
-
-        def flush() -> None:
-            nonlocal current_heading, current_lines
-            if not current_heading:
-                return
-            items.append(self._parse_pending_item(current_heading, current_lines, section))
-            current_heading = ""
-            current_lines = []
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped == "## 待处理事项":
-                flush()
-                section = "pending"
-                continue
-            if stripped == "## 已归档":
-                flush()
-                section = "archived"
-                continue
-            if stripped.startswith("### "):
-                flush()
-                current_heading = stripped[4:].strip()
-                current_lines = []
-                continue
-            if current_heading:
-                current_lines.append(line)
-        flush()
-        return items
-
-    def _parse_pending_item(self, heading: str, lines: list[str], section: str) -> PendingFrontstageItem:
-        fields = {
-            "id": heading,
-            "type": "",
-            "related_task": "",
-            "summary": "",
-            "planner_recommendation": "",
-            "koder_default_action": "",
-            "user_input_needed": "false",
-            "blocking": "false",
-            "resolved": "false",
-            "resolved_by": "",
-            "resolved_at": "",
-            "resolution": "",
-        }
-        options: list[str] = []
-        in_options = False
-        for raw_line in lines:
-            stripped = raw_line.strip()
-            if not stripped:
-                continue
-            if stripped == "options:":
-                in_options = True
-                continue
-            if in_options and stripped.startswith("- "):
-                options.append(stripped[2:].strip())
-                continue
-            if in_options and ":" in stripped:
-                in_options = False
-            if ":" in stripped:
-                key, value = stripped.split(":", 1)
-                key = key.strip()
-                value = value.strip()
-                if key in fields:
-                    fields[key] = value
-        return PendingFrontstageItem(
-            item_id=fields["id"] or heading,
-            item_type=fields["type"],
-            related_task=fields["related_task"],
-            summary=fields["summary"],
-            planner_recommendation=fields["planner_recommendation"],
-            koder_default_action=fields["koder_default_action"],
-            user_input_needed=fields["user_input_needed"].lower() == "true",
-            blocking=fields["blocking"].lower() == "true",
-            options=options,
-            resolved=fields["resolved"].lower() == "true",
-            resolved_by=fields["resolved_by"],
-            resolved_at=fields["resolved_at"],
-            resolution=fields["resolution"],
-            section=section or "pending",
-        )
-
-    def _write_pending_frontstage(self, path: Path, items: list[PendingFrontstageItem]) -> None:
-        pending = [item for item in items if item.section != "archived" and not item.resolved]
-        archived = [item for item in items if item.section == "archived" or item.resolved]
-        lines = [
-            "# PENDING_FRONTSTAGE",
-            "",
-            "## 字段定义",
-            "",
-            "- `id`: 唯一事项 id，例如 `PF-001`",
-            "- `type`: `decision | clarification`",
-            "- `related_task`: 关联任务 id",
-            "- `summary`: 一句话中文摘要",
-            "- `planner_recommendation`: planner 建议方案",
-            "- `koder_default_action`: koder 不上浮用户时的默认动作",
-            "- `user_input_needed`: `true | false`",
-            "- `blocking`: `true | false`",
-            "- `options`: 可选项列表",
-            "- `resolved`: `true | false`",
-            "- `resolved_by`: `koder | user`",
-            "- `resolved_at`: ISO timestamp",
-            "- `resolution`: 最终决定或补充说明",
-            "",
-            "## 待处理事项",
-            "",
-        ]
-        if pending:
-            for item in pending:
-                lines.extend(self._render_pending_item(item))
-        lines.extend(
-            [
-                "## 已归档",
-                "",
-            ]
-        )
-        if archived:
-            for item in archived:
-                lines.extend(self._render_pending_item(item))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-
-    def _render_pending_item(self, item: PendingFrontstageItem) -> list[str]:
-        lines = [
-            f"### {item.item_id}",
-            f"id: {item.item_id}",
-            f"type: {item.item_type}",
-            f"related_task: {item.related_task}",
-            f"summary: {item.summary}",
-            f"planner_recommendation: {item.planner_recommendation}",
-            f"koder_default_action: {item.koder_default_action}",
-            f"user_input_needed: {'true' if item.user_input_needed else 'false'}",
-            f"blocking: {'true' if item.blocking else 'false'}",
-            "options:",
-        ]
-        for option in item.options:
-            lines.append(f"  - {option}")
-        lines.extend(
-            [
-                f"resolved: {'true' if item.resolved else 'false'}",
-                f"resolved_by: {item.resolved_by}",
-                f"resolved_at: {item.resolved_at}",
-                f"resolution: {item.resolution}",
-                "",
-            ]
-        )
-        return lines
 
     def _utc_now_iso(self) -> str:
         result = self._run(
