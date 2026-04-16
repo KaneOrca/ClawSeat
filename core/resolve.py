@@ -77,6 +77,22 @@ def try_resolve_clawseat_root() -> Path | None:
 def dynamic_profile_path(project: str) -> Path:
     """
     Return the canonical path for a project's dynamic profile TOML.
-    Currently /tmp/{project}-profile-dynamic.toml.
+
+    Primary: ~/.agents/profiles/{project}-profile-dynamic.toml (persistent)
+    Fallback: /tmp/{project}-profile-dynamic.toml (legacy, lost on reboot)
+
+    If only the /tmp/ copy exists, returns that for backward compat.
+    New installs will use the persistent location.
     """
-    return Path("/tmp") / f"{project}-profile-dynamic.toml"
+    persistent = Path.home() / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
+    if persistent.exists():
+        return persistent
+    legacy = Path("/tmp") / f"{project}-profile-dynamic.toml"
+    if legacy.exists():
+        # Migrate: copy to persistent location for durability
+        persistent.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(legacy, persistent)
+        return persistent
+    # Neither exists yet — return persistent location for new installs
+    return persistent

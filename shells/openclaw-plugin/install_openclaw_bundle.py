@@ -104,7 +104,8 @@ def check_agent_skills(dry_run: bool) -> list[str]:
     return missing
 
 
-def install_bundle(openclaw_home: Path, *, dry_run: bool) -> None:
+def install_bundle(openclaw_home: Path, *, dry_run: bool) -> int:
+    """Install symlinks and check external skills. Returns count of missing required skills."""
     skills_root = openclaw_home / "skills"
     workspace_koder_skills_root = openclaw_home / "workspace-koder" / "skills"
 
@@ -146,6 +147,8 @@ def install_bundle(openclaw_home: Path, *, dry_run: bool) -> None:
     elif not dry_run:
         print("gstack_skills: all {0} required skills present".format(len(REQUIRED_GSTACK_SKILLS)))
 
+    return len(missing_agent_skills) + len(missing_gstack)
+
 
 def main() -> int:
     args = parse_args()
@@ -154,10 +157,14 @@ def main() -> int:
     if not CLAWSEAT_ROOT.exists():
         raise RuntimeError(f"CLAWSEAT_ROOT not found: {CLAWSEAT_ROOT}")
 
-    install_bundle(openclaw_home, dry_run=args.dry_run)
+    missing_count = install_bundle(openclaw_home, dry_run=args.dry_run)
 
     if not args.dry_run:
         print()
+        if missing_count > 0:
+            print(f"install_incomplete: {missing_count} external skill(s) missing — seats may lack key capabilities")
+            print("  Run the install commands above, then re-run this script to verify.")
+            return 2  # partial install — bundled skills OK, external skills missing
         print("next_steps:")
         print(f"  export CLAWSEAT_ROOT=\"{CLAWSEAT_ROOT}\"")
         print("  在 OpenClaw / 飞书里直接说：安装 ClawSeat 或 启动 ClawSeat")

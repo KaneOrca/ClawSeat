@@ -557,7 +557,7 @@ def _check_skills() -> list[PreflightItem]:
                     fix_command=si.fix_hint,
                 ))
         return items
-    except Exception as exc:
+    except (ImportError, FileNotFoundError, OSError) as exc:
         return [PreflightItem(
             name="skill_registry",
             status=PreflightStatus.WARNING,

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from _common import (
@@ -87,7 +88,7 @@ def main() -> int:
                 return 1
             for _si in _sr_result.optional_missing:
                 print(f"skill_warning: {_si.name} ({_si.source}) — {_si.expanded_path}", file=sys.stderr)
-    except Exception as _exc:
+    except (ImportError, FileNotFoundError, OSError) as _exc:
         print(f"skill_check_skipped: {_exc}", file=sys.stderr)
 
     local_path = make_local_override(profile, project_name=project_name, repo_root=repo_root)

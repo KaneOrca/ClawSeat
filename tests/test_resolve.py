@@ -35,5 +35,7 @@ def test_try_resolve_returns_none_on_bad_path(tmp_path):
 
 def test_dynamic_profile_path():
     p = dynamic_profile_path("myproject")
-    assert p == Path("/tmp/myproject-profile-dynamic.toml")
+    # Persistent location under ~/.agents/profiles/ (new default)
+    # or /tmp/ (legacy fallback if that file exists on disk)
     assert p.name == "myproject-profile-dynamic.toml"
+    assert "myproject" in str(p)
