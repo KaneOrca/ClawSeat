@@ -11,11 +11,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# TODO: cartooner adapter extracted to /tmp/cartooner-clawseat-adapter/adapters/cartooner/
-CARTOONER_ADAPTER_ROOT = REPO_ROOT / "adapters" / "cartooner"
-CARTOONER_CHECK_SCRIPT = CARTOONER_ADAPTER_ROOT / "scripts" / "check-cartooner-status.sh"
-CARTOONER_SUPERVISOR_SCRIPT = CARTOONER_ADAPTER_ROOT / "scripts" / "patrol_supervisor.py"
-
 
 def detect_claude_onboarding_step(text: str, markers: list[tuple[str, str]]) -> str | None:
     for marker, step in markers:
@@ -268,77 +263,10 @@ class HeartbeatHandlers:
         lines.append("")
         self.hooks.write_text(receipt_path, "\n".join(lines))
 
-    # TODO: cartooner-specific heartbeat — adapter extracted out of ClawSeat
     def render_heartbeat_text(self, session: Any, project: Any, engineer: Any) -> str | None:
-        if not (engineer.patrol_authority and engineer.remind_active_loop_owner):
-            return None
-        if project.name != "cartooner":
-            return None
-        active_loop_owner = self.hooks.find_active_loop_owner(project) or "planner"
-        frontstage_seat = session.engineer_id or "koder"
-        check_script = str(CARTOONER_CHECK_SCRIPT)
-        supervisor_script = str(CARTOONER_SUPERVISOR_SCRIPT)
-        send_script = str(self.hooks.send_and_verify_sh)
-        lines = [
-            f"# {session.engineer_id} heartbeat",
-            "",
-            f"Runtime seat id: `{session.engineer_id}`",
-            f"Canonical role: `{engineer.role}`",
-        ]
-        if engineer.aliases:
-            lines.append(f"Aliases: {', '.join(f'`{alias}`' for alias in engineer.aliases)}")
-        lines.extend(
-            [
-                "",
-                "Provisioning assets:",
-                "",
-                "- `HEARTBEAT_MANIFEST.toml` is the desired heartbeat contract.",
-                "- `HEARTBEAT_RECEIPT.toml` is the framework-owned verified install receipt.",
-                "",
-                "When a scheduled heartbeat poll arrives:",
-                "",
-                "1. Stay in lightweight patrol mode; do not enter plan mode for a routine heartbeat run.",
-                "2. Do not re-read `KODER.md` or broad project strategy docs unless the classifier or patrol script returns an ambiguous contradiction that cannot be resolved from the scripted facts.",
-                f"3. Run `{check_script}` as the first-pass classifier.",
-                f"4. Use `{supervisor_script}` to decide whether `{active_loop_owner}` actually needs a reminder.",
-                "5. If patrol shows no meaningful state change or no real stall, reply exactly `HEARTBEAT_OK`.",
-                f"6. If patrol shows a real delivery-not-consumed or stalled-seat condition, use `{frontstage_seat}`'s unblock authority to clear the procedural wait and remind `{active_loop_owner}` if needed; do not take over dispatch or next-hop planning.",
-                "7. Only if the scripts fail or disagree, read the smallest necessary project docs (`TASKS.md` / `STATUS.md` first) and return a short blocker summary instead of loading the full frontstage context.",
-                "",
-                "Reliable handoff model:",
-                "",
-                "- `assigned` = target `TODO.md` exists",
-                f"- `notified` = `{send_script}` returned success",
-                "- `consumed` = target seat durable ACK exists in `TODO.md`",
-                "- only `assigned + notified + consumed` counts as a healthy handoff",
-                "",
-                "Review verdict routing matrix:",
-                "",
-                f"- `APPROVED` -> `{frontstage_seat}`",
-                f"- `APPROVED_WITH_NITS` -> `{frontstage_seat}`",
-                "- `CHANGES_REQUESTED` -> builder seat",
-                f"- `BLOCKED` -> `{frontstage_seat}`",
-                f"- `DECISION_NEEDED` -> `{frontstage_seat}`",
-                f"- Reviewer seat only delivers the verdict; `{active_loop_owner}` still chooses the next hop",
-                "",
-                "Default heartbeat commands:",
-                "",
-                "```bash",
-                f"python {supervisor_script}",
-                f"python {supervisor_script} --send",
-                "```",
-                "",
-                "Guardrails:",
-                "",
-                f"- `{active_loop_owner}` remains the active loop owner and decision owner.",
-                f"- `{frontstage_seat}` owns confirmations, approvals, reminders, and other procedural unblock actions.",
-                "- Do not write downstream specialist TODOs from a heartbeat run.",
-                "- Do not change TASKS.md or STATUS.md unless the patrol protocol explicitly requires a supervision note.",
-                "- Keep heartbeat replies short and factual; avoid restating full project context on every poll.",
-                "- If there is no real reminder to send, stay silent with `HEARTBEAT_OK`.",
-            ]
-        )
-        return "\n".join(lines) + "\n"
+        # Heartbeat text rendering is project-adapter-specific.
+        # No built-in adapters currently provide heartbeat text.
+        return None
 
     def render_heartbeat_manifest_text(
         self,
@@ -349,51 +277,9 @@ class HeartbeatHandlers:
         project_engineers: dict[str, Any] | None = None,
         engineer_order: list[str] | None = None,
     ) -> str | None:
-        if not (engineer.patrol_authority and engineer.remind_active_loop_owner):
-            return None
-        # TODO: cartooner-specific patrol — adapter extracted out of ClawSeat
-        if project.name != "cartooner":
-            return None
-
-        active_loop_owner = (
-            self.hooks.find_active_loop_owner(
-                project,
-                project_engineers=project_engineers,
-                engineer_order=engineer_order,
-            )
-            or "planner"
-        )
-        commands = [
-            f"python {CARTOONER_SUPERVISOR_SCRIPT}",
-            f"python {CARTOONER_SUPERVISOR_SCRIPT} --send",
-        ]
-        lines = [
-            "version = 1",
-            f"seat_id = {self.hooks.q(session.engineer_id)}",
-            f"project = {self.hooks.q(project.name)}",
-            f"role = {self.hooks.q(engineer.role)}",
-            f"aliases = {self.hooks.q_array(engineer.aliases)}",
-            'kind = "heartbeat"',
-            "enabled = true",
-            "interval_minutes = 10",
-            f"active_loop_owner = {self.hooks.q(active_loop_owner)}",
-            'expected_idle_reply = "HEARTBEAT_OK"',
-            f"workspace = {self.hooks.q(session.workspace)}",
-            f"repo_root = {self.hooks.q(project.repo_root)}",
-            f"receipt_path = {self.hooks.q(str(self.receipt_path(session)))}",
-            f"patrol_entrypoint = {self.hooks.q(str(CARTOONER_CHECK_SCRIPT))}",
-            f"supervisor_entrypoint = {self.hooks.q(str(CARTOONER_SUPERVISOR_SCRIPT))}",
-            f"send_script = {self.hooks.q(str(self.hooks.send_and_verify_sh))}",
-            f"commands = {self.hooks.q_array(commands)}",
-            f"human_facing = {'true' if engineer.human_facing else 'false'}",
-            f"patrol_authority = {'true' if engineer.patrol_authority else 'false'}",
-            f"unblock_authority = {'true' if engineer.unblock_authority else 'false'}",
-            f"remind_active_loop_owner = {'true' if engineer.remind_active_loop_owner else 'false'}",
-            f"dispatch_authority = {'true' if engineer.dispatch_authority else 'false'}",
-            f"active_loop_owner_authority = {'true' if engineer.active_loop_owner else 'false'}",
-            "",
-        ]
-        return "\n".join(lines)
+        # Heartbeat manifest rendering is project-adapter-specific.
+        # No built-in adapters currently provide heartbeat manifests.
+        return None
 
     def provision_session_heartbeat(
         self,

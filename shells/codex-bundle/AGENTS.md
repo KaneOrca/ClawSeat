@@ -14,10 +14,7 @@ Read in this order:
 3. first-run entry skill:
    `{CLAWSEAT_ROOT}/core/skills/cs/SKILL.md`
 4. `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
-5. project adapter skill when needed
-   Example:
-   <!-- TODO: cartooner adapter extracted out of ClawSeat core tree -->
-   `{CLAWSEAT_ROOT}/adapters/projects/cartooner/skills/cartooner-koder/SKILL.md`
+5. project adapter skill when needed (from `{CLAWSEAT_ROOT}/adapters/projects/`)
 6. `{CLAWSEAT_ROOT}/shells/codex-bundle/adapter_shim.py`
 
 Bundle boundary:

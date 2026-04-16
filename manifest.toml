@@ -22,8 +22,6 @@ shells = ["shells/openclaw-plugin", "shells/claude-bundle", "shells/codex-bundle
 profiles = ["examples/starter/profiles"]
 docs = ["docs/INSTALL.md", "docs/INSTALL_GUIDE.md", "docs/ARCHITECTURE.md"]
 optional = [
-  # TODO: cartooner adapter extracted to /tmp/cartooner-clawseat-adapter/adapters/cartooner/
-  # "adapters/projects/cartooner",
   "adapters/projects/openclaw",
   "examples/arena-pretext-ui",
   "docs",

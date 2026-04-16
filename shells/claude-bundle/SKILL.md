@@ -17,9 +17,7 @@ It does not implement ClawSeat protocol logic. It only wires Claude Code to:
   - `{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md`
 - core harness skill:
   - `{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md`
-- optional project adapter skill:
-  <!-- TODO: cartooner adapter extracted out of ClawSeat core tree -->
-  - for example `{CLAWSEAT_ROOT}/adapters/projects/cartooner/skills/cartooner-koder/SKILL.md`
+- optional project adapter skill (from `{CLAWSEAT_ROOT}/adapters/projects/`)
 - tmux-backed harness adapter shim:
   - `{CLAWSEAT_ROOT}/shells/claude-bundle/adapter_shim.py`
 

@@ -221,8 +221,7 @@ class TemplateHandlers:
             "Useful paths:",
             f"- repo: `{repo_root}`",
         ]
-        # TODO: cartooner adapter extracted out of ClawSeat — review this path probe
-        for label in ("cartooner", "openclaw"):
+        for label in ("openclaw",):
             candidate = Path(repo_root) / label
             if candidate.exists():
                 workspace_notes_lines.append(f"- {label}: `{candidate}`")
@@ -342,9 +341,6 @@ class TemplateHandlers:
             "repo": repo_root,
             project.name: repo_root,
         }
-        # TODO: cartooner adapter extracted out of ClawSeat — review this symlink
-        if (repo_root / "cartooner").exists():
-            links["cartooner"] = repo_root / "cartooner"
         if (repo_root / "openclaw").exists():
             links["openclaw"] = repo_root / "openclaw"
         for name, target in links.items():

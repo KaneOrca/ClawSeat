@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import textwrap
 from pathlib import Path
@@ -16,7 +17,7 @@ HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scrip
 
 
 def q(value: str) -> str:
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return json.dumps(value, ensure_ascii=False)
 
 
 def q_array(values: list[str]) -> str:
@@ -155,14 +156,6 @@ def render_harness_runtime_lines(engineer: Any) -> list[str]:
         "- heartbeat / patrol / unblock loop",
         "- CLI control console",
     ]
-    # TODO: cartooner-koder skill extracted to /tmp/cartooner-clawseat-adapter/adapters/cartooner/skills/
-    if any("cartooner-koder/SKILL.md" in skill for skill in skills):
-        lines.extend(
-            [
-                "",
-                "`cartooner-koder` remains the project-facing wrapper over that runtime.",
-            ]
-        )
     return lines
 
 

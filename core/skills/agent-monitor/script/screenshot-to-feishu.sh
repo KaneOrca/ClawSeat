@@ -5,7 +5,7 @@
 # 用法:
 #   ./screenshot-to-feishu.sh [消息文字]
 #
-# 默认输出: /Users/ywf/.openclaw/workspace-warden/media/screenshot.jpg
+# 默认输出: ${OPENCLAW_HOME:-$HOME/.openclaw}/workspace-warden/media/screenshot.jpg
 # 截取区域: x=50, 从屏幕顶部到当前鼠标 Y 坐标, 宽=1300
 #
 # 依赖: cliclick (brew install cliclick)
@@ -21,7 +21,7 @@ fi
 
 echo "鼠标 Y 坐标: $MOUSE_Y"
 
-OUTPUT="/Users/ywf/.openclaw/workspace-warden/media/screenshot.jpg"
+OUTPUT="${OPENCLAW_HOME:-$HOME/.openclaw}/workspace-warden/media/screenshot.jpg"
 MSG="${1:-截图}"
 
 # 确保目录存在

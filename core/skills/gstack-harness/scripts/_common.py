@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+"""
+_common.py — harness shared module (re-export hub).
+
+Functions are organized into focused submodules:
+  _utils.py            — file I/O, subprocess, TOML quoting, path constants
+  _feishu.py           — Feishu/Lark messaging, delegation reports
+  _task_io.py          — task dispatch/completion file operations
+  _heartbeat_helpers.py — heartbeat contract verification
+
+This file re-exports everything for backward compatibility with existing
+`from _common import X` statements. New code should import from the
+specific submodule when possible.
+"""
 from __future__ import annotations
 
 import json
@@ -7,84 +20,88 @@ import re
 import shutil
 import subprocess
 import tempfile
-import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore
+# ── Re-exports from submodules (backward compat) ─────────────────────
 
-
-REPO_ROOT = Path(
-    os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[4]))
+from _utils import (  # noqa: F401 — re-export
+    AGENT_HOME,
+    AGENTS_ROOT,
+    CONSUMED_RE,
+    OPENCLAW_AGENTS_ROOT,
+    OPENCLAW_CONFIG_PATH,
+    OPENCLAW_FEISHU_SEND_SH,
+    OPENCLAW_HOME,
+    PLACEHOLDER_RE,
+    REPO_ROOT,
+    SCRIPTS_ROOT,
+    TASK_ROW_RE,
+    ensure_dir,
+    ensure_parent,
+    executable_command,
+    load_json,
+    load_toml,
+    q,
+    q_array,
+    read_text,
+    require_success,
+    run_command,
+    run_command_with_env,
+    sanitize_name,
+    summarize_status_lines,
+    utc_now_iso,
+    write_json,
+    write_text,
 )
-AGENT_HOME = Path(os.environ.get("AGENT_HOME", str(Path.home()))).expanduser()
-AGENTS_ROOT = AGENT_HOME / ".agents"
-SCRIPTS_ROOT = REPO_ROOT / "core" / "shell-scripts"
-OPENCLAW_HOME = Path(
-    os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))
-).expanduser()
-OPENCLAW_CONFIG_PATH = Path(
-    os.environ.get("OPENCLAW_CONFIG_PATH", str(OPENCLAW_HOME / "openclaw.json"))
-).expanduser()
-OPENCLAW_AGENTS_ROOT = OPENCLAW_HOME / "agents"
-OPENCLAW_FEISHU_SEND_SH = Path(
-    os.environ.get(
-        "CLAWSEAT_FEISHU_SEND_SH",
-        os.environ.get(
-            "OPENCLAW_FEISHU_SEND_SH",
-            str(OPENCLAW_HOME / "skills" / "claude-desktop" / "script" / "feishu-send.sh"),
-        ),
-    )
-).expanduser()
 
-
-TASK_ROW_RE = re.compile(r"^\|\s*([A-Za-z0-9_-]+)\s*\|")
-CONSUMED_RE = re.compile(
-    r"^Consumed:\s*(?P<task_id>\S+)\s+from\s+(?P<source>\S+)\s+at\s+(?P<ts>.+)$"
+from _feishu import (  # noqa: F401 — re-export
+    DELEGATION_REPORT_HEADER,
+    VALID_DELEGATION_DECISION_HINTS,
+    VALID_DELEGATION_LANES,
+    VALID_DELEGATION_NEXT_ACTIONS,
+    VALID_DELEGATION_REPORT_STATUSES,
+    VALID_DELEGATION_USER_GATES,
+    _classify_send_failure,
+    _lark_cli_env,
+    _lark_cli_real_home,
+    broadcast_feishu_group_message,
+    build_delegation_report_text,
+    check_feishu_auth,
+    collect_feishu_group_ids_from_config,
+    collect_feishu_group_ids_from_sessions,
+    collect_feishu_group_keys,
+    legacy_feishu_group_broadcast_enabled,
+    resolve_primary_feishu_group_id,
+    sanitize_report_value,
+    send_feishu_user_message,
+    stable_dispatch_nonce,
 )
-PLACEHOLDER_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
-DELEGATION_REPORT_HEADER = "OC_DELEGATION_REPORT_V1"
-VALID_DELEGATION_LANES = {
-    "planning",
-    "builder",
-    "reviewer",
-    "qa",
-    "designer",
-    "frontstage",
-}
-VALID_DELEGATION_REPORT_STATUSES = {
-    "in_progress",
-    "done",
-    "needs_decision",
-    "blocked",
-}
-VALID_DELEGATION_DECISION_HINTS = {
-    "hold",
-    "proceed",
-    "ask_user",
-    "retry",
-    "escalate",
-    "close",
-}
-VALID_DELEGATION_USER_GATES = {
-    "none",
-    "optional",
-    "required",
-}
-VALID_DELEGATION_NEXT_ACTIONS = {
-    "wait",
-    "consume_closeout",
-    "ask_user",
-    "retry_current_lane",
-    "surface_blocker",
-    "finalize_chain",
-}
+from _task_io import (  # noqa: F401 — re-export
+    append_consumed_ack,
+    append_status_note,
+    build_completion_message,
+    build_notify_message,
+    extract_canonical_verdict,
+    extract_prefixed_value,
+    file_declares_task,
+    find_consumed_ack,
+    handoff_assigned,
+    upsert_tasks_row,
+    write_delivery,
+    write_todo,
+)
+
+from _heartbeat_helpers import (  # noqa: F401 — re-export
+    heartbeat_manifest_fingerprint,
+    heartbeat_receipt_is_verified,
+    heartbeat_state,
+)
+
+
+# ── HarnessProfile dataclass + profile loading ───────────────────────
 
 
 @dataclass
@@ -150,9 +167,7 @@ CLAUDE_ONBOARDING_MARKERS: list[tuple[str, str]] = [
 ]
 
 
-def sanitize_name(value: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9._-]+", "-", value.strip())
-
+# ── Profile loading ──────────────────────────────────────────────────
 
 def expand_profile_value(value: str) -> Path:
     defaults = {
@@ -245,8 +260,13 @@ def resolve_dynamic_seats(
 
 
 def load_profile(path: str | Path) -> HarnessProfile:
+    try:
+        import tomllib as _tomllib
+    except ModuleNotFoundError:
+        import tomli as _tomllib  # type: ignore
+
     profile_path = Path(path).expanduser().resolve()
-    data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+    data = _tomllib.loads(profile_path.read_text(encoding="utf-8"))
     dynamic = data.get("dynamic_roster", {})
     if not isinstance(dynamic, dict):
         dynamic = {}
@@ -320,434 +340,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
     )
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def ensure_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-
-
-def ensure_parent(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-
-def read_text(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8")
-
-
-def write_text(path: Path, text: str) -> None:
-    ensure_parent(path)
-    path.write_text(text.rstrip() + "\n", encoding="utf-8")
-
-
-def load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_toml(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    return tomllib.loads(path.read_text(encoding="utf-8"))
-
-
-def collect_feishu_group_keys(payload: Any, *, found: list[str]) -> None:
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if isinstance(key, str) and key.startswith("group:"):
-                group_id = key.split("group:", 1)[1].strip()
-                if group_id and group_id not in found:
-                    found.append(group_id)
-            collect_feishu_group_keys(value, found=found)
-    elif isinstance(payload, list):
-        for item in payload:
-            collect_feishu_group_keys(item, found=found)
-
-
-def collect_feishu_group_ids_from_config(config: dict[str, Any]) -> list[str]:
-    found: list[str] = []
-
-    def add_group_id(value: Any) -> None:
-        group_id = str(value).strip()
-        if group_id and group_id != "*" and group_id not in found:
-            found.append(group_id)
-
-    channels = config.get("channels")
-    if isinstance(channels, dict):
-        feishu = channels.get("feishu")
-        if isinstance(feishu, dict):
-            groups = feishu.get("groups")
-            if isinstance(groups, dict):
-                for group_id in groups.keys():
-                    add_group_id(group_id)
-            accounts = feishu.get("accounts")
-            if isinstance(accounts, dict):
-                default_account = feishu.get("defaultAccount")
-                if isinstance(default_account, str):
-                    default_account_payload = accounts.get(default_account)
-                    if isinstance(default_account_payload, dict):
-                        default_groups = default_account_payload.get("groups")
-                        if isinstance(default_groups, dict):
-                            for group_id in default_groups.keys():
-                                add_group_id(group_id)
-                for account_payload in accounts.values():
-                    if not isinstance(account_payload, dict):
-                        continue
-                    account_groups = account_payload.get("groups")
-                    if isinstance(account_groups, dict):
-                        for group_id in account_groups.keys():
-                            add_group_id(group_id)
-    return found
-
-
-def collect_feishu_group_ids_from_sessions() -> list[str]:
-    found: list[str] = []
-    if not OPENCLAW_AGENTS_ROOT.exists():
-        return found
-    for path in sorted(OPENCLAW_AGENTS_ROOT.glob("*/sessions/sessions.json")):
-        try:
-            payload = load_json(path)
-        except Exception:
-            continue
-        if payload is None:
-            continue
-        collect_feishu_group_keys(payload, found=found)
-    return found
-
-
-def resolve_primary_feishu_group_id() -> str | None:
-    override = (
-        os.environ.get("CLAWSEAT_FEISHU_GROUP_ID")
-        or os.environ.get("OPENCLAW_FEISHU_GROUP_ID")
-    )
-    if override:
-        resolved = override.strip()
-        if resolved:
-            return resolved
-    config = load_json(OPENCLAW_CONFIG_PATH) or {}
-    group_ids = collect_feishu_group_ids_from_config(config)
-    if group_ids:
-        return group_ids[0]
-    group_ids = collect_feishu_group_ids_from_sessions()
-    if group_ids:
-        return group_ids[0]
-    return None
-
-
-def stable_dispatch_nonce(project: str, lane: str, task_id: str) -> str:
-    seed = f"{project}:{lane}:{task_id}".encode("utf-8")
-    return hashlib.sha1(seed).hexdigest()[:8]
-
-
-def sanitize_report_value(value: str) -> str:
-    return " ".join(str(value).split()).strip()
-
-
-def build_delegation_report_text(
-    *,
-    project: str,
-    lane: str,
-    task_id: str,
-    dispatch_nonce: str,
-    report_status: str,
-    decision_hint: str,
-    user_gate: str,
-    next_action: str,
-    summary: str,
-    human_summary: str | None = None,
-) -> str:
-    if lane not in VALID_DELEGATION_LANES:
-        raise ValueError(f"invalid delegation lane: {lane}")
-    if report_status not in VALID_DELEGATION_REPORT_STATUSES:
-        raise ValueError(f"invalid delegation report_status: {report_status}")
-    if decision_hint not in VALID_DELEGATION_DECISION_HINTS:
-        raise ValueError(f"invalid delegation decision_hint: {decision_hint}")
-    if user_gate not in VALID_DELEGATION_USER_GATES:
-        raise ValueError(f"invalid delegation user_gate: {user_gate}")
-    if next_action not in VALID_DELEGATION_NEXT_ACTIONS:
-        raise ValueError(f"invalid delegation next_action: {next_action}")
-
-    ordered_fields = [
-        ("project", sanitize_report_value(project)),
-        ("lane", sanitize_report_value(lane)),
-        ("task_id", sanitize_report_value(task_id)),
-        ("dispatch_nonce", sanitize_report_value(dispatch_nonce)),
-        ("report_status", sanitize_report_value(report_status)),
-        ("decision_hint", sanitize_report_value(decision_hint)),
-        ("user_gate", sanitize_report_value(user_gate)),
-        ("next_action", sanitize_report_value(next_action)),
-        ("summary", sanitize_report_value(summary)),
-    ]
-    lines = [f"[{DELEGATION_REPORT_HEADER}]"]
-    lines.extend(f"{key}={value}" for key, value in ordered_fields)
-    lines.append(f"[/{DELEGATION_REPORT_HEADER}]")
-    human = sanitize_report_value(human_summary or "")
-    if human:
-        lines.extend(["", human])
-    return "\n".join(lines)
-
-
-def _lark_cli_real_home() -> str:
-    """Return the real user HOME for lark-cli (not the isolated seat runtime HOME),
-    because lark-cli's auth config lives under the real user's home directory."""
-    return str(AGENT_HOME) if str(AGENT_HOME) != str(Path.home()) else str(Path.home())
-
-
-def _lark_cli_env() -> dict[str, str]:
-    return {
-        "HOME": _lark_cli_real_home(),
-        "OPENCLAW_HOME": str(OPENCLAW_HOME),
-    }
-
-
-def check_feishu_auth() -> dict[str, str]:
-    """Check lark-cli availability and auth token status.
-
-    Returns a dict with:
-      - status: "ok" | "missing" | "expired" | "needs_refresh" | "error"
-      - reason: human-readable explanation
-      - fix: actionable command the user should run
-      - identity: "user" when token is valid
-      - userName: the authenticated user name when available
-    """
-    lark_cli = shutil.which("lark-cli")
-    if not lark_cli:
-        return {
-            "status": "missing",
-            "reason": "lark-cli not found in PATH",
-            "fix": "brew install larksuite/cli/lark-cli",
-        }
-
-    result = run_command_with_env(
-        [lark_cli, "auth", "status"],
-        cwd=str(OPENCLAW_HOME),
-        env=_lark_cli_env(),
-    )
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        return {
-            "status": "error",
-            "reason": f"lark-cli auth status failed (rc={result.returncode}): {stderr}",
-            "fix": "lark-cli auth login",
-        }
-
-    stdout = result.stdout.strip()
-    try:
-        import json as _json
-        auth_info = _json.loads(stdout)
-    except (ValueError, TypeError):
-        return {
-            "status": "error",
-            "reason": f"unexpected lark-cli auth output: {stdout[:200]}",
-            "fix": "lark-cli auth login",
-        }
-
-    token_status = auth_info.get("tokenStatus", "unknown")
-    identity = auth_info.get("identity", "unknown")
-    user_name = auth_info.get("userName", "")
-
-    if token_status == "valid":
-        payload: dict[str, str] = {
-            "status": "ok",
-            "reason": "auth token is valid",
-            "identity": identity,
-        }
-        if user_name:
-            payload["userName"] = user_name
-        return payload
-
-    if token_status in ("expired", "needs_refresh"):
-        return {
-            "status": token_status,
-            "reason": f"lark-cli token is {token_status}",
-            "fix": "lark-cli auth login",
-        }
-
-    return {
-        "status": "error",
-        "reason": f"unexpected token status: {token_status}",
-        "fix": "lark-cli auth login",
-    }
-
-
-def _classify_send_failure(stderr: str) -> tuple[str, str]:
-    """Classify a lark-cli send failure into a specific reason and fix command.
-
-    Returns (reason, fix).
-    """
-    lower = stderr.lower()
-    if "token" in lower and ("expired" in lower or "invalid" in lower or "refresh" in lower):
-        return "auth_expired", "lark-cli auth login"
-    if "permission" in lower or "scope" in lower or "forbidden" in lower:
-        return "permission_denied", "lark-cli auth login  (ensure im:message scope is granted)"
-    if "not found" in lower or "no such" in lower or "404" in lower:
-        return "group_not_found", "check that the group ID is correct and the bot is in the group"
-    if "timeout" in lower or "connection" in lower or "network" in lower:
-        return "network_error", "check network connectivity and retry"
-    return "lark_cli_send_failed", "run `lark-cli auth status` to diagnose"
-
-
-def send_feishu_user_message(
-    message: str,
-    *,
-    group_id: str | None = None,
-    pre_check_auth: bool = False,
-) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
-    payload: dict[str, str] = {
-        "status": "skipped",
-        "reason": "no_group_id_found",
-        "message": message.strip(),
-    }
-    if not resolved_group_id:
-        return payload
-
-    payload["group_id"] = resolved_group_id
-    lark_cli = shutil.which("lark-cli")
-    if not lark_cli:
-        payload["reason"] = "lark_cli_missing"
-        payload["fix"] = "brew install larksuite/cli/lark-cli"
-        return payload
-
-    # Optional pre-send auth check to catch expired tokens early.
-    if pre_check_auth:
-        auth = check_feishu_auth()
-        if auth["status"] != "ok":
-            payload["status"] = "failed"
-            payload["reason"] = f"auth_{auth['status']}"
-            payload["fix"] = auth.get("fix", "lark-cli auth login")
-            payload["auth_detail"] = auth.get("reason", "")
-            return payload
-
-    result = run_command_with_env(
-        [
-            lark_cli,
-            "im",
-            "+messages-send",
-            "--as",
-            "user",
-            "--chat-id",
-            resolved_group_id,
-            "--text",
-            message,
-        ],
-        cwd=str(OPENCLAW_HOME),
-        env=_lark_cli_env(),
-    )
-    payload["transport"] = "lark-cli-user"
-    payload["returncode"] = str(result.returncode)
-    if result.stdout.strip():
-        payload["stdout"] = result.stdout.strip()
-    if result.stderr.strip():
-        payload["stderr"] = result.stderr.strip()
-    if result.returncode == 0:
-        payload["status"] = "sent"
-    else:
-        payload["status"] = "failed"
-        reason, fix = _classify_send_failure(result.stderr)
-        payload["reason"] = reason
-        payload["fix"] = fix
-    return payload
-
-
-def legacy_feishu_group_broadcast_enabled() -> bool:
-    value = os.environ.get("CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST")
-    if value is None:
-        value = os.environ.get("OPENCLAW_ENABLE_LEGACY_FEISHU_BROADCAST")
-    if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def broadcast_feishu_group_message(
-    message: str,
-    *,
-    group_id: str | None = None,
-) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
-    payload: dict[str, str] = {
-        "status": "skipped",
-        "reason": "no_group_id_found",
-        "message": message.strip(),
-    }
-    if not resolved_group_id:
-        return payload
-
-    payload["group_id"] = resolved_group_id
-    if not legacy_feishu_group_broadcast_enabled():
-        payload["reason"] = "legacy_group_broadcast_disabled"
-        return payload
-    if not OPENCLAW_FEISHU_SEND_SH.exists():
-        payload["reason"] = "feishu_send_script_missing"
-        payload["send_script"] = str(OPENCLAW_FEISHU_SEND_SH)
-        return payload
-
-    result = run_command_with_env(
-        [
-            "bash",
-            str(OPENCLAW_FEISHU_SEND_SH),
-            "--target",
-            f"group:{resolved_group_id}",
-            message,
-        ],
-        cwd=OPENCLAW_HOME,
-        env={"HOME": str(AGENT_HOME)},
-    )
-    payload["send_script"] = str(OPENCLAW_FEISHU_SEND_SH)
-    payload["returncode"] = str(result.returncode)
-    if result.stdout.strip():
-        payload["stdout"] = result.stdout.strip()
-    if result.stderr.strip():
-        payload["stderr"] = result.stderr.strip()
-    if result.returncode == 0:
-        payload["status"] = "sent"
-    else:
-        payload["status"] = "failed"
-        payload["reason"] = "feishu_send_failed"
-    return payload
-
-
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    ensure_parent(path)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def run_command(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return run_command_with_env(args, cwd=cwd, env={"HOME": str(AGENT_HOME)})
-
-
-def run_command_with_env(
-    args: list[str],
-    *,
-    cwd: Path | None = None,
-    env: dict[str, str] | None = None,
-) -> subprocess.CompletedProcess[str]:
-    merged_env = os.environ.copy()
-    if env:
-        merged_env.update(env)
-    return subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        text=True,
-        capture_output=True,
-        env=merged_env,
-        check=False,
-    )
-
-
-def require_success(result: subprocess.CompletedProcess[str], what: str) -> None:
-    if result.returncode == 0:
-        return
-    stderr = result.stderr.strip()
-    stdout = result.stdout.strip()
-    detail = stderr or stdout or f"exit {result.returncode}"
-    raise RuntimeError(f"{what} failed: {detail}")
-
+# ── Session / tmux helpers ───────────────────────────────────────────
 
 def notify(profile: HarnessProfile, target_seat: str, message: str) -> subprocess.CompletedProcess[str]:
     session_name = resolve_session_name(profile, target_seat)
@@ -766,288 +359,6 @@ def resolve_session_name(profile: HarnessProfile, seat: str) -> str:
         if session_name:
             return session_name
     return seat
-
-def build_notify_message(
-    target_seat: str,
-    todo_path: Path,
-    task_id: str,
-    *,
-    source: str,
-    reply_to: str,
-) -> str:
-    return (
-        f"{task_id} assigned from {source} to {target_seat}. "
-        f"Read {todo_path}. When complete, reply to {reply_to} via DELIVERY + notify."
-    )
-
-
-def build_completion_message(task_id: str, delivery_path: Path, *, source: str, target: str) -> str:
-    return (
-        f"{task_id} complete from {source} to {target}. "
-        f"Read {delivery_path} and write a durable Consumed ACK when handled."
-    )
-
-
-def upsert_tasks_row(path: Path, *, task_id: str, title: str, owner: str, status: str, notes: str) -> None:
-    existing = read_text(path).splitlines()
-    if not existing:
-        existing = [
-            "# Tasks",
-            "",
-            "| ID | Title | Owner | Status | Notes |",
-            "|----|-------|-------|--------|-------|",
-        ]
-
-    new_row = f"| {task_id} | {title} | {owner} | {status} | {notes} |"
-    row_index = None
-    table_end = None
-    for idx, line in enumerate(existing):
-        if TASK_ROW_RE.match(line):
-            table_end = idx
-            if line.startswith(f"| {task_id} |"):
-                row_index = idx
-        elif table_end is not None and line.strip() and not line.startswith("|"):
-            break
-    if row_index is not None:
-        existing[row_index] = new_row
-    else:
-        insert_at = table_end + 1 if table_end is not None else len(existing)
-        existing.insert(insert_at, new_row)
-    write_text(path, "\n".join(existing))
-
-
-def append_status_note(path: Path, note: str) -> None:
-    timestamp = utc_now_iso()
-    existing = read_text(path)
-    block = f"- {timestamp}: {note}"
-    if existing.strip():
-        write_text(path, existing.rstrip() + "\n" + block)
-    else:
-        write_text(path, "# Status\n\n" + block)
-
-
-def write_todo(
-    path: Path,
-    *,
-    task_id: str,
-    project: str,
-    owner: str,
-    status: str,
-    title: str,
-    objective: str,
-    source: str,
-    reply_to: str,
-) -> None:
-    text = (
-        f"task_id: {task_id}\n"
-        f"project: {project}\n"
-        f"owner: {owner}\n"
-        f"status: {status}\n"
-        f"title: {title}\n\n"
-        f"# Objective\n\n{objective.strip()}\n\n"
-        f"# Dispatch\n\n"
-        f"source: {source}\n"
-        f"reply_to: {reply_to}\n"
-        f"dispatched_at: {utc_now_iso()}\n"
-    )
-    write_text(path, text)
-
-
-def write_delivery(
-    path: Path,
-    *,
-    task_id: str,
-    owner: str,
-    target: str,
-    title: str,
-    summary: str,
-    status: str,
-    verdict: str | None = None,
-    frontstage_disposition: str | None = None,
-    user_summary: str | None = None,
-    next_action: str | None = None,
-) -> None:
-    lines = [
-        f"task_id: {task_id}",
-        f"owner: {owner}",
-        f"target: {target}",
-        f"status: {status}",
-        f"date: {utc_now_iso()}",
-        "",
-        f"# Delivery: {title}",
-        "",
-        "## Summary",
-        "",
-        summary.strip(),
-    ]
-    if verdict:
-        lines.extend(["", f"Verdict: {verdict}"])
-    if frontstage_disposition:
-        lines.extend(["", f"FrontstageDisposition: {frontstage_disposition}"])
-    if user_summary:
-        lines.extend(["", f"UserSummary: {user_summary.strip()}"])
-    if next_action:
-        lines.extend(["", f"NextAction: {next_action.strip()}"])
-    write_text(path, "\n".join(lines))
-
-
-def append_consumed_ack(path: Path, *, task_id: str, source: str) -> str:
-    existing = read_text(path)
-    for line in existing.splitlines():
-        match = CONSUMED_RE.match(line.strip())
-        if not match:
-            continue
-        if match.group("task_id") == task_id and match.group("source") == source:
-            return line.strip()
-    ack_line = f"Consumed: {task_id} from {source} at {utc_now_iso()}"
-    if existing.strip():
-        write_text(path, existing.rstrip() + "\n" + ack_line)
-    else:
-        write_text(path, ack_line)
-    return ack_line
-
-
-def find_consumed_ack(path: Path, *, task_id: str, source: str) -> str | None:
-    for line in read_text(path).splitlines():
-        match = CONSUMED_RE.match(line.strip())
-        if not match:
-            continue
-        if match.group("task_id") == task_id and match.group("source") == source:
-            return line.strip()
-    return None
-
-
-def extract_canonical_verdict(path: Path) -> str | None:
-    for line in read_text(path).splitlines():
-        if line.startswith("Verdict: "):
-            verdict = line.split("Verdict: ", 1)[1].strip()
-            return verdict or None
-    return None
-
-
-def extract_prefixed_value(path: Path, prefix: str) -> str | None:
-    for line in read_text(path).splitlines():
-        if line.startswith(prefix):
-            value = line.split(prefix, 1)[1].strip()
-            return value or None
-    return None
-
-
-def file_declares_task(path: Path, task_id: str) -> bool:
-    return path.exists() and f"task_id: {task_id}" in read_text(path)
-
-
-def handoff_assigned(
-    profile: HarnessProfile,
-    *,
-    task_id: str,
-    source: str,
-    target: str,
-    kind: str = "dispatch",
-    delivery_path: str | None = None,
-) -> bool:
-    todo_path = profile.todo_path(target)
-    source_delivery_path = profile.delivery_path(source)
-    if kind == "completion" or str(source_delivery_path) == str(delivery_path or ""):
-        return file_declares_task(source_delivery_path, task_id)
-    return file_declares_task(todo_path, task_id)
-
-
-def heartbeat_manifest_fingerprint(manifest: dict[str, Any]) -> str:
-    encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def heartbeat_receipt_is_verified(
-    *,
-    receipt: dict[str, Any] | None,
-    manifest: dict[str, Any] | None,
-    seat: str,
-    project: str,
-) -> bool:
-    if not receipt or not manifest:
-        return False
-    if str(receipt.get("status", "")).strip() != "verified":
-        return False
-    if str(receipt.get("seat_id", "")).strip() != seat:
-        return False
-    if str(receipt.get("project", "")).strip() != project:
-        return False
-    return str(receipt.get("manifest_fingerprint", "")).strip() == heartbeat_manifest_fingerprint(manifest)
-
-
-def heartbeat_state(profile: HarnessProfile, seat: str) -> dict[str, Any]:
-    manifest_path = heartbeat_manifest_path(profile, seat)
-    receipt_path = profile.heartbeat_receipt_for(seat)
-    manifest = load_toml(manifest_path)
-    receipt = load_toml(receipt_path)
-    verified = heartbeat_receipt_is_verified(
-        receipt=receipt,
-        manifest=manifest,
-        seat=seat,
-        project=profile.project_name,
-    )
-    if verified:
-        state = "verified"
-    elif receipt:
-        state = "unverified"
-    else:
-        state = "missing"
-    return {
-        "owner": seat,
-        "configured": verified,
-        "state": state,
-        "manifest_path": str(manifest_path),
-        "receipt_path": str(receipt_path),
-        "manifest": manifest or {},
-        "receipt": receipt or {},
-    }
-
-
-def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
-    materialized_seats = list(profile.seats)
-    lines = [
-        "version = 1",
-        "",
-        f'project_name = "{project_name}"',
-        f'repo_root = "{repo_root}"',
-        f"seat_order = {json.dumps(materialized_seats)}",
-        f"bootstrap_seats = {json.dumps(materialized_seats)}",
-    ]
-    for seat_id, override in profile.seat_overrides.items():
-        if not override:
-            continue
-        lines.extend(["", "[[overrides]]", f'id = "{seat_id}"'])
-        for key, value in override.items():
-            lines.append(f'{key} = "{value}"')
-    payload = "\n".join(lines) + "\n"
-    fd, tmp = tempfile.mkstemp(prefix=f"{sanitize_name(project_name)}-", suffix=".toml")
-    tmp_path = Path(tmp)
-    os.close(fd)
-    write_text(tmp_path, payload)
-    return tmp_path
-
-
-def summarize_status_lines(lines: Iterable[str]) -> list[str]:
-    return [line.strip() for line in lines if line.strip()]
-
-
-def executable_command(path: Path, *extra_args: str) -> list[str]:
-    if path.suffix == ".py":
-        return ["python3", str(path), *extra_args]
-    return [str(path), *extra_args]
-
-
-def tracked_runtime_seats(profile: HarnessProfile) -> list[str]:
-    return [seat for seat in profile.seats if seat != profile.heartbeat_owner]
-
-
-def heartbeat_manifest_path(profile: HarnessProfile, seat: str) -> Path:
-    return profile.workspace_for(seat) / "HEARTBEAT_MANIFEST.toml"
-
-
-def heartbeat_md_path(profile: HarnessProfile, seat: str) -> Path:
-    return profile.workspace_for(seat) / "HEARTBEAT.md"
 
 
 def session_path_for(profile: HarnessProfile, seat: str) -> Path:
@@ -1086,6 +397,54 @@ def detect_claude_onboarding_step(pane_text: str) -> str | None:
             return step
     return None
 
+
+# ── Seat/runtime helpers ─────────────────────────────────────────────
+
+def tracked_runtime_seats(profile: HarnessProfile) -> list[str]:
+    return [seat for seat in profile.seats if seat != profile.heartbeat_owner]
+
+
+def heartbeat_manifest_path(profile: HarnessProfile, seat: str) -> Path:
+    return profile.workspace_for(seat) / "HEARTBEAT_MANIFEST.toml"
+
+
+def heartbeat_md_path(profile: HarnessProfile, seat: str) -> Path:
+    return profile.workspace_for(seat) / "HEARTBEAT.md"
+
+
+def is_managed_runtime_path(profile: HarnessProfile, path: Path) -> bool:
+    try:
+        path.resolve().relative_to(profile.tasks_root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
+    materialized_seats = list(profile.seats)
+    lines = [
+        "version = 1",
+        "",
+        f'project_name = "{project_name}"',
+        f'repo_root = "{repo_root}"',
+        f"seat_order = {json.dumps(materialized_seats)}",
+        f"bootstrap_seats = {json.dumps(materialized_seats)}",
+    ]
+    for seat_id, override in profile.seat_overrides.items():
+        if not override:
+            continue
+        lines.extend(["", "[[overrides]]", f'id = "{seat_id}"'])
+        for key, value in override.items():
+            lines.append(f'{key} = "{value}"')
+    payload = "\n".join(lines) + "\n"
+    fd, tmp = tempfile.mkstemp(prefix=f"{sanitize_name(project_name)}-", suffix=".toml")
+    tmp_path = Path(tmp)
+    os.close(fd)
+    write_text(tmp_path, payload)
+    return tmp_path
+
+
+# ── Rendering ────────────────────────────────────────────────────────
 
 def render_project_doc(profile: HarnessProfile) -> str:
     role_lines = []
@@ -1127,7 +486,7 @@ def render_idle_todo(profile: HarnessProfile, seat: str) -> str:
             "main 在群里保持 requireMention=true；项目面向前台的 koder 账号在该群里默认设为 requireMention=false，"
             "只有显式部署的系统 seat（如 warden）才需要额外放开。"
             "拿到 group ID 后，先确认该群绑定当前项目、已有项目还是新项目，再委派 planner 做飞书联调测试，"
-            "提示用户“收到测试消息即可回复希望完成什么任务”，并并行拉起 reviewer 进入审查待命。"
+            "提示用户\u201c收到测试消息即可回复希望完成什么任务\u201d，并并行拉起 reviewer 进入审查待命。"
         )
     elif seat == profile.active_loop_owner or role in {"planner", "planner-dispatcher"}:
         reply_to = profile.heartbeat_owner
@@ -1177,14 +536,6 @@ def render_patrol_wrapper(profile: HarnessProfile) -> str:
         "set -euo pipefail\n\n"
         f'exec python3 {REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "patrol_supervisor.py"} --profile {profile.profile_path} "$@"\n'
     )
-
-
-def is_managed_runtime_path(profile: HarnessProfile, path: Path) -> bool:
-    try:
-        path.resolve().relative_to(profile.tasks_root.resolve())
-        return True
-    except Exception:
-        return False
 
 
 def render_heartbeat_md(profile: HarnessProfile, seat: str) -> str:
@@ -1254,17 +605,10 @@ def render_heartbeat_manifest(profile: HarnessProfile, seat: str) -> str:
     return "\n".join(lines)
 
 
+# ── Runtime materialization ──────────────────────────────────────────
+
 def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str]) -> None:
-    """Patch Claude settings with model, effortLevel, and hasCompletedOnboarding.
-
-    Writes to TWO locations:
-    1. workspace .claude/settings.local.json — model only (effort not supported here)
-    2. runtime HOME .claude/settings.json — model + effortLevel (Claude Code reads this)
-
-    Claude Code reads effortLevel from the global ~/.claude/settings.json, not from
-    workspace settings.local.json. Since each seat has an isolated runtime HOME,
-    we must write to {runtime_dir}/home/.claude/settings.json for effort to take effect.
-    """
+    """Patch Claude settings with model, effortLevel, and hasCompletedOnboarding."""
     template_path = REPO_ROOT / "core" / "templates" / profile.template_name / "template.toml"
     if not template_path.exists():
         return
@@ -1275,7 +619,6 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
 
     sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(AGENTS_ROOT / "sessions")))
 
-    # Load provider configs from agent_admin_config (lives in core/scripts/)
     _admin_scripts = REPO_ROOT / "core" / "scripts"
     _provider_configs: dict = {}
     try:
@@ -1301,12 +644,10 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
             auth_mode = str(session_data.get("auth_mode", auth_mode)).strip()
             provider = str(session_data.get("provider", provider)).strip()
             runtime_dir = str(session_data.get("runtime_dir", "")).strip()
-            # Use session tool to skip non-claude seats
             tool = str(session_data.get("tool", "")).strip()
             if tool and tool != "claude":
                 continue
 
-        # 1. Patch workspace settings.local.json (model + hasCompletedOnboarding)
         settings_path = profile.workspace_for(seat) / ".claude" / "settings.local.json"
         if settings_path.exists():
             try:
@@ -1323,7 +664,6 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
             if changed:
                 write_text(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
-        # 2. Patch runtime HOME settings.json (model + effortLevel)
         if runtime_dir:
             runtime_settings_path = Path(runtime_dir) / "home" / ".claude" / "settings.json"
             ensure_parent(runtime_settings_path)
@@ -1341,8 +681,6 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
             if "skipDangerousModePermissionPrompt" not in rt_settings:
                 rt_settings["skipDangerousModePermissionPrompt"] = True
                 rt_changed = True
-
-            # Inject provider-specific env vars (e.g., MiniMax timeout, traffic control)
             prov_config = _provider_configs.get(provider, {})
             extra_env = prov_config.get("extra_env")
             if extra_env:
@@ -1355,7 +693,6 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
                         rt_changed = True
                 if env_block:
                     rt_settings["env"] = env_block
-
             if rt_changed:
                 write_text(runtime_settings_path, json.dumps(rt_settings, indent=2, ensure_ascii=False) + "\n")
 
@@ -1380,31 +717,25 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
         write_text(profile.tasks_doc, render_tasks_doc())
     if not profile.status_doc.exists():
         write_text(profile.status_doc, render_status_doc())
-
     if is_managed_runtime_path(profile, profile.status_script):
         write_text(profile.status_script, render_status_wrapper(profile))
         profile.status_script.chmod(0o755)
     if is_managed_runtime_path(profile, profile.patrol_script):
         write_text(profile.patrol_script, render_patrol_wrapper(profile))
         profile.patrol_script.chmod(0o755)
-
-    # Patch .claude/settings.local.json with model/effort from profile seat_overrides
-    # or template defaults. This runs after apply_template to ensure the file exists.
     _patch_claude_settings_from_profile(profile, all_seats)
-
     for seat in profile.heartbeat_seats:
         ensure_dir(profile.workspace_for(seat))
         write_text(heartbeat_md_path(profile, seat), render_heartbeat_md(profile, seat))
         write_text(heartbeat_manifest_path(profile, seat), render_heartbeat_manifest(profile, seat))
 
 
+# ── Secret seeding ───────────────────────────────────────────────────
+
 GLOBAL_ENV_PATH = AGENTS_ROOT / ".env.global"
 
-# Maps (tool, provider) to the env var names in .env.global
 GLOBAL_SECRET_MAP: dict[tuple[str, str], dict[str, str]] = {
     ("claude", "minimax"): {
-        # MiniMax Anthropic-compatible endpoint uses ANTHROPIC_AUTH_TOKEN,
-        # not ANTHROPIC_API_KEY.  URL must include /anthropic path.
         "ANTHROPIC_AUTH_TOKEN": "MINIMAX_API_KEY",
         "ANTHROPIC_BASE_URL": "MINIMAX_BASE_URL",
     },
@@ -1446,7 +777,6 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
     ensure_parent(secret_file)
     if secret_file.exists() and secret_file.stat().st_size > 0:
         return None
-    # Try peer in same provider directory
     provider_dir = secret_file.parent
     if provider_dir.exists():
         for peer in sorted(provider_dir.glob("*.env")):
@@ -1455,7 +785,6 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
             shutil.copy2(peer, secret_file)
             secret_file.chmod(0o600)
             return peer
-    # Fallback: seed from ~/.agents/.env.global
     tool = str(session_data.get("tool", "")).strip()
     provider = str(session_data.get("provider", "")).strip()
     mapping = GLOBAL_SECRET_MAP.get((tool, provider))
@@ -1475,9 +804,5 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
 
 
 def seed_empty_oauth_runtime_from_peer(profile: HarnessProfile, seat: str) -> Path | None:
-    """Disabled: Claude Code OAuth tokens are bound to a specific identity and
-    cannot be shared across seats.  Copying credentials.json from a peer causes
-    the new seat to fail with 'OAuth error: timeout of 15000ms exceeded' because
-    it tries to reuse a token that belongs to a different runtime identity.
-    Each seat must complete its own OAuth flow independently."""
+    """Disabled: Claude Code OAuth tokens are bound to a specific identity."""
     return None

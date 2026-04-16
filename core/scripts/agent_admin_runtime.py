@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import subprocess
@@ -15,8 +16,7 @@ SECRETS_ROOT = HOME / ".agents" / "secrets"
 
 
 def q(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+    return json.dumps(value, ensure_ascii=False)
 
 
 def ensure_secret_permissions(path: Path) -> None:
@@ -104,8 +104,7 @@ def write_codex_api_config(
         raise ValueError(f"Unsupported Codex API provider: {session.provider}")
 
     trust_paths = [str(HOME), str(REPO_ROOT)]
-    # TODO: "cartooner" trust path — cartooner adapter extracted out of ClawSeat
-    for path in (project_repo, project_repo / "cartooner", project_repo / "openclaw"):
+    for path in (project_repo, project_repo / "openclaw"):
         if path.exists():
             trust_paths.append(str(path))
 
