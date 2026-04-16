@@ -82,6 +82,14 @@ bash $DIR/msg_focus.sh && sleep 0.5 && bash $DIR/msg_paste.sh "[W] message" && s
 - 发送确认或补充说明
 - 转联络架构师或 planner
 
+## 高级恢复
+
+当 seat 卡住（queued input、focus mismatch、`[Y/n]` 确认死循环），
+参阅 [tmux takeover patterns](references/tmux-takeover-patterns.md)：
+- 交互层判别方法（agent-input / shell-prompt / focus-mismatch）
+- 恢复升级路径（重发 → 查 help → 找非交互替代 → 直接注入 → 上报）
+- 安全行为边界和结构化报告格式
+
 ## 边界
 
 这个 skill 不负责：
