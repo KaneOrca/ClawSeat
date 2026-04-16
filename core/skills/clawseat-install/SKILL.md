@@ -103,12 +103,10 @@ post-install convenience command.
 After `git pull` or any ClawSeat code update, workspace MD files (AGENTS.md, TOOLS.md, WORKSPACE_CONTRACT.toml, settings.local.json) are stale. Run:
 
 ```bash
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
-  --profile <profile.toml> --project <project> \
-  --koder-workspace <koder工作区路径> --feishu-group-id <oc_xxx>
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
 ```
 
-This regenerates all seat workspace files using the latest template and profile. Koder must **re-read AGENTS.md and TOOLS.md** after refresh.
+Zero arguments needed — auto-detects project, profile, koder workspace, and feishu group ID from existing WORKSPACE_CONTRACT.toml. Regenerates all seat workspace files using the latest template and profile. **After refresh, re-read your AGENTS.md and TOOLS.md.**
 
 ## Troubleshooting
 

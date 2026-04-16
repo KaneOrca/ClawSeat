@@ -2,19 +2,14 @@
 """
 refresh_workspaces.py — Regenerate all seat workspace files after ClawSeat update.
 
-Rewrites AGENTS.md, WORKSPACE_CONTRACT.toml, settings.local.json, and
-skill paths for every seat in the project, using current template + profile.
+Auto-detects project, profile, koder workspace, and feishu group ID.
+Designed to be called by the OpenClaw koder agent with zero arguments:
 
-Also refreshes koder's OpenClaw workspace if --koder-workspace is given.
+    python3 refresh_workspaces.py
 
-Usage:
-    # Refresh backend seats only
-    python3 refresh_workspaces.py --profile <profile.toml> --project install
+Or with explicit overrides:
 
-    # Refresh backend seats + koder OpenClaw workspace
-    python3 refresh_workspaces.py --profile <profile.toml> --project install \
-        --koder-workspace ~/.openclaw/workspace-koder \
-        --feishu-group-id oc_xxx
+    python3 refresh_workspaces.py --project myapp --koder-workspace /path/to/ws
 """
 from __future__ import annotations
 
@@ -34,25 +29,75 @@ _harness_scripts = str(REPO_ROOT / "core" / "skills" / "gstack-harness" / "scrip
 if _harness_scripts not in sys.path:
     sys.path.insert(0, _harness_scripts)
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Refresh all ClawSeat workspace files after code update.")
-    p.add_argument("--profile", required=True, help="Path to the dynamic profile TOML.")
-    p.add_argument("--project", default="install", help="Project name.")
-    p.add_argument("--koder-workspace", help="OpenClaw koder workspace path. If given, also refreshes koder files.")
-    p.add_argument("--feishu-group-id", default="", help="Feishu group ID for the project.")
-    p.add_argument("--dry-run", action="store_true")
-    return p.parse_args()
 
+# ── Auto-detection helpers ───────────────��───────────────────────────
+
+def _detect_koder_workspace() -> str | None:
+    """Find the koder workspace by scanning common locations."""
+    candidates = [
+        Path.home() / ".openclaw" / "workspace-koder",
+        Path(os.environ.get("OPENCLAW_HOME", "")) / "workspace-koder" if os.environ.get("OPENCLAW_HOME") else None,
+    ]
+    # Also check if we're running inside a workspace that has WORKSPACE_CONTRACT.toml
+    cwd = Path.cwd()
+    if (cwd / "WORKSPACE_CONTRACT.toml").exists():
+        return str(cwd)
+    for c in candidates:
+        if c and c.exists() and (c / "WORKSPACE_CONTRACT.toml").exists():
+            return str(c)
+        if c and c.exists() and (c / "AGENTS.md").exists():
+            return str(c)
+    return None
+
+
+def _detect_project_from_contract(koder_ws: str | None) -> str | None:
+    """Read project name from koder's WORKSPACE_CONTRACT.toml."""
+    if not koder_ws:
+        return None
+    contract = Path(koder_ws) / "WORKSPACE_CONTRACT.toml"
+    if not contract.exists():
+        return None
+    data = tomllib.loads(contract.read_text(encoding="utf-8"))
+    return str(data.get("project", "")).strip() or None
+
+
+def _detect_feishu_group_id(koder_ws: str | None) -> str:
+    """Read feishu_group_id from koder's WORKSPACE_CONTRACT.toml."""
+    if not koder_ws:
+        return ""
+    contract = Path(koder_ws) / "WORKSPACE_CONTRACT.toml"
+    if not contract.exists():
+        return ""
+    data = tomllib.loads(contract.read_text(encoding="utf-8"))
+    return str(data.get("feishu_group_id", "")).strip()
+
+
+def _detect_profile(project: str) -> str | None:
+    """Find profile TOML for the project."""
+    from resolve import dynamic_profile_path
+    p = dynamic_profile_path(project)
+    if p.exists():
+        return str(p)
+    # Legacy fallback
+    legacy = Path("/tmp") / f"{project}-profile-dynamic.toml"
+    if legacy.exists():
+        return str(legacy)
+    return None
+
+
+# ── Refresh logic ─────────────────��──────────────────────────────────
 
 def refresh_backend_seats(profile_path: str, project: str, *, dry_run: bool) -> int:
-    """Re-run agent_admin apply-template + materialize_profile_runtime for all backend seats."""
     from _common import load_profile, materialize_profile_runtime
 
     profile = load_profile(profile_path)
     agent_admin = REPO_ROOT / "core" / "scripts" / "agent_admin.py"
 
-    # Re-apply template to regenerate AGENTS.md, WORKSPACE_CONTRACT, settings
     print(f"re-applying template '{profile.template_name}' for project '{project}'...")
     result = subprocess.run(
         [
@@ -71,20 +116,15 @@ def refresh_backend_seats(profile_path: str, project: str, *, dry_run: bool) -> 
         if result.stderr.strip():
             print(result.stderr.strip(), file=sys.stderr)
 
-    # Re-materialize runtime (status scripts, heartbeat, settings patches)
     if not dry_run:
         print("re-materializing profile runtime...")
         materialize_profile_runtime(profile)
 
-    # Report what was refreshed
     for seat in profile.seats:
         workspace = profile.workspace_for(seat)
         agents_md = workspace / "AGENTS.md"
-        contract = workspace / "WORKSPACE_CONTRACT.toml"
         if agents_md.exists():
-            print(f"  refreshed: {seat} AGENTS.md ({agents_md})")
-        if contract.exists():
-            print(f"  refreshed: {seat} WORKSPACE_CONTRACT.toml")
+            print(f"  refreshed: {seat}")
 
     return 0
 
@@ -97,7 +137,6 @@ def refresh_koder(
     *,
     dry_run: bool,
 ) -> int:
-    """Re-run init_koder.py to refresh koder's OpenClaw workspace."""
     init_koder = SCRIPT_DIR / "init_koder.py"
     cmd = [
         "python3", str(init_koder),
@@ -114,30 +153,56 @@ def refresh_koder(
     return result.returncode
 
 
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Refresh all ClawSeat workspace files. Auto-detects all parameters.",
+    )
+    p.add_argument("--project", help="Project name. Auto-detected from koder contract if omitted.")
+    p.add_argument("--profile", help="Profile TOML path. Auto-detected if omitted.")
+    p.add_argument("--koder-workspace", help="Koder workspace path. Auto-detected if omitted.")
+    p.add_argument("--feishu-group-id", help="Feishu group ID. Auto-detected from contract if omitted.")
+    p.add_argument("--dry-run", action="store_true")
+    return p.parse_args()
+
+
 def main() -> int:
     args = parse_args()
+
+    # Auto-detect everything
+    koder_ws = args.koder_workspace or _detect_koder_workspace()
+    project = args.project or _detect_project_from_contract(koder_ws) or "install"
+    feishu_gid = args.feishu_group_id or _detect_feishu_group_id(koder_ws)
+    profile_path = args.profile or _detect_profile(project)
+
+    if not profile_path:
+        print(f"error: cannot find profile for project '{project}'", file=sys.stderr)
+        print(f"  tried: ~/.agents/profiles/{project}-profile-dynamic.toml", file=sys.stderr)
+        return 1
+
+    print(f"project:         {project}")
+    print(f"profile:         {profile_path}")
+    print(f"koder workspace: {koder_ws or '(not found, skipping koder refresh)'}")
+    print(f"feishu group:    {feishu_gid or '(not set)'}")
+    print()
 
     errors = 0
 
     # 1. Refresh backend seats
-    rc = refresh_backend_seats(args.profile, args.project, dry_run=args.dry_run)
+    rc = refresh_backend_seats(profile_path, project, dry_run=args.dry_run)
     if rc != 0:
         errors += 1
 
-    # 2. Refresh koder (if workspace given)
-    if args.koder_workspace:
-        rc = refresh_koder(
-            args.koder_workspace,
-            args.project,
-            args.profile,
-            args.feishu_group_id,
-            dry_run=args.dry_run,
-        )
+    # 2. Refresh koder
+    if koder_ws:
+        rc = refresh_koder(koder_ws, project, profile_path, feishu_gid, dry_run=args.dry_run)
         if rc != 0:
             errors += 1
+    else:
+        print("skipping koder refresh (workspace not found)")
 
     if errors == 0:
-        print(f"\nall workspaces refreshed for project '{args.project}'")
+        print(f"\nall workspaces refreshed for project '{project}'")
+        print("koder should re-read AGENTS.md and TOOLS.md now.")
     else:
         print(f"\nrefresh completed with {errors} error(s)", file=sys.stderr)
 

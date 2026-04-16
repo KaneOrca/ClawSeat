@@ -207,10 +207,8 @@ python3 {clawseat_root}/shells/openclaw-plugin/install_openclaw_bundle.py
 python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
 python3 {clawseat_root}/core/skills/clawseat-install/scripts/init_koder.py --workspace <workspace> --project <project>
 
-# 更新后刷新所有 workspace（git pull 之后必须跑）
-python3 {clawseat_root}/core/skills/clawseat-install/scripts/refresh_workspaces.py \\
-  --profile <profile> --project <project> \\
-  --koder-workspace <koder工作区路径> --feishu-group-id <oc_xxx>
+# 更新后刷新所有 workspace（git pull ��后必须跑，零参数自动检测）
+python3 {clawseat_root}/core/skills/clawseat-install/scripts/refresh_workspaces.py
 ```
 """
 
