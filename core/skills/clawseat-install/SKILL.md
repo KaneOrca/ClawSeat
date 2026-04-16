@@ -37,10 +37,14 @@ post-install convenience command.
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
-   - After running `install_openclaw_bundle.py` (step 5), run preflight and bootstrap
+   - After running `install_openclaw_bundle.py` (step 5), **initialize yourself as koder**:
+     - First, determine your own workspace path. You can find it by checking your current working directory, or by reading your own environment/config. The path is typically `~/.openclaw/workspace-koder/` but may vary.
+     - Run: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" --workspace <your_workspace_path> --project install`
+     - This writes IDENTITY.md, SOUL.md, TOOLS.md, MEMORY.md, AGENTS.md, WORKSPACE_CONTRACT.toml, and skill symlinks into YOUR workspace
+     - After init_koder completes, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`
-   - Bootstrap creates workspaces for backend seats (planner, builder, reviewer) only
+   - Run preflight and bootstrap (bootstrap creates workspaces for backend seats only)
    - After bootstrap, **you MUST ask the user** for each backend seat's configuration before starting ANY seat. Do NOT use template defaults without user confirmation. For each seat, ask:
      - Tool: Claude Code / Codex / Gemini?
      - Auth: OAuth (recommended) or API key?

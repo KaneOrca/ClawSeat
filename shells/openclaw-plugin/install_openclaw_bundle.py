@@ -27,7 +27,11 @@ GLOBAL_SKILLS = {
 }
 
 WORKSPACE_KODER_SKILLS = {
+    "gstack-harness": CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness",
+    "clawseat-install": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-install",
     "clawseat-koder-frontstage": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-koder-frontstage",
+    "socratic-requirements": CLAWSEAT_ROOT / "core" / "skills" / "socratic-requirements",
+    "agent-monitor": CLAWSEAT_ROOT / "core" / "skills" / "agent-monitor",
 }
 
 
