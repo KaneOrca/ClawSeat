@@ -7,6 +7,7 @@ from pathlib import Path
 
 from _common import (
     HarnessProfile,
+    REPO_ROOT,
     load_profile,
     make_local_override,
     materialize_profile_runtime,
