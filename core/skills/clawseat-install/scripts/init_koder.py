@@ -328,6 +328,7 @@ def install_koder_skills(skills_dir: Path, clawseat_root: Path, *, dry_run: bool
         "clawseat-koder-frontstage": clawseat_root / "core" / "skills" / "clawseat-koder-frontstage",
         "socratic-requirements": clawseat_root / "core" / "skills" / "socratic-requirements",
         "agent-monitor": clawseat_root / "core" / "skills" / "agent-monitor",
+        "tmux-basics": clawseat_root / "core" / "skills" / "tmux-basics",
     }
     for name, source in koder_skills.items():
         ensure_skill_symlink(skills_dir, name, source, dry_run=dry_run)

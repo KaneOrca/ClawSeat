@@ -22,6 +22,7 @@ GLOBAL_SKILLS = {
     "agent-monitor": CLAWSEAT_ROOT / "core" / "skills" / "agent-monitor",
     "lark-shared": CLAWSEAT_ROOT / "core" / "skills" / "lark-shared",
     "lark-im": CLAWSEAT_ROOT / "core" / "skills" / "lark-im",
+    "tmux-basics": CLAWSEAT_ROOT / "core" / "skills" / "tmux-basics",
     # Local convenience entrypoint
     "cs": CLAWSEAT_ROOT / "core" / "skills" / "cs",
 }
@@ -32,6 +33,7 @@ WORKSPACE_KODER_SKILLS = {
     "clawseat-koder-frontstage": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-koder-frontstage",
     "socratic-requirements": CLAWSEAT_ROOT / "core" / "skills" / "socratic-requirements",
     "agent-monitor": CLAWSEAT_ROOT / "core" / "skills" / "agent-monitor",
+    "tmux-basics": CLAWSEAT_ROOT / "core" / "skills" / "tmux-basics",
 }
 
 

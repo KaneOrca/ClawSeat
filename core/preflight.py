@@ -193,11 +193,21 @@ def _check_tmux() -> tuple[PreflightItem, PreflightItem]:
     """Check tmux is installed AND server is running. Returns (install_check, server_check)."""
     tmux_path = shutil.which("tmux")
     if not tmux_path:
+        has_brew = shutil.which("brew") is not None
+        if has_brew:
+            fix = "brew install tmux"
+        else:
+            fix = (
+                '# Install Homebrew first:\n'
+                '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\n'
+                '# Then install tmux:\n'
+                'brew install tmux'
+            )
         install_check = PreflightItem(
             name="tmux",
             status=PreflightStatus.HARD_BLOCKED,
             message="tmux not found in PATH",
-            fix_command="brew install tmux",
+            fix_command=fix,
         )
         return install_check, PreflightItem(
             name="tmux_server",

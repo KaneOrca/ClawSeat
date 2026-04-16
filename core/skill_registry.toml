@@ -77,6 +77,14 @@ required = false
 roles = ["planner-dispatcher"]
 description = "Feishu instant messaging: send/receive messages, manage groups"
 
+[[skills]]
+name = "tmux-basics"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md"
+required = false
+roles = ["frontstage-supervisor", "planner-dispatcher"]
+description = "tmux session control: commands, ClawSeat wrappers, pitfalls, self-diagnosis"
+
 # ── Gstack external skills ─────────────────────────────────────────
 
 [[skills]]
