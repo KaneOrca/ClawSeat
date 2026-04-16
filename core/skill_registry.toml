@@ -1,0 +1,162 @@
+version = 1
+description = "ClawSeat skill registry — single source of truth for all skill dependencies"
+
+# ── Bundled skills (shipped with ClawSeat) ─────────────────────────
+
+[[skills]]
+name = "gstack-harness"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md"
+required = true
+roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "qa", "designer"]
+description = "Shared runtime: seat schema, dispatch/completion/ACK protocol, heartbeat, patrol"
+
+[[skills]]
+name = "clawseat-install"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md"
+required = true
+roles = ["frontstage-supervisor", "planner-dispatcher"]
+description = "ClawSeat bootstrap and install coordination"
+
+[[skills]]
+name = "clawseat-koder-frontstage"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md"
+required = false
+roles = ["frontstage-supervisor"]
+description = "Frontstage intake, disposition, and configuration skill for koder"
+
+[[skills]]
+name = "clawseat"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md"
+required = false
+roles = []
+entry_skill = true
+description = "Product entrypoint skill for ClawSeat"
+
+[[skills]]
+name = "cs"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/cs/SKILL.md"
+required = false
+roles = []
+entry_skill = true
+description = "Local post-install convenience entrypoint"
+
+# ── Gstack external skills ─────────────────────────────────────────
+
+[[skills]]
+name = "gstack-careful"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md"
+required = false
+roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer"]
+description = "Safety guardrails for destructive commands"
+
+[[skills]]
+name = "gstack-plan-eng-review"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Eng manager-mode plan review before dispatch"
+
+[[skills]]
+name = "gstack-ship"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-ship/SKILL.md"
+required = false
+roles = ["planner-dispatcher", "builder"]
+description = "Ship workflow: PR creation, merge, deploy"
+
+[[skills]]
+name = "gstack-investigate"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-investigate/SKILL.md"
+required = false
+roles = ["builder"]
+description = "Systematic debugging with root cause investigation"
+
+[[skills]]
+name = "gstack-browse"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md"
+required = false
+roles = ["builder", "qa", "designer"]
+description = "Headless browser for QA testing and visual inspection"
+
+[[skills]]
+name = "gstack-freeze"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-freeze/SKILL.md"
+required = false
+roles = ["builder"]
+description = "Directory-scoped edit restriction"
+
+[[skills]]
+name = "gstack-review"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-review/SKILL.md"
+required = false
+roles = ["reviewer"]
+description = "Pre-landing PR review and canonical verdicts"
+
+[[skills]]
+name = "gstack-qa"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md"
+required = false
+roles = ["qa"]
+description = "Full QA testing with bug fixing"
+
+[[skills]]
+name = "gstack-qa-only"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-qa-only/SKILL.md"
+required = false
+roles = ["qa"]
+description = "Report-only QA testing without fixing"
+
+[[skills]]
+name = "gstack-design-review"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-design-review/SKILL.md"
+required = false
+roles = ["designer"]
+description = "Visual QA and design corrections"
+
+[[skills]]
+name = "gstack-design-shotgun"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-design-shotgun/SKILL.md"
+required = false
+roles = ["designer"]
+description = "Multi-variant design exploration"
+
+[[skills]]
+name = "gstack-design-html"
+source = "gstack"
+path = "~/.gstack/repos/gstack/.agents/skills/gstack-design-html/SKILL.md"
+required = false
+roles = ["designer"]
+description = "Production-quality HTML/CSS from approved designs"
+
+# ── Agent external skills ──────────────────────────────────────────
+
+[[skills]]
+name = "lark-shared"
+source = "agent"
+path = "~/.agents/skills/lark-shared/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Feishu/Lark CLI shared base: auth, config, identity"
+
+[[skills]]
+name = "lark-im"
+source = "agent"
+path = "~/.agents/skills/lark-im/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Feishu instant messaging: send/receive messages, manage groups"

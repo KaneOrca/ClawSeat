@@ -171,6 +171,28 @@ def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
     materialize_profile_runtime(profile)
+    # Per-seat skill validation
+    try:
+        import importlib.util as _ilu
+        _sr_spec = _ilu.spec_from_file_location("skill_registry", str(REPO_ROOT / "core" / "skill_registry.py"))
+        if _sr_spec and _sr_spec.loader:
+            _sr = _ilu.module_from_spec(_sr_spec)
+            _sr_spec.loader.exec_module(_sr)
+            seat_role = (profile.seat_roles or {}).get(args.seat, "")
+            if seat_role:
+                _sr_result = _sr.validate_all(role=seat_role)
+                for _si in _sr_result.required_missing:
+                    print(f"skill_blocked: {_si.name} ({_si.source}) required for {seat_role} — not found at {_si.expanded_path}")
+                    if _si.fix_hint:
+                        print(f"  -> {_si.fix_hint}")
+                if _sr_result.required_missing:
+                    print(f"\nSeat {args.seat} cannot start: {len(_sr_result.required_missing)} required skill(s) missing.")
+                    return 1
+                for _si in _sr_result.optional_missing:
+                    print(f"skill_warning: {_si.name} ({_si.source}) — {_si.expanded_path}")
+    except Exception as _exc:
+        print(f"skill_check_skipped: {_exc}")
+
     has_overrides = args.tool or args.auth_mode or args.provider
     if has_overrides:
         switched = apply_config_overrides(

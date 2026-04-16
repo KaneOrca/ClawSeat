@@ -60,15 +60,26 @@ def ensure_symlink(destination: Path, source: Path, *, dry_run: bool) -> None:
     print(f"installed: {destination} -> {source}")
 
 
-REQUIRED_AGENT_SKILLS = ["lark-shared", "lark-im"]
+# Skill lists are derived from the skill registry (SSOT) rather than hardcoded.
+_SKILL_REGISTRY_PATH = CLAWSEAT_ROOT / "core" / "skill_registry.py"
 LARK_SKILLS_REPO = "https://github.com/larksuite/cli.git"
 GSTACK_SKILLS_ROOT = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
-REQUIRED_GSTACK_SKILLS = [
-    "gstack-investigate", "gstack-review", "gstack-qa", "gstack-qa-only",
-    "gstack-design-review", "gstack-design-shotgun", "gstack-design-html",
-    "gstack-ship", "gstack-careful", "gstack-browse", "gstack-freeze",
-    "gstack-plan-eng-review",
-]
+
+try:
+    sys.path.insert(0, str(CLAWSEAT_ROOT / "core"))
+    from skill_registry import load_registry, skills_for_source
+    _REGISTRY = load_registry()
+    REQUIRED_AGENT_SKILLS = [s.name for s in skills_for_source(_REGISTRY, "agent")]
+    REQUIRED_GSTACK_SKILLS = [s.name for s in skills_for_source(_REGISTRY, "gstack")]
+except Exception:
+    # Fallback: keep working even if registry is unavailable
+    REQUIRED_AGENT_SKILLS = ["lark-shared", "lark-im"]
+    REQUIRED_GSTACK_SKILLS = [
+        "gstack-investigate", "gstack-review", "gstack-qa", "gstack-qa-only",
+        "gstack-design-review", "gstack-design-shotgun", "gstack-design-html",
+        "gstack-ship", "gstack-careful", "gstack-browse", "gstack-freeze",
+        "gstack-plan-eng-review",
+    ]
 
 
 def check_agent_skills(dry_run: bool) -> list[str]:

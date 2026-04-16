@@ -526,6 +526,42 @@ def _check_optional_cli(binary: str, label: str, install_hint: str) -> Preflight
     )
 
 
+def _check_skills() -> list[PreflightItem]:
+    """Validate all skills in the registry are present on disk."""
+    try:
+        from skill_registry import load_registry, validate_all
+        result = validate_all()
+        items: list[PreflightItem] = []
+        for si in result.items:
+            if si.exists:
+                items.append(PreflightItem(
+                    name=f"skill_{si.name}",
+                    status=PreflightStatus.PASS,
+                    message=f"skill {si.name}: ok ({si.source})",
+                ))
+            elif si.required:
+                items.append(PreflightItem(
+                    name=f"skill_{si.name}",
+                    status=PreflightStatus.HARD_BLOCKED,
+                    message=f"required skill {si.name} ({si.source}) not found at {si.expanded_path}",
+                    fix_command=si.fix_hint,
+                ))
+            else:
+                items.append(PreflightItem(
+                    name=f"skill_{si.name}",
+                    status=PreflightStatus.WARNING,
+                    message=f"optional skill {si.name} ({si.source}) not found at {si.expanded_path}",
+                    fix_command=si.fix_hint,
+                ))
+        return items
+    except Exception as exc:
+        return [PreflightItem(
+            name="skill_registry",
+            status=PreflightStatus.WARNING,
+            message=f"skill registry check failed: {exc}",
+        )]
+
+
 def preflight_check(project: str) -> PreflightResult:
     """
     Run all preflight checks for the given project.
@@ -569,6 +605,9 @@ def preflight_check(project: str) -> PreflightResult:
     items.append(_check_optional_cli("claude", "Claude Code CLI", "brew install claude"))
     items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
     items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
+
+    # skill registry validation
+    items.extend(_check_skills())
 
     # Categorize
     hard_blocked = [i for i in items if i.status == PreflightStatus.HARD_BLOCKED]

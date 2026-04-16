@@ -69,6 +69,27 @@ def main() -> int:
     project_name = args.project_name or profile.project_name
     repo_root = Path(args.repo_root).expanduser() if args.repo_root else profile.repo_root
     effective_profile = with_overrides(profile, project_name=project_name, repo_root=repo_root)
+
+    # Validate skills before bootstrap — block on required missing
+    try:
+        import importlib.util as _ilu
+        _sr_spec = _ilu.spec_from_file_location("skill_registry", str(REPO_ROOT / "core" / "skill_registry.py"))
+        if _sr_spec and _sr_spec.loader:
+            _sr = _ilu.module_from_spec(_sr_spec)
+            _sr_spec.loader.exec_module(_sr)
+            _sr_result = _sr.validate_all()
+            for _si in _sr_result.required_missing:
+                print(f"skill_blocked: {_si.name} ({_si.source}) — {_si.expanded_path}", file=sys.stderr)
+                if _si.fix_hint:
+                    print(f"  -> {_si.fix_hint}", file=sys.stderr)
+            if _sr_result.required_missing:
+                print(f"\nBootstrap aborted: {len(_sr_result.required_missing)} required skill(s) missing.", file=sys.stderr)
+                return 1
+            for _si in _sr_result.optional_missing:
+                print(f"skill_warning: {_si.name} ({_si.source}) — {_si.expanded_path}", file=sys.stderr)
+    except Exception as _exc:
+        print(f"skill_check_skipped: {_exc}", file=sys.stderr)
+
     local_path = make_local_override(profile, project_name=project_name, repo_root=repo_root)
     try:
         cmd = [
