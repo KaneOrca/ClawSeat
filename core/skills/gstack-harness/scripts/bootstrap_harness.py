@@ -139,6 +139,15 @@ def main() -> int:
         if result.stdout.strip():
             print(result.stdout.strip())
         return 0
+    except Exception as exc:
+        print(
+            f"warn: bootstrap failed for {project_name!r}: {exc}\n"
+            f"Rollback hint: remove workspace at {effective_profile.workspace_root}"
+            f" and re-run bootstrap_harness, or run: python3 agent.py project"
+            f" teardown --project {project_name}",
+            file=sys.stderr,
+        )
+        raise
     finally:
         local_path.unlink(missing_ok=True)
 

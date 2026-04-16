@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+import tempfile
 
 import json
 import os
@@ -672,10 +673,15 @@ class ClawseatAdapter:
             raise RuntimeError(f"expected JSON output from {' '.join(command)}: {exc}") from exc
 
     def _profile_snapshot(self, profile_path: Path) -> dict[str, Any]:
+        # Write profile_path to a temp file to avoid shell injection via special chars
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+        tmp.write(str(profile_path))
+        tmp.close()
+        _tmp_path = tmp.name
         helper = (
             "import importlib.util, json, sys\n"
             "module_path = sys.argv[1]\n"
-            "profile_path = sys.argv[2]\n"
+            "import pathlib\nprofile_path = pathlib.Path(sys.argv[2]).read_text().strip()\n"
             "spec = importlib.util.spec_from_file_location('clawseat_dynamic_common_helper', module_path)\n"
             "module = importlib.util.module_from_spec(spec)\n"
             "assert spec.loader is not None\n"
@@ -703,7 +709,7 @@ class ClawseatAdapter:
                 "-c",
                 helper,
                 str(_get_migration_root() / "dynamic_common.py"),
-                str(profile_path),
+                _tmp_path,
             ]
         )
         if not result.ok:

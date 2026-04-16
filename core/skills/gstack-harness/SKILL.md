@@ -205,6 +205,20 @@ Project profiles are also the right place to declare project-specific seat
 runtime choices. Avoid patching those choices by hand after bootstrap when the
 project profile can carry them directly.
 
+## Adapter stub (R-01)
+
+The OpenClaw native adapter is **not yet implemented**.
+
+`core/adapter/adapter_shim.py` always returns a `TmuxCliAdapter` regardless of
+the runtime environment. There is no code path that instantiates a real
+OpenClaw adapter object — the shim exists only as a structural placeholder.
+
+Practical implication: all seat-to-seat transport calls ultimately go through
+the tmux `send-and-verify.sh` path. When the target seat is the OpenClaw
+frontstage (koder), the caller must explicitly bypass tmux and use the Feishu
+user-message path (`complete_handoff.py` → `send_feishu_user_message`).
+Do not assume the adapter layer will detect and switch modes automatically.
+
 ## Seat configuration rule
 
 `koder` is responsible for configuring seats, not just launching them.

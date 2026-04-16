@@ -89,9 +89,36 @@ class StoreHandlers:
         project_name = name or self.get_current_project_name(projects)
         if not project_name:
             raise self.hooks.error_cls("No project configured")
-        if project_name not in projects:
-            raise self.hooks.error_cls(f"Unknown project: {project_name}")
-        return projects[project_name]
+        if project_name in projects:
+            return projects[project_name]
+        # Fallback: project not in registry but sessions may exist on disk.
+        # This happens when switch-harness is called standalone (e.g. from a
+        # harness planner seat) without a prior `agent-admin project create`.
+        session_dir = self.hooks.sessions_root / project_name
+        if session_dir.is_dir():
+            engineers: list[str] = []
+            repo_root = ""
+            for session_toml in sorted(session_dir.glob("*/session.toml")):
+                try:
+                    data = self.hooks.load_toml(session_toml)
+                except Exception:
+                    continue
+                if data:
+                    engineers.append(str(data.get("engineer_id", session_toml.parent.name)))
+                    if not repo_root:
+                        repo_root = str(data.get("workspace", ""))
+            return self.hooks.project_cls(
+                name=project_name,
+                repo_root=repo_root,
+                monitor_session=f"project-{project_name}-monitor",
+                engineers=engineers,
+                monitor_engineers=engineers[:4],
+            )
+        raise self.hooks.error_cls(
+            f"Unknown project: {project_name}. "
+            f"No registered project and no session directory found at {session_dir}. "
+            "Run bootstrap_harness.py or `agent-admin project create` to register."
+        )
 
     def load_engineer(self, engineer_id: str) -> Any:
         data = self.hooks.load_toml(self.engineer_path(engineer_id))
