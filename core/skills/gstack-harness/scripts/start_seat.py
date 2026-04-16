@@ -188,6 +188,26 @@ def render_launch_summary(profile, seat: str) -> str:
     return "\n".join(lines)
 
 
+def print_effective_launch(profile, seat: str) -> None:
+    result = run_command(
+        [
+            "python3",
+            str(profile.agent_admin),
+            "session",
+            "effective-launch",
+            seat,
+            "--project",
+            profile.project_name,
+        ],
+        cwd=profile.repo_root,
+    )
+    require_success(result, f"effective launch for {seat}")
+    output = result.stdout.strip()
+    if output:
+        print("effective_launch:")
+        print(output)
+
+
 def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
@@ -253,6 +273,9 @@ def main() -> int:
         cmd.append("--reset")
     result = run_command(cmd, cwd=profile.repo_root)
     require_success(result, "start_seat")
+    session_data = load_toml(session_path_for(profile, args.seat)) or {}
+    if str(session_data.get("tool", "")).strip() == "codex":
+        print_effective_launch(profile, args.seat)
     open_result = run_command(
         [
             "python3",

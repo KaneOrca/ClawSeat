@@ -26,6 +26,22 @@ post-install convenience command.
 - If the user wants a fresh project workspace, use `starter.toml` for a koder-only entrypoint or `full-team.toml` when they explicitly want the full six-seat roster.
 - If the user wants OpenClaw integration, use `shells/openclaw-plugin/openclaw_bootstrap.py` and keep core logic in ClawSeat, not OpenClaw.
 
+## Prerequisites
+
+Before starting, verify these dependencies are installed:
+- **Python >= 3.11** — `python3 --version`
+- **tmux** — `tmux -V` (if missing: `brew install tmux`)
+- **Node.js >= 22** — `node --version` (needed for OpenClaw)
+- **At least one seat CLI** — `claude --version` or `codex --version` or `gemini --version`
+- **gstack** (for specialist seats) — if `~/.gstack/repos/gstack` does not exist:
+  ```bash
+  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
+  cd ~/.gstack/repos/gstack && ./setup
+  ```
+- **lark-cli** (optional, for Feishu bridge) — `brew install larksuite/cli/lark-cli`
+
+Preflight (`python3 "$CLAWSEAT_ROOT/core/preflight.py" install`) will check all of these and give specific install commands for anything missing.
+
 ## Standard Flow
 
 1. Resolve the canonical project/workspace name and check whether an existing TUI or workspace already exists for it.

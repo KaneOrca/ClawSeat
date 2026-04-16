@@ -18,6 +18,7 @@ class StoreHooks:
     current_project_path: Path
     templates_root: Path
     tool_binaries: dict[str, str]
+    default_tool_args: dict[str, list[str]]
     normalize_name: Callable[[str], str]
     ensure_dir: Callable[[Path], None]
     write_text: Callable[[Path, str, int | None], None]
@@ -33,6 +34,9 @@ class StoreHooks:
 class StoreHandlers:
     def __init__(self, hooks: StoreHooks) -> None:
         self.hooks = hooks
+
+    def default_launch_args_for_tool(self, tool: str) -> list[str]:
+        return list(self.hooks.default_tool_args.get(tool, []))
 
     def project_path(self, project: str) -> Path:
         return self.hooks.projects_root / project / "project.toml"
@@ -494,6 +498,11 @@ class StoreHandlers:
         secret_file = ""
         if auth_mode == "api":
             secret_file = str(self.hooks.secret_file_for(tool, provider, engineer_id))
+        resolved_launch_args = (
+            list(launch_args)
+            if launch_args is not None
+            else self.default_launch_args_for_tool(tool)
+        )
         return self.hooks.session_record_cls(
             engineer_id=engineer_id,
             project=project.name,
@@ -507,7 +516,7 @@ class StoreHandlers:
             bin_path=self.hooks.tool_binaries[tool],
             monitor=monitor,
             legacy_sessions=[legacy_session] if legacy_session else [],
-            launch_args=list(launch_args or []),
+            launch_args=resolved_launch_args,
             secret_file=secret_file,
             wrapper=wrapper,
         )

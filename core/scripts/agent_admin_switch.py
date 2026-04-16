@@ -11,6 +11,7 @@ class SwitchHooks:
     error_cls: type[Exception]
     legacy_secrets_root: Path
     tool_binaries: dict[str, str]
+    default_tool_args: dict[str, list[str]]
     identity_name: Callable[..., str]
     runtime_dir_for_identity: Callable[..., Path]
     secret_file_for: Callable[..., Path]
@@ -32,6 +33,9 @@ class SwitchHooks:
 class SwitchHandlers:
     def __init__(self, hooks: SwitchHooks) -> None:
         self.hooks = hooks
+
+    def default_launch_args_for_tool(self, tool: str) -> list[str]:
+        return list(self.hooks.default_tool_args.get(tool, []))
 
     def ensure_api_secret_ready(self, session: Any) -> None:
         if session.auth_mode != "api" or not session.secret_file:
@@ -78,10 +82,19 @@ class SwitchHandlers:
             session.auth_mode,
             expected_identity,
         )
-        if session.identity == expected_identity and session.runtime_dir == str(expected_runtime):
+        expected_bin_path = self.hooks.tool_binaries[session.tool]
+        expected_launch_args = self.default_launch_args_for_tool(session.tool)
+        if (
+            session.identity == expected_identity
+            and session.runtime_dir == str(expected_runtime)
+            and session.bin_path == expected_bin_path
+            and session.launch_args == expected_launch_args
+        ):
             return session
         session.identity = expected_identity
         session.runtime_dir = str(expected_runtime)
+        session.bin_path = expected_bin_path
+        session.launch_args = expected_launch_args
         self.hooks.write_session(session)
         self.hooks.apply_template(session, self.hooks.load_project(session.project))
         return session
@@ -110,7 +123,7 @@ class SwitchHandlers:
             bin_path=self.hooks.tool_binaries[tool],
             monitor=old_session.monitor,
             legacy_sessions=list(old_session.legacy_sessions),
-            launch_args=list(old_session.launch_args),
+            launch_args=self.default_launch_args_for_tool(tool),
             secret_file=secret_file,
             wrapper=old_session.wrapper,
         )

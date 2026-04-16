@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install tmux
+        run: sudo apt-get install -y tmux
+
+      - name: Install ClawSeat (editable)
+        run: pip install -e ".[dev]"
+
+      - name: Set CLAWSEAT_ROOT
+        run: echo "CLAWSEAT_ROOT=$(pwd)" >> $GITHUB_ENV
+
+      - name: Pytest
+        run: python -m pytest tests/ -v
+
+      - name: Skill registry check
+        run: python core/scripts/skill_manager.py check
+
+      - name: Harness selftest
+        run: |
+          cd core/skills/gstack-harness/scripts
+          python selftest.py > /dev/null
+
+      - name: Compile check (core modules)
+        run: |
+          python -m py_compile core/resolve.py
+          python -m py_compile core/preflight.py
+          python -m py_compile core/bootstrap_receipt.py
+          python -m py_compile core/skill_registry.py
+          python -m py_compile core/transport.py
+          python -m py_compile core/adapter/clawseat_adapter.py
+
+      - name: mypy (strict modules)
+        run: |
+          python -m mypy core/resolve.py core/skill_registry.py core/transport.py \
+            --ignore-missing-imports --no-error-summary

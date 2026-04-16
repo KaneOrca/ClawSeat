@@ -32,6 +32,7 @@ class ParserHooks:
     cmd_session_stop_engineer: Callable[[Any], int]
     cmd_session_start_project: Callable[[Any], int]
     cmd_session_status: Callable[[Any], int]
+    cmd_session_effective_launch: Callable[[Any], int]
     cmd_session_switch_harness: Callable[[Any], int]
     cmd_session_switch_auth: Callable[[Any], int]
     cmd_window_open_monitor: Callable[[Any], int]
@@ -195,6 +196,12 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_status_parser.add_argument("engineer", nargs="?")
     session_status_parser.add_argument("--project")
     session_status_parser.set_defaults(func=hooks.cmd_session_status)
+
+    session_effective_launch = session_sub.add_parser("effective-launch")
+    session_effective_launch.add_argument("engineer")
+    session_effective_launch.add_argument("--project")
+    session_effective_launch.add_argument("cmd", nargs=argparse.REMAINDER)
+    session_effective_launch.set_defaults(func=hooks.cmd_session_effective_launch)
 
     switch_harness = session_sub.add_parser("switch-harness")
     switch_harness.add_argument("--project", required=True)

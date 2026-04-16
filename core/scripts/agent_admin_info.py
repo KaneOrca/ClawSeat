@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -27,6 +28,32 @@ class InfoHooks:
 class InfoHandlers:
     def __init__(self, hooks: InfoHooks) -> None:
         self.hooks = hooks
+
+    def resolved_launch_args(self, session: Any, cmd: list[str] | None = None) -> tuple[list[str], str]:
+        if cmd:
+            return list(cmd), "explicit_cmd"
+        if session.launch_args:
+            return list(session.launch_args), "session.launch_args"
+        return list(self.hooks.default_launch_args(session)), "default_tool_args"
+
+    def effective_launch_snapshot(self, session: Any, cmd: list[str] | None = None) -> dict[str, object]:
+        resolved_args, source = self.resolved_launch_args(session, cmd=cmd)
+        command = [session.bin_path, *resolved_args]
+        return {
+            "engineer_id": session.engineer_id,
+            "project": session.project,
+            "tool": session.tool,
+            "auth_mode": session.auth_mode,
+            "provider": session.provider,
+            "workspace": session.workspace,
+            "runtime_dir": session.runtime_dir,
+            "binary": session.bin_path,
+            "session_launch_args": list(session.launch_args),
+            "default_launch_args": list(self.hooks.default_launch_args(session)),
+            "effective_launch_args": resolved_args,
+            "launch_args_source": source,
+            "effective_command": " ".join(shlex.quote(part) for part in command),
+        }
 
     def engineer_summary(self, engineer: Any, sessions: dict[tuple[str, str], Any] | None = None) -> str:
         session_map = sessions or self.hooks.load_sessions()
@@ -60,6 +87,7 @@ class InfoHandlers:
                 f"session = {session.session}",
                 f"secret_file = {session.secret_file or '-'}",
                 f"legacy_sessions = {', '.join(session.legacy_sessions) or '-'}",
+                f"launch_args = {', '.join(session.launch_args) or '-'}",
                 f"status = {self.hooks.session_status(session)}",
             ]
         )
@@ -147,13 +175,39 @@ class InfoHandlers:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         binary, env = self.hooks.build_runtime(session)
         cmd = [binary]
-        if args.cmd:
-            cmd.extend(args.cmd)
-        elif session.launch_args:
-            cmd.extend(session.launch_args)
-        else:
-            cmd.extend(self.hooks.default_launch_args(session))
+        resolved_args, _ = self.resolved_launch_args(session, cmd=args.cmd)
+        cmd.extend(resolved_args)
         os.execvpe(binary, cmd, env)
+        return 0
+
+    def session_effective_launch(self, args: Any) -> int:
+        session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
+        snapshot = self.effective_launch_snapshot(session, cmd=getattr(args, "cmd", None))
+        for key in (
+            "engineer_id",
+            "project",
+            "tool",
+            "auth_mode",
+            "provider",
+            "workspace",
+            "runtime_dir",
+            "binary",
+        ):
+            print(f"{key} = {snapshot[key]}")
+        print(
+            "session_launch_args = "
+            + (", ".join(snapshot["session_launch_args"]) if snapshot["session_launch_args"] else "-")
+        )
+        print(
+            "default_launch_args = "
+            + (", ".join(snapshot["default_launch_args"]) if snapshot["default_launch_args"] else "-")
+        )
+        print(
+            "effective_launch_args = "
+            + (", ".join(snapshot["effective_launch_args"]) if snapshot["effective_launch_args"] else "-")
+        )
+        print(f"launch_args_source = {snapshot['launch_args_source']}")
+        print(f"effective_command = {snapshot['effective_command']}")
         return 0
 
     def start(self, args: Any) -> int:

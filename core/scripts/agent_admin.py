@@ -406,6 +406,7 @@ STORE_HANDLERS = StoreHandlers(
         current_project_path=CURRENT_PROJECT_PATH,
         templates_root=TEMPLATES_ROOT,
         tool_binaries=TOOL_BINARIES,
+        default_tool_args=DEFAULT_TOOL_ARGS,
         normalize_name=normalize_name,
         ensure_dir=ensure_dir,
         write_text=write_text,
@@ -767,6 +768,10 @@ def cmd_session_status(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_status(args)
 
 
+def cmd_session_effective_launch(args: argparse.Namespace) -> int:
+    return INFO_HANDLERS.session_effective_launch(args)
+
+
 def ensure_api_secret_ready(session: SessionRecord) -> None:
     SWITCH_HANDLERS.ensure_api_secret_ready(session)
 
@@ -784,6 +789,7 @@ SWITCH_HANDLERS = SwitchHandlers(
         error_cls=AgentAdminError,
         legacy_secrets_root=LEGACY_SECRETS_ROOT,
         tool_binaries=TOOL_BINARIES,
+        default_tool_args=DEFAULT_TOOL_ARGS,
         identity_name=identity_name,
         runtime_dir_for_identity=runtime_dir_for_identity,
         secret_file_for=secret_file_for,
@@ -1051,6 +1057,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_session_stop_engineer=cmd_session_stop_engineer,
     cmd_session_start_project=cmd_session_start_project,
     cmd_session_status=cmd_session_status,
+    cmd_session_effective_launch=cmd_session_effective_launch,
     cmd_session_switch_harness=cmd_session_switch_harness,
     cmd_session_switch_auth=cmd_session_switch_auth,
     cmd_window_open_monitor=cmd_window_open_monitor,

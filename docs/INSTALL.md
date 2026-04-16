@@ -48,8 +48,8 @@ Recommended first-run path:
 1. In OpenClaw or Feishu-facing runtimes, load the `clawseat` skill/plugin and
    let it route through the OpenClaw bootstrap path.
    The canonical `install` bootstrap now auto-seeds
-   `/tmp/install-profile-dynamic.toml` from the shipped `install.toml` profile
-   when the machine is starting from a blank state.
+   `~/.agents/profiles/install-profile-dynamic.toml` from the shipped `install.toml`
+   profile when the machine is starting from a blank state.
 2. In Claude Code or Codex local runtimes, install the entry skills with
    `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
 3. Only in those local runtimes, use `/cs` as the convenience alias that

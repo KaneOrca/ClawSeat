@@ -158,13 +158,6 @@ def write_codex_api_config(
                 "",
             ]
         )
-    lines.extend(
-        [
-            "[notice]",
-            'hide_full_access_warning = true',
-            "",
-        ]
-    )
     write_text_fn(codex_home / "config.toml", "\n".join(lines))
 
 

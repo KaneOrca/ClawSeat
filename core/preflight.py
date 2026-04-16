@@ -618,9 +618,22 @@ def preflight_check(project: str) -> PreflightResult:
     items.append(_check_session_binding_dir(project))
 
     # optional runtime CLIs (WARNING, not blocking)
-    items.append(_check_optional_cli("claude", "Claude Code CLI", "brew install claude"))
+    items.append(_check_optional_cli("claude", "Claude Code CLI", "npm install -g @anthropic-ai/claude-code"))
     items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
     items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
+
+    # gstack skills (WARNING — needed for specialist seats)
+    gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+    if not gstack_root.exists():
+        items.append(PreflightItem(
+            name="gstack",
+            status=PreflightStatus.WARNING,
+            message="gstack skills not found — specialist seats (builder, reviewer, qa, designer) will lack key capabilities",
+            fix_command=(
+                "git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack\n"
+                "cd ~/.gstack/repos/gstack && ./setup"
+            ),
+        ))
 
     # skill registry validation
     items.extend(_check_skills())
