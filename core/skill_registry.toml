@@ -45,6 +45,38 @@ roles = []
 entry_skill = true
 description = "Local post-install convenience entrypoint"
 
+[[skills]]
+name = "socratic-requirements"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/socratic-requirements/SKILL.md"
+required = false
+roles = ["frontstage-supervisor", "planner-dispatcher"]
+description = "Structured requirement clarification via Socratic questioning before implementation"
+
+[[skills]]
+name = "agent-monitor"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md"
+required = false
+roles = ["frontstage-supervisor", "planner-dispatcher"]
+description = "Observe, contact, and unblock other ClawSeat seats via tmux and iTerm"
+
+[[skills]]
+name = "lark-shared"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/lark-shared/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Feishu/Lark CLI shared base: auth, config, identity"
+
+[[skills]]
+name = "lark-im"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/lark-im/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Feishu instant messaging: send/receive messages, manage groups"
+
 # ── Gstack external skills ─────────────────────────────────────────
 
 [[skills]]
@@ -142,21 +174,3 @@ path = "~/.gstack/repos/gstack/.agents/skills/gstack-design-html/SKILL.md"
 required = false
 roles = ["designer"]
 description = "Production-quality HTML/CSS from approved designs"
-
-# ── Agent external skills ──────────────────────────────────────────
-
-[[skills]]
-name = "lark-shared"
-source = "agent"
-path = "~/.agents/skills/lark-shared/SKILL.md"
-required = false
-roles = ["planner-dispatcher"]
-description = "Feishu/Lark CLI shared base: auth, config, identity"
-
-[[skills]]
-name = "lark-im"
-source = "agent"
-path = "~/.agents/skills/lark-im/SKILL.md"
-required = false
-roles = ["planner-dispatcher"]
-description = "Feishu instant messaging: send/receive messages, manage groups"

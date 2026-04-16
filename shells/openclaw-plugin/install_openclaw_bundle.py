@@ -14,6 +14,11 @@ GLOBAL_SKILLS = {
     "clawseat": CLAWSEAT_ROOT / "core" / "skills" / "clawseat",
     "clawseat-install": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-install",
     "clawseat-koder-frontstage": CLAWSEAT_ROOT / "core" / "skills" / "clawseat-koder-frontstage",
+    # Base package — bundled into ClawSeat, zero external deps
+    "socratic-requirements": CLAWSEAT_ROOT / "core" / "skills" / "socratic-requirements",
+    "agent-monitor": CLAWSEAT_ROOT / "core" / "skills" / "agent-monitor",
+    "lark-shared": CLAWSEAT_ROOT / "core" / "skills" / "lark-shared",
+    "lark-im": CLAWSEAT_ROOT / "core" / "skills" / "lark-im",
 }
 
 WORKSPACE_KODER_SKILLS = {
