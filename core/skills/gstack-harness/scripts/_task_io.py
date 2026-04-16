@@ -1,6 +1,7 @@
 """Task dispatch/completion file operations — extracted from _common.py."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from _utils import CONSUMED_RE, TASK_ROW_RE, read_text, utc_now_iso, write_text
@@ -189,3 +190,95 @@ def handoff_assigned(
     if kind == "completion" or str(source_delivery_path) == str(delivery_path or ""):
         return file_declares_task(source_delivery_path, task_id)
     return file_declares_task(todo_path, task_id)
+
+
+def append_task_to_queue(
+    path: Path,
+    *,
+    task_id: str,
+    project: str,
+    owner: str,
+    title: str,
+    objective: str,
+    source: str,
+    reply_to: str,
+    skill_refs: list[str] | None = None,
+    task_type: str = "unspecified",
+    review_required: bool = False,
+) -> None:
+    existing = read_text(path)
+
+    # Backward compat: old format (task_id: header) auto-wrapped as queue head.
+    if existing.strip() and existing.lstrip().startswith("task_id:"):
+        old_task_id_match = re.search(r"^task_id: (.+)$", existing, re.MULTILINE)
+        old_task_id = old_task_id_match.group(1).strip() if old_task_id_match else "legacy"
+        existing = f"# Queue: {owner}\n\n## [pending] {old_task_id}\n{existing.strip()}\n"
+
+    has_active = bool(re.search(r"^## \[(pending|queued)\]", existing, re.MULTILINE))
+    status = "queued" if has_active else "pending"
+
+    entry_lines = [
+        f"## [{status}] {task_id}",
+        f"task_id: {task_id}",
+        f"title: {title}",
+        f"task_type: {task_type}",
+        f"review_required: {'true' if review_required else 'false'}",
+        f"source: {source}",
+        f"reply_to: {reply_to}",
+        f"dispatched_at: {utc_now_iso()}",
+        "",
+        "### Objective",
+        "",
+        objective.strip(),
+    ]
+    if skill_refs:
+        entry_lines += ["", "### Skill Refs", ""] + [f"- {ref}" for ref in skill_refs]
+
+    entry = "\n".join(entry_lines)
+
+    if not existing.strip():
+        content = f"# Queue: {owner}\n\n{entry}\n"
+    elif "\n# Completed" in existing:
+        idx = existing.index("\n# Completed")
+        content = existing[:idx].rstrip() + f"\n\n---\n\n{entry}\n" + existing[idx:]
+    else:
+        content = existing.rstrip() + f"\n\n---\n\n{entry}\n"
+
+    write_text(path, content)
+
+
+def complete_task_in_queue(
+    path: Path,
+    *,
+    task_id: str,
+    summary: str,
+) -> str | None:
+    """Mark task_id as [completed], activate next [queued] task.
+    Returns next task_id if one was activated, else None."""
+    content = read_text(path)
+    if not content.strip():
+        return None
+
+    content, n = re.subn(
+        rf"^## \[pending\] {re.escape(task_id)}",
+        f"## [completed] {task_id}",
+        content,
+        flags=re.MULTILINE,
+    )
+    if n == 0:
+        return None
+
+    next_task_id = None
+    m = re.search(r"^## \[queued\] (\S+)", content, re.MULTILINE)
+    if m:
+        next_task_id = m.group(1)
+        content = content[: m.start()] + f"## [pending] {next_task_id}" + content[m.end():]
+
+    completed_line = f"- [{utc_now_iso()[:10]}] {task_id} — {summary}"
+    if "# Completed" not in content:
+        content = content.rstrip() + f"\n\n# Completed\n\n{completed_line}\n"
+    else:
+        content = content.replace("# Completed\n", f"# Completed\n{completed_line}\n", 1)
+
+    write_text(path, content)
+    return next_task_id

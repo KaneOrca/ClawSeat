@@ -104,7 +104,7 @@ def collect_feishu_group_ids_from_sessions() -> list[str]:
     return found
 
 
-def resolve_primary_feishu_group_id() -> str | None:
+def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     override = (
         os.environ.get("CLAWSEAT_FEISHU_GROUP_ID")
         or os.environ.get("OPENCLAW_FEISHU_GROUP_ID")
@@ -265,9 +265,10 @@ def send_feishu_user_message(
     message: str,
     *,
     group_id: str | None = None,
+    project: str | None = None,
     pre_check_auth: bool = False,
 ) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
+    resolved_group_id = (group_id or resolve_primary_feishu_group_id(project=project) or "").strip()
     payload: dict[str, str] = {
         "status": "skipped",
         "reason": "no_group_id_found",
@@ -324,8 +325,9 @@ def broadcast_feishu_group_message(
     message: str,
     *,
     group_id: str | None = None,
+    project: str | None = None,
 ) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id() or "").strip()
+    resolved_group_id = (group_id or resolve_primary_feishu_group_id(project=project) or "").strip()
     payload: dict[str, str] = {
         "status": "skipped",
         "reason": "no_group_id_found",
