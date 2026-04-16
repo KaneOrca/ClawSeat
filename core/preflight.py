@@ -17,8 +17,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root
-from resolve import dynamic_profile_path as _dynamic_profile_path
+from core.resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root
+from core.resolve import dynamic_profile_path as _dynamic_profile_path
 
 
 class PreflightStatus(Enum):
@@ -542,7 +542,10 @@ def _check_optional_cli(binary: str, label: str, install_hint: str) -> Preflight
 def _check_skills() -> list[PreflightItem]:
     """Validate all skills in the registry are present on disk."""
     try:
-        from skill_registry import load_registry, validate_all
+        try:
+            from core.skill_registry import load_registry, validate_all
+        except ImportError:
+            from skill_registry import load_registry, validate_all
         result = validate_all()
         items: list[PreflightItem] = []
         for si in result.items:

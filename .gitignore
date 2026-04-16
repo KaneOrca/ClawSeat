@@ -8,3 +8,4 @@ build/
 .tmp/
 generated/
 *.pyc
+clawseat.egg-info/

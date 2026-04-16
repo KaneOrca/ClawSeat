@@ -19,11 +19,9 @@ CLAWSEAT_ROOT = Path(
     os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[3]))
 )
 CORE_ROOT = CLAWSEAT_ROOT / "core"
-if str(CORE_ROOT) not in sys.path:
-    sys.path.insert(0, str(CORE_ROOT))
 
-from resolve import resolve_clawseat_root as _shared_resolve_clawseat_root
-from harness_adapter import (
+from core.resolve import resolve_clawseat_root as _shared_resolve_clawseat_root
+from core.harness_adapter import (
     AuthConfig,
     HarnessAdapter,
     RecoverResult,

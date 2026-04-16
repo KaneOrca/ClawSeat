@@ -8,9 +8,25 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
+  "mypy>=1.10",
   "tomli",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+
+[tool.setuptools.packages.find]
+include = ["core*", "adapters*", "shells*"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = false  # Too many Hooks DI callables return Any — enable after typing Hooks
+warn_unused_configs = true
+ignore_missing_imports = true
+
+# Strict checking for new/critical modules
+[[tool.mypy.overrides]]
+module = ["core.resolve", "core.skill_registry", "core.transport"]
+warn_return_any = true
+disallow_untyped_defs = true

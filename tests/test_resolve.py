@@ -1,13 +1,10 @@
 """Smoke tests for core/resolve.py — the SSOT for root resolution."""
 import os
-import sys
 from pathlib import Path
 
-# Ensure core/ is importable
 _REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_REPO / "core"))
 
-from resolve import resolve_clawseat_root, try_resolve_clawseat_root, dynamic_profile_path
+from core.resolve import resolve_clawseat_root, try_resolve_clawseat_root, dynamic_profile_path
 
 
 def test_resolve_finds_repo():

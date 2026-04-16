@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from _common import (
     extract_canonical_verdict,
@@ -38,7 +39,7 @@ def main() -> int:
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     receipt = load_json(receipt_path) or {}
     todo_path = profile.todo_path(args.target)
-    delivery_path = profile.delivery_path(args.source)
+    delivery_path = Path(str(receipt.get("delivery_path", "")).strip()) if receipt.get("delivery_path") else profile.delivery_path(args.source)
     assigned = handoff_assigned(
         profile,
         task_id=args.task_id,

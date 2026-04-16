@@ -126,6 +126,10 @@ class Engineer:
     default_tool: str = ""
     default_auth_mode: str = ""
     default_provider: str = ""
+    # Template rendering context (set by render_template_text, read by workspace renderers)
+    _project_record: object = None
+    _project_engineers: dict[str, object] = field(default_factory=dict)
+    _engineer_order: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -145,6 +149,9 @@ class SessionRecord:
     launch_args: list[str] = field(default_factory=list)
     secret_file: str = ""
     wrapper: str = ""
+    # Template context (set by agent_admin_crud during apply_template)
+    _template_model: str = ""
+    _template_effort: str = ""
 
 
 @dataclass

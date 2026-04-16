@@ -129,7 +129,7 @@ class ClawseatAdapter:
         if profile_path is not None:
             candidate = Path(profile_path).expanduser()
         else:
-            from resolve import dynamic_profile_path
+            from core.resolve import dynamic_profile_path
             dynamic = dynamic_profile_path(project_name)
             if dynamic.exists():
                 candidate = dynamic
@@ -181,7 +181,8 @@ class ClawseatAdapter:
         """Execute all pending operations and return results.
 
         Operations are removed from the queue only after successful execution.
-        If an operation fails, remaining operations stay in the queue for retry.
+        If an operation fails, the failed op and remaining ops stay in the queue
+        for retry.
         """
         selected = project_name or self.current_project
         if not selected:
@@ -224,6 +225,8 @@ class ClawseatAdapter:
                 ))
                 break
             results.append(result)
+            if result.returncode != 0:
+                break
             queue.pop(0)  # Remove only after successful execution
         return results
 

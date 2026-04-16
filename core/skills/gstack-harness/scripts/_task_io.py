@@ -187,7 +187,10 @@ def handoff_assigned(
 ) -> bool:
     todo_path = profile.todo_path(target)  # type: ignore[attr-defined]
     source_delivery_path = profile.delivery_path(source)  # type: ignore[attr-defined]
-    if kind == "completion" or str(source_delivery_path) == str(delivery_path or ""):
+    if kind == "completion":
+        candidate = Path(delivery_path) if delivery_path else source_delivery_path
+        return file_declares_task(candidate, task_id)
+    if str(source_delivery_path) == str(delivery_path or ""):
         return file_declares_task(source_delivery_path, task_id)
     return file_declares_task(todo_path, task_id)
 

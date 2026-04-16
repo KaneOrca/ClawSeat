@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+import sys
 
 from dynamic_common import (
     append_consumed_ack,
@@ -30,6 +32,110 @@ VALID_FRONTSTAGE_DISPOSITIONS = {
     "AUTO_ADVANCE",
     "USER_DECISION_NEEDED",
 }
+
+
+def _seat_fallback_path(profile: object, seat: str, filename: str) -> Path:
+    return profile.workspace_for(seat) / filename  # type: ignore[attr-defined]
+
+
+def _seat_fallback_receipt_path(profile: object, seat: str, primary: Path) -> Path:
+    return profile.workspace_for(seat) / ".clawseat" / "handoffs" / primary.name  # type: ignore[attr-defined]
+
+
+def persist_delivery(
+    profile: object,
+    *,
+    seat: str,
+    task_id: str,
+    owner: str,
+    target: str,
+    title: str,
+    summary: str,
+    status: str,
+    verdict: str | None = None,
+    frontstage_disposition: str | None = None,
+    user_summary: str | None = None,
+    next_action: str | None = None,
+) -> tuple[Path, bool]:
+    primary = profile.delivery_path(seat)  # type: ignore[attr-defined]
+    try:
+        write_delivery(
+            primary,
+            task_id=task_id,
+            owner=owner,
+            target=target,
+            title=title,
+            summary=summary,
+            status=status,
+            verdict=verdict,
+            frontstage_disposition=frontstage_disposition,
+            user_summary=user_summary,
+            next_action=next_action,
+        )
+        return primary, False
+    except PermissionError as exc:
+        fallback = _seat_fallback_path(profile, seat, "DELIVERY.md")
+        write_delivery(
+            fallback,
+            task_id=task_id,
+            owner=owner,
+            target=target,
+            title=title,
+            summary=summary,
+            status=status,
+            verdict=verdict,
+            frontstage_disposition=frontstage_disposition,
+            user_summary=user_summary,
+            next_action=next_action,
+        )
+        print(
+            f"warn: delivery path {primary} not writable ({exc}); "
+            f"wrote fallback delivery to {fallback}",
+            file=sys.stderr,
+        )
+        return fallback, True
+
+
+def persist_receipt(
+    profile: object,
+    *,
+    seat: str,
+    primary: Path,
+    payload: dict[str, object],
+) -> Path:
+    try:
+        write_json(primary, payload)
+        return primary
+    except PermissionError as exc:
+        fallback = _seat_fallback_receipt_path(profile, seat, primary)
+        write_json(fallback, payload)
+        print(
+            f"warn: receipt path {primary} not writable ({exc}); "
+            f"wrote fallback receipt to {fallback}",
+            file=sys.stderr,
+        )
+        return fallback
+
+
+def append_consumed_ack_with_fallback(
+    profile: object,
+    *,
+    seat: str,
+    task_id: str,
+    source: str,
+) -> tuple[str, Path]:
+    primary = profile.todo_path(seat)  # type: ignore[attr-defined]
+    try:
+        return append_consumed_ack(primary, task_id=task_id, source=source), primary
+    except PermissionError as exc:
+        fallback = _seat_fallback_path(profile, seat, "TODO.md")
+        ack_line = append_consumed_ack(fallback, task_id=task_id, source=source)
+        print(
+            f"warn: todo path {primary} not writable ({exc}); "
+            f"appended consumed ACK to fallback TODO {fallback}",
+            file=sys.stderr,
+        )
+        return ack_line, fallback
 
 
 def build_frontstage_objective(
@@ -88,11 +194,23 @@ def main() -> int:
     receipt["target"] = target
     source_role = profile.seat_roles.get(args.source, "")
     if args.ack_only:
-        ack_line = append_consumed_ack(profile.todo_path(target), task_id=args.task_id, source=args.source)
+        ack_line, ack_path = append_consumed_ack_with_fallback(
+            profile,
+            seat=target,
+            task_id=args.task_id,
+            source=args.source,
+        )
         receipt["consumed_at"] = utc_now_iso()
         receipt["consumed_ack"] = ack_line
-        write_json(receipt_path, receipt)
+        receipt["todo_path"] = str(ack_path)
+        receipt_path = persist_receipt(
+            profile,
+            seat=args.source,
+            primary=receipt_path,
+            payload=receipt,
+        )
         print(ack_line)
+        print(f"receipt: {receipt_path}")
         return 0
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
         raise SystemExit(
@@ -113,9 +231,9 @@ def main() -> int:
             raise SystemExit("planner delivery with USER_DECISION_NEEDED requires --next-action")
     summary = args.summary or f"{args.task_id} completed by {args.source}."
     title = args.title or args.task_id
-    delivery_path = profile.delivery_path(args.source)
-    write_delivery(
-        delivery_path,
+    delivery_path, used_fallback_delivery = persist_delivery(
+        profile,
+        seat=args.source,
         task_id=args.task_id,
         owner=args.source,
         target=target,
@@ -129,6 +247,7 @@ def main() -> int:
     )
     receipt["delivery_path"] = str(delivery_path)
     receipt["delivered_at"] = utc_now_iso()
+    receipt["used_fallback_delivery"] = used_fallback_delivery
     if planner_to_frontstage:
         frontstage_todo = profile.todo_path(target)
         write_todo(
@@ -163,7 +282,12 @@ def main() -> int:
         require_success(result, "completion notify")
         receipt["notified_at"] = utc_now_iso()
         receipt["notify_message"] = message
-    write_json(receipt_path, receipt)
+    receipt_path = persist_receipt(
+        profile,
+        seat=args.source,
+        primary=receipt_path,
+        payload=receipt,
+    )
     print(f"completed {args.task_id} -> {target}")
     print(f"delivery: {delivery_path}")
     print(f"receipt: {receipt_path}")

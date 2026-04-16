@@ -15,7 +15,7 @@ from pathlib import Path
 
 import tomllib
 
-from resolve import try_resolve_clawseat_root as _resolve_clawseat_root
+from core.resolve import try_resolve_clawseat_root as _resolve_clawseat_root
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ def write_receipt(
             tmux_version = "not installed"
 
     # Profile path
-    from resolve import dynamic_profile_path as _dpp
+    from core.resolve import dynamic_profile_path as _dpp
     profile_path = str(_dpp(project))
     if not Path(profile_path).exists():
         profile_path = f"/tmp/{project}-profile.toml"
@@ -194,7 +194,7 @@ def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
     # Check dynamic profile still exists
     project = bootstrap.get("project", "")
     if project:
-        from resolve import dynamic_profile_path as _dpp
+        from core.resolve import dynamic_profile_path as _dpp
         profile = _dpp(str(project))
         if not profile.exists():
             return False, f"dynamic profile missing: {profile} (receipt stale)"
