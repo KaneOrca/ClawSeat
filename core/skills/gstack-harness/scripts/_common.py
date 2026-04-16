@@ -628,6 +628,8 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
         _spec = importlib.util.spec_from_file_location("agent_admin_config", _admin_scripts / "agent_admin_config.py")
         if _spec and _spec.loader:
             _mod = importlib.util.module_from_spec(_spec)
+            import sys as _sys
+            _sys.modules.setdefault("agent_admin_config", _mod)
             _spec.loader.exec_module(_mod)
             _provider_configs = getattr(_mod, "CLAUDE_API_PROVIDER_CONFIGS", {})
     except Exception:

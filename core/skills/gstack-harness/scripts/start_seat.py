@@ -198,6 +198,9 @@ def main() -> int:
         _sr_spec = _ilu.spec_from_file_location("skill_registry", str(REPO_ROOT / "core" / "skill_registry.py"))
         if _sr_spec and _sr_spec.loader:
             _sr = _ilu.module_from_spec(_sr_spec)
+            # Python 3.12+ dataclass(slots=True) needs the module in sys.modules
+            import sys as _sys
+            _sys.modules.setdefault("skill_registry", _sr)
             _sr_spec.loader.exec_module(_sr)
             seat_role = (profile.seat_roles or {}).get(args.seat, "")
             if seat_role:
