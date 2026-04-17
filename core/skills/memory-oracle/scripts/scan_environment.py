@@ -389,6 +389,113 @@ def scan_network() -> dict:
     return data
 
 
+def scan_github() -> dict:
+    """GitHub identity, gh CLI state, SSH keys, git credential setup.
+
+    Captures the full picture an installer needs for GitHub-backed tasks:
+    which gh account is active, what scopes the token has, git user config,
+    and SSH public keys registered locally.
+    """
+    data: dict = {
+        "scanned_at": now_iso(),
+        "gitconfig": {},
+        "git_credential_helpers": {},
+        "gh_cli": {},
+        "ssh_keys": [],
+    }
+
+    # ── git global config ─────────────────────────────────────────
+    gitconfig_text = safe_read(HOME / ".gitconfig")
+    if gitconfig_text is not None:
+        data["gitconfig"]["path"] = str(HOME / ".gitconfig")
+        # Capture key user fields if present
+        user_name = run_cmd(["git", "config", "--global", "--get", "user.name"])
+        user_email = run_cmd(["git", "config", "--global", "--get", "user.email"])
+        signing_key = run_cmd(["git", "config", "--global", "--get", "user.signingkey"])
+        if user_name:
+            data["gitconfig"]["user_name"] = user_name
+        if user_email:
+            data["gitconfig"]["user_email"] = user_email
+        if signing_key:
+            data["gitconfig"]["signing_key"] = signing_key
+        # Credential helpers per URL scheme
+        lines = run_cmd(["git", "config", "--global", "--list"]).splitlines()
+        for line in lines:
+            if ".helper=" in line and "credential" in line:
+                key, _, value = line.partition("=")
+                data["git_credential_helpers"].setdefault(key, []).append(value)
+
+    # ── gh CLI config ─────────────────────────────────────────────
+    gh_hosts_path = HOME / ".config" / "gh" / "hosts.yml"
+    gh_hosts_text = safe_read(gh_hosts_path)
+    if gh_hosts_text:
+        data["gh_cli"]["hosts_file"] = str(gh_hosts_path)
+        # Extract active accounts per host (minimal yaml parse — we only need user field)
+        current_host: str | None = None
+        hosts: dict[str, dict] = {}
+        for raw in gh_hosts_text.splitlines():
+            if raw and not raw.startswith(" ") and not raw.startswith("\t") and raw.rstrip().endswith(":"):
+                current_host = raw.rstrip().rstrip(":").strip()
+                hosts[current_host] = {}
+                continue
+            stripped = raw.strip()
+            if current_host and stripped.startswith("user:"):
+                hosts[current_host]["active_user"] = stripped.split(":", 1)[1].strip()
+            if current_host and stripped.startswith("git_protocol:"):
+                hosts[current_host]["git_protocol"] = stripped.split(":", 1)[1].strip()
+        data["gh_cli"]["hosts"] = hosts
+
+    # Live auth status (respects active keyring entry)
+    gh_status = run_cmd(["gh", "auth", "status"], timeout=10)
+    if gh_status:
+        # Extract account, active flag, token scopes
+        accounts: list[dict] = []
+        current: dict = {}
+        for line in gh_status.splitlines():
+            line = line.rstrip()
+            if line.startswith("github.com"):
+                if current:
+                    accounts.append(current)
+                current = {"host": "github.com"}
+            elif "Logged in to" in line:
+                # "  ✓ Logged in to github.com account <name> (keyring)"
+                parts = line.split("account", 1)
+                if len(parts) == 2:
+                    acct = parts[1].strip().split()[0]
+                    current["account"] = acct
+            elif "Active account:" in line:
+                current["active"] = "true" in line.lower()
+            elif "Git operations protocol:" in line:
+                current["protocol"] = line.split(":", 1)[1].strip()
+            elif "Token scopes:" in line:
+                scopes = line.split(":", 1)[1].strip()
+                # scopes look like: 'admin:org', 'repo', ...
+                current["scopes"] = [s.strip().strip("'\"") for s in scopes.split(",") if s.strip()]
+        if current:
+            accounts.append(current)
+        data["gh_cli"]["auth_status"] = accounts
+
+    # ── SSH public keys ───────────────────────────────────────────
+    ssh_dir = HOME / ".ssh"
+    if ssh_dir.is_dir():
+        for pub in sorted(ssh_dir.glob("*.pub")):
+            text = safe_read(pub, max_bytes=8192)
+            if text is None:
+                continue
+            parts = text.strip().split()
+            key_type = parts[0] if parts else ""
+            comment = parts[-1] if len(parts) >= 3 else ""
+            data["ssh_keys"].append({
+                "path": str(pub),
+                "type": key_type,
+                "comment": comment,
+                "fingerprint": run_cmd(["ssh-keygen", "-lf", str(pub)], timeout=5).split()[1]
+                    if run_cmd(["ssh-keygen", "-lf", str(pub)], timeout=5) else "",
+            })
+
+    return data
+
+
 # ── Orchestration ──────────────────────────────────────────────────
 
 
@@ -401,6 +508,7 @@ SCANNERS = {
     "clawseat": scan_clawseat,
     "repos": scan_repos,
     "network": scan_network,
+    "github": scan_github,
 }
 
 
