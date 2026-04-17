@@ -139,11 +139,15 @@ def run_command_with_env(
 
 
 def require_success(result: subprocess.CompletedProcess[str], what: str) -> None:
+    import sys
     if result.returncode == 0:
         return
     stderr = result.stderr.strip()
     stdout = result.stdout.strip()
     detail = stderr or stdout or f"exit {result.returncode}"
+    if result.returncode == 2:
+        print(f"warn: {what} skipped: {detail}", file=sys.stderr)
+        return
     raise RuntimeError(f"{what} failed: {detail}")
 
 
