@@ -54,6 +54,22 @@ def parse_args() -> argparse.Namespace:
              "AGENTS.md + WORKSPACE_CONTRACT.toml): ask the user interactively (default), "
              "overwrite them in place, back them up to .backup-<timestamp>/ first, or abort.",
     )
+    p.add_argument(
+        "--memory-workspace",
+        default="",
+        help=(
+            "When provided, deploy inject_memory.sh from the memory-oracle template "
+            "into <memory-workspace>/.claude/hooks/inject_memory.sh (SPEC §5.1 item 12)."
+        ),
+    )
+    p.add_argument(
+        "--memory-root",
+        default="",
+        help=(
+            "Absolute path to the memory root (default: ~/.agents/memory). "
+            "Used when deploying the inject_memory.sh hook via --memory-workspace."
+        ),
+    )
     return p.parse_args()
 
 
@@ -1019,6 +1035,63 @@ feishu_group_id = "{feishu_group_id}"
 
 
 # ---------------------------------------------------------------------------
+# Memory seat inject hook deployment (SPEC §5.1 item 12 — B variant)
+# ---------------------------------------------------------------------------
+
+
+_INJECT_TEMPLATE_PATH = (
+    CLAWSEAT_ROOT / "core" / "skills" / "memory-oracle" / "inject_memory.sh.template"
+)
+_INJECT_HOOK_RELATIVE = Path(".claude") / "hooks" / "inject_memory.sh"
+
+
+def deploy_memory_inject_hook(
+    memory_workspace: Path,
+    memory_root: Path,
+    *,
+    dry_run: bool,
+) -> Path:
+    """Deploy inject_memory.sh into the memory seat workspace.
+
+    Reads inject_memory.sh.template, substitutes __MEMORY_ROOT__ with the
+    real absolute path, and writes the result to
+    <memory_workspace>/.claude/hooks/inject_memory.sh with mode 755.
+
+    This function is idempotent — safe to call on re-init.
+
+    Args:
+        memory_workspace: Path to the memory seat's workspace directory.
+        memory_root: Absolute path to ~/.agents/memory (or override).
+        dry_run: Print the intended action without writing to disk.
+
+    Returns:
+        The target path (even in dry-run mode).
+    """
+    if not _INJECT_TEMPLATE_PATH.exists():
+        raise FileNotFoundError(
+            f"inject_memory.sh.template not found: {_INJECT_TEMPLATE_PATH}"
+        )
+
+    template = _INJECT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    rendered = template.replace("__MEMORY_ROOT__", str(memory_root))
+
+    target = memory_workspace / _INJECT_HOOK_RELATIVE
+
+    if dry_run:
+        print(f"would_write: {target} ({len(rendered)} bytes, mode 755)")
+        return target
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered, encoding="utf-8")
+    try:
+        os.chmod(target, 0o755)
+    except OSError:
+        pass
+    print(f"wrote: {target} (mode 755)")
+    return target
+
+
+# ---------------------------------------------------------------------------
 # Symlink helpers
 # ---------------------------------------------------------------------------
 
@@ -1120,6 +1193,23 @@ def main() -> int:
     if not args.dry_run:
         print("installing koder skills...")
     install_koder_skills(workspace / "skills", REPO_ROOT, dry_run=args.dry_run)
+
+    # Deploy memory inject hook if --memory-workspace is given (SPEC §5.1 item 12)
+    if args.memory_workspace:
+        mem_ws = Path(args.memory_workspace).expanduser().resolve()
+        import pwd
+        try:
+            real_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except (KeyError, OSError):
+            real_home = Path.home()
+        mem_root = (
+            Path(args.memory_root).expanduser().resolve()
+            if args.memory_root
+            else real_home / ".agents" / "memory"
+        )
+        if not args.dry_run:
+            print(f"\ndeploying memory inject hook to {mem_ws}...")
+        deploy_memory_inject_hook(mem_ws, mem_root, dry_run=args.dry_run)
 
     if not args.dry_run:
         print(f"\nkoder initialized for project '{args.project}' at {workspace}")
