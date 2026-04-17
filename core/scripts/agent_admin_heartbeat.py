@@ -143,6 +143,17 @@ def build_claude_loop_command(manifest: dict) -> str:
     return f"/loop {interval}m {prompt}"
 
 
+# Claude-specific markers used ONLY by provision_session_heartbeat() to decide
+# whether a Claude pane is still in first-run setup (cannot receive /loop yet).
+# This table is intentionally Claude-only because heartbeat provisioning only
+# targets Claude sessions — codex/gemini seats do not participate in heartbeat.
+#
+# For start_seat's full claude/codex/gemini startup-readiness table, see
+# core/skills/gstack-harness/scripts/_common.py :: CLAUDE_ONBOARDING_MARKERS
+# (that is the single source of truth for seat-start detection).
+#
+# When you touch _common.py markers, also cross-check the Claude substrings
+# here; tests/test_onboarding_markers.py verifies the Claude subset is in sync.
 CLAUDE_ONBOARDING_MARKERS: tuple[tuple[str, str], ...] = (
     ("Let's get started.", "welcome"),
     ("Choose the text style", "text_style"),

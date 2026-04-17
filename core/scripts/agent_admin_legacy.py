@@ -204,12 +204,21 @@ class LegacyHandlers:
             if legacy_workspace_value:
                 copy_workspace_overlay(Path(legacy_workspace_value), Path(record.workspace), self.hooks.ensure_dir)
 
-            seed_runtime = Path(legacy["seed_runtime"]) if legacy.get("seed_runtime") else None
+            # OAuth runtime is user-managed via the TUI — never seed OAuth
+            # tokens/auth.json from a shared legacy identity. The runtime dir is
+            # still created so the seat has a sandbox HOME to write into once
+            # the user logs in via the CLI's first-run flow.
+            # (API mode: credential files are seeded below via record.secret_file
+            # + seed_secret; that remains correct.)
             runtime_dir = Path(record.runtime_dir)
-            if seed_runtime and seed_runtime.exists() and (args.force or not runtime_dir.exists()):
-                copy_tree(seed_runtime, runtime_dir)
-            else:
+            if legacy.get("auth_mode") == "oauth":
                 self.hooks.ensure_dir(runtime_dir)
+            else:
+                seed_runtime = Path(legacy["seed_runtime"]) if legacy.get("seed_runtime") else None
+                if seed_runtime and seed_runtime.exists() and (args.force or not runtime_dir.exists()):
+                    copy_tree(seed_runtime, runtime_dir)
+                else:
+                    self.hooks.ensure_dir(runtime_dir)
 
             if record.secret_file:
                 seed_secret = Path(legacy["seed_secret"])

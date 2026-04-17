@@ -160,8 +160,17 @@ class HarnessProfile:
 
 
 # Pane-text patterns that tell us a TUI is waiting on human interaction
-# (OAuth login, workspace trust, bypass warning). Name kept for backward
-# compat with agent_admin_heartbeat.py — these cover claude / codex / gemini.
+# (OAuth login, workspace trust, bypass warning, approval gate).
+# Name kept for backward compat with agent_admin_heartbeat.py — these cover
+# claude / codex / gemini.
+#
+# Marker strings are verified against real CLI output. Sources of truth:
+#   - claude-code 2.1.112  (inspected package bundle + live runs)
+#   - codex-cli   0.121.0  (inspected bundle + live first-run in isolated HOME)
+#   - gemini-cli  0.38.1   (inspected bundle + live first-run in isolated HOME)
+# If you upgrade a CLI, re-verify every line below and update tests/
+# test_onboarding_markers.py accordingly. Do NOT add markers based on docs
+# alone — only strings you can observe in a captured pane.
 CLAUDE_ONBOARDING_MARKERS: list[tuple[str, str]] = [
     # ── Claude Code ────────────────────────────────────────────────
     ("Browser didn't open? Use the url below to sign in", "claude_oauth_login"),
@@ -172,20 +181,23 @@ CLAUDE_ONBOARDING_MARKERS: list[tuple[str, str]] = [
     ("WARNING: Claude Code running in Bypass Permissions mode", "claude_bypass_permissions"),
     ("OAuth error:", "claude_oauth_error"),
     # ── Codex (OpenAI) CLI ────────────────────────────────────────
-    # Codex first-run presents a "Sign in with ChatGPT / Use API key" menu
-    # and an OAuth URL + code flow for ChatGPT-mode login.
+    # First-run auth menu, ChatGPT OAuth (device-code), API key entry, and
+    # the directory-trust + approval-gate prompts.
     ("Sign in with ChatGPT", "codex_oauth_login"),
-    ("Sign in with API key", "codex_api_login"),
-    ("Visit the URL below to sign in", "codex_oauth_login"),
-    ("Paste the code you received", "codex_oauth_code"),
-    ("Continue? [Y/n]", "codex_workspace_trust"),
-    ("approval required", "codex_approval_prompt"),
+    ("Provide your own API key", "codex_api_login"),
+    ("Finish signing in via your browser", "codex_oauth_login"),
+    ("If the link doesn't open automatically", "codex_oauth_login"),
+    ("Enter this one-time code", "codex_oauth_code"),
+    ("Do you trust the contents of this directory?", "codex_workspace_trust"),
+    ("Approval requested:", "codex_approval_prompt"),
+    ("Approval needed in", "codex_approval_prompt"),
     # ── Gemini CLI ────────────────────────────────────────────────
-    # Gemini CLI shows Google OAuth consent and account picker.
+    # First-run auth menu, Google OAuth wait, and the folder-trust prompt.
+    # The Google account picker is a browser step — there is no TUI marker
+    # for it, so we do not try to detect it.
+    ("Sign in with Google", "gemini_oauth_menu"),
     ("Waiting for authentication", "gemini_oauth_login"),
-    ("Select an account to continue", "gemini_oauth_account"),
-    ("Successfully authenticated", "gemini_oauth_continue"),
-    ("Do you trust the authors of the files", "gemini_workspace_trust"),
+    ("Do you trust the files in this folder?", "gemini_workspace_trust"),
 ]
 
 

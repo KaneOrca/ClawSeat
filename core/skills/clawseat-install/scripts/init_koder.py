@@ -579,11 +579,13 @@ python3 {scripts}/tui_ctl.py --profile <profile> status --seat <X>
 
 每种 CLI 的登录流程（用户在 TUI 里做，你不用管细节）：
 
-| tool | oauth 流程 | 验证登录成功 |
-|------|-----------|------------|
-| claude (anthropic) | 浏览器打开 → 授权 → 粘贴 code | TUI 显示 "Login successful" |
-| codex (openai) | Sign in with ChatGPT → 浏览器 → 授权 | TUI 进入主界面，能接收输入 |
-| gemini (google) | 浏览器打开 Google 选号 → 同意 | TUI 显示 "Successfully authenticated" |
+| tool | oauth 流程 | 验证登录成功（统一判据） |
+|------|-----------|------------------------|
+| claude (anthropic) | 浏览器打开 → 授权 → 粘贴 code | TUI 返回主界面，`❯` 可输入；不再出现 `Browser didn't open?` / `Paste code here` 等登录提示 |
+| codex (openai) | Sign in with ChatGPT → 浏览器 → one-time code | TUI 返回主界面，可输入；不再出现 `Sign in with ChatGPT` / `Finish signing in via your browser` / `Enter this one-time code` |
+| gemini (google) | Sign in with Google → 浏览器 Google 授权 | TUI 返回主界面，可输入；不再出现 `Sign in with Google` / `Waiting for authentication` |
+
+**统一判据 = "TUI 回到干净 prompt，能接收输入"**。不要盯具体字符串（它们随 CLI 版本漂移）——盯"交互状态"。
 
 这三个 CLI 都会把登录态写到各自管理的目录（`~/.codex/auth.json` / claude 的 settings / gemini 的 config），**runtime sandbox 会把写入目标隔离到 `~/.agents/runtime/identities/<tool>/<mode>/<identity>/` 下**——用户每次登录是**给这一个 seat 这一份凭证**，不会污染全局。
 
