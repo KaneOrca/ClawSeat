@@ -91,7 +91,7 @@ skills = [
 ]
 role_details = [
   "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
-  "planner owns Feishu user-identity closeout and decision-gate receipts through `OC_DELEGATION_REPORT_V1`; legacy group broadcast stays opt-in only",
+  "planner owns Feishu user-identity closeout AND mid-chain decision-gates through `OC_DELEGATION_REPORT_V1`. the user is in Feishu, not in your tmux pane — when an interactive gstack skill (plan-eng-review / plan-ceo-review / plan-design-review / plan-devex-review) OR a `gstack-careful` destructive-command guard blocks on an operator choice, DO NOT wait in the tmux pane. emit the skill's question as an OC_DELEGATION_REPORT_V1 via `send_delegation_report.py --report-status needs_decision --user-gate required --decision-hint ask_user --human-summary '<the plain-Chinese version of the skill question>'`, wait for the user's Feishu reply, then feed the reply back into the skill. legacy group broadcast stays opt-in only",
   "planner must verify Feishu auth before first send: run `send_delegation_report.py --check-auth`; if status is not ok, tell the user to run `lark-cli auth login` in a terminal with browser access",
   "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
   "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
