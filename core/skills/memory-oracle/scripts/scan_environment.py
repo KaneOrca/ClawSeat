@@ -53,6 +53,9 @@ HOME = _real_user_home()
 DEFAULT_OUTPUT = HOME / ".agents" / "memory"
 SCAN_VERSION = 1
 
+# Scanner outputs go into machine/ subdirectory (SPEC §3 target layout)
+MACHINE_SUBDIR = "machine"
+
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -584,6 +587,33 @@ def scan_github() -> dict:
     return data
 
 
+def scan_current_context() -> dict:
+    """Write the current project pointer and last refresh timestamp.
+
+    Reads CLAWSEAT_PROJECT / AGENTS_PROJECT / CLAWSEAT_WORKSPACE_ROOT from the
+    environment so the memory seat knows which project is active right now.
+    Written to machine/current_context.json on every full scan.
+    """
+    last_refresh_ts = now_iso()
+    data: dict = {
+        "scanned_at": last_refresh_ts,
+        "last_refresh_ts": last_refresh_ts,
+        "current_project": None,
+        "current_project_dir": None,
+    }
+
+    # Prefer the explicit project env var set by ClawSeat launch scripts
+    project = os.environ.get("CLAWSEAT_PROJECT") or os.environ.get("AGENTS_PROJECT")
+    if project:
+        data["current_project"] = project
+
+    workspace_root = os.environ.get("CLAWSEAT_WORKSPACE_ROOT")
+    if workspace_root:
+        data["current_project_dir"] = workspace_root
+
+    return data
+
+
 # ── Orchestration ──────────────────────────────────────────────────
 
 
@@ -597,6 +627,7 @@ SCANNERS = {
     "repos": scan_repos,
     "network": scan_network,
     "github": scan_github,
+    "current_context": scan_current_context,
 }
 
 
@@ -618,7 +649,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     output_dir = Path(args.output).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Scanner outputs go into machine/ subdirectory (SPEC §3 target layout)
+    machine_dir = output_dir / MACHINE_SUBDIR
+    machine_dir.mkdir(parents=True, exist_ok=True)
 
     if args.only:
         targets = [t.strip() for t in args.only.split(",") if t.strip()]
@@ -638,7 +671,7 @@ def main() -> int:
             print(f"scanning {name}…", end=" ", flush=True)
         try:
             data = scanner()
-            path = write_json(output_dir, name, data)
+            path = write_json(machine_dir, name, data)
             results[name] = {"path": str(path), "ok": True}
             if not args.quiet:
                 print("✓")
@@ -648,11 +681,12 @@ def main() -> int:
             if not args.quiet:
                 print(f"✗ ({exc.__class__.__name__}: {exc})")
 
-    # Write index
+    # Write index at output_dir root (not inside machine/)
     index = {
         "version": SCAN_VERSION,
         "scanned_at": now_iso(),
         "output_dir": str(output_dir),
+        "machine_dir": str(machine_dir),
         "scanners": list(results.keys()),
         "results": results,
         "errors": errors,
@@ -663,6 +697,8 @@ def main() -> int:
         ok = sum(1 for r in results.values() if r.get("ok"))
         print(f"\nscan complete: {ok}/{total} scanners succeeded")
         print(f"index: {index_path}")
+        machine_files = sorted(p.name for p in machine_dir.iterdir() if p.is_file())
+        print(f"machine/ files: {machine_files}")
 
     return 0 if not errors else 1
 
