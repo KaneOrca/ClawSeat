@@ -315,6 +315,12 @@ def cmd_list(
             "example": "examples",
         }
 
+    # M2 project-scanner kinds: stored as projects/<proj>/<kind>.json (single file)
+    M2_KINDS: frozenset[str] = frozenset({
+        "runtime", "tests", "deploy", "ci", "lint",
+        "structure", "env_templates", "dev_env",
+    })
+
     results: list[dict] = []
 
     def _collect_dir(d: Path) -> None:
@@ -336,6 +342,15 @@ def cmd_list(
 
         if kind_name == "event":
             # SPEC §3: root events.log (JSONL, append-only) — not project-scoped
+            return
+
+        if kind_name in M2_KINDS:
+            # M2 scanner kinds: single file projects/<proj>/<kind>.json
+            f = proj_path / f"{kind_name}.json"
+            if f.is_file():
+                rec = _load_json(f)
+                if isinstance(rec, dict):
+                    results.append(rec)
             return
 
         if proj_name == "_shared":
@@ -577,7 +592,11 @@ Examples (v1 backward-compatible):
     )
     p.add_argument(
         "--kind",
-        help="Fact kind filter (decision, delivery, issue, finding, …)",
+        help=(
+            "Fact kind filter. M1: decision, delivery, issue, finding, reflection, "
+            "library_knowledge, example, pattern, event. "
+            "M2 (scanner): runtime, tests, deploy, ci, lint, structure, env_templates, dev_env."
+        ),
     )
     p.add_argument(
         "--since",

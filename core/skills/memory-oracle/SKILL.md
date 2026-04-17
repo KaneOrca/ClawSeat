@@ -48,3 +48,24 @@ claim 铁律：每个值必须能从磁盘 JSON path 直接验证；不在磁盘
 
 - 不调度其它 seat；不联网（research 除外）；不编造 key 或 id
 - 不读老 flat `~/.agents/memory/*.json`（`machine/` 是唯一权威源）
+
+## Project Scanner (M2)
+
+Scan a project repo into `projects/<name>/` structured facts.
+
+```bash
+python3 scan_project.py --project <name> --repo <path> --depth {shallow|medium|deep}
+```
+
+Depth: `shallow`=`dev_env.json` only; `medium`=+`runtime/tests/deploy/ci/lint/structure`; `deep`=+`env_templates`.  
+Default is **dry-run** (stdout JSON). Add `--commit` to write; `--force-commit` to overwrite.  
+D20: scanner is subprocess-free — pure static filesystem reads (no npm/pip/docker).
+
+Query after commit:
+
+```bash
+python3 query_memory.py --project clawseat --kind runtime
+python3 scan_project.py --project clawseat --repo /Users/ywf/.clawseat --depth shallow --commit
+```
+
+M1 scanners (`scan_environment.py`) → machine layer; M2 (`scan_project.py`) → project layer.
