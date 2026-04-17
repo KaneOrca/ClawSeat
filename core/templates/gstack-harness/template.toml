@@ -240,3 +240,37 @@ role_details = [
   "use gstack-browse for visual inspection and responsive testing",
   "design-driven UI prototypes / visual shells, not production wiring or full feature completion",
 ]
+
+[[engineers]]
+id = "memory"
+role = "memory-oracle"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+effort = "auto"
+monitor = true
+optional = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "environment memory oracle: scans the machine and serves structured knowledge",
+  "runs scan_environment.py on first dispatch to build ~/.agents/memory/ database",
+  "responds to queries by reading ~/.agents/memory/*.json and writing response.json",
+  "context is ephemeral — all knowledge persists to disk; each conversation starts fresh by reloading the memory database",
+  "cheap highspeed model (MiniMax-M2.7-highspeed) suitable for lookup and light reasoning",
+  "queryable from any seat via query_memory.py --ask or via direct JSON reads",
+]

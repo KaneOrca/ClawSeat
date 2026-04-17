@@ -85,6 +85,14 @@ required = false
 roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "qa"]
 description = "tmux session control: commands, ClawSeat wrappers, pitfalls, self-diagnosis"
 
+[[skills]]
+name = "memory-oracle"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md"
+required = false
+roles = ["memory-oracle"]
+description = "Environment memory oracle: scans the machine, builds structured knowledge DB at ~/.agents/memory/, answers queries"
+
 # ── Gstack external skills ─────────────────────────────────────────
 
 [[skills]]

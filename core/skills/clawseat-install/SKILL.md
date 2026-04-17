@@ -40,7 +40,51 @@ Before starting, verify these dependencies are installed:
   ```
 - **lark-cli** (optional, for Feishu bridge) — `brew install larksuite/cli/lark-cli`
 
-Preflight (`python3 "$CLAWSEAT_ROOT/core/preflight.py" install`) will check all of these and give specific install commands for anything missing.
+Preflight now supports runtime-aware install gating:
+
+- OpenClaw first install: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install --runtime openclaw --auto-fix`
+- Local runtime: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install`
+
+## Optional: Use Memory CC to Avoid Guessing
+
+Memory CC is an optional seat (`role = "memory-oracle"`, `tool = claude + api + minimax + MiniMax-M2.7-highspeed`) that scans the machine once and answers environment queries during install. Use it when you don't know where API keys, feishu group IDs, or provider URLs live.
+
+**When to use**:
+- Install is about to prompt the user for something the machine already knows (e.g. minimax API key already in `~/.agents/.env.global`)
+- Multiple seats need the same secret / URL / provider config
+- You (an AI agent running the install) don't want to guess paths
+
+**Minimum flow**:
+1. Start memory seat after bootstrap (before planner):
+   ```bash
+   python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+     --profile <profile.toml> --seat memory --confirm-start
+   ```
+2. Dispatch the scan task:
+   ```bash
+   python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+     --profile <profile.toml> --source koder --target memory \
+     --task-id MEMORY-SCAN-001 --title "Environment scan" \
+     --objective "Run scan_environment.py and build ~/.agents/memory/"
+   ```
+3. Wait for `~/.agents/memory/index.json` to appear
+4. Query via direct file read (fast) or `--ask` (reasoning):
+   ```bash
+   # direct
+   python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+     --key credentials.keys.MINIMAX_API_KEY.value
+
+   # reasoning
+   python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+     --ask "Which provider should designer-1 use?" --profile <profile.toml>
+   ```
+
+**Zero-dependency fallback**: You can also run the scanner directly without the TUI — it works as a standalone script:
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+```
+
+Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0600`. Do not copy it off the machine.
 
 ## Standard Flow
 
@@ -53,15 +97,15 @@ Preflight (`python3 "$CLAWSEAT_ROOT/core/preflight.py" install`) will check all 
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
-   - After running `install_openclaw_bundle.py` (step 5), **initialize yourself as koder**:
-     - First, determine your own workspace path. You can find it by checking your current working directory, or by reading your own environment/config. The path is typically `~/.openclaw/workspace-koder/` but may vary.
-     - **Ask the user for their Feishu group ID** (format: `oc_xxx`). If the user doesn't have one yet, pass empty string and configure later.
-     - Run: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" --workspace <your_workspace_path> --project install --feishu-group-id <group_id>`
-     - This writes IDENTITY.md, SOUL.md, TOOLS.md, MEMORY.md, AGENTS.md, WORKSPACE_CONTRACT.toml, and skill symlinks into YOUR workspace
-     - After init_koder completes, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
+   - Prefer the canonical one-shot installer:
+     - `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py"`
+   - This script now owns bundle repair, runtime-aware preflight, koder workspace init/refresh, dynamic profile creation, materialized-seat bootstrap, and planner config gating.
+   - **Ask the user for their Feishu group ID** (format: `oc_xxx`) before first install when possible. If they don't have one yet, pass empty string and configure later:
+     - `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py" --feishu-group-id <group_id>`
+   - After it refreshes `workspace-koder`, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`
-   - Run preflight and bootstrap
+   - If `planner` is still unconfigured, stop at the printed configuration gate instead of guessing seat config
    - Read the profile fields correctly:
      - `seats` = full roster
      - `materialized_seats` = seats whose runtime/session scaffold already exists after bootstrap

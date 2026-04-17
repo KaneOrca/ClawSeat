@@ -188,6 +188,8 @@ def expand_profile_value(value: str) -> Path:
 def normalize_role(role: str) -> str:
     if role in {"planner", "planner-dispatcher"}:
         return "planner"
+    if role in {"memory", "memory-oracle"}:
+        return "memory"
     return role or "specialist"
 
 
