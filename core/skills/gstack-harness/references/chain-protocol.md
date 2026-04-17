@@ -31,11 +31,21 @@ One common project mapping is:
      for ad hoc reminders or unblock notices that are not full dispatches
    - this is the default transport; do not use raw `tmux send-keys` unless the
      transport script is unavailable
-   - if a fallback is unavoidable, replicate the transport contract:
-     - send the text
-     - wait 1 second
-     - send `Enter`
-     - verify the message is not stranded in the input buffer
+   - the canonical transport contract is fire-and-forget:
+     - send the text via `tmux send-keys -l`
+     - wait 0.3 seconds
+     - send `Enter` three times with 0.2 second intervals (flushes any
+       stuck prior input from the same pane)
+     - exit 0 on transport-level success (pane is live); exit 2 is
+       reserved for a future "target seat intentionally skipped" signal
+   - callers do NOT receive a message-submission confirmation; the
+     3-Enter flush is the correctness mechanism, not a verify step
+   - if a fallback is unavoidable, replicate the transport contract
+     above verbatim
+   - Previously this contract included a verify-stranded-input step;
+     commit d7f6e0d relaxes that to fire-and-forget with 3-Enter flush.
+     Rationale: Claude TUI panes absorb excess Enter as no-op during
+     processing, so stuck input is self-clearing without verify.
 4. write a handoff receipt
 
 Default policy:

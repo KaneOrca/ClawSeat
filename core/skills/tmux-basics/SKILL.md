@@ -55,20 +55,26 @@ tmux capture-pane -t <session> -p -S -
 $CLAWSEAT_ROOT/core/shell-scripts/send-and-verify.sh --project <project> <seat> "message"
 ```
 
-This script:
-1. Resolves the canonical session name
-2. Sends the text
-3. Waits 1 second, then sends Enter
-4. Verifies the message was consumed (not stuck in input buffer)
-5. Auto-retries Enter if the message is still queued
+This script (fire-and-forget transport since commit d7f6e0d):
+1. Resolves the canonical session name via agentctl.sh
+2. Verifies the tmux session is alive (`tmux has-session`)
+3. Sends the text with `tmux send-keys -l`
+4. Waits 0.3s, then sends `Enter` three times at 0.2s intervals to
+   flush any stuck prior input and submit the new message
+5. Exits 0 on transport success (session live + send-keys accepted),
+   1 on SESSION_DEAD / SESSION_NOT_FOUND / TMUX_MISSING, 2 reserved
+   for a future transport-skip signal
+
+The 3-Enter flush is the correctness mechanism; this script does not
+confirm message submission. Callers that need delivery acknowledgement
+must rely on downstream receipt (e.g., target seat's Consumed ACK).
 
 **Fallback only** (when the wrapper is unavailable):
 
 ```bash
 tmux send-keys -l -t <session> "text"
-sleep 1
-tmux send-keys -t <session> Enter
-# Then verify: capture pane and check the message is gone from input
+sleep 0.3
+for _ in 1 2 3; do tmux send-keys -t <session> Enter; sleep 0.2; done
 ```
 
 ### Wait for specific output

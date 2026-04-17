@@ -9,6 +9,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -139,15 +140,28 @@ def run_command_with_env(
 
 
 def require_success(result: subprocess.CompletedProcess[str], what: str) -> None:
-    import sys
+    """Raise RuntimeError on any non-zero exit."""
     if result.returncode == 0:
         return
     stderr = result.stderr.strip()
     stdout = result.stdout.strip()
     detail = stderr or stdout or f"exit {result.returncode}"
+    raise RuntimeError(f"{what} failed: {detail}")
+
+
+def require_success_allow_skip(result: subprocess.CompletedProcess[str], what: str) -> None:
+    """Like require_success but tolerates exit code 2 (transport skipped)."""
+    if result.returncode == 0:
+        return
     if result.returncode == 2:
+        stderr = result.stderr.strip()
+        stdout = result.stdout.strip()
+        detail = stderr or stdout or "skipped"
         print(f"warn: {what} skipped: {detail}", file=sys.stderr)
         return
+    stderr = result.stderr.strip()
+    stdout = result.stdout.strip()
+    detail = stderr or stdout or f"exit {result.returncode}"
     raise RuntimeError(f"{what} failed: {detail}")
 
 

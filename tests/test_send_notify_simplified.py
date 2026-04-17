@@ -178,11 +178,11 @@ def test_project_flag_routing(tmp_path):
         _kill_session(sess)
 
 
-def test_require_success_exit_2_warns_not_raises():
-    """require_success with rc=2 prints warn to stderr and does NOT raise."""
+def test_require_success_allow_skip_exit_2_warns_not_raises():
+    """require_success_allow_skip with rc=2 prints warn to stderr and does NOT raise."""
     if _UTILS_DIR not in sys.path:
         sys.path.insert(0, _UTILS_DIR)
-    from _utils import require_success
+    from _utils import require_success_allow_skip
 
     fake = MagicMock()
     fake.returncode = 2
@@ -190,9 +190,24 @@ def test_require_success_exit_2_warns_not_raises():
     fake.stdout = ""
     buf = io.StringIO()
     with mock.patch("sys.stderr", buf):
-        require_success(fake, "send-op")
+        require_success_allow_skip(fake, "send-op")
     assert "warn:" in buf.getvalue()
     assert "skipped" in buf.getvalue()
+
+
+def test_require_success_exit_2_now_raises():
+    """require_success with rc=2 now raises RuntimeError (strict semantics)."""
+    if _UTILS_DIR not in sys.path:
+        sys.path.insert(0, _UTILS_DIR)
+    from _utils import require_success
+
+    fake = MagicMock()
+    fake.returncode = 2
+    fake.stderr = ""
+    fake.stdout = ""
+    with pytest.raises(RuntimeError) as exc_info:
+        require_success(fake, "send-op")
+    assert "exit 2" in str(exc_info.value)
 
 
 def test_require_success_exit_1_still_raises():
@@ -207,3 +222,17 @@ def test_require_success_exit_1_still_raises():
     fake.stdout = ""
     with pytest.raises(RuntimeError):
         require_success(fake, "send-op")
+
+
+def test_require_success_allow_skip_exit_1_still_raises():
+    """require_success_allow_skip with rc=1 also raises RuntimeError."""
+    if _UTILS_DIR not in sys.path:
+        sys.path.insert(0, _UTILS_DIR)
+    from _utils import require_success_allow_skip
+
+    fake = MagicMock()
+    fake.returncode = 1
+    fake.stderr = "something broke"
+    fake.stdout = ""
+    with pytest.raises(RuntimeError):
+        require_success_allow_skip(fake, "send-op")
