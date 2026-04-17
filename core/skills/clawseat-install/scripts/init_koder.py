@@ -376,6 +376,93 @@ python3 {clawseat_root}/core/scripts/skill_manager.py check
 bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>
 ```
 
+## 项目 (project) —— 每次拉 seat 之前必须锚定
+
+你可以**同时管理多个项目**。每个项目：
+- 有自己的 **profile TOML** (`~/.agents/profiles/{{project}}-profile-dynamic.toml`)
+- 有自己的 **tasks root** (`~/.agents/tasks/{{project}}/`) — TODO/DELIVERY/handoff 全在这
+- 有自己的 **workspace root** (`~/.agents/workspaces/{{project}}/`) — 每个 seat 一个子目录
+- 有自己的 **feishu group** — 团队协作的独立通信通道
+- 拉起**独立的 planner/builder/reviewer/...** 一套团队
+
+**默认项目是 `install`**（装机期唯一项目，你此刻所在的项目）。其他项目都是用户侧需求驱动的。
+
+### 你当前所在的项目
+
+读你自己的 `WORKSPACE_CONTRACT.toml` 的 `project` 字段，或者：
+```bash
+python3 -c "import tomllib; print(tomllib.loads(open('/Users/ywf/.openclaw/workspace-koder/WORKSPACE_CONTRACT.toml').read())['project'])"
+```
+
+### 新建项目（用户让你启动新团队时）
+
+**准备工作（问用户）：**
+1. 项目名（英文短名，作 profile / tasks_root / session 的路径锚定）
+2. 项目描述（给 PROJECT.md）
+3. **让用户手动在飞书里建一个新群**，把群 ID（`oc_xxx`）复制给你
+   - 你不要尝试程序化建群，lark-cli 不支持
+4. 和用户简单讨论后**选定 template**（默认 `full-team.toml`，6 seats）：
+   ```bash
+   # 推荐:  full-team       (koder+planner+builder-1+reviewer-1+qa-1+designer-1)
+   # 轻量:  install         (koder+planner+builder-1+reviewer-1)
+   # 起点:  starter         (仅 koder, 后续手动加 seat)
+   ```
+
+**执行步骤：**
+```bash
+# 1. 复制 profile 模板并 patch 项目名
+cp {clawseat_root}/examples/starter/profiles/full-team.toml \
+   ~/.agents/profiles/<new-project>-profile-dynamic.toml
+# 用 sed 把所有 "my-project" 换成新名字, 以及补上 feishu_group_id
+
+# 2. Bootstrap 新项目
+python3 {scripts}/bootstrap_harness.py \\
+  --profile ~/.agents/profiles/<new-project>-profile-dynamic.toml \\
+  --project-name <new-project>
+
+# 3. 绑定 feishu group 到 project
+python3 -c "
+import sys
+sys.path.insert(0, '{clawseat_root}/shells/openclaw-plugin')
+from _bridge_binding import bind_project_to_group
+bind_project_to_group(
+    project='<new-project>',
+    group_id='<oc_xxx 用户给的>',
+    account_id='main',  # 或用户指定
+    session_key='<project>-setup',
+    bound_by='{heartbeat_owner}',
+    authorized=True,
+)
+"
+
+# 4. 拉起新项目的 planner（在问 memory DB 拿 provider 配置之后）
+python3 {scripts}/start_seat.py \\
+  --profile ~/.agents/profiles/<new-project>-profile-dynamic.toml \\
+  --seat planner \\
+  --tool <X> --auth-mode <Y> --provider <Z> \\
+  --confirm-start
+
+# 5. dispatch 工作给 planner
+python3 {scripts}/dispatch_task.py \\
+  --profile ~/.agents/profiles/<new-project>-profile-dynamic.toml \\
+  --source {heartbeat_owner} --target planner \\
+  --task-id PROJECT-KICKOFF \\
+  --title "<项目启动>" \\
+  --objective "<用户要的东西>"
+```
+
+### 项目间隔离原则
+
+- **seat 间的 dispatch/DELIVERY/handoff 都是 project-scoped**：planner-A 不能 dispatch 给 builder-B
+- **Memory CC 是全局单实例**，所有项目共享同一份知识库 `~/.agents/memory/*.json`
+- **你自己（koder）是唯一跨项目角色**，可以同时持有多个项目的 frontstage 控制权
+
+### 常见错误（一定不要犯）
+
+- 不要跳过 `--project-name` 直接跑 bootstrap_harness —— 会默认写到 `my-project` 污染它
+- 不要把 install 项目的 profile 拷贝给新项目再改 —— 用 examples/starter/ 下的模板
+- 不要用同一个 feishu group 绑两个项目 —— BRIDGE.toml 是 1:1 关系
+
 ## 获取环境知识 (API keys, 路径, OpenClaw 配置) —— 硬性 SOP
 
 **装 seat、配 provider、查 feishu group、查 API key 之前**：
