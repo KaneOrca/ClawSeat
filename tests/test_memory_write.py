@@ -393,3 +393,105 @@ def test_written_file_permissions_are_600(tmp_path):
     p = Path(out["path"])
     mode = p.stat().st_mode
     assert stat.S_IMODE(mode) == 0o600
+
+
+# ── kind=reflection → JSONL append ───────────────────────────────────────────
+
+
+def test_reflection_writes_to_reflections_jsonl(tmp_path):
+    result = run_write(*minimal_args("reflection"), memory_dir=str(tmp_path))
+    assert result.returncode == 0
+    out = json.loads(result.stdout)
+    assert out["path"].endswith("reflections.jsonl"), f"Expected reflections.jsonl, got {out['path']}"
+
+
+def test_reflection_path_contains_project_dir(tmp_path):
+    result = run_write(*minimal_args("reflection", project="install"), memory_dir=str(tmp_path))
+    assert result.returncode == 0
+    out = json.loads(result.stdout)
+    assert "/projects/install/reflections.jsonl" in out["path"]
+
+
+def test_reflection_two_writes_produce_two_jsonl_lines(tmp_path):
+    run_write(*minimal_args("reflection", title="First thought"), memory_dir=str(tmp_path))
+    run_write(*minimal_args("reflection", title="Second thought"), memory_dir=str(tmp_path))
+    jsonl_file = tmp_path / "projects" / "install" / "reflections.jsonl"
+    assert jsonl_file.exists()
+    lines = [l for l in jsonl_file.read_text().splitlines() if l.strip()]
+    assert len(lines) == 2
+
+
+def test_reflection_jsonl_lines_are_valid_json(tmp_path):
+    run_write(*minimal_args("reflection", title="Alpha"), memory_dir=str(tmp_path))
+    run_write(*minimal_args("reflection", title="Beta"), memory_dir=str(tmp_path))
+    jsonl_file = tmp_path / "projects" / "install" / "reflections.jsonl"
+    lines = [l for l in jsonl_file.read_text().splitlines() if l.strip()]
+    for line in lines:
+        record = json.loads(line)
+        assert record["kind"] == "reflection"
+        assert record["schema_version"] == 1
+
+
+def test_reflection_jsonl_records_have_distinct_ids(tmp_path):
+    run_write(*minimal_args("reflection", title="Alpha"), memory_dir=str(tmp_path))
+    run_write(*minimal_args("reflection", title="Beta"), memory_dir=str(tmp_path))
+    jsonl_file = tmp_path / "projects" / "install" / "reflections.jsonl"
+    lines = [l for l in jsonl_file.read_text().splitlines() if l.strip()]
+    ids = [json.loads(l)["id"] for l in lines]
+    assert len(set(ids)) == 2
+
+
+def test_reflection_does_not_write_id_json_file(tmp_path):
+    result = run_write(*minimal_args("reflection"), memory_dir=str(tmp_path))
+    assert result.returncode == 0
+    project_root = tmp_path / "projects" / "install"
+    json_files = list(project_root.glob("reflection-*.json"))
+    assert json_files == [], f"Unexpected .json files: {json_files}"
+
+
+def test_reflection_no_loose_json_at_project_root(tmp_path):
+    run_write(*minimal_args("reflection", title="Alpha"), memory_dir=str(tmp_path))
+    run_write(*minimal_args("reflection", title="Beta"), memory_dir=str(tmp_path))
+    project_root = tmp_path / "projects" / "install"
+    loose_json = [p for p in project_root.glob("*.json")]
+    assert loose_json == [], f"Loose .json files at project root: {loose_json}"
+
+
+def test_reflection_schema_validated_before_jsonl_write(tmp_path):
+    result = run_write(
+        "--kind", "reflection",
+        "--project", "install",
+        "--title", "x",
+        "--author", "planner",
+        "--seats", "planner,builder-1",
+        memory_dir=str(tmp_path),
+    )
+    assert result.returncode == 0
+    jsonl_file = tmp_path / "projects" / "install" / "reflections.jsonl"
+    assert jsonl_file.exists()
+
+
+def test_reflection_author_soft_governance_still_applies(tmp_path):
+    result = run_write(
+        "--kind", "reflection",
+        "--project", "install",
+        "--title", "Soft check",
+        "--author", "unknown-bot",
+        "--seats", "planner,builder-1",
+        memory_dir=str(tmp_path),
+    )
+    assert result.returncode == 0
+    assert "warning" in result.stderr.lower()
+    jsonl_file = tmp_path / "projects" / "install" / "reflections.jsonl"
+    assert jsonl_file.exists()
+
+
+def test_reflection_dry_run_does_not_write_jsonl(tmp_path):
+    result = run_write(
+        *minimal_args("reflection"),
+        "--dry-run",
+        memory_dir=str(tmp_path),
+    )
+    assert result.returncode == 0
+    jsonl_file = tmp_path / "projects" / "install" / "reflections.jsonl"
+    assert not jsonl_file.exists()

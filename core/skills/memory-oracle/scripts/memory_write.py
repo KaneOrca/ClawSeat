@@ -43,6 +43,7 @@ from _memory_paths import (  # noqa: E402
     KIND_SUBDIRS,
     SHARED_KIND_SUBDIRS,
     generate_id,
+    reflections_path,
 )
 from _memory_schema import SchemaError, make_record, validate  # noqa: E402
 
@@ -56,6 +57,8 @@ def _fact_path(kind: str, project: str, fact_id: str, memory_root: Path) -> Path
     if project == "_shared":
         subdir_name = SHARED_KIND_SUBDIRS.get(kind, f"{kind}s")
         return memory_root / "shared" / subdir_name / f"{fact_id}.json"
+    if kind == "reflection":
+        return reflections_path(project, memory_root=memory_root)
     subdir_name = KIND_SUBDIRS.get(kind)
     if subdir_name:
         return memory_root / "projects" / project / subdir_name / f"{fact_id}.json"
@@ -68,6 +71,18 @@ def _write_fact(record: dict, path: Path) -> None:
         json.dumps(record, indent=2, ensure_ascii=False, sort_keys=False),
         encoding="utf-8",
     )
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _append_jsonl(record: dict, path: Path) -> None:
+    """Append one JSON record as a single line to a JSONL file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(record, ensure_ascii=False, sort_keys=False) + "\n"
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(line)
     try:
         os.chmod(path, 0o600)
     except OSError:
@@ -188,7 +203,10 @@ def main() -> int:
     memory_root = Path(args.memory_dir).expanduser().resolve()
     out_path = _fact_path(args.kind, args.project, fact_id, memory_root)
 
-    _write_fact(record, out_path)
+    if args.kind == "reflection":
+        _append_jsonl(record, out_path)
+    else:
+        _write_fact(record, out_path)
 
     if not args.quiet:
         result = {
