@@ -44,6 +44,7 @@ from _common import (
 _GSTACK_SKILLS_ROOT = "/Users/ywf/.gstack/repos/gstack/.agents/skills"
 
 INTENT_MAP: dict[str, dict[str, str]] = {
+    # ── Plan-phase intents (planner's own skills) ─────────────────────
     "eng-review": {
         "trigger": "Review the architecture and lock in the plan",
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-eng-review/SKILL.md",
@@ -57,13 +58,14 @@ INTENT_MAP: dict[str, dict[str, str]] = {
     "design-review": {
         "trigger": "Review the design plan and design critique",
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-design-review/SKILL.md",
-        "description": "designer's-eye plan review (UX / visual / component)",
+        "description": "designer's-eye plan review (UX / visual / component; plan-mode)",
     },
     "devex-review": {
         "trigger": "DX review and developer experience audit (Addy Osmani framework)",
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-devex-review/SKILL.md",
         "description": "developer experience audit (zero friction / learn by doing / fight uncertainty)",
     },
+    # ── Build / ship intents (builder-1) ──────────────────────────────
     "ship": {
         "trigger": "Ship it and create a PR (run tests, review diff, bump VERSION, update CHANGELOG)",
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-ship/SKILL.md",
@@ -79,6 +81,50 @@ INTENT_MAP: dict[str, dict[str, str]] = {
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-investigate/SKILL.md",
         "description": "bug RCA (investigate → analyze → hypothesize → implement)",
     },
+    "freeze": {
+        "trigger": "Freeze and restrict edits to this directory",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-freeze/SKILL.md",
+        "description": "restrict Edit/Write to one module for the session",
+    },
+    "unfreeze": {
+        "trigger": "Unfreeze and remove the edit restriction",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-unfreeze/SKILL.md",
+        "description": "clear the /freeze boundary, allow all-directory edits again",
+    },
+    # ── Review intent (reviewer-1) ────────────────────────────────────
+    "code-review": {
+        "trigger": "Code review — pre-landing PR review, check the diff for SQL safety, LLM trust, conditional side effects, structural issues",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-review/SKILL.md",
+        "description": "pre-landing PR review (NOT plan-review; for final diff check)",
+    },
+    # ── QA intents (qa-1) ────────────────────────────────────────────
+    "qa-test": {
+        "trigger": "QA — systematically test this web app and fix bugs found (test → fix → verify loop)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-qa/SKILL.md",
+        "description": "full QA test-fix-verify loop with before/after health scores",
+    },
+    "qa-only": {
+        "trigger": "QA report only — just report bugs, don't fix anything",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-qa-only/SKILL.md",
+        "description": "report-only QA (no source code edits, only a structured report)",
+    },
+    # ── Design intents (designer-1) ───────────────────────────────────
+    "design-critique": {
+        "trigger": "Audit the design — visual QA, check if it looks good, design polish (post-implementation)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-design-review/SKILL.md",
+        "description": "post-implementation visual audit (iteratively fixes visual issues)",
+    },
+    "design-html": {
+        "trigger": "Finalize this design and turn it into production HTML/CSS",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-design-html/SKILL.md",
+        "description": "design → production HTML/CSS via Pretext patterns",
+    },
+    "design-shotgun": {
+        "trigger": "Design shotgun — generate multiple AI design variants and compare",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-design-shotgun/SKILL.md",
+        "description": "multi-variant design exploration with comparison board",
+    },
+    # ── Cross-cutting intents (all seats) ─────────────────────────────
     "office-hours": {
         "trigger": "Office hours brainstorm — help me think through this, is this worth building",
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-office-hours/SKILL.md",

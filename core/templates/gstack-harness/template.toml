@@ -98,6 +98,7 @@ role_details = [
   "use gstack-plan-eng-review for engineering plan review, plan-ceo-review for strategy, plan-design-review for UX, plan-devex-review for DX",
   "use gstack-ship for PR creation, gstack-land-and-deploy for merge + production verification",
   "use gstack-checkpoint to save/resume state on long task chains",
+  "when dispatching to a specialist, pass dispatch_task.py --intent <key> to preselect the gstack skill trigger for that specialist (builder: ship/land/investigate/freeze/unfreeze; reviewer: code-review; qa: qa-test/qa-only; designer: design-critique/design-html/design-shotgun). if no intent fits, omit --intent and state the reason in --objective. the target→intent mapping table is in your own AGENTS.md Dispatch Playbook — read it before every multi-specialist chain.",
 ]
 
 [[engineers]]

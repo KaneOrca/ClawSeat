@@ -72,17 +72,41 @@ def test_skill_md_paths_point_to_gstack_tree():
 
 
 def test_expected_intent_keys_present():
-    """Pin the canonical 9 intents. If one disappears, TOOLS/dispatch.md
-    needs a corresponding update in init_koder.py.
+    """Pin the canonical 17 intents (9 plan + 8 specialist-facing).
+    If one disappears, TOOLS/dispatch.md (koder) AND the dispatch playbook
+    rendered for planner (agent_admin_workspace.py) need matching updates.
+
+    The 17 intents split into:
+    - plan-phase (planner's own skills): eng-review, ceo-review,
+      design-review, devex-review
+    - build/ship (builder-1): ship, land, investigate, freeze, unfreeze
+    - review (reviewer-1): code-review
+    - QA (qa-1): qa-test, qa-only
+    - design (designer-1): design-critique, design-html, design-shotgun
+    - cross-cutting: office-hours, checkpoint
     """
     expected = {
+        # plan-phase (planner)
         "eng-review",
         "ceo-review",
         "design-review",
         "devex-review",
+        # build / ship (builder-1)
         "ship",
         "land",
         "investigate",
+        "freeze",
+        "unfreeze",
+        # review (reviewer-1)
+        "code-review",
+        # QA (qa-1)
+        "qa-test",
+        "qa-only",
+        # design (designer-1)
+        "design-critique",
+        "design-html",
+        "design-shotgun",
+        # cross-cutting
         "office-hours",
         "checkpoint",
     }
@@ -190,3 +214,75 @@ def test_every_intent_produces_non_empty_effect(intent):
         f"intent {intent!r} failed to inject trigger prefix"
     )
     assert spec["skill_md"] in new_refs
+
+
+# ── Specialist-facing intents: correct SKILL.md routing ──────────────────
+#
+# Lock each specialist intent to the right gstack skill. If someone renames
+# a gstack skill or rewires the intent to the wrong SKILL.md, planner will
+# activate the wrong runtime on specialist. Mismatch here = wrong behaviour
+# in live task chains.
+
+
+@pytest.mark.parametrize(
+    "intent,expected_skill_basename",
+    [
+        # Build / ship intents point at builder-1's gstack skills
+        ("ship", "gstack-ship"),
+        ("land", "gstack-land-and-deploy"),
+        ("investigate", "gstack-investigate"),
+        ("freeze", "gstack-freeze"),
+        ("unfreeze", "gstack-unfreeze"),
+        # Review intent points at reviewer-1's skill (gstack-review, NOT
+        # gstack-plan-*-review which is planner's own)
+        ("code-review", "gstack-review"),
+        # QA intents point at qa-1's skills
+        ("qa-test", "gstack-qa"),
+        ("qa-only", "gstack-qa-only"),
+        # Design intents point at designer-1's skills
+        ("design-critique", "gstack-design-review"),
+        ("design-html", "gstack-design-html"),
+        ("design-shotgun", "gstack-design-shotgun"),
+    ],
+)
+def test_specialist_intents_route_to_correct_skill(intent, expected_skill_basename):
+    """Each specialist intent must point at the SKILL.md of the named gstack
+    skill. If renamed or re-pointed, activation breaks silently in production.
+    """
+    spec = INTENT_MAP[intent]
+    assert f"/{expected_skill_basename}/SKILL.md" in spec["skill_md"], (
+        f"intent {intent!r} skill_md {spec['skill_md']!r} does not point at "
+        f"/{expected_skill_basename}/SKILL.md"
+    )
+
+
+def test_code_review_and_design_review_are_not_confused():
+    """`code-review` is reviewer-1's PR-diff review (gstack-review).
+    `design-review` is planner's PLAN-MODE UX review (gstack-plan-design-review).
+    `design-critique` is designer-1's POST-implementation visual audit
+    (gstack-design-review).
+
+    These three MUST point at three different SKILL.md files. Easy to mix
+    up in the head.
+    """
+    code_review_skill = INTENT_MAP["code-review"]["skill_md"]
+    design_review_skill = INTENT_MAP["design-review"]["skill_md"]
+    design_critique_skill = INTENT_MAP["design-critique"]["skill_md"]
+    assert code_review_skill != design_review_skill
+    assert code_review_skill != design_critique_skill
+    assert design_review_skill != design_critique_skill
+    assert "gstack-review/" in code_review_skill
+    assert "gstack-plan-design-review/" in design_review_skill
+    assert "gstack-design-review/" in design_critique_skill
+    assert "plan-design-review" not in design_critique_skill  # not planner's
+
+
+def test_qa_test_vs_qa_only_distinct():
+    """qa-test actually edits code (test→fix→verify loop); qa-only is
+    report-only. If someone collapses these to the same SKILL.md, a
+    planner dispatch with `--intent qa-only` might end up fixing bugs
+    when the caller explicitly asked for report-only.
+    """
+    assert INTENT_MAP["qa-test"]["skill_md"] != INTENT_MAP["qa-only"]["skill_md"]
+    assert "gstack-qa/" in INTENT_MAP["qa-test"]["skill_md"]
+    assert "gstack-qa-only/" in INTENT_MAP["qa-only"]["skill_md"]

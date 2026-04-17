@@ -408,6 +408,15 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
         )
         or "builder-1"
     )
+    reviewer_seat = (
+        preferred_seat_for_role(
+            project,
+            "reviewer",
+            project_engineers=getattr(session, "project_engineers", None),
+            engineer_order=getattr(session, "engineer_order", None),
+        )
+        or "reviewer-1"
+    )
 
     if engineer.role == "frontstage-supervisor":
         lines = [
@@ -447,7 +456,14 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "",
             "When a Feishu group is bound, the dispatch helper will broadcast the task release to that same group only when CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1 is explicitly set.",
             "",
-            "Dispatch work to a specialist (swap the target seat as needed):",
+            "Dispatch work to a specialist (swap the target seat as needed).",
+            "**Always pass `--intent`** — it prepends the canonical gstack skill trigger",
+            "phrase to `--objective` and appends the skill's SKILL.md path to",
+            "`--skill-refs`, so the target seat's Claude Code runtime actually activates",
+            "the right gstack skill. Without `--intent`, the specialist runs on default",
+            "AI behaviour and skipping the gstack methodology entirely (ship workflow,",
+            "QA test-fix-verify loop, etc.).",
+            "",
             "```bash",
             f"python3 {root}/dispatch_task.py \\",
             f"  --profile {profile_ref} \\",
@@ -456,8 +472,37 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --objective '<OBJECTIVE>' \\",
+            "  --intent <INTENT_KEY>   # see mapping table below",
             f"  --reply-to {planner_seat}",
             "```",
+            "",
+            "### Target seat → recommended `--intent` map",
+            "",
+            "| target seat | typical work | recommended `--intent` key(s) |",
+            "|---|---|---|",
+            f"| `{builder_seat}` | implementation, ship a PR | `ship`, `land`, `investigate`, `freeze`/`unfreeze` |",
+            f"| `{reviewer_seat}` | pre-landing PR review | `code-review` |",
+            "| `qa-1` | test / bug-hunt a web app | `qa-test`, `qa-only` |",
+            "| `designer-1` | design audit / finalize UI | `design-critique`, `design-html`, `design-shotgun` |",
+            "",
+            "If no intent fits (pure planning or routing without a gstack skill),",
+            "omit `--intent` and state the reason in `--objective`.",
+            "",
+            "### Specialist gstack skill rosters (read-only reference)",
+            "",
+            "These are the gstack skills mounted on each specialist seat's Claude Code",
+            "runtime. You can only activate skills the target seat actually has:",
+            "",
+            f"- `{builder_seat}`: gstack-ship, gstack-land-and-deploy, gstack-investigate, "
+            "gstack-freeze, gstack-unfreeze, gstack-browse, gstack-careful, gstack-checkpoint",
+            f"- `{reviewer_seat}`: gstack-review, gstack-browse, gstack-careful",
+            "- `qa-1`: gstack-qa, gstack-qa-only, gstack-browse",
+            "- `designer-1`: gstack-design-html, gstack-design-review, "
+            "gstack-design-shotgun, gstack-browse",
+            "",
+            "Trying `--intent design-critique` on `builder-1` will NOT activate "
+            "`gstack-design-review` there — the skill isn't on that seat. Dispatch",
+            "the right task to the right seat.",
             "",
             "The receipt helper follows the same hook and only broadcasts when $CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1 is explicitly set; default is disabled.",
             "",
