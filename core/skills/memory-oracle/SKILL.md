@@ -83,32 +83,53 @@ objective: 扫描整台电脑，建立结构化记忆库
 ```
 task_id: MEMORY-QUERY-XXX
 objective: 回答 "designer seat 应该用哪个 provider 和 API key?"
+source: <发起方>    # koder / planner / builder-1 / memory-client (bash caller)
 ```
 
-执行步骤：
-1. UserPromptSubmit hook 已把全量 memory DB 注入 —— 直接在当前上下文里看
-2. 推理并组合答案
-3. 写入 `/Users/ywf/.agents/memory/response.json`（绝对路径）：
-   ```json
-   {
-     "query_id": "MEMORY-QUERY-XXX",
-     "claims": [
-       {
-         "statement": "designer-1 uses gemini + oauth + google provider",
-         "evidence": [
-           {
-             "file": "clawseat.json",
-             "path": "profiles.install-profile-dynamic.seat_roles.designer-1",
-             "expected_value": "designer"
-           }
-         ]
-       }
-     ],
-     "confidence": "high",
-     "timestamp": "2026-04-17T12:34:56Z"
-   }
-   ```
-4. 通过 `/Users/ywf/coding/ClawSeat/core/skills/gstack-harness/scripts/complete_handoff.py` 返回完成
+**你的单职责：调一个脚本。一次搞定。**
+
+```bash
+python3 /Users/ywf/coding/ClawSeat/core/skills/memory-oracle/scripts/memory_deliver.py \
+  --profile <profile.toml> \
+  --task-id MEMORY-QUERY-XXX \
+  --target <原 TODO 里的 source> \
+  --response-inline '<json 字符串>'
+```
+
+这一个调用同时做了：
+1. 写 `/Users/ywf/.agents/memory/responses/{task_id}.json`
+2. 调 complete_handoff.py 分发（target 是 seat → DELIVERY + tmux notify；target 是 external → 只写 receipt）
+
+**你不需要手动 mkdir、不需要记住路径、不需要分两步调用。**`memory_deliver.py` 把整个协议封装好了。
+
+#### response JSON schema（`--response-inline` 里传的）
+
+```json
+{
+  "claims": [
+    {
+      "statement": "designer-1 uses gemini + oauth + google provider",
+      "evidence": [
+        {
+          "file": "clawseat",
+          "path": "profiles.install-profile-dynamic.seat_roles.designer-1",
+          "expected_value": "designer"
+        }
+      ]
+    }
+  ],
+  "confidence": "high",
+  "timestamp": "2026-04-17T12:34:56Z"
+}
+```
+
+`query_id` 不用填——memory_deliver.py 会用 `--task-id` 自动填好。
+
+#### evidence 格式宽容度
+
+`file` 可以写短名 `github` / `github.json` / `/full/path/github.json`，caller 的 verify_claims 会归一化。
+`path` 可以写点号 `gh_cli.active_login` / JSONPath `$.gh_cli.active_login` / 斜杠 `gh_cli/active_login`，都会被归一化。
+**但 `expected_value` 必须和磁盘上完全相等**，否则 verify 报 mismatch。
 
 ## 查询回答的 SOP —— 强制性契约
 

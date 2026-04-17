@@ -332,6 +332,22 @@ def main() -> int:
         )
         receipt["todo_path"] = str(frontstage_todo)
         receipt["assigned_at"] = utc_now_iso()
+    # Graceful degrade for external callers (e.g. the ancestor Claude Code
+    # running an install via query_memory.py --ask). These callers pass
+    # source strings like "memory-client" / "bootstrap-installer" that are
+    # not real tmux seats — trying to notify them via send-and-verify.sh
+    # fails with a bogus tmux session name.
+    target_is_known_seat = args.target in (getattr(profile, "seats", None) or [])
+    if not target_is_known_seat and not args.skip_notify:
+        receipt["notify_skipped"] = "target_not_registered_seat"
+        # Auditable: we KNOW we skipped; caller can inspect receipt JSON.
+        print(
+            f"notify_skipped: target {args.target!r} is not a registered seat; "
+            "completion receipt written but no tmux/Feishu notification sent.",
+            file=sys.stderr,
+        )
+        args.skip_notify = True  # force-skip the branches below
+
     if not args.skip_notify:
         message = build_completion_message(
             args.task_id,

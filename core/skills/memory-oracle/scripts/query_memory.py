@@ -150,20 +150,22 @@ def cmd_search(memory_dir: Path, term: str, *, files: list[str] | None = None) -
 
 
 def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
-    """Ask Memory CC via dispatch_task.py + poll response.json."""
+    """Ask Memory CC via dispatch_task.py + poll responses/{task_id}.json.
+
+    This is the mechanism for callers who are NOT tmux seats (e.g. the
+    ancestor Claude Code running the install). Real seats should use
+    ``dispatch_task.py`` directly and receive DELIVERY.md via the canonical
+    harness flow — no polling needed.
+    """
     if not profile_path:
         print("error: --ask requires --profile <profile.toml>", file=sys.stderr)
         return 2
 
-    # Build task_id from timestamp
-    task_id = f"MEMORY-QUERY-{int(time.time())}"
-    response_path = DEFAULT_MEMORY_DIR / "response.json"
-    # Clear stale response
-    if response_path.exists():
-        try:
-            response_path.unlink()
-        except OSError:
-            pass
+    # Build task_id from timestamp + pid to avoid collisions
+    task_id = f"MEMORY-QUERY-{int(time.time())}-{os.getpid()}"
+    responses_dir = DEFAULT_MEMORY_DIR / "responses"
+    responses_dir.mkdir(parents=True, exist_ok=True)
+    response_path = responses_dir / f"{task_id}.json"
 
     # Locate dispatch_task.py (walks up from this script)
     script_dir = Path(__file__).resolve().parent
@@ -189,7 +191,7 @@ def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
         print(f"error: dispatch failed: {dispatch_result.stderr}", file=sys.stderr)
         return 1
 
-    # Poll response.json
+    # Poll the per-query response file (no collision with other queries)
     deadline = time.time() + timeout
     while time.time() < deadline:
         if response_path.exists():
@@ -254,9 +256,30 @@ def verify_claims(response: dict, memory_dir: Path) -> dict:
             fname = ev.get("file", "")
             path = ev.get("path", "")
             expected = ev.get("expected_value")
-            # strip .json extension if present
+            # ── normalize file ──────────────────────────────────
+            # LLMs emit any of: "github", "github.json",
+            #   "/Users/ywf/.agents/memory/github.json", "memory/github"
+            # → take the basename, strip .json
+            fname = os.path.basename(fname)
             if fname.endswith(".json"):
                 fname = fname[:-5]
+            # ── normalize path ──────────────────────────────────
+            # LLMs emit any of: "a.b.c", "$.a.b.c", "/a/b/c",
+            #   "a['b'].c", "a/b/c" — normalize to dot-separated.
+            if path:
+                path = path.strip()
+                if path.startswith("$."):
+                    path = path[2:]
+                elif path.startswith("$"):
+                    path = path[1:].lstrip(".")
+                path = path.lstrip("/").replace("/", ".")
+                # strip bracket notation: a['b'] → a.b
+                path = path.replace("[", ".").replace("]", "").replace("'", "").replace('"', "")
+                # collapse double dots
+                while ".." in path:
+                    path = path.replace("..", ".")
+                path = path.strip(".")
+
             data = load_memory_file(memory_dir, fname)
             if data is None:
                 mismatches.append({"file": fname, "path": path, "reason": "file_not_found"})
