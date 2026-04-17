@@ -1,0 +1,71 @@
+version = 1
+profile_name = "install-with-memory"
+description = "Install profile with Memory CC as the first backend seat. Memory CC scans the machine once on startup and serves as knowledge oracle for the rest of install (ancestor Claude Code queries it to avoid asking the user for values that already live on disk: API keys, Feishu group IDs, OpenClaw agent list, etc)."
+template_name = "gstack-harness"
+project_name = "install"
+repo_root = "{CLAWSEAT_ROOT}"
+tasks_root = "~/.agents/tasks/install"
+project_doc = "~/.agents/tasks/install/PROJECT.md"
+tasks_doc = "~/.agents/tasks/install/TASKS.md"
+status_doc = "~/.agents/tasks/install/STATUS.md"
+send_script = "{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh"
+status_script = "~/.agents/tasks/install/patrol/check-status.sh"
+patrol_script = "~/.agents/tasks/install/patrol/patrol-supervisor.sh"
+agent_admin = "{CLAWSEAT_ROOT}/core/scripts/agent_admin.py"
+workspace_root = "~/.agents/workspaces/install"
+handoff_dir = "~/.agents/tasks/install/patrol/handoffs"
+heartbeat_owner = "koder"
+active_loop_owner = "planner"
+default_notify_target = "planner"
+heartbeat_receipt = "~/.agents/workspaces/install/koder/HEARTBEAT_RECEIPT.toml"
+# 5 seats, memory first so it's available for the rest of the install chain.
+seats = ["memory", "koder", "planner", "builder-1", "reviewer-1"]
+heartbeat_seats = ["koder"]
+
+[seat_roles]
+memory = "memory-oracle"
+koder = "frontstage-supervisor"
+planner = "planner-dispatcher"
+builder-1 = "builder"
+reviewer-1 = "reviewer"
+
+[dynamic_roster]
+enabled = true
+session_root = "~/.agents/sessions"
+materialized_seats = ["memory", "koder", "planner", "builder-1", "reviewer-1"]
+# bootstrap_seats kept for compatibility and frontstage bootstrap intent.
+bootstrap_seats = ["koder"]
+# memory starts first so subsequent seats can query it during their setup.
+default_start_seats = ["memory", "koder", "planner"]
+compat_legacy_seats = false
+
+# Memory CC uses claude + api + minimax out of the box (cheap, fast lookup seat).
+# Bootstrap auto-seeds ANTHROPIC_AUTH_TOKEN from ~/.agents/.env.global's
+# MINIMAX_API_KEY — no user prompt required.
+[seat_overrides.memory]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+
+# Other seats' seat_overrides are populated during the configuration phase.
+# The koder frontstage skill (post-handoff) guides the user through provider
+# selection and auth setup before any of these backend seats are started.
+#
+# Example after configuration:
+#   [seat_overrides.planner]
+#   tool = "claude"
+#   auth_mode = "oauth"
+#
+#   [seat_overrides.builder-1]
+#   tool = "claude"
+#   auth_mode = "oauth"
+#
+#   [seat_overrides.reviewer-1]
+#   tool = "codex"
+#   auth_mode = "api"
+#   provider = "xcode-best"
+
+[patrol]
+enabled = false
+planner_brief_path = "~/.agents/tasks/install/planner/PLANNER_BRIEF.md"

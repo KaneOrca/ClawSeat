@@ -21,11 +21,14 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[3]  # clawseat-install/scripts/ → core/skills/ → core/ → ClawSeat
-_core = str(REPO_ROOT / "core")
-if _core not in sys.path:
-    sys.path.insert(0, _core)
-_harness_scripts = str(REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts")
+REPO_ROOT = SCRIPT_DIR.parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core._bootstrap import CLAWSEAT_ROOT
+from core.resolve import dynamic_profile_path
+
+_harness_scripts = str(CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness" / "scripts")
 if _harness_scripts not in sys.path:
     sys.path.insert(0, _harness_scripts)
 
@@ -42,11 +45,78 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--profile", help="Path to the dynamic profile TOML. Auto-resolved if omitted.")
     p.add_argument("--feishu-group-id", default="", help="Feishu group ID for this project (oc_xxx). Leave empty to configure later.")
     p.add_argument("--dry-run", action="store_true", help="Print what would be written without changing files.")
+    p.add_argument(
+        "--on-conflict",
+        choices=("ask", "overwrite", "backup", "abort"),
+        default="ask",
+        help="When the workspace already has managed files (IDENTITY/SOUL/TOOLS/MEMORY/"
+             "AGENTS.md + WORKSPACE_CONTRACT.toml): ask the user interactively (default), "
+             "overwrite them in place, back them up to .backup-<timestamp>/ first, or abort.",
+    )
     return p.parse_args()
 
 
+# Files init_koder writes into the workspace. Only these are backed up when
+# --on-conflict=backup is chosen — everything else (skills/, repos/, working
+# products like pptx/png etc.) stays in place.
+MANAGED_FILES = (
+    "IDENTITY.md",
+    "SOUL.md",
+    "TOOLS.md",
+    "MEMORY.md",
+    "AGENTS.md",
+    "WORKSPACE_CONTRACT.toml",
+)
+
+
+def detect_managed_conflicts(workspace: Path) -> list[str]:
+    return [name for name in MANAGED_FILES if (workspace / name).exists()]
+
+
+def backup_managed_files(workspace: Path, conflicts: list[str]) -> Path:
+    """Move the 6 managed files into a .backup-<timestamp>/ subdir.
+
+    Returns the backup dir path. Leaves every other file in the workspace
+    (skills/, repos/, etc.) untouched.
+    """
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = workspace / f".backup-{stamp}"
+    backup_dir.mkdir(parents=True, exist_ok=False)
+    for name in conflicts:
+        src = workspace / name
+        dst = backup_dir / name
+        src.rename(dst)
+    return backup_dir
+
+
+def resolve_conflict_policy(
+    policy: str, conflicts: list[str], workspace: Path
+) -> str:
+    """For --on-conflict=ask, prompt the user. Otherwise return policy as-is."""
+    if policy != "ask":
+        return policy
+    print(f"\nworkspace {workspace} already has managed files:")
+    for name in conflicts:
+        print(f"  • {name}")
+    print("\nchoose:")
+    print("  1. overwrite  (discard the existing versions in place)")
+    print("  2. backup     (move them to .backup-<timestamp>/ then rewrite)")
+    print("  3. abort      (do nothing, exit)")
+    while True:
+        try:
+            choice = input("enter 1 / 2 / 3: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return "abort"
+        if choice == "1":
+            return "overwrite"
+        if choice == "2":
+            return "backup"
+        if choice == "3":
+            return "abort"
+
+
 def load_template() -> dict:
-    path = REPO_ROOT / "core" / "templates" / "gstack-harness" / "template.toml"
+    path = CLAWSEAT_ROOT / "core" / "templates" / "gstack-harness" / "template.toml"
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
@@ -62,7 +132,6 @@ def resolve_profile(project: str, explicit: str | None) -> Path:
         p = Path(explicit).expanduser()
         if p.exists():
             return p
-    from resolve import dynamic_profile_path
     return dynamic_profile_path(project)
 
 
@@ -500,6 +569,19 @@ def main() -> int:
     if not workspace.exists():
         print(f"error: workspace does not exist: {workspace}", file=sys.stderr)
         return 1
+
+    # Conflict handling: check for the 6 files init_koder will overwrite.
+    conflicts = detect_managed_conflicts(workspace)
+    if conflicts and not args.dry_run:
+        policy = resolve_conflict_policy(args.on_conflict, conflicts, workspace)
+        if policy == "abort":
+            print("aborted: workspace untouched.", file=sys.stderr)
+            return 2
+        if policy == "backup":
+            backup_dir = backup_managed_files(workspace, conflicts)
+            print(f"backed up {len(conflicts)} file(s) to {backup_dir}")
+        elif policy == "overwrite":
+            print(f"overwriting {len(conflicts)} file(s) in place")
 
     profile_path, profile = load_profile_context(args.project, args.profile)
     files = build_workspace_files(
