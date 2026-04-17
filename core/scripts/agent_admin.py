@@ -752,6 +752,10 @@ def cmd_session_start_engineer(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_start_engineer(args)
 
 
+def cmd_session_batch_start_engineer(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_batch_start_engineer(args)
+
+
 def cmd_session_provision_heartbeat(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_provision_heartbeat(args)
 
@@ -1053,6 +1057,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_project_delete=cmd_project_delete,
     cmd_project_layout_set=cmd_project_layout_set,
     cmd_session_start_engineer=cmd_session_start_engineer,
+    cmd_session_batch_start_engineer=cmd_session_batch_start_engineer,
     cmd_session_provision_heartbeat=cmd_session_provision_heartbeat,
     cmd_session_stop_engineer=cmd_session_stop_engineer,
     cmd_session_start_project=cmd_session_start_project,

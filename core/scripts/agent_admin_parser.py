@@ -28,6 +28,7 @@ class ParserHooks:
     cmd_project_delete: Callable[[Any], int]
     cmd_project_layout_set: Callable[[Any], int]
     cmd_session_start_engineer: Callable[[Any], int]
+    cmd_session_batch_start_engineer: Callable[[Any], int]
     cmd_session_provision_heartbeat: Callable[[Any], int]
     cmd_session_stop_engineer: Callable[[Any], int]
     cmd_session_start_project: Callable[[Any], int]
@@ -173,6 +174,33 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_start_eng.add_argument("--project")
     session_start_eng.add_argument("--reset", action="store_true")
     session_start_eng.set_defaults(func=hooks.cmd_session_start_engineer)
+
+    # batch-start-engineer: atomic multi-seat startup.
+    # Phase 1: parallel tmux start for every engineer (no iTerm side effects).
+    # Python threads join before Phase 2, replacing the `wait` that shell
+    # operators used to have to remember.
+    # Phase 2: single `window open-monitor` call creates one iTerm window with
+    # one tab per seat, in one AppleScript invocation. No race is possible
+    # because there is no concurrency during Phase 2.
+    # --no-iterm skips Phase 2 (tmux-only mode) — useful for CI or when the
+    # operator plans to open the window later with `window open-monitor`.
+    session_batch_start = session_sub.add_parser(
+        "batch-start-engineer",
+        help="start N seats in parallel (tmux) then open one iTerm window with all tabs (single AppleScript)",
+    )
+    session_batch_start.add_argument(
+        "engineers",
+        nargs="+",
+        help="engineer ids to start (e.g. planner builder-1 reviewer-1 designer-1)",
+    )
+    session_batch_start.add_argument("--project")
+    session_batch_start.add_argument("--reset", action="store_true")
+    session_batch_start.add_argument(
+        "--no-iterm",
+        action="store_true",
+        help="skip Phase 2; only start tmux sessions",
+    )
+    session_batch_start.set_defaults(func=hooks.cmd_session_batch_start_engineer)
 
     session_provision_heartbeat = session_sub.add_parser("provision-heartbeat")
     session_provision_heartbeat.add_argument("engineer")

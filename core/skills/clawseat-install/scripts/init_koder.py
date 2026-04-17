@@ -651,29 +651,47 @@ python3 {scripts}/start_seat.py \\
 
 `start_seat.py` 一步到位：起 tmux + 开 iTerm tab + 做 TUI 可见性检查。
 
-### 多 seat 启动（一次 ≥2 seat，**默认走 batch**）
+### 多 seat 启动（一次 ≥2 seat）
+
+**直接用 `batch-start-engineer`**。这个子命令内部做了三件事：
+1. 用线程池并行 `start-engineer` 所有 seat（只起 tmux，不碰 iTerm）
+2. 等每个线程都返回（等价于 shell 的 `wait`，但强制不可省）
+3. 一次 `window open-monitor` 开所有 tab 到同一个 iTerm window（单次 AppleScript，无 race）
 
 ```bash
-# 1) 并行起所有 tmux session（不开 iTerm）
-for seat in planner builder-1 reviewer-1 designer-1; do
-  python3 {admin} session start-engineer $seat --project <project> &
-done
-wait
-
-# 2) 一次性 batch 把所有 seat 的 tab 开进一个 iTerm window
-python3 {admin} window open-monitor <project>
+python3 {admin} session batch-start-engineer \\
+  planner builder-1 reviewer-1 designer-1 \\
+  --project <project>
 ```
 
-batch 方式的好处：
-- **原子**：1 次 AppleScript 开所有 tab，并发上没有 race 可能
-- **快 ~3x**：`session start-engineer` 不走 iTerm，只起 tmux，几乎瞬时
-- **视觉整齐**：所有 seat tab 排在同一个 iTerm window 里
+可选：
+- `--no-iterm` — 只起 tmux，不开 iTerm（之后再手动 `window open-monitor`）
+- `--reset` — 已存在的 tmux session 先 kill 再重建
+
+特性：
+- **原子**：Phase 2 前拿到所有 Phase 1 结果；没起成的 seat → 整批失败 → **不**开残缺 iTerm window
+- **快 ~3x**：tmux 启动不走 iTerm，几乎瞬时
+- **视觉整齐**：所有 seat tab 排在同一 iTerm window 里
+- **无法遗漏 wait**：等 Phase 1 完成的逻辑写在 Python 里，不靠 shell `wait`
 
 前提（install-with-memory.toml 默认都满足）：
 - `project.window_mode = "tabs-1up"`
 - 目标 seat 都在 `monitor_engineers` 里
 
-koder 本身是 OpenClaw agent 不是 tmux seat，`open_project_tabs_window` 自动过滤只开 backend seat 的 tab。
+koder 本身是 OpenClaw agent 不是 tmux seat，`open_project_tabs_window` 自动过滤，不会尝试给 koder 开 tab。
+
+### ⚠️ 不要手写 for-loop 的 shell 版本
+
+下面这个模式看着对，但**禁止**在 koder 里用：
+```bash
+# ❌ 错误：容易漏 wait
+for seat in ...; do
+  session start-engineer $seat &
+done
+window open-monitor ...    # 可能 Phase 1 还没完
+```
+
+漏 `wait` 时 `open-monitor` 会在 tmux session 还没建完时就发 AppleScript，`open_project_tabs_window` 内部 `tmux_has_session(seat)` 返回 False 就跳过该 seat → iTerm tab 漏开 → 用户以为 batch 模式不稳定。**统一走 `batch-start-engineer`**，Python 里保证顺序。
 
 ### planner 报 seat_needed 怎么办
 

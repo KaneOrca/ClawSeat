@@ -38,6 +38,134 @@ class CommandHandlers:
         print(session.session)
         return 0
 
+    def session_batch_start_engineer(self, args: Any) -> int:
+        """Atomically start N seats: parallel tmux, then single iTerm window.
+
+        Replaces the shell idiom `for seat in ...; do session start-engineer
+        $seat &; done; wait; window open-monitor <project>` — which is easy
+        to get wrong (forgetting `wait` races Phase 2 against Phase 1's
+        still-starting tmux sessions, causing open_project_tabs_window to
+        skip not-yet-ready seats and leaving partial tabs).
+
+        Phase 1 uses a thread pool so concurrent start_engineer calls share
+        Python process state (no subprocess-to-subprocess coordination).
+        start_engineer itself is per-seat in every mutation (per-seat
+        session.toml, per-seat workspace, per-seat tmux session name) so
+        running it in parallel is safe.
+
+        Phase 2 is a single `open_monitor_window` call — one osascript, one
+        atomic AppleScript block. No concurrency during Phase 2 means no
+        iTerm current-window race even without the fix in
+        agent_admin_window.py.
+        """
+        import concurrent.futures
+        import sys
+
+        engineer_ids = list(getattr(args, "engineers", []) or [])
+        if not engineer_ids:
+            raise self.hooks.error_cls(
+                "batch-start-engineer requires one or more engineer ids"
+            )
+        # Dedupe while preserving order so the operator's intent reads
+        # left-to-right but we never ask tmux to start the same session twice.
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for eid in engineer_ids:
+            if eid not in seen:
+                seen.add(eid)
+                ordered.append(eid)
+        engineer_ids = ordered
+
+        project_name = getattr(args, "project", None)
+        reset = bool(getattr(args, "reset", False))
+        skip_iterm = bool(getattr(args, "no_iterm", False))
+
+        # Resolve all sessions up front so we fail fast on typos (bad seat
+        # id) before we touch tmux. The resolve step also normalises engineer
+        # names for downstream hooks.
+        sessions_to_start: list[Any] = []
+        for eid in engineer_ids:
+            sessions_to_start.append(
+                self.hooks.resolve_engineer_session(eid, project_name=project_name)
+            )
+
+        # Phase 1 — parallel tmux start.
+        def _start_one(session: Any) -> tuple[str, Exception | None]:
+            try:
+                self.hooks.session_service.start_engineer(session, reset=reset)
+                return (session.engineer_id, None)
+            except Exception as exc:  # noqa: BLE001 - collect, don't abort pool
+                return (session.engineer_id, exc)
+
+        failures: list[tuple[str, Exception]] = []
+        started: list[Any] = []
+        max_workers = min(len(sessions_to_start), 8)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_start_one, s): s for s in sessions_to_start
+            }
+            # concurrent.futures.wait blocks until every future is done —
+            # this IS the `wait` that shell operators had to remember.
+            for fut in concurrent.futures.as_completed(futures):
+                session = futures[fut]
+                _eid, err = fut.result()
+                if err is None:
+                    started.append(session)
+                    print(f"batch-start-engineer: {session.session} started")
+                else:
+                    failures.append((session.engineer_id, err))
+                    print(
+                        f"batch-start-engineer: {session.engineer_id} FAILED — {err}",
+                        file=sys.stderr,
+                    )
+
+        # Best-effort heartbeat provisioning for started Claude sessions. We
+        # do this sequentially after tmux Phase 1 because heartbeat itself
+        # writes per-seat state and is not the hot path.
+        for session in started:
+            try:
+                _provisioned, detail = self.hooks.provision_session_heartbeat(session)
+                if detail:
+                    print(detail)
+            except Exception as exc:  # noqa: BLE001 - heartbeat is non-fatal
+                print(f"heartbeat ({session.engineer_id}): {exc}", file=sys.stderr)
+
+        if failures:
+            failed_ids = [eid for eid, _ in failures]
+            raise self.hooks.error_cls(
+                f"batch-start-engineer: {len(failures)}/{len(engineer_ids)} "
+                f"seats failed to start: {failed_ids}. "
+                "Not opening iTerm window; fix the failing seats then re-run."
+            )
+
+        # Phase 2 — single atomic open-monitor.
+        if skip_iterm:
+            print("batch-start-engineer: --no-iterm set, skipping Phase 2")
+            return 0
+
+        project = self.hooks.load_project_or_current(project_name)
+        if not project.monitor_engineers:
+            print(
+                f"batch-start-engineer: project '{project.name}' has no "
+                "monitor_engineers; skipping iTerm window. Started tmux "
+                "sessions remain alive — attach manually if needed.",
+                file=sys.stderr,
+            )
+            return 0
+        if project.window_mode != "tabs-1up":
+            # For non-tabs modes (e.g. project-monitor) we defer to the same
+            # path window_open_monitor uses, which may also start a monitor
+            # session. Safe to share the code.
+            self.hooks.session_service.start_project(
+                project, ensure_monitor=True, reset=False
+            )
+        self.hooks.open_monitor_window(
+            project,
+            self.hooks.load_project_sessions(project.name),
+            self.hooks.load_engineers(),
+        )
+        return 0
+
     def session_provision_heartbeat(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         provisioned, detail = self.hooks.provision_session_heartbeat(
