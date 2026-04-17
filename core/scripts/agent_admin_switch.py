@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from agent_admin_config import validate_runtime_combo
+
 
 @dataclass
 class SwitchHooks:
@@ -129,6 +131,17 @@ class SwitchHandlers:
         )
 
     def session_switch_harness(self, args: Any) -> int:
+        # Validate the tool/auth_mode/provider triple BEFORE any mutation.
+        # Same rationale as CRUD engineer_create: unknown provider strings
+        # used to silently succeed through build_switched_session, burning
+        # an identity directory under the typoed name.
+        validate_runtime_combo(
+            args.tool,
+            args.mode,
+            args.provider,
+            error_cls=self.hooks.error_cls,
+            context=f"session switch-harness {args.engineer}",
+        )
         project = self.hooks.load_project_or_current(args.project)
         old_session = self.hooks.load_session(project.name, self.hooks.normalize_name(args.engineer))
         new_session = self.build_switched_session(old_session, project, args.tool, args.mode, args.provider)
@@ -151,6 +164,17 @@ class SwitchHandlers:
     def session_switch_auth(self, args: Any) -> int:
         project = self.hooks.load_project_or_current(args.project)
         old_session = self.hooks.load_session(project.name, self.hooks.normalize_name(args.engineer))
+        # Validate the (unchanged tool, new auth_mode, new provider) triple
+        # before we mutate anything. For switch-auth the tool is locked to
+        # the old session's tool — we only validate the requested auth
+        # side of the combo.
+        validate_runtime_combo(
+            old_session.tool,
+            args.mode,
+            args.provider,
+            error_cls=self.hooks.error_cls,
+            context=f"session switch-auth {args.engineer}",
+        )
         new_session = self.build_switched_session(old_session, project, old_session.tool, args.mode, args.provider)
         if new_session.tool != old_session.tool:
             raise self.hooks.error_cls(

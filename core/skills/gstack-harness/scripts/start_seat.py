@@ -287,6 +287,29 @@ def main() -> int:
 
     has_overrides = args.tool or args.auth_mode or args.provider
     if has_overrides:
+        # Local pre-validation: fail before the subprocess round-trip to
+        # agent-admin switch-harness. When all three override args are
+        # supplied together, we can reject a bad triple (e.g. tool=claude,
+        # auth_mode=oauth, provider=anthropix) right here with the full
+        # list of valid providers — no half-mutated session.toml state,
+        # no burned identity directory.
+        if args.tool and args.auth_mode and args.provider:
+            import importlib.util as _ilu
+            _spec = _ilu.spec_from_file_location(
+                "agent_admin_config",
+                str(REPO_ROOT / "core" / "scripts" / "agent_admin_config.py"),
+            )
+            if _spec and _spec.loader:
+                _mod = _ilu.module_from_spec(_spec)
+                sys.modules.setdefault("agent_admin_config", _mod)
+                _spec.loader.exec_module(_mod)
+                _mod.validate_runtime_combo(
+                    args.tool,
+                    args.auth_mode,
+                    args.provider,
+                    error_cls=RuntimeError,
+                    context=f"start_seat --seat {args.seat}",
+                )
         switched = apply_config_overrides(
             profile, args.seat,
             tool=args.tool, auth_mode=args.auth_mode, provider=args.provider,

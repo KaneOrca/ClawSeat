@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from agent_admin_config import validate_runtime_combo
+
 
 @dataclass
 class CrudHooks:
@@ -296,6 +298,20 @@ class CrudHandlers:
         return 0
 
     def engineer_create(self, args: Any) -> int:
+        # Validate the tool/auth_mode/provider triple BEFORE we touch any
+        # filesystem state. Historically typos like `anthropix` (vs
+        # `anthropic`) silently created engineer profiles + runtime sandbox
+        # directories under the wrong identity path, then the seat would
+        # start but never get its secret because the secret-file lookup
+        # used the typoed provider. The operator's only symptom was a blank
+        # pane. Catching this at the argparse boundary gives a clear error.
+        validate_runtime_combo(
+            args.tool,
+            args.mode,
+            args.provider,
+            error_cls=self.hooks.error_cls,
+            context=f"engineer create {args.engineer}",
+        )
         projects = self.hooks.load_projects()
         project = projects[args.project]
         engineer_id = self.hooks.normalize_name(args.engineer)
