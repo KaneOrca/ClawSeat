@@ -900,19 +900,40 @@ def ensure_skill_symlink(skills_dir: Path, name: str, source: Path, *, dry_run: 
     dest.symlink_to(source)
 
 
-def install_koder_skills(skills_dir: Path, clawseat_root: Path, *, dry_run: bool) -> None:
-    """Symlink koder's ClawSeat skills into the workspace skills/ dir."""
+def install_koder_skills(
+    skills_dir: Path,
+    clawseat_root: Path,
+    *,
+    spec: dict | None = None,
+    dry_run: bool,
+) -> None:
+    """Symlink koder's ClawSeat skills into the workspace skills/ dir.
+
+    Skill list is sourced from the gstack-harness template's ``engineers[id=koder].skills``
+    field — the SAME source AGENTS.md renders from — so the rendered manifest
+    and the on-disk symlinks can never drift. ``spec`` is the koder engineer
+    dict produced by ``koder_spec()``; when called standalone we re-load the
+    template to fetch it.
+    """
     skills_dir.mkdir(parents=True, exist_ok=True)
-    koder_skills = {
-        "gstack-harness": clawseat_root / "core" / "skills" / "gstack-harness",
-        "clawseat-install": clawseat_root / "core" / "skills" / "clawseat-install",
-        "clawseat-koder-frontstage": clawseat_root / "core" / "skills" / "clawseat-koder-frontstage",
-        "socratic-requirements": clawseat_root / "core" / "skills" / "socratic-requirements",
-        "agent-monitor": clawseat_root / "core" / "skills" / "agent-monitor",
-        "tmux-basics": clawseat_root / "core" / "skills" / "tmux-basics",
-    }
-    for name, source in koder_skills.items():
-        ensure_skill_symlink(skills_dir, name, source, dry_run=dry_run)
+
+    if spec is None:
+        spec = _find_template_engineer(load_template(), "koder")
+
+    # Each skill entry is a raw path string that may contain {CLAWSEAT_ROOT}
+    # or ~ and resolves to a .../SKILL.md; the symlink's source is the skill
+    # directory (parent of SKILL.md).
+    for raw_skill in spec.get("skills", []):
+        expanded = raw_skill.replace("{CLAWSEAT_ROOT}", str(clawseat_root))
+        expanded = os.path.expanduser(expanded)
+        skill_dir = Path(expanded).parent
+        name = skill_dir.name
+        if not skill_dir.exists():
+            # External skills (gstack, agent skills) may not be installed yet.
+            # Skip with a note so the caller can see what's missing.
+            print(f"  skip: {name} (source not found: {skill_dir})", file=sys.stderr)
+            continue
+        ensure_skill_symlink(skills_dir, name, skill_dir, dry_run=dry_run)
 
 
 # ---------------------------------------------------------------------------
