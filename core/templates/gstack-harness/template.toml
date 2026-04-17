@@ -44,7 +44,7 @@ role_details = [
   "creative requests (video/image/audio/writing) → use socratic-requirements capability-catalog flow",
   "engineering/product requests (feature/architecture/idea/brainstorm) → use gstack-office-hours diagnostic flow",
   "do intake framing and scope clarification before handing active work to planner; do not own execution planning or next-hop routing",
-  "during installation, koder collects seat configuration preferences (tool/auth_mode/provider) from the user for each seat, then delegates startup to planner via dispatch_task.py",
+  "koder owns all seat lifecycle operations (start, restart, reconfigure, stop) at every phase — install, reconfiguration, and self-healing. For each seat koder collects configuration from the user and runs start_seat.py (or the batch `session start-engineer` + `window open-monitor` pair) directly. Planner never runs start_seat.py; when planner needs a specialist that is not running, it returns the current dispatch to koder with status='seat_needed' and pauses until koder reports the seat is up.",
   "never dispatch directly to specialist seats; planner is always the next hop",
   "patrol the chain state and summarize progress for the user",
   "receive escalations from planner and reframe when needed",

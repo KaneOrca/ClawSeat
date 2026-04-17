@@ -630,21 +630,28 @@ python3 {admin} window open-engineer <seat> --project <project>
 python3 {admin} window open-monitor <project>
 ```
 
-## 批量拉 seat 时的约束
+## 拉 seat 的唯一原则：**koder 自己拉，不委派给 planner**
 
-如果用户说"帮我把 planner/builder/reviewer 都装起来"：
-- **每个 seat 单独问一次配置** —— 不要用"都用 claude oauth"偷懒；用户可能希望 builder 便宜（minimax）、reviewer 严格（claude）
-- 也可以先问用户 "要不要为 N 个 seat 统一用同一套配置？"，用户同意才复用
-- **禁止**：自己定一套默认，跳过用户确认直接把 N 个 seat 全起了
+无论是安装期、补一个 seat、换一个 seat 的 provider、还是 planner 报 `seat_needed`，**都是你（koder）跑命令**，不派任务给 planner 让 planner 跑 `start_seat.py`。
 
-### 两种启动路径
+如果用户一次说"帮我把 planner / builder / reviewer / designer 都装起来"：
+- **每个 seat 单独问一次配置** —— 不要用"都用 claude oauth"偷懒；用户可能希望 builder 便宜、reviewer 严格、designer 走 gemini
+- 可以先问 "要不要为 N 个 seat 统一用同一套配置？"，用户同意才复用
+- **禁止**：自己定默认，跳过用户确认直接把 N 个全起了
 
-| 模式 | 适用 | 特点 |
-|------|------|------|
-| **A (per-seat)** | 渐进式、1–2 个 seat、用户要看到一个再决定下一个 | 每次 `start_seat.py` 同时起 tmux + 开 iTerm window。多 seat 并发时 iTerm 系统的"Prefer tabs"偏好会把新 window 合成 tab；race fix 保证各 tab 不混。 |
-| **B (batch)** | 一次并发 ≥3 个 seat、想在同一 iTerm window 里整齐排列 | 先 `session start-engineer` 并行起所有 tmux（不开 iTerm），再**一次 AppleScript** 批量开所有 tab。原子、快 3x、零 race 可能。 |
+### 单 seat 启动（1 个 seat）
 
-### B 模式 SOP（推荐用于一次拉 ≥3 seat）
+```bash
+python3 {scripts}/start_seat.py \\
+  --profile <profile.toml> \\
+  --seat <seat> \\
+  --tool <claude|codex|gemini> --auth-mode <oauth|api> --provider <...> \\
+  --confirm-start
+```
+
+`start_seat.py` 一步到位：起 tmux + 开 iTerm tab + 做 TUI 可见性检查。
+
+### 多 seat 启动（一次 ≥2 seat，**默认走 batch**）
 
 ```bash
 # 1) 并行起所有 tmux session（不开 iTerm）
@@ -657,17 +664,23 @@ wait
 python3 {admin} window open-monitor <project>
 ```
 
-前提条件（project.toml）：
-- `window_mode = "tabs-1up"`（install-with-memory 模板默认值）
+batch 方式的好处：
+- **原子**：1 次 AppleScript 开所有 tab，并发上没有 race 可能
+- **快 ~3x**：`session start-engineer` 不走 iTerm，只起 tmux，几乎瞬时
+- **视觉整齐**：所有 seat tab 排在同一个 iTerm window 里
+
+前提（install-with-memory.toml 默认都满足）：
+- `project.window_mode = "tabs-1up"`
 - 目标 seat 都在 `monitor_engineers` 里
 
-koder 是 OpenClaw agent 不是 tmux seat，`open_project_tabs_window` 会自动过滤只开 backend seat 的 tab，不会尝试 attach `install-koder-claude`（不存在）。
+koder 本身是 OpenClaw agent 不是 tmux seat，`open_project_tabs_window` 自动过滤只开 backend seat 的 tab。
 
-### 什么时候仍用 A 模式
+### planner 报 seat_needed 怎么办
 
-- 用户说"先起 planner，我先配它，再决定下一个"——显式渐进，一次就一个
-- 用户说"只补一个 reviewer-1"——单 seat 不需要批量
-- 某个 seat 的 OAuth 登录需要用户全神贯注盯 TUI，不想被其他 seat 的 splash 干扰
+planner 在 dispatch 过程中发现 specialist 没起，会给你发 `complete_handoff --status seat_needed --title 'seat_needed: <seat>'`。收到后：
+1. 问用户 "planner 需要 `<seat>` 跑 <task>，当前没起，你想给它配什么 CLI/auth/provider？"
+2. 用户确认 → 按上面"单 seat 启动"跑 `start_seat.py`
+3. Seat TUI 进入干净 prompt → 发 `notify_seat.py --target planner --title 'seat_ready: <seat>'` 让 planner 继续
 
 ## 如果 pane 持续空白（CLI 启动失败）
 
