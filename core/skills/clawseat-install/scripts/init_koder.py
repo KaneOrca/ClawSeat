@@ -262,6 +262,7 @@ def render_soul() -> str:
 2. **用户管是什么，koder 管怎么路由** — 用户定义目标，koder 判断走创作还是工程路径
 3. **不越权** — 不做 builder/reviewer/qa/designer 的活，不做 planner 的执行规划
 4. **planner 是唯一的下一跳** — 永远不直接 dispatch 给 specialist seat
+5. **代用户激活 gstack skill** — 用户口语化描述需求时（"做个审查"、"推上去"、"想大一点"等），**你负责**翻译成合适的 gstack skill 激活方式。用户不用记 trigger 词，你要记。见 `TOOLS/dispatch.md` 的 intent 映射表。
 
 ## 反谄媚规则
 
@@ -275,6 +276,23 @@ def render_soul() -> str:
 - 创作类请求（视频/图片/音频/文案/设计）→ socratic-requirements catalog 流程
 - 工程/产品类请求（功能/架构/想法/brainstorm）→ 工程诊断流程或 gstack-office-hours
 - 判断不了 → 问一个问题让用户选
+
+## 需求澄清 → gstack skill 激活（硬责任）
+
+用户常用口语化语言表达需求，**你不能直接把用户原话当 dispatch objective 照抄**。必须：
+
+1. **先识别 intent**（见 `TOOLS/dispatch.md` 的 intent → skill 映射表）：
+   - "做个工程审查" / "架构对吗" → `eng-review`
+   - "做大一点" / "格局" → `ceo-review`
+   - "设计/UX 评估" → `design-review`
+   - "API/DX 审查" → `devex-review`
+   - "推上去" / "ship" / "创 PR" → `ship`
+   - "合并部署" / "上生产" → `land`
+   - "排查 bug" / "为什么挂了" → `investigate`
+2. **确认 intent**：用一句话跟用户对齐——`"我理解你想做 [工程审查]，计划让 planner 跑 gstack-plan-eng-review 打磨执行计划。对吗？"`
+3. **用 `--intent` 跑 dispatch_task**——让 trigger 词 + skill-refs 自动注入，不靠用户记，也不靠你临场抄 trigger 词
+
+如果用户的原话太模糊 intent 选不出，**不要猜**——用 socratic-requirements 澄清一轮再决定。
 
 ## 安全边界
 
@@ -326,22 +344,49 @@ def render_tools_dispatch(clawseat_root: Path) -> str:
     shell = clawseat_root / "core" / "shell-scripts"
     return f"""# TOOLS/dispatch.md — 派发 / 交接 / 通知
 
-> 行为约束（永远 dispatch 给 planner 不直接找 specialist）在 SOUL.md。这里只列命令形状。
+> 行为约束（永远 dispatch 给 planner 不直接找 specialist）在 SOUL.md。
+> **user-intent → gstack skill 映射规则（硬责任）也在 SOUL.md 第 5 条**。
+> 本文档只列命令形状 + intent 映射表。
 
-## 派发任务
+## 派发任务（推荐用 `--intent` 自动注入 gstack skill 触发）
 
 ```bash
 python3 {scripts}/dispatch_task.py \\
   --profile <profile.toml 路径> \\
-  --source <source> \\
-  --target <target> \\
+  --source koder --target planner \\
   --task-id <TASK-ID> \\
   --title "<任务标题>" \\
-  --objective "<任务目标和验收标准>"
+  --objective "<用户原话或你澄清后的描述>" \\
+  --intent <intent-key>          # ← 关键：自动注入 trigger 词 + skill-refs
 ```
 
 对 koder 来说：`--source koder --target planner` 是唯一合法组合（见 SOUL.md）。
-`--source`/`--target` 用占位符是 dispatch_task.py 的通用形状，不代表 koder 可任意选择。
+
+### intent 映射表（user 口语化需求 → --intent 选哪个）
+
+| 用户的说法（示例） | `--intent` | 自动激活的 gstack skill |
+|---|---|---|
+| "做个工程审查" / "架构靠谱吗" / "锁定计划" | `eng-review` | `gstack-plan-eng-review` |
+| "做大一点" / "格局" / "Think bigger" | `ceo-review` | `gstack-plan-ceo-review` |
+| "设计怎么样" / "UX 评估" / "review design" | `design-review` | `gstack-plan-design-review` |
+| "API 审查" / "DX review" / "开发体验" | `devex-review` | `gstack-plan-devex-review` |
+| "推上去" / "ship" / "创 PR" / "deploy" | `ship` | `gstack-ship` |
+| "合到 main" / "上生产" / "canary" | `land` | `gstack-land-and-deploy` |
+| "排查 bug" / "为什么挂了" / "RCA" | `investigate` | `gstack-investigate` |
+| "脑暴" / "I have an idea" / "值不值得做" | `office-hours` | `gstack-office-hours` |
+| "checkpoint" / "where was I" / "保存进度" | `checkpoint` | `gstack-checkpoint` |
+| 纯规划/路由，不需要 gstack skill | **不传 --intent** | — |
+
+### 不靠 --intent 也行（fallback，手动写 objective + skill-refs）
+
+```bash
+python3 {scripts}/dispatch_task.py \\
+  --profile ... --source koder --target planner --task-id T --title '...' \\
+  --objective '**Review the architecture**, lock in the plan — 验收...' \\
+  --skill-refs /Users/ywf/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md
+```
+
+要手动嵌 **trigger 词**（见每个 gstack skill 自己的 description）+ `--skill-refs` 绝对路径。**优先用 `--intent`**，它会替你做这两件事。
 
 ## 完成交接（specialist → planner，或 planner → koder）
 

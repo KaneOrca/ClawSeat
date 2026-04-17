@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from _common import (
     append_status_note,
@@ -19,6 +20,111 @@ from _common import (
     write_json,
     write_todo,
 )
+
+
+# ── Intent → gstack skill mapping ──────────────────────────────────────
+#
+# Users describe needs in natural language ("做个工程审查", "推上去", "想大一点").
+# They should not have to remember gstack skill trigger phrases — that is
+# koder's job per SOUL.md §5 (the "代用户激活 gstack skill" hard rule).
+#
+# This map lets koder pass --intent <key> and the dispatch prepends the
+# canonical trigger phrase to the objective AND adds the SKILL.md path to
+# --skill-refs, so the downstream planner Claude Code runtime picks up the
+# right skill without guesswork.
+#
+# To add a new intent:
+#   1. Confirm the gstack SKILL.md trigger phrase in its frontmatter.
+#   2. Append an entry here.
+#   3. Add a row to TOOLS/dispatch.md's intent table in init_koder.py.
+#   4. Add a test row in tests/test_dispatch_intent.py.
+#
+# All four MUST move together — the SKILL.md text is the source of truth.
+
+_GSTACK_SKILLS_ROOT = "/Users/ywf/.gstack/repos/gstack/.agents/skills"
+
+INTENT_MAP: dict[str, dict[str, str]] = {
+    "eng-review": {
+        "trigger": "Review the architecture and lock in the plan",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-eng-review/SKILL.md",
+        "description": "engineering plan review (architecture / data flow / test coverage / perf)",
+    },
+    "ceo-review": {
+        "trigger": "Think bigger and expand scope if it creates a better product",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-ceo-review/SKILL.md",
+        "description": "CEO/founder-mode strategy review (scope expand / hold / reduce)",
+    },
+    "design-review": {
+        "trigger": "Review the design plan and design critique",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-design-review/SKILL.md",
+        "description": "designer's-eye plan review (UX / visual / component)",
+    },
+    "devex-review": {
+        "trigger": "DX review and developer experience audit (Addy Osmani framework)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-devex-review/SKILL.md",
+        "description": "developer experience audit (zero friction / learn by doing / fight uncertainty)",
+    },
+    "ship": {
+        "trigger": "Ship it and create a PR (run tests, review diff, bump VERSION, update CHANGELOG)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-ship/SKILL.md",
+        "description": "ship workflow (test → diff → version → commit → push → PR)",
+    },
+    "land": {
+        "trigger": "Land the PR and deploy — merge, wait for CI and deploy, verify production",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-land-and-deploy/SKILL.md",
+        "description": "merge + canary + production verification",
+    },
+    "investigate": {
+        "trigger": "Investigate root cause — debug this, why is this broken, root cause analysis",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-investigate/SKILL.md",
+        "description": "bug RCA (investigate → analyze → hypothesize → implement)",
+    },
+    "office-hours": {
+        "trigger": "Office hours brainstorm — help me think through this, is this worth building",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-office-hours/SKILL.md",
+        "description": "YC office-hours brainstorm (6 forcing questions / design doc)",
+    },
+    "checkpoint": {
+        "trigger": "Checkpoint — save progress and where was I",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-checkpoint/SKILL.md",
+        "description": "save/resume working state across sessions",
+    },
+}
+
+
+def apply_intent(
+    intent: str | None,
+    objective: str,
+    skill_refs: list[str] | None,
+) -> tuple[str, list[str]]:
+    """Expand --intent into (augmented_objective, augmented_skill_refs).
+
+    - If intent is None, return inputs unchanged.
+    - If intent is valid, prepend the canonical trigger phrase to the objective
+      and append the skill SKILL.md path to skill_refs (deduped).
+    - If intent is unknown, raise ValueError listing valid intents.
+    """
+    if intent is None:
+        return objective, (skill_refs or [])
+    if intent not in INTENT_MAP:
+        valid = ", ".join(sorted(INTENT_MAP.keys()))
+        raise ValueError(
+            f"unknown --intent {intent!r}; valid intents: {valid}"
+        )
+    spec = INTENT_MAP[intent]
+    trigger = spec["trigger"]
+    skill_md = spec["skill_md"]
+    # Prepend trigger only if not already present (idempotent when koder
+    # re-runs a dispatch with --intent after the trigger is already in the
+    # objective — helpful when the operator wrote both by hand).
+    if trigger.lower() not in objective.lower():
+        new_objective = f"**{trigger}** — {objective.strip()}"
+    else:
+        new_objective = objective
+    refs = list(skill_refs or [])
+    if skill_md not in refs:
+        refs.append(skill_md)
+    return new_objective, refs
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,6 +159,19 @@ def parse_args() -> argparse.Namespace:
             "(e.g. 'references/feishu-bridge-setup.md'). Appended as a '# Skill Refs' section."
         ),
     )
+    parser.add_argument(
+        "--intent",
+        choices=sorted(INTENT_MAP.keys()),
+        default=None,
+        help=(
+            "High-level user-intent key that auto-injects the canonical gstack "
+            "skill trigger phrase into --objective AND appends the skill's "
+            "SKILL.md path to --skill-refs. Use this so koder does not have to "
+            "memorise every gstack skill's trigger vocabulary. "
+            "Valid keys: " + ", ".join(sorted(INTENT_MAP.keys())) + ". "
+            "See TOOLS/dispatch.md for the user-intent → key mapping."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -64,6 +183,14 @@ def main() -> int:
             f"dispatch target {args.target!r} is not a declared seat for project "
             f"{profile.project_name!r}; known seats: {profile.seats}"
         )
+    # Expand --intent into a canonical trigger phrase + skill-ref before we
+    # write anything. This is the "koder should memorise triggers, not the
+    # user" plumbing per SOUL.md §5.
+    effective_objective, effective_skill_refs = apply_intent(
+        args.intent,
+        args.objective,
+        args.skill_refs,
+    )
     todo_path = profile.todo_path(args.target)
     reply_to = args.reply_to or args.source
     source_role = profile.seat_roles.get(args.source, "")
@@ -74,10 +201,10 @@ def main() -> int:
         project=profile.project_name,
         owner=args.target,
         title=args.title,
-        objective=args.objective,
+        objective=effective_objective,
         source=args.source,
         reply_to=reply_to,
-        skill_refs=args.skill_refs,
+        skill_refs=effective_skill_refs,
         task_type=args.task_type,
         review_required=args.review_required,
     )
