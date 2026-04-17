@@ -262,6 +262,22 @@ def main() -> int:
         args.source == profile.active_loop_owner
         and args.target == profile.heartbeat_owner
     )
+    # Guard (followup #22): only planner can close out to the frontstage
+    # supervisor (koder). Non-planner specialists that target koder fall
+    # into the tmux seat path — but koder runs inside OpenClaw, not as a
+    # tmux session, so `notify` silently fails and the Feishu
+    # OC_DELEGATION_REPORT_V1 path is skipped (that path is gated on
+    # source=planner). The receipt lands on disk but the user never hears
+    # about it. Force such specialists back through planner.
+    if args.target == profile.heartbeat_owner and not planner_to_frontstage:
+        raise SystemExit(
+            f"complete_handoff to {profile.heartbeat_owner!r} requires "
+            f"source={profile.active_loop_owner!r} (got source={args.source!r}). "
+            f"Non-planner specialists must close back to planner; planner "
+            f"aggregates and forwards to {profile.heartbeat_owner!r} via Feishu "
+            f"OC_DELEGATION_REPORT_V1. This enforces canonical chain §6 "
+            f"closeout path."
+        )
     if planner_to_frontstage:
         if args.frontstage_disposition not in VALID_FRONTSTAGE_DISPOSITIONS:
             raise SystemExit(
