@@ -354,6 +354,7 @@ def main() -> int:
             delivery_path,
             source=args.source,
             target=args.target,
+            user_summary=args.user_summary,
         )
         # Determine koder type once: OpenClaw koder has a Feishu group configured.
         # In OpenClaw mode koder is NOT a tmux session — Feishu is the only notify channel.

@@ -139,6 +139,7 @@ role_details = [
   "use gstack-browse for headless browser testing of UI changes",
   "use gstack-freeze to restrict edits to the target directory when debugging",
   "return implementation artifacts to planner; do not self-close the chain",
+  "NEVER use raw tmux send-keys to notify peer seats. Full stop. Use complete_handoff.py --user-summary as the only compliant rich text exit for completion messages.",
 ]
 
 [[engineers]]
@@ -172,6 +173,7 @@ role_details = [
   "use the latest gstack review workflow and canonical verdicts",
   "use gstack-browse for visual verification of UI changes",
   "return verdicts to planner; do not reroute the chain yourself",
+  "NEVER use raw tmux send-keys to notify peer seats. Full stop. Use complete_handoff.py --user-summary as the only compliant rich text exit for completion messages.",
 ]
 
 [[engineers]]
@@ -206,6 +208,7 @@ role_details = [
   "use gstack-qa-only for report-only mode without fixing",
   "use gstack-browse for headless browser UI testing",
   "prefer MiniMax-M2.7-highspeed for test-heavy execution",
+  "NEVER use raw tmux send-keys to notify peer seats. Full stop. Use complete_handoff.py --user-summary as the only compliant rich text exit for completion messages.",
 ]
 
 [[engineers]]
@@ -240,6 +243,7 @@ role_details = [
   "use gstack-design-html for production-quality HTML/CSS from approved designs",
   "use gstack-browse for visual inspection and responsive testing",
   "design-driven UI prototypes / visual shells, not production wiring or full feature completion",
+  "NEVER use raw tmux send-keys to notify peer seats. Full stop. Use complete_handoff.py --user-summary as the only compliant rich text exit for completion messages.",
 ]
 
 [[engineers]]

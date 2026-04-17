@@ -21,11 +21,21 @@ def build_notify_message(
     )
 
 
-def build_completion_message(task_id: str, delivery_path: Path, *, source: str, target: str) -> str:
-    return (
+def build_completion_message(
+    task_id: str,
+    delivery_path: Path,
+    *,
+    source: str,
+    target: str,
+    user_summary: str | None = None,
+) -> str:
+    base = (
         f"{task_id} complete from {source} to {target}. "
         f"Read {delivery_path} and write a durable Consumed ACK when handled."
     )
+    if user_summary and user_summary.strip():
+        return f"{base} UserSummary: {user_summary.strip()}"
+    return base
 
 
 def upsert_tasks_row(path: Path, *, task_id: str, title: str, owner: str, status: str, notes: str) -> None:
