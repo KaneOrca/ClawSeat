@@ -430,7 +430,9 @@ def scan_github() -> dict:
     gh_hosts_text = safe_read(gh_hosts_path)
     if gh_hosts_text:
         data["gh_cli"]["hosts_file"] = str(gh_hosts_path)
-        # Extract active accounts per host (minimal yaml parse — we only need user field)
+        # Extract host config. NOTE: the ``user:`` field in hosts.yml is a
+        # LOCAL gh CLI account alias (keyring entry label), NOT the actual
+        # GitHub login. For the real GitHub username use `gh api user`.
         current_host: str | None = None
         hosts: dict[str, dict] = {}
         for raw in gh_hosts_text.splitlines():
@@ -440,15 +442,22 @@ def scan_github() -> dict:
                 continue
             stripped = raw.strip()
             if current_host and stripped.startswith("user:"):
-                hosts[current_host]["active_user"] = stripped.split(":", 1)[1].strip()
+                hosts[current_host]["account_alias"] = stripped.split(":", 1)[1].strip()
             if current_host and stripped.startswith("git_protocol:"):
                 hosts[current_host]["git_protocol"] = stripped.split(":", 1)[1].strip()
         data["gh_cli"]["hosts"] = hosts
 
-    # Live auth status (respects active keyring entry)
+    # Real GitHub login for the currently active account — this is what
+    # clone/API calls must use. Separate from the hosts.yml alias.
+    login = run_cmd(["gh", "api", "user", "--jq", ".login"], timeout=10)
+    if login:
+        data["gh_cli"]["active_login"] = login
+
+    # Live auth status (respects active keyring entry). NOTE: the "account"
+    # token in the status output is the local keyring alias (same as the
+    # hosts.yml user field), NOT the actual GitHub login. See active_login.
     gh_status = run_cmd(["gh", "auth", "status"], timeout=10)
     if gh_status:
-        # Extract account, active flag, token scopes
         accounts: list[dict] = []
         current: dict = {}
         for line in gh_status.splitlines():
@@ -458,11 +467,11 @@ def scan_github() -> dict:
                     accounts.append(current)
                 current = {"host": "github.com"}
             elif "Logged in to" in line:
-                # "  ✓ Logged in to github.com account <name> (keyring)"
+                # "  ✓ Logged in to github.com account <alias> (keyring)"
                 parts = line.split("account", 1)
                 if len(parts) == 2:
-                    acct = parts[1].strip().split()[0]
-                    current["account"] = acct
+                    alias = parts[1].strip().split()[0]
+                    current["account_alias"] = alias
             elif "Active account:" in line:
                 current["active"] = "true" in line.lower()
             elif "Git operations protocol:" in line:
@@ -492,6 +501,85 @@ def scan_github() -> dict:
                 "fingerprint": run_cmd(["ssh-keygen", "-lf", str(pub)], timeout=5).split()[1]
                     if run_cmd(["ssh-keygen", "-lf", str(pub)], timeout=5) else "",
             })
+
+    # ── Remote GitHub: owned repos, orgs, gists ───────────────────
+    # Only attempt if gh CLI shows an active auth. Degrades to a
+    # `fetch_error` field if the network / token fails — never raises.
+    data["remote"] = {}
+    active = any(
+        acct.get("active") for acct in (data.get("gh_cli", {}).get("auth_status") or [])
+    )
+    if active:
+        # Owned repos — up to 500. `gh repo list` only lists repos the user
+        # owns (not the ones they collaborate on via orgs).
+        repo_json = run_cmd(
+            [
+                "gh", "repo", "list",
+                "--limit", "500",
+                "--json", "name,nameWithOwner,description,isPrivate,isFork,isArchived,"
+                          "defaultBranchRef,updatedAt,pushedAt,url,primaryLanguage,"
+                          "diskUsage,stargazerCount",
+            ],
+            timeout=30,
+        )
+        if repo_json:
+            try:
+                raw_repos = json.loads(repo_json)
+                simplified = []
+                for r in raw_repos:
+                    default_branch = ""
+                    dbref = r.get("defaultBranchRef") or {}
+                    if isinstance(dbref, dict):
+                        default_branch = dbref.get("name", "") or ""
+                    lang = r.get("primaryLanguage") or {}
+                    lang_name = lang.get("name", "") if isinstance(lang, dict) else ""
+                    simplified.append({
+                        "name": r.get("name", ""),
+                        "full_name": r.get("nameWithOwner", ""),
+                        "url": r.get("url", ""),
+                        "description": (r.get("description") or "")[:300],
+                        "is_private": bool(r.get("isPrivate")),
+                        "is_fork": bool(r.get("isFork")),
+                        "is_archived": bool(r.get("isArchived")),
+                        "default_branch": default_branch,
+                        "primary_language": lang_name,
+                        "disk_usage_kb": r.get("diskUsage", 0),
+                        "stars": r.get("stargazerCount", 0),
+                        "updated_at": r.get("updatedAt", ""),
+                        "pushed_at": r.get("pushedAt", ""),
+                    })
+                data["remote"]["owned_repos"] = simplified
+                data["remote"]["owned_repos_count"] = len(simplified)
+            except (json.JSONDecodeError, TypeError) as exc:
+                data["remote"]["owned_repos_error"] = f"parse_error: {exc}"
+        else:
+            data["remote"]["owned_repos_error"] = "gh_repo_list_empty_or_failed"
+
+        # Organizations the active user belongs to
+        org_json = run_cmd(
+            ["gh", "api", "user/orgs", "--jq",
+             "[.[] | {login, url, description}]"],
+            timeout=15,
+        )
+        if org_json:
+            try:
+                data["remote"]["organizations"] = json.loads(org_json)
+            except (json.JSONDecodeError, TypeError):
+                data["remote"]["organizations_error"] = "parse_error"
+
+        # Summary counts only (gists / starred can be large — keep cheap)
+        counts = run_cmd(
+            ["gh", "api", "user", "--jq",
+             "{public_repos, owned_private_repos, public_gists, followers, following}"],
+            timeout=10,
+        )
+        if counts:
+            try:
+                data["remote"]["user_summary"] = json.loads(counts)
+            except (json.JSONDecodeError, TypeError):
+                pass
+    else:
+        data["remote"]["fetch_skipped"] = "no_active_gh_auth"
 
     return data
 
