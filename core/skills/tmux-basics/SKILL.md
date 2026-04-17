@@ -134,8 +134,11 @@ and instruct the target to read it.
 Codex and Gemini CLI can be slow to process input. If `Enter` arrives
 before the TUI has finished accepting the text, it gets swallowed.
 
-Fix: use `send-and-verify.sh` (auto-retries), or manually add `sleep 1`
-between text and Enter.
+Fix: use `send-and-verify.sh`, which waits 0.3s after the text and
+then sends `Enter` three times at 0.2s intervals — the 3-Enter flush
+covers the swallow case without verify. Raw `send-keys` callers
+should replicate the same cadence (0.3s wait, then 3 Enters at 0.2s
+intervals) instead of a single `sleep 1`.
 
 ### 3. Text lands in wrong layer
 
