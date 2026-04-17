@@ -365,12 +365,20 @@ def iterm_run_command(command: str, title: str | None = None) -> None:
         title_lines = f'\n      set name to "{escaped_title}"'
 
     def build_script(app_name: str) -> str:
+        # IMPORTANT: anchor the new window in a local AppleScript variable
+        # (targetWindow). `current window` is iTerm-wide mutable state — when
+        # two agent-admin invocations race (e.g. koder fires start_seat for
+        # several seats in parallel), each osascript sees the OTHER's
+        # just-created window as "current" and both end up writing into the
+        # same window while the other is left blank. Pinning to the local
+        # variable returned by `create window` is the iTerm-official way to
+        # avoid this race without serialising the callers.
         return textwrap.dedent(
             f'''
             tell application "{app_name}"
               activate
-              create window with default profile
-              tell current session of current window
+              set targetWindow to (create window with default profile)
+              tell current session of targetWindow
                 {title_lines.strip()}
                 write text "{escaped_command}"
               end tell
@@ -414,6 +422,10 @@ def open_project_tabs_window(project: Any, sessions: dict[str, Any], engineers: 
         # runs open-monitor from inside one of those tabs). Old windows are
         # left for the user to close manually or are replaced naturally when
         # the tmux session reattaches in the new tab.
+        # Anchor every write to the local `projectWindow` (and, for added
+        # tabs, to a local `newTab`) so a concurrent osascript creating its
+        # own window cannot steal `current window` and redirect our writes.
+        # See iterm_run_command() for the rationale.
         lines = [
             f'tell application "{app_name}"',
             "  activate",
@@ -421,17 +433,23 @@ def open_project_tabs_window(project: Any, sessions: dict[str, Any], engineers: 
         ]
 
         for tab_index, session in enumerate(resolved_sessions):
-            if tab_index > 0:
-                lines.append("  tell projectWindow")
-                lines.append("    create tab with default profile")
-                lines.append("  end tell")
             command = _iterm_script_command(shell_attach_command(session), context=f"monitor tab {session.engineer_id}")
             engineer = engineers.get(session.engineer_id)
             title = applescript_quote(f"{project.name}:{engineer.display_name if engineer else session.engineer_id}")
-            lines.append("  tell current session of current window")
-            lines.append(f'    set name to "{title}"')
-            lines.append(f'    write text "{command}"')
-            lines.append("  end tell")
+            if tab_index == 0:
+                # The first tab is the one created implicitly with the window.
+                lines.append("  tell current session of projectWindow")
+                lines.append(f'    set name to "{title}"')
+                lines.append(f'    write text "{command}"')
+                lines.append("  end tell")
+            else:
+                lines.append("  tell projectWindow")
+                lines.append("    set newTab to (create tab with default profile)")
+                lines.append("    tell current session of newTab")
+                lines.append(f'      set name to "{title}"')
+                lines.append(f'      write text "{command}"')
+                lines.append("    end tell")
+                lines.append("  end tell")
 
         lines.append("end tell")
         return "\n".join(lines)
@@ -444,6 +462,9 @@ def open_dashboard_window(projects: list[Any]) -> None:
         raise AgentAdminWindowError("No projects configured")
 
     def build_script(app_name: str) -> str:
+        # Same anti-race pattern as open_project_tabs_window / iterm_run_command:
+        # anchor to local `dashboardWindow` and (for added tabs) local `newTab`
+        # rather than iTerm's mutable `current window` / `current tab`.
         lines = [
             f'tell application "{app_name}"',
             "  activate",
@@ -451,17 +472,21 @@ def open_dashboard_window(projects: list[Any]) -> None:
         ]
 
         for tab_index, project in enumerate(projects):
-            if tab_index > 0:
-                lines.append("  tell dashboardWindow")
-                lines.append("    create tab with default profile")
-                lines.append("  end tell")
             command = _iterm_script_command(
                 project_monitor_shell_command(project),
                 context="open_dashboard_window",
             )
-            lines.append("  tell current session of current window")
-            lines.append(f'    write text "{command}"')
-            lines.append("  end tell")
+            if tab_index == 0:
+                lines.append("  tell current session of dashboardWindow")
+                lines.append(f'    write text "{command}"')
+                lines.append("  end tell")
+            else:
+                lines.append("  tell dashboardWindow")
+                lines.append("    set newTab to (create tab with default profile)")
+                lines.append("    tell current session of newTab")
+                lines.append(f'      write text "{command}"')
+                lines.append("    end tell")
+                lines.append("  end tell")
 
         lines.append("end tell")
         return "\n".join(lines)
