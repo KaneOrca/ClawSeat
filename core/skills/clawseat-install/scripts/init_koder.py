@@ -463,6 +463,91 @@ python3 {scripts}/dispatch_task.py \\
 - 不要把 install 项目的 profile 拷贝给新项目再改 —— 用 examples/starter/ 下的模板
 - 不要用同一个 feishu group 绑两个项目 —— BRIDGE.toml 是 1:1 关系
 
+## 拉 seat 之后的 TUI 可见性 —— 第一性原理：用户必须能看到 TUI
+
+`start_seat.py` 做两件事：
+1. `session start-engineer` — 建 tmux session，在里面启动 CLI（claude/codex/gemini）
+2. `window open-engineer` — 打开 iTerm tab 并 attach 到这个 tmux session
+
+**第 2 步失败是 non-fatal**：tmux 在后台跑，但用户看不到任何 TUI 窗口。这时你必须：
+
+### 拉 seat 后**立即**验证可见性
+
+```bash
+# 检查整个项目所有 seat 的可见性（0=全部可见, 1=有不可见）
+python3 {scripts}/tui_ctl.py \\
+  --profile <profile.toml 路径> \\
+  status
+
+# 输出示例:
+#   Seat        Session                       Tool    Clients Content Status
+#   planner     install-planner-claude        claude  1       yes     VISIBLE
+#   builder-1   install-builder-1-claude      claude  0       no      RUNNING_NOT_VISIBLE
+#   reviewer-1  install-reviewer-1-codex      codex   1       yes     VISIBLE
+```
+
+`Status` 的三个值：
+- `VISIBLE` — session 活着且有 iTerm client attached，用户能看见 TUI ✅
+- `RUNNING_NOT_VISIBLE` — tmux session 在跑但没 iTerm tab attach ❌ 需要 recover
+- `NOT_RUNNING` — tmux session 根本不存在 ❌ 需要重新 start_seat
+- `NO_SESSION_RECORD` — ~/.agents/sessions/.../session.toml 都没生成 ❌ start_seat 彻底失败
+
+### 恢复 RUNNING_NOT_VISIBLE 的 seat
+
+```bash
+# 自动: 批量重开 iTerm 窗口给所有不可见 seat
+python3 {scripts}/tui_ctl.py \\
+  --profile <profile.toml 路径> \\
+  recover
+
+# 或者单个手动:
+python3 {clawseat_root}/core/scripts/agent_admin.py window open-engineer <seat> --project <project>
+
+# 或者重建整个项目窗口 (一次性打开项目所有 seat 的 tabs):
+python3 {clawseat_root}/core/scripts/agent_admin.py window open-monitor <project>
+```
+
+### 拉 seat 的**完整模板**（永远按这个走）
+
+```bash
+# Step 1: start (建 tmux + 启 CLI + 尝试开窗口)
+python3 {scripts}/start_seat.py \\
+  --profile <profile> --seat <X> \\
+  --tool <claude|codex|gemini> --auth-mode <oauth|api> --provider <provider> \\
+  --confirm-start
+
+# Step 2: 等 3 秒让 CLI 初始化
+sleep 3
+
+# Step 3: 验证可见性 ← 不要省
+python3 {scripts}/tui_ctl.py --profile <profile> check --seat <X>
+
+# Step 4: 如果 RUNNING_NOT_VISIBLE, recover
+python3 {scripts}/tui_ctl.py --profile <profile> recover --seat <X>
+
+# Step 5: 验证 CLI 是否正常初始化（pane 有内容）
+python3 {scripts}/tui_ctl.py --profile <profile> status --seat <X>
+# 看 Content 列. yes=TUI 渲染好了; no=CLI 可能启动失败 (auth 错 / provider 拼错 / 模型不存在)
+```
+
+### 如果 pane 持续空白（CLI 启动失败）
+
+最常见原因：
+1. **provider 拼错**（`anthropix` vs `anthropic`、`minimaxi` vs `minimax`）
+   - 先 `query_memory.py --search provider` 找合法 provider 列表
+   - 检查 session.toml: `cat ~/.agents/sessions/<project>/<seat>/session.toml`
+2. **secret 文件缺失**（auth_mode=api 但没 seed key）
+   - 检查 `~/.agents/secrets/claude/<provider>/<seat>.env`
+   - 从 `~/.agents/.env.global` 或 peer seat 拷贝
+3. **tool binary 找不到**（claude / codex 没装）
+   - `command -v claude` / `command -v codex` 先确认
+
+修复后用 `--reset` 重建 tmux session：
+```bash
+python3 {scripts}/start_seat.py --profile <profile> --seat <X> \\
+  --tool <X> --auth-mode <Y> --provider <Z> --confirm-start --reset
+```
+
 ## 获取环境知识 (API keys, 路径, OpenClaw 配置) —— 硬性 SOP
 
 **装 seat、配 provider、查 feishu group、查 API key 之前**：
