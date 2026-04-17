@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import textwrap
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,12 @@ REPO_ROOT = Path(
 HARNESS_PROFILE_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "assets" / "profiles"
 SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
+
+# Ensure `core/` is importable so bare `from resolve import ...` resolves
+# regardless of how this module is invoked (direct script vs import).
+_CORE_PATH = str(REPO_ROOT / "core")
+if _CORE_PATH not in sys.path:
+    sys.path.insert(0, _CORE_PATH)
 
 
 def q(value: str) -> str:

@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import os
+import sys
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+
+# Ensure `core/` is importable so bare `from resolve import ...` resolves
+# regardless of how this module is invoked (direct script vs import).
+_REPO_ROOT = Path(
+    os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[2]))
+)
+_CORE_PATH = str(_REPO_ROOT / "core")
+if _CORE_PATH not in sys.path:
+    sys.path.insert(0, _CORE_PATH)
 
 
 @dataclass
