@@ -87,34 +87,53 @@ capture_tail() {
 }
 
 # Called when the post-send grep finds message still in input area.
-# Sends Enter again and re-checks. Exits 1 on failure.
+# Retries up to 3 times with backoffs=(2 4 8) seconds. Exits 1 on failure.
 retry_enter_and_check() {
-  echo "${SESSION}: RETRY_NEEDED - message still visible; attempting Enter retry"
-  if ! run_tmux "retry-enter" send-keys -t "$SESSION" Enter; then
-    echo "${SESSION}: RETRY_ENTER_FAILED"
-    echo "${SESSION}: HARD_BLOCK iTerm-only Enter retry failed"
-    exit 1
-  fi
-  sleep 2
-  local after2
-  after2="$(capture_tail)" || {
-    echo "${SESSION}: CAPTURE_AFTER_RETRY_FAILED"
-    echo "${SESSION}: HARD_BLOCK iTerm-only retry verification failed"
-    exit 1
-  }
-  if printf "%s\n" "$after2" | grep -qF "$MSG"; then
-    echo "${SESSION}: RETRY_FAILED - message may not be received by pane process"
-    exit 1
-  fi
-  echo "${SESSION}: OK (retry Enter)"
+  local backoffs=(2 4 8)
+  local attempt
+  for attempt in 1 2 3; do
+    local sleep_s="${backoffs[$((attempt - 1))]}"
+    echo "${SESSION}: RETRY_NEEDED attempt=${attempt}/3 — sending Enter Enter, backoff=${sleep_s}s"
+    if ! run_tmux "retry-enter-1" send-keys -t "$SESSION" Enter; then
+      echo "${SESSION}: RETRY_ENTER_FAILED attempt=${attempt}"
+      exit 1
+    fi
+    if ! run_tmux "retry-enter-2" send-keys -t "$SESSION" Enter; then
+      echo "${SESSION}: RETRY_ENTER_FAILED attempt=${attempt}"
+      exit 1
+    fi
+    sleep "$sleep_s"
+    local after
+    after="$(capture_tail)" || {
+      echo "${SESSION}: CAPTURE_AFTER_RETRY_FAILED attempt=${attempt}"
+      echo "${SESSION}: HARD_BLOCK iTerm-only retry verification failed"
+      exit 1
+    }
+    if ! printf "%s\n" "$after" | grep -qF "$MSG"; then
+      echo "${SESSION}: OK (retry Enter, attempt=${attempt})"
+      return 0
+    fi
+  done
+  echo "${SESSION}: RETRY_FAILED attempts=3 backoffs=2s/4s/8s prior_pane_may_be_busy_or_modal"
+  exit 1
 }
 
 # Liveness check before send
-capture_tail > /dev/null || {
+pre_send_tail=""
+pre_send_tail="$(capture_tail)" || {
   echo "${SESSION}: CAPTURE_BEFORE_FAILED"
   echo "${SESSION}: HARD_BLOCK iTerm-only precheck failed before submit"
   exit 1
 }
+if printf "%s\n" "$pre_send_tail" | grep -Eq '[>❯][[:space:]]+[^[:space:]│╮╯╭─]'; then
+  echo "${SESSION}: prior_stuck_input_detected_cleaned"
+  if ! run_tmux "precheck-clean-enter" send-keys -t "$SESSION" Enter; then
+    echo "${SESSION}: PRECHECK_CLEAN_FAILED"
+    echo "${SESSION}: HARD_BLOCK iTerm-only pre-send cleanup failed"
+    exit 1
+  fi
+  sleep 0.5
+fi
 
 send_and_verify_once() {
   local message="$1"
