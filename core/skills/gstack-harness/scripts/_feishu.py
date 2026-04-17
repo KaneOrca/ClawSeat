@@ -20,6 +20,67 @@ from _utils import (
 )
 
 
+# ── Real-user-home resolution ─────────────────────────────────────────
+#
+# Seats run inside a sandbox HOME at
+#   ~/.agents/runtime/identities/<tool>/<auth>/<identity>/home/
+# so Path.home() inside a seat returns THAT, not the operator's real HOME.
+# Many resources live at the operator's real HOME — lark-cli config,
+# OpenClaw workspace-koder WORKSPACE_CONTRACT.toml with the per-project
+# feishu_group_id, the OpenClaw openclaw.json — and if we resolve them
+# against the sandbox HOME they all miss and we silently fall off canonical
+# paths. That is EXACTLY what caused planner→koder `complete_handoff.py`
+# to route through tmux (because resolve_primary_feishu_group_id returned
+# None under sandbox HOME) and hard-fail when koder's phantom tmux
+# session was missing.
+#
+# This helper is the single source of truth for "where is the operator's
+# real HOME, regardless of which sandbox we are running in". Used by every
+# resource lookup below.
+
+def _real_user_home() -> Path:
+    """Return the operator's real HOME, bypassing any seat runtime isolation.
+
+    Resolution priority (most-authoritative first):
+
+    1. Explicit env override (CLAWSEAT_REAL_HOME / LARK_CLI_HOME) — set by
+       the installer / harness when it knows the real answer.
+    2. Explicit AGENT_HOME env differing from Path.home() — harness injected
+       the real path.
+    3. pwd.getpwuid(os.getuid()).pw_dir — the OS's own answer for "which
+       directory is this user's home". Reliable regardless of HOME env
+       override, regardless of sandbox residue. This is authoritative.
+    4. Path.home() as last-resort fallback (only if pwd lookup fails, which
+       should not happen on normal macOS/Linux).
+
+    NOTE on canary heuristics: an earlier version checked
+    `(Path.home() / ".lark-cli/config.json").exists()` as a "am I in a
+    sandbox?" signal. That was unsafe because sandbox HOMEs inherit / get
+    seeded with stale lark-cli config from earlier test runs, falsely
+    telling us the sandbox was the real HOME. pwd is the correct primary.
+    """
+    # 1. Explicit override
+    override = (
+        os.environ.get("CLAWSEAT_REAL_HOME")
+        or os.environ.get("LARK_CLI_HOME")
+    )
+    if override:
+        return Path(override).expanduser()
+    # 2. AGENT_HOME differs from Path.home() — harness told us where real is
+    if str(AGENT_HOME) != str(Path.home()):
+        return AGENT_HOME
+    # 3. pwd database — authoritative OS answer, immune to HOME env override
+    try:
+        import pwd
+        pw = pwd.getpwuid(os.getuid())
+        if pw and pw.pw_dir:
+            return Path(pw.pw_dir)
+    except (ImportError, KeyError):
+        pass
+    # 4. Last-resort fallback
+    return Path.home()
+
+
 # ── Delegation report constants ──────────────────────────────────────
 
 DELEGATION_REPORT_HEADER = "OC_DELEGATION_REPORT_V1"
@@ -123,14 +184,19 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
         if resolved:
             return resolved
 
-    # 2. Project contract binding (SSOT for per-project group)
+    # 2. Project contract binding (SSOT for per-project group).
+    # Resolve against the operator's REAL home, not Path.home() — when a
+    # seat runs inside a sandbox HOME (ClawSeat runtime identity), Path.home()
+    # points at an empty sandbox tree and every project contract path below
+    # would miss, silently routing planner→koder complete_handoff through
+    # tmux instead of Feishu.
     if project:
-        from pathlib import Path as _P
+        real_home = _real_user_home()
         contract_paths = [
             # OpenClaw koder workspace
-            _P.home() / ".openclaw" / "workspace-koder" / "WORKSPACE_CONTRACT.toml",
+            real_home / ".openclaw" / "workspace-koder" / "WORKSPACE_CONTRACT.toml",
             # ClawSeat managed workspace
-            AGENT_HOME / ".agents" / "workspaces" / project / "koder" / "WORKSPACE_CONTRACT.toml",
+            real_home / ".agents" / "workspaces" / project / "koder" / "WORKSPACE_CONTRACT.toml",
         ]
         for cp in contract_paths:
             if cp.exists():
@@ -140,8 +206,14 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
                     if gid:
                         return gid
 
-    # 3. OpenClaw config fallback (may return wrong group in multi-project)
-    config = load_json(OPENCLAW_CONFIG_PATH) or {}
+    # 3. OpenClaw config fallback (may return wrong group in multi-project).
+    # OPENCLAW_CONFIG_PATH is derived from OPENCLAW_HOME which respects
+    # CLAWSEAT_REAL_HOME / pwd resolution where relevant. But in a sandbox
+    # HOME the default resolves under the sandbox too — force real home here.
+    config_path = _real_user_home() / ".openclaw" / "openclaw.json"
+    if not config_path.exists():
+        config_path = OPENCLAW_CONFIG_PATH
+    config = load_json(config_path) or {}
     group_ids = collect_feishu_group_ids_from_config(config)
     if group_ids:
         return group_ids[0]
@@ -216,21 +288,11 @@ def _lark_cli_real_home() -> str:
     not seat-level. When a seat runs with an isolated HOME (ClawSeat
     runtime identity), we must restore the real user HOME so lark-cli
     can find its config and tokens.
+
+    Shares resolution logic with _real_user_home(); the .lark-cli canary
+    inside _real_user_home() makes this identical for lark-cli callers.
     """
-    # Explicit override: user told us where the real home is
-    override = os.environ.get("LARK_CLI_HOME") or os.environ.get("CLAWSEAT_REAL_HOME")
-    if override:
-        return str(Path(override).expanduser())
-    # AGENT_HOME is the real home when it differs from the (possibly isolated) Path.home()
-    if str(AGENT_HOME) != str(Path.home()):
-        return str(AGENT_HOME)
-    # Fallback: try to detect isolation by checking if .lark-cli exists at Path.home()
-    if (Path.home() / ".lark-cli" / "config.json").exists():
-        return str(Path.home())
-    # Last resort: use /Users/<username> on macOS (pwd module gives the real home)
-    import pwd
-    real_home = pwd.getpwuid(os.getuid()).pw_dir
-    return real_home
+    return str(_real_user_home())
 
 
 def _lark_cli_env() -> dict[str, str]:
