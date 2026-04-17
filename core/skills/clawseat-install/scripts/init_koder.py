@@ -507,9 +507,65 @@ python3 {clawseat_root}/core/scripts/agent_admin.py window open-engineer <seat> 
 python3 {clawseat_root}/core/scripts/agent_admin.py window open-monitor <project>
 ```
 
+### 拉 seat 之前 —— **配置收集 SOP**（硬性，缺一不可）
+
+**绝对铁律：你不得自己替用户决定 tool / auth_mode / provider / model**。
+每个 seat 可能的组合有十几种（claude+oauth+anthropic / claude+api+minimax / claude+api+xcode-best / codex+api+xcode-best / gemini+oauth+google / ...），用户的账号状态、API 余额、偏好只有用户自己知道。你的职责是**把候选列给用户**。
+
+工作流程：
+
+#### 1. 先查 Memory CC 列出候选
+
+```bash
+# 列出所有已知合法 provider / 已 seed 的 API key:
+python3 {clawseat_root}/core/skills/memory-oracle/scripts/query_memory.py --search "provider"
+python3 {clawseat_root}/core/skills/memory-oracle/scripts/query_memory.py --search "API_KEY"
+
+# 检查用户机器上已有的 CLI:
+command -v claude; command -v codex; command -v gemini
+
+# 查看用户已配好的 oauth 身份 (用过的):
+ls ~/.agents/runtime/identities/claude/oauth/ 2>/dev/null
+ls ~/.agents/runtime/identities/codex/oauth/ 2>/dev/null
+ls ~/.agents/runtime/identities/gemini/oauth/ 2>/dev/null
+
+# 查看已 seed 的 API secrets (包括哪些 provider 已可用):
+ls ~/.agents/secrets/claude/     # 可能有 anthropic / minimax / xcode-best 子目录
+ls ~/.agents/secrets/codex/
+```
+
+#### 2. 给用户展示一张表，问他选什么
+
+**永远不要假设**。把发现的选项列给用户：
+
+```
+seat: planner
+  你可以用以下组合（我检测到这些凭证/CLI 都可用）:
+  1. claude + oauth  + anthropic            (Claude Max / Pro 订阅，无需 API key)
+  2. claude + api    + anthropic            (需 ANTHROPIC_API_KEY)
+  3. claude + api    + minimax              (走 MiniMax 端点，Memory 里有 key)
+  4. claude + api    + xcode-best           (你之前 qa-1 用过这个)
+  5. codex  + api    + xcode-best           (gpt-5.4 系列)
+
+  请选 1-5 或告诉我用别的组合。
+```
+
+用户答了之后，**再次回显确认**：
+
+```
+我要给 planner 用: claude + api + minimax (MiniMax-M2.7-highspeed)
+确认吗？(yes/no)
+```
+
+#### 3. 用户 `yes` 之后才调 start_seat
+
+---
+
 ### 拉 seat 的**完整模板**（永远按这个走）
 
 ```bash
+# Step 0: 已经完成上面的"配置收集 SOP"，用户确认了 <tool> <auth_mode> <provider>
+
 # Step 1: start (建 tmux + 启 CLI + 尝试开窗口)
 python3 {scripts}/start_seat.py \\
   --profile <profile> --seat <X> \\
@@ -529,6 +585,13 @@ python3 {scripts}/tui_ctl.py --profile <profile> recover --seat <X>
 python3 {scripts}/tui_ctl.py --profile <profile> status --seat <X>
 # 看 Content 列. yes=TUI 渲染好了; no=CLI 可能启动失败 (auth 错 / provider 拼错 / 模型不存在)
 ```
+
+### 批量拉 seat 时的约束
+
+如果用户说"帮我把 planner/builder/reviewer 都装起来"：
+- **每个 seat 单独问一次配置** —— 不要用"都用 claude oauth"偷懒；用户可能希望 builder 便宜（minimax）、reviewer 严格（claude）
+- 也可以先问用户 "要不要为 4 个 seat 统一用同一套配置？"，用户同意才复用
+- **禁止**：自己定一套默认，跳过用户确认直接把 4 个 seat 全起了
 
 ### 如果 pane 持续空白（CLI 启动失败）
 
