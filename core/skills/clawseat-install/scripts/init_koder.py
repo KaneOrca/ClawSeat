@@ -637,6 +637,38 @@ python3 {admin} window open-monitor <project>
 - 也可以先问用户 "要不要为 N 个 seat 统一用同一套配置？"，用户同意才复用
 - **禁止**：自己定一套默认，跳过用户确认直接把 N 个 seat 全起了
 
+### 两种启动路径
+
+| 模式 | 适用 | 特点 |
+|------|------|------|
+| **A (per-seat)** | 渐进式、1–2 个 seat、用户要看到一个再决定下一个 | 每次 `start_seat.py` 同时起 tmux + 开 iTerm window。多 seat 并发时 iTerm 系统的"Prefer tabs"偏好会把新 window 合成 tab；race fix 保证各 tab 不混。 |
+| **B (batch)** | 一次并发 ≥3 个 seat、想在同一 iTerm window 里整齐排列 | 先 `session start-engineer` 并行起所有 tmux（不开 iTerm），再**一次 AppleScript** 批量开所有 tab。原子、快 3x、零 race 可能。 |
+
+### B 模式 SOP（推荐用于一次拉 ≥3 seat）
+
+```bash
+# 1) 并行起所有 tmux session（不开 iTerm）
+for seat in planner builder-1 reviewer-1 designer-1; do
+  python3 {admin} session start-engineer $seat --project <project> &
+done
+wait
+
+# 2) 一次性 batch 把所有 seat 的 tab 开进一个 iTerm window
+python3 {admin} window open-monitor <project>
+```
+
+前提条件（project.toml）：
+- `window_mode = "tabs-1up"`（install-with-memory 模板默认值）
+- 目标 seat 都在 `monitor_engineers` 里
+
+koder 是 OpenClaw agent 不是 tmux seat，`open_project_tabs_window` 会自动过滤只开 backend seat 的 tab，不会尝试 attach `install-koder-claude`（不存在）。
+
+### 什么时候仍用 A 模式
+
+- 用户说"先起 planner，我先配它，再决定下一个"——显式渐进，一次就一个
+- 用户说"只补一个 reviewer-1"——单 seat 不需要批量
+- 某个 seat 的 OAuth 登录需要用户全神贯注盯 TUI，不想被其他 seat 的 splash 干扰
+
 ## 如果 pane 持续空白（CLI 启动失败）
 
 最常见原因：
