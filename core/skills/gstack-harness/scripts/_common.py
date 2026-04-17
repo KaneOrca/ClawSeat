@@ -159,14 +159,33 @@ class HarnessProfile:
         return self.workspace_for(seat) / "HEARTBEAT_RECEIPT.toml"
 
 
+# Pane-text patterns that tell us a TUI is waiting on human interaction
+# (OAuth login, workspace trust, bypass warning). Name kept for backward
+# compat with agent_admin_heartbeat.py — these cover claude / codex / gemini.
 CLAUDE_ONBOARDING_MARKERS: list[tuple[str, str]] = [
-    ("Browser didn't open? Use the url below to sign in", "oauth_login"),
-    ("Paste code here if prompted >", "oauth_code"),
-    ("Login successful. Press Enter to continue", "oauth_continue"),
-    ("Accessing workspace:", "workspace_trust"),
-    ("Quick safety check:", "workspace_trust"),
-    ("WARNING: Claude Code running in Bypass Permissions mode", "bypass_permissions"),
-    ("OAuth error:", "oauth_error"),
+    # ── Claude Code ────────────────────────────────────────────────
+    ("Browser didn't open? Use the url below to sign in", "claude_oauth_login"),
+    ("Paste code here if prompted >", "claude_oauth_code"),
+    ("Login successful. Press Enter to continue", "claude_oauth_continue"),
+    ("Accessing workspace:", "claude_workspace_trust"),
+    ("Quick safety check:", "claude_workspace_trust"),
+    ("WARNING: Claude Code running in Bypass Permissions mode", "claude_bypass_permissions"),
+    ("OAuth error:", "claude_oauth_error"),
+    # ── Codex (OpenAI) CLI ────────────────────────────────────────
+    # Codex first-run presents a "Sign in with ChatGPT / Use API key" menu
+    # and an OAuth URL + code flow for ChatGPT-mode login.
+    ("Sign in with ChatGPT", "codex_oauth_login"),
+    ("Sign in with API key", "codex_api_login"),
+    ("Visit the URL below to sign in", "codex_oauth_login"),
+    ("Paste the code you received", "codex_oauth_code"),
+    ("Continue? [Y/n]", "codex_workspace_trust"),
+    ("approval required", "codex_approval_prompt"),
+    # ── Gemini CLI ────────────────────────────────────────────────
+    # Gemini CLI shows Google OAuth consent and account picker.
+    ("Waiting for authentication", "gemini_oauth_login"),
+    ("Select an account to continue", "gemini_oauth_account"),
+    ("Successfully authenticated", "gemini_oauth_continue"),
+    ("Do you trust the authors of the files", "gemini_workspace_trust"),
 ]
 
 
@@ -836,6 +855,7 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
     return None
 
 
-def seed_empty_oauth_runtime_from_peer(profile: HarnessProfile, seat: str) -> Path | None:
-    """Disabled: Claude Code OAuth tokens are bound to a specific identity."""
-    return None
+# NOTE: OAuth auth is the user's job, done interactively in the TUI pane.
+# ClawSeat's only job is to spin up tmux + CLI + iTerm tab; credentials
+# live in whatever CODEX_HOME / HOME / XDG dirs the CLI manages itself.
+# We intentionally DO NOT seed or copy oauth tokens across identities.

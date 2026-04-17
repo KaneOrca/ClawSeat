@@ -137,7 +137,8 @@ render_status_doc = BASE_COMMON.render_status_doc
 render_patrol_wrapper = BASE_COMMON.render_patrol_wrapper
 is_managed_runtime_path = BASE_COMMON.is_managed_runtime_path
 seed_empty_secret_from_peer = BASE_COMMON.seed_empty_secret_from_peer
-seed_empty_oauth_runtime_from_peer = BASE_COMMON.seed_empty_oauth_runtime_from_peer
+# seed_empty_oauth_runtime_from_peer was removed — OAuth tokens are
+# user-managed via the TUI, not seeded by the harness.
 
 
 def load_raw_toml(path: Path) -> dict[str, Any]:

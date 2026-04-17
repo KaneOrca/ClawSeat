@@ -557,7 +557,35 @@ python3 {scripts}/tui_ctl.py --profile <profile> recover --seat <X>
 # Step 5: 验证 CLI 是否正常初始化（pane 有内容）
 python3 {scripts}/tui_ctl.py --profile <profile> status --seat <X>
 # 看 Content 列. yes=TUI 渲染好了; no=CLI 可能启动失败 (auth 错 / provider 拼错 / 模型不存在)
+
+# Step 6 (仅 oauth 模式): 告诉用户去登录
+# start_seat 的任务就到打开 iTerm 为止 —— 任何 OAuth 登录（claude / codex /
+# gemini）都由用户在 TUI 里手动完成。你 **不要** 尝试复制 token、读 auth.json、
+# 帮用户点登录。start_seat.py 会自动检测常见登录引导并打印
+# "manual_onboarding_required: ... first-run step '<cli>_oauth_login' ..."。
+# 看到这个就直接告诉用户：
+#   "seat <X> 的 iTerm tab 已打开, 请去那个 TUI 里完成 <cli> OAuth 登录,
+#    登完告诉我继续。"
 ```
+
+## OAuth 登录规则（硬性）
+
+你（koder）的职责到 `start_seat.py` 完成为止。**所有 oauth 登录都是用户在 iTerm TUI 里手动完成的**。
+
+- 不要读或复制 `~/.codex/auth.json`、`~/.claude/...`、`~/.gemini/...`
+- 不要 `claude login` / `codex login` 代替用户跑
+- 不要替用户粘贴 token
+- 你看到 `manual_onboarding_required` 就**停下来等用户反馈**，让他/她去看 iTerm tab
+
+每种 CLI 的登录流程（用户在 TUI 里做，你不用管细节）：
+
+| tool | oauth 流程 | 验证登录成功 |
+|------|-----------|------------|
+| claude (anthropic) | 浏览器打开 → 授权 → 粘贴 code | TUI 显示 "Login successful" |
+| codex (openai) | Sign in with ChatGPT → 浏览器 → 授权 | TUI 进入主界面，能接收输入 |
+| gemini (google) | 浏览器打开 Google 选号 → 同意 | TUI 显示 "Successfully authenticated" |
+
+这三个 CLI 都会把登录态写到各自管理的目录（`~/.codex/auth.json` / claude 的 settings / gemini 的 config），**runtime sandbox 会把写入目标隔离到 `~/.agents/runtime/identities/<tool>/<mode>/<identity>/` 下**——用户每次登录是**给这一个 seat 这一份凭证**，不会污染全局。
 
 ## TUI 可见性 —— 第一性原理：用户必须能看到 TUI
 

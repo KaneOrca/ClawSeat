@@ -17,7 +17,6 @@ from _common import (
     require_success,
     run_command,
     seed_empty_secret_from_peer,
-    seed_empty_oauth_runtime_from_peer,
     session_name_for,
     session_path_for,
     utc_now_iso,
@@ -304,7 +303,9 @@ def main() -> int:
         )
         return 2
     seeded_from = seed_empty_secret_from_peer(profile, args.seat)
-    oauth_seeded_from = seed_empty_oauth_runtime_from_peer(profile, args.seat)
+    # OAuth is intentionally NOT seeded here — each CLI (claude/codex/gemini)
+    # manages its own login in the TUI pane. Our job is only to spin up the
+    # tmux+CLI+iTerm plumbing so the user can see and complete the login.
     # Ensure model/effort are written to settings.local.json before starting.
     # This covers seats started after bootstrap (via planner dispatch).
     from _common import _patch_claude_settings_from_profile
@@ -325,22 +326,28 @@ def main() -> int:
     session_data = load_toml(session_path_for(profile, args.seat)) or {}
     if str(session_data.get("tool", "")).strip() == "codex":
         print_effective_launch(profile, args.seat)
-    open_result = run_command(
-        [
-            "python3",
-            str(profile.agent_admin),
-            "window",
-            "open-engineer",
-            args.seat,
-            "--project",
-            profile.project_name,
-        ],
-        cwd=profile.repo_root,
-    )
+    window_cmd = [
+        "python3",
+        str(profile.agent_admin),
+        "window",
+        "open-engineer",
+        args.seat,
+        "--project",
+        profile.project_name,
+    ]
+    session_name = session_data.get("session", f"{profile.project_name}-{args.seat}")
+    # Retry window open once — iTerm AppleScript can be flaky.
+    open_result = run_command(window_cmd, cwd=profile.repo_root)
+    if open_result.returncode != 0:
+        print(
+            f"window_open_retry: first attempt failed (rc={open_result.returncode}), retrying…",
+            file=sys.stderr,
+        )
+        import time as _t2
+        _t2.sleep(1)
+        open_result = run_command(window_cmd, cwd=profile.repo_root)
     if open_result.returncode != 0:
         # Window open is non-fatal — the tmux session is already running.
-        # iTerm may not be installed, or AppleScript access may be denied.
-        session_name = session_data.get("session", f"{profile.project_name}-{args.seat}")
         print(
             f"window_open_skipped: iTerm window for {args.seat} could not be opened "
             f"(rc={open_result.returncode}). The tmux session is running — connect with:\n"
@@ -349,13 +356,39 @@ def main() -> int:
         )
     if seeded_from is not None:
         print(f"seeded secret for {args.seat} from {seeded_from}")
-    if oauth_seeded_from is not None:
-        print(
-            f"oauth_seed_warning: copied credentials for {args.seat} from {oauth_seeded_from} — "
-            "Claude Code may still require a fresh OAuth login for this seat"
-        )
     if result.stdout.strip():
         print(result.stdout.strip())
+    # TUI visibility check — ensure user can actually see the seat
+    tui_check = run_command(
+        [
+            "python3", "-c",
+            "import sys; sys.path.insert(0, %r); "
+            "from agent_admin_window import verify_tui_visible; "
+            "import json; print(json.dumps(verify_tui_visible(%r, retries=3, delay=2.0)))"
+            % (str(profile.repo_root / "core" / "scripts"), session_name),
+        ],
+        cwd=profile.repo_root,
+    )
+    if tui_check.returncode == 0 and tui_check.stdout.strip():
+        import json as _json
+        try:
+            tui_state = _json.loads(tui_check.stdout.strip())
+            if not tui_state.get("session_exists"):
+                print(
+                    f"session_lost: tmux session '{session_name}' disappeared after startup. "
+                    "The seat may have exited immediately.",
+                    file=sys.stderr,
+                )
+            elif not tui_state.get("visible"):
+                print(
+                    f"tui_not_visible: session '{session_name}' is running but not attached "
+                    f"(clients={tui_state.get('clients', 0)}). "
+                    f"Connect manually: tmux attach -t {session_name}",
+                    file=sys.stderr,
+                )
+        except (ValueError, KeyError):
+            pass  # best-effort check, don't block seat startup
+
     # Retry pane capture with delay — the TUI may not have rendered yet
     import time as _time
     pane_text = capture_session_pane(profile, args.seat)
@@ -377,14 +410,19 @@ def main() -> int:
             )
     if onboarding_step is not None:
         hint = ""
-        if onboarding_step in ("oauth_login", "oauth_code", "oauth_error"):
+        # oauth_login / oauth_code / oauth_error steps (across claude/codex/
+        # gemini — see CLAUDE_ONBOARDING_MARKERS) may time out; pressing
+        # Enter in the TUI usually re-triggers the flow.
+        if any(tok in onboarding_step for tok in ("oauth_login", "oauth_code", "oauth_error")):
             hint = (
                 " If OAuth times out (e.g. 'timeout of 15000ms exceeded'), "
                 "press Enter in the tmux window to retry."
             )
+        # Identify which CLI via the marker-step prefix (claude_/codex_/gemini_).
+        cli = onboarding_step.split("_", 1)[0] if "_" in onboarding_step else "tui"
         print(
             "manual_onboarding_required: "
-            f"{args.seat} is waiting on Claude first-run step '{onboarding_step}'.{hint} "
+            f"{args.seat} is waiting on {cli} first-run step '{onboarding_step}'.{hint} "
             "Ask the user to complete the prompt in the TUI window, then notify the operator to take over."
         )
     else:

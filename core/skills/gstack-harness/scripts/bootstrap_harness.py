@@ -14,7 +14,6 @@ from _common import (
     require_success,
     run_command,
     seed_empty_secret_from_peer,
-    seed_empty_oauth_runtime_from_peer,
 )
 
 
@@ -112,7 +111,7 @@ def main() -> int:
         materialize_profile_runtime(effective_profile)
         for seat in (effective_profile.materialized_seats or effective_profile.seats):
             seed_empty_secret_from_peer(effective_profile, seat)
-            seed_empty_oauth_runtime_from_peer(effective_profile, seat)
+            # OAuth is user-managed via the TUI; nothing to seed here.
         if args.start:
             start_result = run_command(
                 [
