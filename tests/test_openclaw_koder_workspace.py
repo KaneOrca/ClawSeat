@@ -110,28 +110,39 @@ def test_init_koder_builds_workspace_from_profile_backend_seats(tmp_path):
         feishu_group_id="",
     )
 
-    tools = files["TOOLS.md"]
+    tools_index = files["TOOLS.md"]
+    tools_seat = files["TOOLS/seat.md"]
     agents = files["AGENTS.md"]
     memory = files["MEMORY.md"]
     contract = files["WORKSPACE_CONTRACT.toml"]
 
-    assert "--seat <planner|reviewer-1>" in tools
-    assert "start_seat.py --seat koder" in tools
-    assert "禁止运行 `start_seat.py --seat koder`" in tools
-    assert "`builder-1`" not in tools
-    assert "`qa-1`" not in tools
+    # TOOLS.md is now a slim index — the 禁止 rule is in the hard-rules section.
+    assert "禁止运行 `start_seat.py --seat koder`" in tools_index
+    assert "`TOOLS/seat.md`" in tools_index  # routes to the seat sub-file
+
+    # The seat command details live in TOOLS/seat.md.
+    assert "--seat <planner|reviewer-1>" in tools_seat
+    # backend seat list inside seat.md only names the starting-capable seats.
+    assert "`planner`, `reviewer-1`" in tools_seat
+    assert "`builder-1`" not in tools_seat
+    assert "`qa-1`" not in tools_seat
 
     assert "Only backend seats may be started from this workspace: `planner`, `reviewer-1`" in agents
-    assert "never run `start_seat.py --seat koder`" in agents
+    # OpenClaw-mode caveat now points at TOOLS.md 强制规则; the literal
+    # "never run ..." phrase was deduplicated out of AGENTS.md.
+    assert "`koder`" in agents
+    assert "强制规则" in agents
 
-    assert "- `koder`" in memory
-    assert "- `planner`" in memory
-    assert "- `reviewer-1`" in memory
+    # MEMORY.md no longer embeds the seat roster; it points at the contract.
+    assert "`WORKSPACE_CONTRACT.toml`" in memory
     assert "- `builder-1`" not in memory
-    assert "- frontstage owner: `koder` (already live in OpenClaw; never self-start)" in memory
+    # The stale hardcoded status lines are gone.
+    assert "bootstrap: pending" not in memory
 
     assert 'seats = ["koder", "planner", "reviewer-1"]' in contract
     assert 'backend_seats = ["planner", "reviewer-1"]' in contract
+    # D1: contract fingerprint lands in every contract now.
+    assert 'contract_fingerprint = "' in contract
     assert 'default_backend_start_seats = ["planner"]' in contract
     assert profile.materialized_seats == ["koder", "planner", "reviewer-1"]
     assert profile.bootstrap_seats == ["koder"]
