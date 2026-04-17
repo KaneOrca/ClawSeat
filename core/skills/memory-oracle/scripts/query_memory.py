@@ -54,6 +54,26 @@ def _load_json(path: Path) -> dict | None:
         return None
 
 
+def _load_jsonl(path: Path) -> list[dict]:
+    """Load all valid records from a JSONL (newline-delimited JSON) file."""
+    if not path.is_file():
+        return []
+    records: list[dict] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    rec = json.loads(line)
+                    if isinstance(rec, dict):
+                        records.append(rec)
+                except json.JSONDecodeError:
+                    pass
+    except OSError:
+        pass
+    return records
+
+
 def load_memory_file(memory_dir: Path, name: str) -> dict | None:
     """Load a named memory file.
 
@@ -305,26 +325,46 @@ def cmd_list(
             if isinstance(rec, dict):
                 results.append(rec)
 
-    if project and kind:
-        # Specific project + kind
-        if project == "_shared":
-            subdir = SHARED_KIND_SUBDIRS.get(kind, f"{kind}s")
+    def _collect_project_kind(proj_name: str, kind_name: str) -> None:
+        """Collect facts for a (project, kind) pair, routing JSONL kinds correctly."""
+        proj_path = memory_dir / "projects" / proj_name
+
+        if kind_name == "reflection":
+            # SPEC §3: projects/<proj>/reflections.jsonl (JSONL, append-only)
+            results.extend(_load_jsonl(proj_path / "reflections.jsonl"))
+            return
+
+        if kind_name == "event":
+            # SPEC §3: root events.log (JSONL, append-only) — not project-scoped
+            return
+
+        if proj_name == "_shared":
+            subdir = SHARED_KIND_SUBDIRS.get(kind_name, f"{kind_name}s")
             _collect_dir(memory_dir / "shared" / subdir)
+            return
+
+        subdir = KIND_SUBDIRS.get(kind_name)
+        if subdir:
+            _collect_dir(proj_path / subdir)
         else:
-            subdir = KIND_SUBDIRS.get(kind)
-            if subdir:
-                _collect_dir(memory_dir / "projects" / project / subdir)
-            else:
-                # e.g. reflection, event — stored at project root
-                _collect_dir(memory_dir / "projects" / project)
+            _collect_dir(proj_path)
+
+    if kind == "event":
+        # Global JSONL — project arg is ignored for event
+        results.extend(_load_jsonl(memory_dir / "events.log"))
+
+    elif project and kind:
+        _collect_project_kind(project, kind)
 
     elif project:
-        # All kinds in a project
+        # All kinds in a project (JSON subdirs + JSONL reflections)
         proj_root = memory_dir / "projects" / project
         if proj_root.is_dir():
             for entry in sorted(proj_root.iterdir()):
                 if entry.is_dir():
                     _collect_dir(entry)
+                elif entry.name == "reflections.jsonl":
+                    results.extend(_load_jsonl(entry))
                 elif entry.suffix == ".json":
                     rec = _load_json(entry)
                     if isinstance(rec, dict):
@@ -335,17 +375,14 @@ def cmd_list(
         projects_root = memory_dir / "projects"
         if projects_root.is_dir():
             for proj_dir in sorted(projects_root.iterdir()):
-                if not proj_dir.is_dir():
-                    continue
-                subdir = KIND_SUBDIRS.get(kind)
-                if subdir:
-                    _collect_dir(proj_dir / subdir)
-        # Also check shared
+                if proj_dir.is_dir():
+                    _collect_project_kind(proj_dir.name, kind)
+        # Also check shared for shared-scoped kinds
         if kind in SHARED_KIND_SUBDIRS:
             _collect_dir(memory_dir / "shared" / SHARED_KIND_SUBDIRS[kind])
 
     else:
-        # --since only: scan all projects, all kinds
+        # --since only: scan all projects, all kinds (JSON + JSONL)
         projects_root = memory_dir / "projects"
         if projects_root.is_dir():
             for proj_dir in sorted(projects_root.iterdir()):
@@ -354,6 +391,8 @@ def cmd_list(
                         rec = _load_json(entry)
                         if isinstance(rec, dict):
                             results.append(rec)
+                    results.extend(_load_jsonl(proj_dir / "reflections.jsonl"))
+        results.extend(_load_jsonl(memory_dir / "events.log"))
 
     # Apply --since filter on the `ts` field
     if since:

@@ -343,3 +343,118 @@ def test_status_shows_projects(memory_tree):
 def test_no_args_exits_2(memory_tree):
     result = run_query(memory_dir=str(memory_tree))
     assert result.returncode == 2
+
+
+# ── F1: reflection and event JSONL routing (reviewer finding) ─────────────────
+
+
+@pytest.fixture()
+def memory_with_jsonl(tmp_path):
+    """Tree with reflections.jsonl and events.log JSONL files."""
+    # projects/install/reflections.jsonl — two records
+    proj = tmp_path / "projects" / "install"
+    proj.mkdir(parents=True)
+    r1 = {"schema_version": 1, "kind": "reflection", "id": "r1", "project": "install",
+          "ts": "2026-04-18T10:00:00+00:00", "title": "Reflection 1"}
+    r2 = {"schema_version": 1, "kind": "reflection", "id": "r2", "project": "install",
+          "ts": "2026-04-20T10:00:00+00:00", "title": "Reflection 2"}
+    (proj / "reflections.jsonl").write_text(
+        json.dumps(r1) + "\n" + json.dumps(r2) + "\n", encoding="utf-8"
+    )
+
+    # projects/other/reflections.jsonl — one record
+    other = tmp_path / "projects" / "other"
+    other.mkdir(parents=True)
+    r3 = {"schema_version": 1, "kind": "reflection", "id": "r3", "project": "other",
+          "ts": "2026-04-19T10:00:00+00:00", "title": "Other Reflection"}
+    (other / "reflections.jsonl").write_text(json.dumps(r3) + "\n", encoding="utf-8")
+
+    # events.log — global JSONL
+    e1 = {"kind": "event", "id": "e1", "ts": "2026-04-18T09:00:00+00:00", "title": "Event A"}
+    e2 = {"kind": "event", "id": "e2", "ts": "2026-04-19T09:00:00+00:00", "title": "Event B"}
+    (tmp_path / "events.log").write_text(
+        json.dumps(e1) + "\n" + json.dumps(e2) + "\n", encoding="utf-8"
+    )
+    return tmp_path
+
+
+def test_kind_reflection_project_reads_jsonl(memory_with_jsonl):
+    result = run_query("--project", "install", "--kind", "reflection",
+                       memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    assert len(records) == 2
+    titles = {r["title"] for r in records}
+    assert "Reflection 1" in titles
+    assert "Reflection 2" in titles
+
+
+def test_kind_reflection_all_projects(memory_with_jsonl):
+    result = run_query("--kind", "reflection", memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    assert len(records) == 3
+    projects = {r["project"] for r in records}
+    assert "install" in projects
+    assert "other" in projects
+
+
+def test_kind_reflection_since_filter(memory_with_jsonl):
+    result = run_query("--project", "install", "--kind", "reflection",
+                       "--since", "2026-04-19",
+                       memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    assert len(records) == 1
+    assert records[0]["title"] == "Reflection 2"
+
+
+def test_kind_event_reads_global_log(memory_with_jsonl):
+    result = run_query("--kind", "event", memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    assert len(records) == 2
+    titles = {r["title"] for r in records}
+    assert "Event A" in titles
+    assert "Event B" in titles
+
+
+def test_kind_event_project_ignored_still_reads_global_log(memory_with_jsonl):
+    # For event kind, project is ignored — events.log is always global
+    result = run_query("--project", "install", "--kind", "event",
+                       memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    assert len(records) == 2
+
+
+def test_kind_event_since_filter(memory_with_jsonl):
+    result = run_query("--kind", "event", "--since", "2026-04-19",
+                       memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    assert len(records) == 1
+    assert records[0]["title"] == "Event B"
+
+
+def test_empty_reflections_exits_1(memory_with_jsonl):
+    # project with no reflections.jsonl
+    (memory_with_jsonl / "projects" / "empty-proj").mkdir(parents=True)
+    result = run_query("--project", "empty-proj", "--kind", "reflection",
+                       memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 1
+    assert json.loads(result.stdout) == []
+
+
+def test_empty_events_log_exits_1(tmp_path):
+    result = run_query("--kind", "event", memory_dir=str(tmp_path))
+    assert result.returncode == 1
+    assert json.loads(result.stdout) == []
+
+
+def test_project_only_includes_reflections(memory_with_jsonl):
+    result = run_query("--project", "install", memory_dir=str(memory_with_jsonl))
+    assert result.returncode == 0
+    records = json.loads(result.stdout)
+    kinds = {r["kind"] for r in records}
+    assert "reflection" in kinds

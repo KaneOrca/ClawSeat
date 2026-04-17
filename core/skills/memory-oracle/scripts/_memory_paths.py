@@ -53,6 +53,9 @@ RESEARCH_DIR = MEMORY_ROOT / "research"
 EVENTS_LOG = MEMORY_ROOT / "events.log"
 RESPONSES_DIR = MEMORY_ROOT / "responses"
 
+# Filename for per-project reflection JSONL (SPEC §3)
+REFLECTIONS_FILE = "reflections.jsonl"
+
 # Subdirectories under projects/<name>/ for each fact kind
 KIND_SUBDIRS: dict[str, str] = {
     "decision": "decisions",
@@ -72,6 +75,25 @@ SHARED_KIND_SUBDIRS: dict[str, str] = {
 def project_dir(project: str) -> Path:
     """Return the directory for a named project."""
     return PROJECTS_DIR / project
+
+
+def reflections_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return the reflections JSONL path for a project (SPEC §3).
+
+    Write hooks are M5's responsibility; this constant is registered here so
+    M3/M5 can import it without re-deriving the layout.
+    """
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / REFLECTIONS_FILE
+
+
+def events_log_path(*, memory_root: Path | None = None) -> Path:
+    """Return the global events.log JSONL path (SPEC §3).
+
+    Write hooks are M5's responsibility; registered here for importability.
+    """
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "events.log"
 
 
 def generate_id(kind: str, project: str, content: str) -> str:
@@ -100,9 +122,13 @@ def fact_path(kind: str, project: str, fact_id: str, *, memory_root: Path | None
         subdir_name = SHARED_KIND_SUBDIRS.get(kind, f"{kind}s")
         return root / "shared" / subdir_name / f"{fact_id}.json"
 
+    # reflection → per-project JSONL (SPEC §3; write appended by M5)
+    if kind == "reflection":
+        return reflections_path(project, memory_root=memory_root)
+
     subdir_name = KIND_SUBDIRS.get(kind)
     if subdir_name:
         return root / "projects" / project / subdir_name / f"{fact_id}.json"
 
-    # Kinds without a dedicated subdir (reflection, event, …) go at project root
+    # Other kinds without a dedicated subdir go at project root
     return root / "projects" / project / f"{fact_id}.json"

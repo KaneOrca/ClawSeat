@@ -630,6 +630,18 @@ SCANNERS = {
     "current_context": scan_current_context,
 }
 
+# Default targets for a full scan (no --only).  Restricted to the §3 auto-inject
+# tier so machine/ stays ≤ 5-6 files per acceptance §5.3.4.
+# Legacy scanners (system, environment, gstack, clawseat, repos) are still
+# available via --only but are NOT written in a default run.
+MACHINE_DEFAULT_SCANNERS = [
+    "credentials",
+    "network",
+    "openclaw",
+    "github",
+    "current_context",
+]
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Environment scanner for Memory CC.")
@@ -661,7 +673,8 @@ def main() -> int:
             print(f"available: {','.join(SCANNERS)}", file=sys.stderr)
             return 2
     else:
-        targets = list(SCANNERS.keys())
+        # Default: only the §3 auto-inject tier (5 files) — §5.3.4 acceptance
+        targets = list(MACHINE_DEFAULT_SCANNERS)
 
     results: dict[str, dict] = {}
     errors: list[dict] = []
