@@ -37,6 +37,7 @@ import re
 from typing import Any
 
 VALID_KINDS: frozenset[str] = frozenset({
+    # M1 kinds
     "decision",
     "delivery",
     "issue",
@@ -46,6 +47,15 @@ VALID_KINDS: frozenset[str] = frozenset({
     "example",
     "pattern",
     "event",
+    # M2 project-scanner kinds
+    "runtime",
+    "tests",
+    "deploy",
+    "ci",
+    "lint",
+    "structure",
+    "env_templates",
+    "dev_env",
 })
 
 VALID_TRUST_LEVELS: frozenset[str] = frozenset({"high", "medium", "low"})

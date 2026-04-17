@@ -96,6 +96,72 @@ def events_log_path(*, memory_root: Path | None = None) -> Path:
     return root / "events.log"
 
 
+# ── M2 project-scanner path helpers (SPEC §3, D15) ───────────────────────────
+# Each helper returns the canonical kind-named file path under projects/<p>/.
+# Files are named <kind>.json (one file per kind per project, full-rebuild policy).
+
+
+def dev_env_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/dev_env.json — shallow-depth flat summary."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "dev_env.json"
+
+
+def runtime_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/runtime.json — language/deps detector output."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "runtime.json"
+
+
+def tests_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/tests.json — test-framework detector output."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "tests.json"
+
+
+def deploy_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/deploy.json — deploy-config detector output."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "deploy.json"
+
+
+def ci_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/ci.json — CI/CD detector output."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "ci.json"
+
+
+def lint_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/lint.json — lint/format detector output."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "lint.json"
+
+
+def structure_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/structure.json — repo-structure detector output."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "structure.json"
+
+
+def env_templates_path(project: str, *, memory_root: Path | None = None) -> Path:
+    """Return projects/<p>/env_templates.json — env-template detector output (deep only)."""
+    root = memory_root if memory_root is not None else MEMORY_ROOT
+    return root / "projects" / project / "env_templates.json"
+
+
+# Mapping: M2 kind → path helper for use in scan_project.py
+M2_KIND_PATH_HELPERS: dict[str, object] = {
+    "dev_env": dev_env_path,
+    "runtime": runtime_path,
+    "tests": tests_path,
+    "deploy": deploy_path,
+    "ci": ci_path,
+    "lint": lint_path,
+    "structure": structure_path,
+    "env_templates": env_templates_path,
+}
+
+
 def generate_id(kind: str, project: str, content: str) -> str:
     """Generate a stable fact ID: <kind>-<project|shared>-<8-char hash>.
 
