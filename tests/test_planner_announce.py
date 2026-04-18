@@ -215,19 +215,28 @@ def test_config_gate_env_zero_overrides_profile_true(monkeypatch):
 
 
 def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
-    """Config gate opens when profile.observability.announce_planner_events=true and env unset."""
+    """Config gate opens: stub lark-cli intercepts the call and logs the message."""
     import subprocess
+    import re as _re
+    import os as _os
 
-    # Build an isolated profile with tasks_root/workspace/handoff redirected to tmp_path
-    # so dispatch_task.py does not write to the real ~/.agents/tasks.
     real_profile = Path("/Users/ywf/.agents/profiles/install-profile-dynamic.toml")
     if not real_profile.exists():
         pytest.skip("real profile not found")
 
-    import re as _re
-    profile_text = real_profile.read_text(encoding="utf-8")
+    # ── Stub lark-cli ───────────────────────────────────────────────────────────
+    # Writes all argv to LARK_STUB_LOG (one arg per line), exits 0.
+    stub_log = tmp_path / "lark-cli-args.log"
+    stub = tmp_path / "lark-cli"
+    stub.write_text(
+        "#!/bin/sh\n"
+        f'printf \'%s\\n\' "$@" >> "{stub_log}"\n'
+        "exit 0\n"
+    )
+    stub.chmod(0o755)
 
-    # Redirect FS paths to tmp_path to avoid polluting real task queue
+    # ── Isolated profile ────────────────────────────────────────────────────────
+    profile_text = real_profile.read_text(encoding="utf-8")
     tasks_tmp = tmp_path / "tasks"
     ws_tmp = tmp_path / "workspaces"
     handoff_tmp = tmp_path / "handoffs"
@@ -241,15 +250,18 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
     profile_text = _re.sub(r'tasks_doc\s*=\s*"[^"]*"', f'tasks_doc = "{tasks_tmp}/install/TASKS.md"', profile_text)
     profile_text = _re.sub(r'status_doc\s*=\s*"[^"]*"', f'status_doc = "{tasks_tmp}/install/STATUS.md"', profile_text)
     profile_text = _re.sub(r'heartbeat_receipt\s*=\s*"[^"]*"', f'heartbeat_receipt = "{ws_tmp}/install/koder/HEARTBEAT_RECEIPT.toml"', profile_text)
-
     if "[observability]" not in profile_text:
         profile_text += "\n[observability]\nannounce_planner_events = true\n"
-
     tmp_profile = tmp_path / "test-profile.toml"
     tmp_profile.write_text(profile_text, encoding="utf-8")
 
-    import os as _os
+    # ── Subprocess env ──────────────────────────────────────────────────────────
     env = dict(_os.environ)
+    env["PATH"] = f"{tmp_path}:{env.get('PATH', '')}"
+    # CLAWSEAT_FEISHU_GROUP_ID makes resolve_primary_feishu_group_id() return a
+    # known value without reading real ~/.openclaw or WORKSPACE_CONTRACT.toml files.
+    env["CLAWSEAT_FEISHU_GROUP_ID"] = "test-group-e2e-stub"
+    env["OPENCLAW_HOME"] = str(tmp_path)  # cwd for lark-cli call must exist
     env.pop("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS", None)  # use config gate, not env override
 
     result = subprocess.run(
@@ -269,16 +281,22 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
         env=env,
         cwd=str(_SCRIPTS),
     )
-    # Gate opened if announce warn appeared in stderr (fail-safe swallows feishu error)
-    gate_opened = "planner announce" in result.stderr
-    assert gate_opened, (
-        "Config gate did not open: no announce warn in stderr.\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+
+    stub_content = stub_log.read_text(encoding="utf-8") if stub_log.exists() else ""
     assert result.returncode == 0, (
         f"dispatch_task.py failed (rc={result.returncode})\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}\nstub_log: {stub_content}"
+    )
+    assert stub_log.exists() and stub_content.strip(), (
+        "lark-cli stub was not called — announce gate did not open.\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
+    # Message format: "[{project}] {source} → {target}: {task_id} {verb}"
+    for keyword in ("planner", "builder-1", "smoke-announce-e2e", "dispatched"):
+        assert keyword in stub_content, (
+            f"Expected {keyword!r} in stub log but not found.\n"
+            f"stub_log: {stub_content}\nstderr: {result.stderr}"
+        )
 
 
 # ── F2: attribute-guard test ──────────────────────────────────────────────────
