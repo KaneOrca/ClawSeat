@@ -48,7 +48,7 @@ def resolve_clawseat_root() -> Path:
 
 
 def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, bootstrap_only: bool) -> list[str]:
-    tasks_root = f"/tmp/{project_name}/.tasks"
+    tasks_root = str(Path.home() / ".agents" / "tasks" / project_name)
     workspace_root = str(Path.home() / ".agents" / "workspaces" / project_name)
     heartbeat_owner = str(data.get("heartbeat_owner", "koder"))
     active_loop_owner = str(data.get("active_loop_owner", heartbeat_owner))
