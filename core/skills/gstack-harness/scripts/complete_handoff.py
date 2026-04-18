@@ -34,48 +34,70 @@ from _common import (
 def _do_prune(text: str, task_id: str) -> str:
     """Return text with first [pending]/[queued] block matching task_id removed.
 
+    Splits on '^## [' line anchors (spec approach-b) to avoid any dependency on
+    '# Completed' appearing literally as a split token — objective/title fields
+    may contain that text. The trailing non-entry content (e.g. '# Completed'
+    section) is located by scanning for h1 headings after the last ## [ block
+    only, so poison lines inside earlier entry bodies are invisible.
     Returns the same object (identity) if no match found.
     """
-    # Split off # Completed section so we only touch the active queue
-    if "\n# Completed" in text:
-        queue_part, completed_part = text.split("\n# Completed", 1)
-        completed_section = "\n# Completed" + completed_part
-    else:
-        queue_part = text
-        completed_section = ""
+    lines = text.splitlines(keepends=True)
 
-    # Find where entries start (first ## [)
-    first_entry_m = re.search(r"^## \[", queue_part, re.MULTILINE)
-    if not first_entry_m:
+    task_pat = re.compile(rf"^task_id:\s*{re.escape(task_id)}\s*$")
+    status_pat = re.compile(r"^## \[(pending|queued)\]")
+    h1_pat = re.compile(r"^# (?!#)")  # h1 heading that is not ## or ###
+
+    # Find ## [ block start positions
+    block_starts = [i for i, ln in enumerate(lines) if ln.startswith("## [")]
+    if not block_starts:
         return text
 
-    header = queue_part[: first_entry_m.start()]
-    entries_text = queue_part[first_entry_m.start():]
+    # Locate the trailing non-entry section (e.g. '# Completed').
+    # Scan only from the last ## [ block onwards so poison h1 lines inside
+    # earlier entry bodies do not influence the boundary.
+    tail_start = len(lines)
+    for k in range(block_starts[-1] + 1, len(lines)):
+        if h1_pat.match(lines[k]):
+            tail_start = k
+            break
 
-    # Split entries by the separator written by append_task_to_queue
-    entries = re.split(r"\n\n---\n\n", entries_text)
+    # Each block runs from its start to the next block start (or tail_start)
+    block_ends = list(block_starts[1:]) + [tail_start]
+    blocks = list(zip(block_starts, block_ends))
 
-    task_re = re.compile(rf"^task_id:\s*{re.escape(task_id)}\s*$", re.MULTILINE)
-    status_re = re.compile(r"^## \[(pending|queued)\]", re.MULTILINE)
-
+    # Find first matching [pending]/[queued] block
     found = None
-    for i, entry in enumerate(entries):
-        if status_re.search(entry) and task_re.search(entry):
+    for i, (bstart, bend) in enumerate(blocks):
+        seg = lines[bstart:bend]
+        if status_pat.match(seg[0]) and any(task_pat.match(l) for l in seg):
             found = i
             break
 
     if found is None:
         return text
 
-    new_entries = entries[:found] + entries[found + 1:]
-    if new_entries:
-        new_queue = header + "\n\n---\n\n".join(new_entries)
-    else:
-        new_queue = header.rstrip("\n")
+    # Rebuild without the found block
+    header = "".join(lines[: block_starts[0]])
+    remaining = blocks[:found] + blocks[found + 1:]
 
-    result = new_queue + completed_section
-    if result and not result.endswith("\n"):
+    if remaining:
+        parts = ["".join(lines[bs:be]) for bs, be in remaining]
+        entries = "".join(parts)
+        # Strip dangling --- separator when the deleted block was non-last
+        entries = re.sub(r"\n\n---\n\n\s*$", "\n", entries)
+        result = header + entries
+    else:
+        result = header.rstrip("\n")
+
+    # Reattach trailing section (e.g. '# Completed') with proper spacing
+    tail = "".join(lines[tail_start:])
+    if tail:
+        if not result.endswith("\n\n"):
+            result = result.rstrip("\n") + "\n\n"
+        result += tail
+    elif not result.endswith("\n"):
         result += "\n"
+
     return result
 
 

@@ -255,3 +255,75 @@ title: second occurrence
     assert result is not content
     assert "first occurrence" not in result
     assert "second occurrence" in result
+
+
+# ── Poison tests: '# Completed' inside entry body must not affect parsing ───
+
+
+def test_poison_completed_in_objective_body_not_split():
+    """A '# Completed' line inside an entry's Objective body must not be treated
+    as the trailing section boundary; the entry containing the poison line is
+    preserved when a DIFFERENT task_id is deleted."""
+    content = """\
+# Queue: builder-1
+
+## [queued] safe-task
+task_id: safe-task
+title: has poison body
+
+### Objective
+
+Some prose.
+
+# Completed
+
+More prose after the poison line.
+
+---
+
+## [pending] target-task
+task_id: target-task
+title: delete me
+
+### Objective
+
+clean body
+"""
+    result = _do_prune(content, "target-task")
+    assert result is not content
+    # target deleted
+    assert "target-task" not in result
+    assert "delete me" not in result
+    # safe-task and its ENTIRE body (including the poison '# Completed' line) preserved
+    assert "safe-task" in result
+    assert "has poison body" in result
+    assert "More prose after the poison line." in result
+
+
+def test_poison_completed_title_field_entry_deleted():
+    """An entry whose *title* field contains '# Completed task' is deleted
+    correctly when its task_id is the ACK target; the real trailing
+    '# Completed' section (after all ## [ blocks) is preserved."""
+    content = """\
+# Queue: builder-1
+
+## [pending] poison-title-task
+task_id: poison-title-task
+title: # Completed task (this is the title)
+
+### Objective
+
+do the thing
+
+# Completed
+
+- [2026-01-01] old-task — done
+"""
+    result = _do_prune(content, "poison-title-task")
+    assert result is not content
+    # entry deleted
+    assert "poison-title-task" not in result
+    assert "do the thing" not in result
+    # real trailing section preserved
+    assert "# Completed" in result
+    assert "old-task — done" in result
