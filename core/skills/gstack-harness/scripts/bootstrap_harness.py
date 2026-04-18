@@ -23,9 +23,19 @@ def _link_sandbox_tasks_to_real_home(
     *,
     _agents_home: Path | None = None,
 ) -> None:
-    """Create sandbox_home/.agents/tasks/<project>/<seat> → real tasks_root/<seat> symlinks.
+    """Per-project symlink. Covers all sub-paths including patrol/handoffs and
+    per-seat TODO/DELIVERY atomically.
 
-    Idempotent. Fail-safe: warns on error, never raises.
+    Creates: sandbox_home/.agents/tasks/<project>  →  real profile.tasks_root
+
+    Replaces the old per-seat approach with a single project-level symlink so
+    patrol/handoffs, PROJECT.md, STATUS.md etc. are also visible across the
+    sandbox boundary. Idempotent. Fail-safe: warns on error, never raises.
+
+    Upgrade path from legacy per-seat symlinks:
+      If sandbox_home/.agents/tasks/<project> is a real dir containing only
+      per-seat symlinks (no real files/dirs), those symlinks are removed and
+      the parent dir is replaced with the per-project symlink.
     """
     try:
         import tomllib as _tomllib
@@ -33,6 +43,10 @@ def _link_sandbox_tasks_to_real_home(
         import tomli as _tomllib  # type: ignore
 
     agents_home = _agents_home or (Path.home() / ".agents")
+    real_tasks_root = profile.tasks_root
+    real_tasks_root.mkdir(parents=True, exist_ok=True)
+
+    seen_sandbox_homes: set[Path] = set()
 
     for seat in seats:
         session_path = agents_home / "sessions" / profile.project_name / seat / "session.toml"
@@ -52,30 +66,41 @@ def _link_sandbox_tasks_to_real_home(
         if not sandbox_home.is_dir():
             continue
 
-        real_tasks = profile.tasks_root / seat
-        sandbox_tasks_parent = sandbox_home / ".agents" / "tasks" / profile.project_name
-        sandbox_tasks = sandbox_tasks_parent / seat
+        if sandbox_home in seen_sandbox_homes:
+            continue
+        seen_sandbox_homes.add(sandbox_home)
+
+        sandbox_project_link = sandbox_home / ".agents" / "tasks" / profile.project_name
 
         try:
-            real_tasks.mkdir(parents=True, exist_ok=True)
-            if sandbox_tasks.is_symlink():
-                if sandbox_tasks.resolve() == real_tasks.resolve():
+            if sandbox_project_link.is_symlink():
+                if sandbox_project_link.resolve() == real_tasks_root.resolve():
+                    continue  # already correct — idempotent
+                print(
+                    f"warn: _link_sandbox_tasks: {sandbox_project_link} is symlink to different target, skipping",
+                    file=sys.stderr,
+                )
+                continue
+
+            if sandbox_project_link.exists():
+                # Real directory — inspect children
+                children = list(sandbox_project_link.iterdir())
+                real_items = [c for c in children if not c.is_symlink()]
+                if real_items:
+                    print(
+                        f"warn: _link_sandbox_tasks: {sandbox_project_link} is regular dir with data, skipping",
+                        file=sys.stderr,
+                    )
                     continue
-                print(
-                    f"warn: _link_sandbox_tasks: {sandbox_tasks} is symlink to different target, skipping",
-                    file=sys.stderr,
-                )
-                continue
-            if sandbox_tasks.exists():
-                print(
-                    f"warn: _link_sandbox_tasks: {sandbox_tasks} is a regular dir with data, skipping",
-                    file=sys.stderr,
-                )
-                continue
-            sandbox_tasks_parent.mkdir(parents=True, exist_ok=True)
-            sandbox_tasks.symlink_to(real_tasks)
+                # Only symlinks (or empty) — safe to migrate
+                for child in children:
+                    child.unlink()
+                sandbox_project_link.rmdir()
+
+            sandbox_project_link.parent.mkdir(parents=True, exist_ok=True)
+            sandbox_project_link.symlink_to(real_tasks_root.resolve())
         except Exception as exc:
-            print(f"warn: _link_sandbox_tasks: failed to link {seat}: {exc}", file=sys.stderr)
+            print(f"warn: _link_sandbox_tasks: failed to link for {seat}: {exc}", file=sys.stderr)
 
 
 def parse_args() -> argparse.Namespace:
@@ -85,6 +110,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo-root", help="Override repo root from the profile.")
     parser.add_argument("--start", action="store_true", help="Start the project monitor after bootstrap.")
     parser.add_argument("--refresh-existing", action="store_true", help="Refresh workspace files for already-deployed seats from current template.")
+    parser.add_argument("--link-tasks", action="store_true", help="Only create sandbox→real tasks symlinks (skip full bootstrap).")
     return parser.parse_args()
 
 
@@ -133,6 +159,13 @@ def main() -> int:
     project_name = args.project_name or profile.project_name
     repo_root = Path(args.repo_root).expanduser() if args.repo_root else profile.repo_root
     effective_profile = with_overrides(profile, project_name=project_name, repo_root=repo_root)
+
+    if args.link_tasks:
+        _link_sandbox_tasks_to_real_home(
+            effective_profile,
+            list(effective_profile.materialized_seats or effective_profile.seats),
+        )
+        return 0
 
     # Validate skills before bootstrap — block on required missing
     try:

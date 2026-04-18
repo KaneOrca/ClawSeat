@@ -120,10 +120,9 @@ def test_link_sandbox_creates_symlink(tmp_path):
         profile, ["seat-1"], _agents_home=agents_home
     )
 
-    real_tasks = profile.tasks_root / "seat-1"
-    sandbox_tasks = sandbox_home / ".agents" / "tasks" / profile.project_name / "seat-1"
-    assert sandbox_tasks.is_symlink(), "symlink should have been created"
-    assert sandbox_tasks.resolve() == real_tasks.resolve()
+    sandbox_project = sandbox_home / ".agents" / "tasks" / profile.project_name
+    assert sandbox_project.is_symlink(), "per-project symlink should have been created"
+    assert sandbox_project.resolve() == profile.tasks_root.resolve()
 
 
 def test_link_sandbox_idempotent(tmp_path):
@@ -143,8 +142,9 @@ def test_link_sandbox_idempotent(tmp_path):
         profile, ["seat-1"], _agents_home=agents_home
     )
 
-    sandbox_tasks = sandbox_home / ".agents" / "tasks" / profile.project_name / "seat-1"
-    assert sandbox_tasks.is_symlink(), "symlink must still exist after idempotent call"
+    sandbox_project = sandbox_home / ".agents" / "tasks" / profile.project_name
+    assert sandbox_project.is_symlink(), "per-project symlink must still exist after idempotent call"
+    assert sandbox_project.resolve() == profile.tasks_root.resolve()
 
 
 def test_link_sandbox_protects_existing_dir(tmp_path, capsys):
