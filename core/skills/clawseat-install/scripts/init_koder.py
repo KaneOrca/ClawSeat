@@ -86,6 +86,7 @@ MANAGED_FILES = (
     "TOOLS/seat.md",
     "TOOLS/memory.md",
     "TOOLS/install.md",
+    "TOOLS/protocol.md",
     "MEMORY.md",
     "AGENTS.md",
     "WORKSPACE_CONTRACT.toml",
@@ -222,6 +223,7 @@ def build_workspace_files(
         "TOOLS/seat.md": render_tools_seat(REPO_ROOT, heartbeat_owner=heartbeat_owner, backend_seats=backend),
         "TOOLS/memory.md": render_tools_memory(REPO_ROOT, heartbeat_owner=heartbeat_owner),
         "TOOLS/install.md": render_tools_install(REPO_ROOT),
+        "TOOLS/protocol.md": render_tools_protocol(REPO_ROOT),
         "MEMORY.md": render_memory(
             project,
             profile_path,
@@ -865,6 +867,13 @@ python3 {clawseat_root}/core/skills/clawseat-install/scripts/refresh_workspaces.
 ```
 """
 
+
+def render_tools_protocol(clawseat_root: Path) -> str:
+    """Read shared TOOLS/protocol.md and return its content for koder's workspace."""
+    shared = clawseat_root / "core" / "templates" / "shared" / "TOOLS" / "protocol.md"
+    if shared.is_file():
+        return shared.read_text(encoding="utf-8")
+    return "# Communication & Handoff Protocol\n\nSee TOOLS/handoff.md.\n"
 
 
 def render_memory(

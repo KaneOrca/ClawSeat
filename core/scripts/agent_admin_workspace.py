@@ -15,6 +15,9 @@ REPO_ROOT = Path(
 HARNESS_PROFILE_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "assets" / "profiles"
 SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
+TOOLS_SHARED_ROOT = REPO_ROOT / "core" / "templates" / "shared" / "TOOLS"
+
+_SPECIALIST_ROLES = frozenset({"builder", "reviewer", "qa", "designer"})
 
 # Ensure `core/` is importable so bare `from resolve import ...` resolves
 # regardless of how this module is invoked (direct script vs import).
@@ -42,6 +45,11 @@ def render_role_details_lines(engineer: Any) -> list[str]:
     details = list(getattr(engineer, "role_details", []) or [])
     if not details:
         return []
+    if engineer.role in _SPECIALIST_ROLES:
+        summary = "; ".join(details)
+        if len(summary) > 200:
+            summary = summary[:197] + "..."
+        return ["## Role Focus", summary]
     lines = ["## Role Focus", ""]
     lines.extend(f"- {detail}" for detail in details)
     return lines
@@ -60,6 +68,8 @@ def render_aliases_lines(engineer: Any) -> list[str]:
 
 
 def render_authority_lines(engineer: Any) -> list[str]:
+    if engineer.role in _SPECIALIST_ROLES:
+        return []
     capabilities: list[str] = []
     if getattr(engineer, "human_facing", False):
         capabilities.append("human-facing intake and user communication")
@@ -111,6 +121,8 @@ def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[s
     project_doc = f"{tasks_root}/PROJECT.md"
     tasks_doc = f"{tasks_root}/TASKS.md"
     status_doc = f"{tasks_root}/STATUS.md"
+    if engineer.role in _SPECIALIST_ROLES:
+        return [f"**Read first:** `{todo_path}`"]
     lines = [
         "## Read First",
         "",
@@ -152,6 +164,8 @@ def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[s
 
 
 def render_harness_runtime_lines(engineer: Any) -> list[str]:
+    if engineer.role in _SPECIALIST_ROLES or engineer.role == "planner-dispatcher":
+        return []
     skills = list(getattr(engineer, "skills", []) or [])
     if not any("gstack-harness/SKILL.md" in skill for skill in skills):
         return []
@@ -300,17 +314,13 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
             ]
         )
     else:
-        lines.extend(
-            [
-                f"- `{seat_name}` is a specialist seat. Execute the assigned work from TODO.md and return completion to `{planner_seat}`.",
-                f"- do not bypass `{planner_seat}` for normal completion handoffs",
-                "- do not become an ad hoc frontstage or planner seat",
-            ]
-        )
+        lines = [f"Specialist seat. Execute `TODO.md` and return to `{planner_seat}`."]
     return lines
 
 
 def render_communication_protocol_lines(engineer: Any, project_name: str) -> list[str]:
+    if engineer.role in _SPECIALIST_ROLES:
+        return ["Read `TOOLS/protocol.md` for full communication protocol."]
     send_script = str(SEND_AND_VERIFY_SH)
     notify_script = str(HARNESS_SCRIPTS_ROOT / "notify_seat.py")
     planner_seat = (
@@ -353,19 +363,11 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
     elif engineer.role == "planner-dispatcher":
         lines.extend(
             [
-                "- when dispatching work to `builder-1`, `reviewer-1`, `qa-1`, or `designer-1`, default to `gstack-harness/scripts/dispatch_task.py` so `TODO.md` gets `source` and `reply_to`, project state docs are updated, and a dispatch receipt is written",
-                "- when a Feishu group is bound, keep the legacy group broadcast path disabled unless explicitly opted in; the default planner closeout path is `OC_DELEGATION_REPORT_V1` through `lark-cli --as user`",
-                "- when the bound group is used to wake koder through the user channel, use `gstack-harness/scripts/send_delegation_report.py` to emit `OC_DELEGATION_REPORT_V1` instead of hand-writing a free-form status message",
-                "- when a specialist completes work, write a durable `Consumed:` ACK before routing the next hop",
-                "- a durable `Consumed:` ACK is not the end of the chain; after consuming a reviewer verdict, planner must either route the next specialist or, if the task is complete, immediately close out to koder with `gstack-harness/scripts/complete_handoff.py --source planner --target koder --frontstage-disposition AUTO_ADVANCE --user-summary ...`",
-                "- use canonical review verdicts (`APPROVED`, `APPROVED_WITH_NITS`, `CHANGES_REQUESTED`, `BLOCKED`, `DECISION_NEEDED`) instead of inferring routing from prose",
-                "- when returning a chain result to frontstage, use `gstack-harness/scripts/complete_handoff.py` as the default closeout path instead of hand-rolling the delivery",
-                "- planner closeout back to frontstage must leave all three artifacts: `DELIVERY.md`, seat-to-seat notify, and a machine-readable handoff receipt",
-                "- planner closeout back to frontstage should also refresh the frontstage TODO so koder has a durable inbox item for the current chain result",
-                "- do not leave a normal planning result parked as 'awaiting koder decision' unless the task really created a frontstage decision gate; default to `AUTO_ADVANCE` for accepted-scope plans",
-                "- when returning a chain result to frontstage, include `FrontstageDisposition:` and `UserSummary:` in `DELIVERY.md`; default to `AUTO_ADVANCE` unless a real user decision is needed",
-                "- when frontstage supplies a Feishu group ID for install bring-up, first run the group smoke test, send the user-facing test prompt, and expect reviewer startup in parallel rather than waiting for a second nudge",
-                "- if the chain is verification-heavy, start `qa-1` in parallel with or immediately after `reviewer-1`; QA is a verification lane, not a first-launch seat",
+                "- dispatch via `dispatch_task.py` (not raw tmux); always pass `--intent` to activate the gstack skill",
+                "- stamp durable `Consumed:` ACK before routing the next hop; ACK alone does NOT finish the chain",
+                "- use canonical verdicts: `APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`",
+                "- closeout to koder via `complete_handoff.py --frontstage-disposition AUTO_ADVANCE --user-summary ...`",
+                "- Feishu: emit `OC_DELEGATION_REPORT_V1` via `send_delegation_report.py`; legacy broadcast opt-in only. See `TOOLS/feishu.md`.",
             ]
         )
     else:
@@ -399,24 +401,6 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
         )
         or "planner"
     )
-    builder_seat = (
-        preferred_seat_for_role(
-            project,
-            "builder",
-            project_engineers=getattr(session, "project_engineers", None),
-            engineer_order=getattr(session, "engineer_order", None),
-        )
-        or "builder-1"
-    )
-    reviewer_seat = (
-        preferred_seat_for_role(
-            project,
-            "reviewer",
-            project_engineers=getattr(session, "project_engineers", None),
-            engineer_order=getattr(session, "engineer_order", None),
-        )
-        or "reviewer-1"
-    )
 
     if engineer.role == "frontstage-supervisor":
         lines = [
@@ -449,145 +433,131 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "```",
         ]
     elif engineer.role == "planner-dispatcher":
+        _materialize_planner_tools(session, project, engineer, profile_ref, root, planner_seat)
         lines = [
             "## Dispatch Playbook",
             "",
-            "Prefer these helpers over hand-written TODO/TASKS/STATUS edits:",
-            "",
-            "When a Feishu group is bound, the dispatch helper will broadcast the task release to that same group only when CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1 is explicitly set.",
-            "",
-            "Dispatch work to a specialist (swap the target seat as needed).",
-            "**Always pass `--intent`** — it prepends the canonical gstack skill trigger",
-            "phrase to `--objective` and appends the skill's SKILL.md path to",
-            "`--skill-refs`, so the target seat's Claude Code runtime actually activates",
-            "the right gstack skill. Without `--intent`, the specialist runs on default",
-            "AI behaviour and skipping the gstack methodology entirely (ship workflow,",
-            "QA test-fix-verify loop, etc.).",
+            "**Always pass `--intent`** — see `TOOLS/intent.md` for target→intent map.",
+            "See `TOOLS/handoff.md` for ACK, closeout, and seat-needed commands.",
+            "See `TOOLS/seat-lifecycle.md` for seat lifecycle rules.",
             "",
             "```bash",
             f"python3 {root}/dispatch_task.py \\",
             f"  --profile {profile_ref} \\",
             f"  --source {planner_seat} \\",
-            f"  --target {builder_seat} \\",
+            "  --target <TARGET_SEAT> \\",
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --objective '<OBJECTIVE>' \\",
-            "  --intent <INTENT_KEY>   # see mapping table below",
+            "  --intent <INTENT_KEY> \\",
             f"  --reply-to {planner_seat}",
             "```",
-            "",
-            "### Target seat → recommended `--intent` map",
-            "",
-            "| target seat | typical work | recommended `--intent` key(s) |",
-            "|---|---|---|",
-            f"| `{builder_seat}` | implementation, ship a PR | `ship`, `land`, `investigate`, `freeze`/`unfreeze` |",
-            f"| `{reviewer_seat}` | pre-landing PR review | `code-review` |",
-            "| `qa-1` | test / bug-hunt a web app | `qa-test`, `qa-only` |",
-            "| `designer-1` | design audit / finalize UI | `design-critique`, `design-html`, `design-shotgun` |",
-            "",
-            "If no intent fits (pure planning or routing without a gstack skill),",
-            "omit `--intent` and state the reason in `--objective`.",
-            "",
-            "### Specialist gstack skill rosters (read-only reference)",
-            "",
-            "These are the gstack skills mounted on each specialist seat's Claude Code",
-            "runtime. You can only activate skills the target seat actually has:",
-            "",
-            f"- `{builder_seat}`: gstack-ship, gstack-land-and-deploy, gstack-investigate, "
-            "gstack-freeze, gstack-unfreeze, gstack-browse, gstack-careful, gstack-checkpoint",
-            f"- `{reviewer_seat}`: gstack-review, gstack-browse, gstack-careful",
-            "- `qa-1`: gstack-qa, gstack-qa-only, gstack-browse",
-            "- `designer-1`: gstack-design-html, gstack-design-review, "
-            "gstack-design-shotgun, gstack-browse",
-            "",
-            "Trying `--intent design-critique` on `builder-1` will NOT activate "
-            "`gstack-design-review` there — the skill isn't on that seat. Dispatch",
-            "the right task to the right seat.",
-            "",
-            "The receipt helper follows the same hook and only broadcasts when $CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1 is explicitly set; default is disabled.",
-            "",
-            "After reading a specialist delivery, stamp the durable ACK before routing onward:",
-            "```bash",
-            f"python3 {root}/complete_handoff.py \\",
-            f"  --profile {profile_ref} \\",
-            f"  --source {builder_seat} \\",
-            f"  --target {planner_seat} \\",
-            "  --task-id <TASK_ID> \\",
-            "  --ack-only",
-            "```",
-            "",
-            "A durable `Consumed:` ACK only records that the delivery was read. It does not finish the chain; if the reviewer verdict resolves the task, planner must immediately issue the frontstage closeout to `koder` with `complete_handoff.py` and the usual `AUTO_ADVANCE` / `USER_DECISION_NEEDED` fields.",
-            "",
-            "Return a chain result to koder:",
-            "```bash",
-            f"python3 {root}/complete_handoff.py \\",
-            f"  --profile {profile_ref} \\",
-            f"  --source {planner_seat} \\",
-            "  --target koder \\",
-            "  --task-id <TASK_ID> \\",
-            "  --title '<TITLE>' \\",
-            "  --summary '<CHAIN_SUMMARY>' \\",
-            "  --frontstage-disposition AUTO_ADVANCE \\",
-            "  --user-summary '<SHORT_USER_SUMMARY>'",
-            "```",
-            "",
-            "If a closeout is visible in the bound group, read the linked delivery trail, reconcile the wrap-up, and update the project docs before giving the user the summary.",
-            "",
-            "Seat lifecycle is koder's responsibility, NOT planner's.",
-            "If a specialist seat you need is down or missing, do NOT run start_seat.py",
-            "yourself. Return the current dispatch to koder with a `seat_needed` signal",
-            "and pause until koder reports the seat is up:",
-            "```bash",
-            f"python3 {root}/complete_handoff.py \\",
-            f"  --profile {profile_ref} \\",
-            f"  --source {planner_seat} \\",
-            "  --target koder \\",
-            "  --task-id <TASK_ID> \\",
-            "  --title 'seat_needed: <seat>' \\",
-            f"  --summary 'Need {builder_seat} (or specify) to be running before I can dispatch <TASK_ID>. Pausing.' \\",
-            "  --frontstage-disposition USER_DECISION_NEEDED \\",
-            "  --user-summary 'Waiting for koder to launch the required seat.'",
-            "```",
-            "Resume when koder sends `seat_ready: <seat>`. The same rule applies for",
-            "reconfiguring (switching tool/auth/provider) — that's koder's job.",
-            "",
-            "Do NOT run `window open-monitor` from inside a tmux seat — it may close",
-            "the tab you are running in. Ask koder (frontstage) to open the monitor window,",
-            "or let the user run it from an external terminal.",
         ]
-    elif engineer.role in {"builder", "reviewer", "qa", "designer"}:
-        lines = [
-            "## Dispatch Playbook",
-            "",
-            f"When your assigned work is complete, return it to `{planner_seat}` with the helper:",
-            "```bash",
-            f"python3 {root}/complete_handoff.py \\",
-            f"  --profile {profile_ref} \\",
-            f"  --source {session.engineer_id} \\",
-            f"  --target {planner_seat} \\",
-            "  --task-id <TASK_ID> \\",
-            "  --title '<TITLE>' \\",
-            "  --summary '<DELIVERY_SUMMARY>'",
-            "```",
-        ]
-        if engineer.role == "reviewer":
-            lines.extend(
-                [
-                    "",
-                    "Reviewer closeout must include a canonical verdict:",
-                    "```bash",
-                    f"python3 {root}/complete_handoff.py \\",
-                    f"  --profile {profile_ref} \\",
-                    f"  --source {session.engineer_id} \\",
-                    f"  --target {planner_seat} \\",
-                    "  --task-id <TASK_ID> \\",
-                    "  --title '<TITLE>' \\",
-                    "  --summary '<DELIVERY_SUMMARY>' \\",
-                    "  --verdict APPROVED",
-                    "```",
-                ]
-            )
+    elif engineer.role in _SPECIALIST_ROLES:
+        _materialize_specialist_protocol(session)
+        verdict_flag = "  --verdict APPROVED \\\n" if engineer.role == "reviewer" else ""
+        cmd = (
+            f"python3 {root}/complete_handoff.py "
+            f"--profile {profile_ref} "
+            f"--source {session.engineer_id} "
+            f"--target {planner_seat} "
+            f"--task-id <ID> --title '<T>' --summary '<S>'"
+            + (f" --verdict APPROVED" if engineer.role == "reviewer" else "")
+        )
+        lines = ["## Dispatch", "```bash", cmd, "```"]
     return lines
+
+
+def _materialize_planner_tools(
+    session: Any,
+    project: Any,
+    engineer: Any,
+    profile_ref: str,
+    root: str,
+    planner_seat: str,
+) -> None:
+    workspace = Path(getattr(session, "workspace", "") or "")
+    if not workspace.is_dir():
+        return
+    tools_dir = workspace / "TOOLS"
+    try:
+        tools_dir.mkdir(exist_ok=True)
+    except OSError:
+        return
+    files = {
+        "intent.md": render_tools_intent(session, project, engineer),
+        "handoff.md": render_tools_handoff(session, project, engineer, profile_ref, root, planner_seat),
+        "feishu.md": render_tools_feishu(session, project, engineer),
+        "seat-lifecycle.md": render_tools_seat_lifecycle(session, project, engineer, profile_ref, root, planner_seat),
+    }
+    for name, content in files.items():
+        try:
+            (tools_dir / name).write_text(content, encoding="utf-8")
+        except OSError:
+            pass
+
+
+def _materialize_specialist_protocol(session: Any) -> None:
+    workspace = Path(getattr(session, "workspace", "") or "")
+    if not workspace.is_dir():
+        return
+    tools_dir = workspace / "TOOLS"
+    try:
+        tools_dir.mkdir(exist_ok=True)
+    except OSError:
+        return
+    target = tools_dir / "protocol.md"
+    source = TOOLS_SHARED_ROOT / "protocol.md"
+    if target.is_symlink() or target.exists():
+        return
+    try:
+        target.symlink_to(source)
+    except OSError:
+        try:
+            if source.is_file():
+                target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            pass
+
+
+def render_tools_intent(session: Any, project: Any, engineer: Any) -> str:
+    shared = TOOLS_SHARED_ROOT / "intent.md"
+    if shared.is_file():
+        return shared.read_text(encoding="utf-8")
+    return "# Dispatch Intent Map\n\nSee `dispatch_task.py --help` for available `--intent` keys.\n"
+
+
+def render_tools_handoff(
+    session: Any, project: Any, engineer: Any, profile_ref: str, root: str, planner_seat: str
+) -> str:
+    shared = TOOLS_SHARED_ROOT / "handoff.md"
+    template = shared.read_text(encoding="utf-8") if shared.is_file() else ""
+    template = template.replace("<HARNESS_SCRIPTS>", root).replace("<PROFILE>", profile_ref)
+    return template
+
+
+def render_tools_feishu(session: Any, project: Any, engineer: Any) -> str:
+    shared = TOOLS_SHARED_ROOT / "feishu.md"
+    if shared.is_file():
+        root = str(HARNESS_SCRIPTS_ROOT)
+        return shared.read_text(encoding="utf-8").replace("<HARNESS_SCRIPTS>", root)
+    return "# Feishu Protocol\n\nSee `send_delegation_report.py --help`.\n"
+
+
+def render_tools_seat_lifecycle(
+    session: Any, project: Any, engineer: Any, profile_ref: str, root: str, planner_seat: str
+) -> str:
+    shared = TOOLS_SHARED_ROOT / "seat-lifecycle.md"
+    template = shared.read_text(encoding="utf-8") if shared.is_file() else ""
+    template = template.replace("<HARNESS_SCRIPTS>", root).replace("<PROFILE>", profile_ref)
+    from resolve import dynamic_profile_path as _dpp  # noqa: PLC0415
+    agent_admin = str(
+        Path(
+            os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[2]))
+        ) / "core" / "scripts" / "agent_admin.py"
+    )
+    template = template.replace("<AGENT_ADMIN>", agent_admin)
+    return template
 
 
 def workspace_contract_payload(
@@ -714,6 +684,9 @@ def render_loaded_skills_lines(engineer: Any, engineer_id: str) -> list[str]:
     skills = list(getattr(engineer, "skills", []) or [])
     if not skills:
         return []
+    if engineer.role in _SPECIALIST_ROLES or engineer.role == "planner-dispatcher":
+        expanded_paths = [f"`{_expand_skill_path(s)}`" for s in skills]
+        return ["**Skills:** " + ", ".join(expanded_paths)]
     header = "## Loaded Skills"
     lines = [header, "", f"Use these as the default skill set for `{engineer_id}`:", ""]
     for raw_skill in skills:
