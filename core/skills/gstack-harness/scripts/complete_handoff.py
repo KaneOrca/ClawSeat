@@ -47,9 +47,12 @@ def _should_announce_planner_event(source: str, target: str, profile=None) -> bo
     override = os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS")
     if override is not None:
         return override == "1" and (source == "planner" or target == "planner")
-    if profile is None or not getattr(profile.observability, "announce_planner_events", False):
+    observability = getattr(profile, "observability", None)
+    if observability is None:
         return False
-    return source == "planner" or target == "planner"
+    return getattr(observability, "announce_planner_events", False) and (
+        source == "planner" or target == "planner"
+    )
 
 
 def _try_announce_planner_event(*, project: str, source: str, target: str, task_id: str, verb: str) -> None:

@@ -254,7 +254,7 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
 
     result = subprocess.run(
         [
-            "python3", str(_SCRIPTS / "dispatch_task.py"),
+            sys.executable, str(_SCRIPTS / "dispatch_task.py"),
             "--profile", str(tmp_profile),
             "--source", "planner",
             "--target", "builder-1",
@@ -278,3 +278,14 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
         f"dispatch_task.py failed (rc={result.returncode})\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
+
+
+# ── F2: attribute-guard test ──────────────────────────────────────────────────
+
+
+def test_profile_without_observability_attr_returns_false(monkeypatch):
+    """profile missing observability attribute must return False (not AttributeError)."""
+    monkeypatch.delenv("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS", raising=False)
+    profile_no_obs = MagicMock(spec=[])  # no attributes at all
+    assert dispatch_task._should_announce_planner_event("planner", "builder-1", profile_no_obs) is False
+    assert complete_handoff._should_announce_planner_event("planner", "builder-1", profile_no_obs) is False
