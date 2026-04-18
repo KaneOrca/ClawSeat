@@ -200,6 +200,161 @@
 
 ---
 
+## 附录 A · Live-Run Additions (追加于 Phase 7 M1-M2 期间)
+
+这些条目来自 M1/M2/sendverify/bootstrap-sync 四条 chain 跑完过程中暴露的新系统性问题。继续用 P0/P1/P2 同分级。已闭的条目在 commit sha 后面画 ✅。
+
+### 12. koder 非 trivial chain 必须走 planner (P1)
+
+**发现**: followup-rawtmux-fix 事件中 koder 跳过 planner 直派 3 个 specialist，导致非标准链路 + qa false-negative race。
+
+**修复**: template.toml koder role_details 加硬规则"任何 dispatch ≥2 specialist 的 chain 必须走 planner，无一例外"。
+
+**文件**: `core/templates/gstack-harness/template.toml`
+
+---
+
+### 13. specialist 硬编码回 planner，不尊重 reply_to (P1)
+
+**发现**: planner 用 `reply_to=reviewer-1` 想 auto-chain，但 reviewer-1 的 AGENTS.md 内置"完成后回 planner"，`reply_to` 字段被忽略。sendverify-simplify 和 M2 bundle-B 侥幸跑通是因为 planner 本来就有 consume 兜底。
+
+**修复**: reviewer-1 / qa-1 / builder-1 / designer-1 的 AGENTS.md 明确"优先从 dispatch receipt 读 `reply_to` 字段"。
+
+**文件**: `core/templates/gstack-harness/template.toml`
+
+---
+
+### 14. planner 收到自己没派的 task 完成应 flag surprised_ack (P2)
+
+**发现**: followup-rawtmux-fix 事件中 planner 静默 ACK 了 qa-1 的主动完成（koder bypass），无告警。
+
+**修复**: planner `complete_handoff.py` consumer 逻辑检测 task_id 是否在自己的 dispatch log 里；不是则 receipt 添加 `surprise=true` 标签 + stderr warning。
+
+**文件**: `core/skills/gstack-harness/scripts/complete_handoff.py`
+
+---
+
+### 15. Sandbox HOME 隔离导致 planner 读不到 koder 写的 TODO (P0)
+
+**发现**: real HOME 和 sandbox HOME 的 `TODO.md` 是不同物理文件。koder 从真实 HOME 写的任务派发，planner 在 sandbox HOME 读到的是老内容或空白。本现象在 followup-sendverify-race 首次派发触发，koder 以为 notify 失败重试 3 次导致 queue append 3 份。
+
+**修复候选**:
+- A. bootstrap 做 `tasks/` 的 symlink (sandbox → real)
+- B. dispatch_task.py / complete_handoff.py 同时写两处
+
+**推荐**: A
+
+**文件**: `core/skills/gstack-harness/scripts/bootstrap_harness.py`
+
+---
+
+### 16. dispatch_task.py 非幂等 (P0)
+
+**发现**: 同 task_id 重复调 `dispatch_task.py` 会在 TODO.md queue 里 append 多条。followup-sendverify-race 首次派发有 3 份 queued 副本。
+
+**修复**: 入参若 TODO 已有同 task_id pending/queued 条目 → 退出码 2 (TASK_ALREADY_QUEUED)，只重发 notify，不追加 queue。
+
+**文件**: `core/skills/gstack-harness/scripts/dispatch_task.py`
+
+---
+
+### 17. koder retry dispatch 缺少幂等保护 (P0)
+
+**发现**: 配合 #16。koder 看 dispatch_task 非零退出，不加判断重跑整个命令。应该只重发 send-and-verify 而不是重跑 dispatch 本身。
+
+**修复**: koder 的 dispatch retry 逻辑识别退出码 2 = 只 re-notify；退出码 1 = 真失败需 escalate。
+
+**文件**: koder system prompt (`~/.openclaw/workspace-koder/TOOLS/dispatch.md`) + template.toml
+
+---
+
+### 18. eng-review AUTO_ADVANCE 语义歧义 (P2)
+
+**发现**: followup-sendverify-race 中 planner 以 eng-review phase 完成名义发 AUTO_ADVANCE 给 koder，但 koder 误读为"整个任务已收尾"。实际下游 builder/reviewer/qa 都还没跑。
+
+**修复**: `complete_handoff.py --frontstage-disposition` 允许传 `phase=plan` 或 `phase=impl`，`OC_DELEGATION_REPORT_V1` 体现 phase，让 koder 知道是锁方案还是整条链完成。
+
+**文件**: `core/skills/gstack-harness/scripts/complete_handoff.py`
+
+---
+
+### 19. 非标准 reply_to 串链在 specialist 系统提示词下不成立 (P2)
+
+**重复 #13，合并**。
+
+---
+
+### 20. Template → deployed workspace 同步机制缺失 (P0) ✅ 已闭合（e9614aa）
+
+**发现**: M1 期间 builder-1 的 workspace `AGENTS.md` 仍是 02:00 版本（旧的 "unless unavailable" 豁免），但 template.toml 已在 05:20 更新。运行中的 seat 无法自动读到新规则。
+
+**已落**: e9614aa 新增 `agent-admin engineer refresh-workspace <seat>` 命令 + `bootstrap_harness.py --refresh-existing`。qa-1 APPROVED 的 S1/S4/S5/S6/S7/S8。
+
+---
+
+### 21. Transport failed 时 specialist 缺 no-fallback 显式路径 (P1)
+
+**发现**: builder-1 遇 complete_handoff.py notify 失败，默认 fallback 裸 tmux（旧规则允许）。新规则禁了裸 tmux 但没教"该怎么办"。
+
+**修复**: template.toml specialist role_details 加"transport failed → retry 3 次 → 放弃，留 DELIVERY.md 等 patrol heartbeat"路径。
+
+**文件**: `core/templates/gstack-harness/template.toml`
+
+---
+
+### 22. complete_handoff 非 planner → koder 应硬拒绝 (P0) ✅ 已闭合（48b799d）
+
+**发现**: qa-1 / reviewer-1 直连 `target=koder` 走 tmux 路径（koder 不是 tmux seat），notify 静默失败；Feishu 路径 gated on source=planner 也不触发。DELIVERY 落盘但用户永远收不到。
+
+**已落**: `complete_handoff.py` 硬拒绝 non-planner → koder + 7 新测试。
+
+---
+
+### 23. Feishu 路径硬编码锁死 source=planner 的 side-effect (P1)
+
+**发现**: 与 #22 互补：koder bypass planner 直派 specialist 的 chain，specialist 想回 koder 也走不通 Feishu（路径 gated）。#22 修了直连 reject，但那些 bypass chain 本身依然 orphan。
+
+**修复**: template.toml koder role_details 硬化禁止 bypass（#12），根治此问题。
+
+---
+
+### 24. Planner 事件实时推送 Feishu (P1) —— 观测基建
+
+**发现**: 当前只有 `OC_DELEGATION_REPORT_V1` 在 planner → koder closeout 一步发。中间的 dispatch / consumed / verdict 全部 invisible。实际 debug 过程中多次出现 planner stuck / bypass / race 问题，都因为缺实时 observability 而需要 bash 抓 tmux pane。
+
+**修复**:
+- `dispatch_task.py` 成功写 receipt 后（source 或 target 是 planner），推简短一行 Feishu
+- `complete_handoff.py` 成功写 DELIVERY 后（source 或 target 是 planner），推简短一行 Feishu
+- 格式: `[<project>] <source> → <target>: <task_id> <verb>` （<80 字符）
+- `CLAWSEAT_ANNOUNCE_PLANNER_EVENTS` env var 控制，install profile 置 1，默认关
+
+**范围**:
+- `core/skills/gstack-harness/scripts/dispatch_task.py`
+- `core/skills/gstack-harness/scripts/complete_handoff.py`
+- `tests/test_planner_announce.py` (new, ≥6 cases)
+
+**硬红线**:
+- 不碰 template.toml / AGENTS.md
+- specialist ↔ specialist 事件不广播（避免噪音）
+- Feishu 发送失败不阻塞 dispatch / complete_handoff 主流程
+- 一行 <80 字符（防止刷屏）
+
+**文件**: 2 py 脚本 + 1 测试
+
+---
+
+### 25. Seat 在 feature branch 上工作，不是 main (P2)
+
+**发现**: 2026-04-18 push 时发现 `memory-v3-m2-bundle-b` feature branch 上堆了 4 commits（bundle-B + fix1 + bootstrap-sync 2），builder-1 或 planner 在上面跑不提示。违反"默认 main 工作"约定，并且 `git push origin main` 这种常规操作看起来"up-to-date"但其实 local main 跟 HEAD 不同步。
+
+**修复**:
+- specialist AGENTS.md 明确"除非任务明写 `--branch X`，否则始终在 main 工作"
+- ship skill / agent-admin 提供"start-in-main"助推（自动检测 non-main + 告警）
+
+**文件**: `core/templates/gstack-harness/template.toml` + ship skill
+
+---
+
 ## 派发建议顺序
 
 建议 koder 在 M1 final AUTO_ADVANCE 后，按以下顺序派：
