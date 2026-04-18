@@ -17,7 +17,13 @@ from typing import Any, Iterable
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore
+    try:
+        import tomli as tomllib  # type: ignore
+    except ModuleNotFoundError as _exc:  # pragma: no cover
+        raise ModuleNotFoundError(
+            "clawseat requires Python 3.11+ OR tomli installed for Python <3.11. "
+            "Install with: pip install tomli"
+        ) from _exc
 
 
 # ── Path constants ───────────────────────────────────────────────────
