@@ -236,8 +236,8 @@ def test_do_prune_returns_same_object_on_no_match():
     assert result is _TWO_ENTRIES
 
 
-def test_do_prune_fifo_deletes_first_only():
-    """When task_id appears under [pending] twice, only the first is deleted."""
+def test_do_prune_deletes_all_matching():
+    """When task_id appears under [pending]/[queued] twice, both are deleted."""
     content = """\
 # Queue: builder-1
 
@@ -254,7 +254,8 @@ title: second occurrence
     result = _do_prune(content, "task-x")
     assert result is not content
     assert "first occurrence" not in result
-    assert "second occurrence" in result
+    assert "second occurrence" not in result
+    assert "task-x" not in result
 
 
 # ── Poison tests: '# Completed' inside entry body must not affect parsing ───

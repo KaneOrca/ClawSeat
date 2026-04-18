@@ -32,13 +32,14 @@ from _common import (
 
 
 def _do_prune(text: str, task_id: str) -> str:
-    """Return text with first [pending]/[queued] block matching task_id removed.
+    """Return text with ALL [pending]/[queued] blocks matching task_id removed.
 
     Splits on '^## [' line anchors (spec approach-b) to avoid any dependency on
     '# Completed' appearing literally as a split token — objective/title fields
     may contain that text. The trailing non-entry content (e.g. '# Completed'
     section) is located by scanning for h1 headings after the last ## [ block
     only, so poison lines inside earlier entry bodies are invisible.
+    Removes all matching blocks (defense-in-depth for pre-#16 duplicate residue).
     Returns the same object (identity) if no match found.
     """
     lines = text.splitlines(keepends=True)
@@ -65,20 +66,21 @@ def _do_prune(text: str, task_id: str) -> str:
     block_ends = list(block_starts[1:]) + [tail_start]
     blocks = list(zip(block_starts, block_ends))
 
-    # Find first matching [pending]/[queued] block
-    found = None
+    # Identify ALL matching [pending]/[queued] blocks (not just first).
+    # Defense-in-depth: pre-#16 dispatch retries may have left duplicate entries.
+    matching = []
     for i, (bstart, bend) in enumerate(blocks):
         seg = lines[bstart:bend]
         if status_pat.match(seg[0]) and any(task_pat.match(l) for l in seg):
-            found = i
-            break
+            matching.append(i)
 
-    if found is None:
+    if not matching:
         return text
 
-    # Rebuild without the found block
+    # Rebuild without any of the matching blocks
     header = "".join(lines[: block_starts[0]])
-    remaining = blocks[:found] + blocks[found + 1:]
+    matching_set = set(matching)
+    remaining = [b for i, b in enumerate(blocks) if i not in matching_set]
 
     if remaining:
         parts = ["".join(lines[bs:be]) for bs, be in remaining]
@@ -102,7 +104,7 @@ def _do_prune(text: str, task_id: str) -> str:
 
 
 def _prune_todo_entry(todo_path: Path, task_id: str) -> None:
-    """Delete first [pending]/[queued] block for task_id from todo_path.
+    """Delete all [pending]/[queued] blocks for task_id from todo_path.
 
     Atomic write via tempfile + os.replace. Fail-safe: any IO/regex error is
     printed to stderr and swallowed — ACK main flow is unaffected.
