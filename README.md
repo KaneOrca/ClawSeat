@@ -16,9 +16,11 @@ Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core s
 All profiles live in `examples/starter/profiles/`. To install gstack (required for `install.toml` and `full-team.toml`):
 
 ```bash
-git clone https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
+git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
 cd ~/.gstack/repos/gstack && ./setup
 ```
+
+> ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
 
 ## Quick Install
 

@@ -40,6 +40,7 @@ Before starting, verify these dependencies are installed:
   git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
   cd ~/.gstack/repos/gstack && ./setup
   ```
+  > ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
 - **lark-cli** (optional, for Feishu bridge) — `brew install larksuite/cli/lark-cli`
 
 Preflight now supports runtime-aware install gating:
