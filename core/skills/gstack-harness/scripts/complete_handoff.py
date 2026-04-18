@@ -355,7 +355,7 @@ def main() -> int:
             task_id=args.task_id,
             source=args.source,
         )
-        _prune_todo_entry(ack_path, args.task_id)
+        _prune_todo_entry(profile.todo_path(args.source), args.task_id)  # type: ignore[attr-defined]
         receipt["consumed_at"] = utc_now_iso()
         receipt["consumed_ack"] = ack_line
         receipt["todo_path"] = str(ack_path)

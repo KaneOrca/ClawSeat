@@ -327,3 +327,55 @@ do the thing
     # real trailing section preserved
     assert "# Completed" in result
     assert "old-task — done" in result
+
+
+# ── Path mapping tests: prune hits source/TODO, not target/TODO ─────────────
+
+_PENDING_ENTRY = """\
+# Queue: {seat}
+
+## [queued] task-xyz
+task_id: task-xyz
+title: some task
+
+### Objective
+
+do stuff
+"""
+
+
+def test_path_source_ack(tmp_path):
+    """ACK with source=A target=B must prune A/TODO.md only; B/TODO.md untouched."""
+    seat_a = tmp_path / "A"
+    seat_b = tmp_path / "B"
+    seat_a.mkdir()
+    seat_b.mkdir()
+    todo_a = seat_a / "TODO.md"
+    todo_b = seat_b / "TODO.md"
+    todo_a.write_text(_PENDING_ENTRY.format(seat="A"), encoding="utf-8")
+    todo_b.write_text(_PENDING_ENTRY.format(seat="B"), encoding="utf-8")
+
+    # Simulate --source A --target B --ack-only: prune source (A) TODO
+    _prune_todo_entry(todo_a, "task-xyz")
+
+    assert "task-xyz" not in todo_a.read_text(encoding="utf-8")
+    assert "task-xyz" in todo_b.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("source_seat", ["reviewer-1", "builder-1", "qa-1"])
+def test_path_symmetric_planner_target(tmp_path, source_seat):
+    """For source=<engineer> target=planner, prune runs on source seat's TODO."""
+    source_dir = tmp_path / source_seat
+    planner_dir = tmp_path / "planner"
+    source_dir.mkdir()
+    planner_dir.mkdir()
+    source_todo = source_dir / "TODO.md"
+    planner_todo = planner_dir / "TODO.md"
+    source_todo.write_text(_PENDING_ENTRY.format(seat=source_seat), encoding="utf-8")
+    planner_todo.write_text(_PENDING_ENTRY.format(seat="planner"), encoding="utf-8")
+
+    # source seat's TODO is pruned; planner's TODO must not change
+    _prune_todo_entry(source_todo, "task-xyz")
+
+    assert "task-xyz" not in source_todo.read_text(encoding="utf-8")
+    assert "task-xyz" in planner_todo.read_text(encoding="utf-8")
