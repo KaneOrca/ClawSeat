@@ -17,6 +17,67 @@ from _common import (
 )
 
 
+def _link_sandbox_tasks_to_real_home(
+    profile: HarnessProfile,
+    seats: list[str],
+    *,
+    _agents_home: Path | None = None,
+) -> None:
+    """Create sandbox_home/.agents/tasks/<project>/<seat> → real tasks_root/<seat> symlinks.
+
+    Idempotent. Fail-safe: warns on error, never raises.
+    """
+    try:
+        import tomllib as _tomllib
+    except ModuleNotFoundError:
+        import tomli as _tomllib  # type: ignore
+
+    agents_home = _agents_home or (Path.home() / ".agents")
+
+    for seat in seats:
+        session_path = agents_home / "sessions" / profile.project_name / seat / "session.toml"
+        if not session_path.is_file():
+            continue
+        try:
+            with open(session_path, "rb") as _f:
+                session_data = _tomllib.load(_f)
+        except Exception as exc:
+            print(f"warn: _link_sandbox_tasks: cannot read session for {seat}: {exc}", file=sys.stderr)
+            continue
+
+        runtime_dir = session_data.get("runtime_dir", "")
+        if not runtime_dir:
+            continue
+        sandbox_home = Path(runtime_dir) / "home"
+        if not sandbox_home.is_dir():
+            continue
+
+        real_tasks = profile.tasks_root / seat
+        sandbox_tasks_parent = sandbox_home / ".agents" / "tasks" / profile.project_name
+        sandbox_tasks = sandbox_tasks_parent / seat
+
+        try:
+            real_tasks.mkdir(parents=True, exist_ok=True)
+            if sandbox_tasks.is_symlink():
+                if sandbox_tasks.resolve() == real_tasks.resolve():
+                    continue
+                print(
+                    f"warn: _link_sandbox_tasks: {sandbox_tasks} is symlink to different target, skipping",
+                    file=sys.stderr,
+                )
+                continue
+            if sandbox_tasks.exists():
+                print(
+                    f"warn: _link_sandbox_tasks: {sandbox_tasks} is a regular dir with data, skipping",
+                    file=sys.stderr,
+                )
+                continue
+            sandbox_tasks_parent.mkdir(parents=True, exist_ok=True)
+            sandbox_tasks.symlink_to(real_tasks)
+        except Exception as exc:
+            print(f"warn: _link_sandbox_tasks: failed to link {seat}: {exc}", file=sys.stderr)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Bootstrap a project from a gstack harness profile.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
@@ -110,6 +171,10 @@ def main() -> int:
         result = run_command(cmd, cwd=profile.repo_root)
         require_success(result, "bootstrap_harness")
         materialize_profile_runtime(effective_profile)
+        _link_sandbox_tasks_to_real_home(
+            effective_profile,
+            list(effective_profile.materialized_seats or effective_profile.seats),
+        )
         for seat in (effective_profile.materialized_seats or effective_profile.seats):
             seed_empty_secret_from_peer(effective_profile, seat)
             # OAuth is user-managed via the TUI; nothing to seed here.

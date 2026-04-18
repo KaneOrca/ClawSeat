@@ -456,10 +456,9 @@ def main() -> int:
                     or broadcast.get("stdout")
                     or broadcast.get("reason", "unknown")
                 )
-                print(
-                    f"warn: completion notify (feishu openclaw koder) failed after 3 attempts"
-                    f" for {args.task_id}: {detail}",
-                    file=sys.stderr,
+                raise RuntimeError(
+                    f"completion notify (feishu openclaw koder) failed after 3 attempts"
+                    f" for {args.task_id}: {detail}"
                 )
             if broadcast.get("status") != "failed":
                 receipt["notified_at"] = utc_now_iso()
@@ -513,6 +512,12 @@ def main() -> int:
                     "status": "skipped",
                     "reason": "legacy_group_broadcast_disabled",
                 }
+    if not args.skip_notify:
+        assert (
+            receipt.get("notified_at")
+            or receipt.get("notify_skipped")
+            or receipt.get("feishu_delegation_report", {}).get("status") == "ok"
+        ), "notify path produced no observable success/skip marker"
     receipt_path = persist_receipt(
         profile,
         seat=args.source,
