@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -40,6 +41,23 @@ VALID_FRONTSTAGE_DISPOSITIONS = {
     "AUTO_ADVANCE",
     "USER_DECISION_NEEDED",
 }
+
+
+def _should_announce_planner_event(source: str, target: str) -> bool:
+    if os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS") != "1":
+        return False
+    return source == "planner" or target == "planner"
+
+
+def _try_announce_planner_event(*, project: str, source: str, target: str, task_id: str, verb: str) -> None:
+    message = f"[{project}] {source} → {target}: {task_id} {verb}"
+    if len(message) > 80:
+        message = message[:77] + "..."
+    try:
+        from _feishu import send_feishu_user_message
+        send_feishu_user_message(message, project=project)
+    except Exception as exc:
+        print(f"warn: planner announce failed for {task_id}: {exc}", file=sys.stderr)
 
 
 def _seat_fallback_path(profile: object, seat: str, filename: str) -> Path:
@@ -247,6 +265,14 @@ def main() -> int:
         )
         print(ack_line)
         print(f"receipt: {receipt_path}")
+        if _should_announce_planner_event(args.source, args.target):
+            _try_announce_planner_event(
+                project=profile.project_name,
+                source=args.source,
+                target=args.target,
+                task_id=args.task_id,
+                verb="consumed",
+            )
         return 0
 
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
@@ -496,6 +522,14 @@ def main() -> int:
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")
     print(f"receipt: {receipt_path}")
+    if _should_announce_planner_event(args.source, args.target):
+        _try_announce_planner_event(
+            project=profile.project_name,
+            source=args.source,
+            target=args.target,
+            task_id=args.task_id,
+            verb="delivered",
+        )
     return 0
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -20,6 +21,25 @@ from _common import (
     write_json,
     write_todo,
 )
+
+
+# ── Planner event announce helpers ─────────────────────────────────────
+
+def _should_announce_planner_event(source: str, target: str) -> bool:
+    if os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS") != "1":
+        return False
+    return source == "planner" or target == "planner"
+
+
+def _try_announce_planner_event(*, project: str, source: str, target: str, task_id: str, verb: str) -> None:
+    message = f"[{project}] {source} → {target}: {task_id} {verb}"
+    if len(message) > 80:
+        message = message[:77] + "..."
+    try:
+        from _feishu import send_feishu_user_message
+        send_feishu_user_message(message, project=project)
+    except Exception as exc:
+        print(f"warn: planner announce failed for {task_id}: {exc}", file=sys.stderr)
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
@@ -352,6 +372,14 @@ def main() -> int:
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
     print(f"receipt: {receipt_path}")
+    if _should_announce_planner_event(args.source, args.target):
+        _try_announce_planner_event(
+            project=profile.project_name,
+            source=args.source,
+            target=args.target,
+            task_id=args.task_id,
+            verb="dispatched",
+        )
     return 0
 
 
