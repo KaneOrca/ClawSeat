@@ -75,7 +75,7 @@ def _real_user_home() -> Path:
         pw = pwd.getpwuid(os.getuid())
         if pw and pw.pw_dir:
             return Path(pw.pw_dir)
-    except (ImportError, KeyError):
+    except (ImportError, KeyError):  # silent-ok: pwd module or uid key unavailable; fall back to Path.home()
         pass
     # 4. Last-resort fallback
     return Path.home()

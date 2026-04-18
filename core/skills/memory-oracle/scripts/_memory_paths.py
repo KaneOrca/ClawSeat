@@ -35,7 +35,7 @@ def _real_user_home() -> Path:
         real = Path(pwd.getpwuid(os.getuid()).pw_dir)
         if real.is_dir():
             return real
-    except (KeyError, OSError):
+    except (KeyError, OSError):  # silent-ok: pwd lookup unavailable; fall back to HOME env or Path.home()
         pass
     env_home = os.environ.get("HOME")
     if env_home:

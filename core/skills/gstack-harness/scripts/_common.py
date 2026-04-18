@@ -688,8 +688,10 @@ def _patch_claude_settings_from_profile(profile: HarnessProfile, seats: list[str
             _sys.modules.setdefault("agent_admin_config", _mod)
             _spec.loader.exec_module(_mod)
             _provider_configs = getattr(_mod, "CLAUDE_API_PROVIDER_CONFIGS", {})
-    except Exception:
-        pass
+    except (ImportError, FileNotFoundError, OSError, AttributeError) as exc:
+        # silent-ok: agent_admin_config is optional; fall back to empty provider list.
+        import sys
+        print(f"warn: agent_admin_config load failed: {exc}", file=sys.stderr)
 
     for seat in seats:
         spec = engineer_map.get(seat, {})

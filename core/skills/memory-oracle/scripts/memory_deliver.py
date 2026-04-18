@@ -41,7 +41,7 @@ def _real_user_home() -> Path:
         real = Path(pwd.getpwuid(os.getuid()).pw_dir)
         if real.is_dir():
             return real
-    except (KeyError, OSError):
+    except (KeyError, OSError):  # silent-ok: pwd lookup unavailable; fall back to HOME env or Path.home()
         pass
     env_home = os.environ.get("HOME")
     return Path(env_home) if env_home else Path.home()
@@ -120,7 +120,7 @@ def main() -> int:
     )
     try:
         os.chmod(response_path, 0o600)
-    except OSError:
+    except OSError:  # silent-ok: chmod is best-effort on read-only or cross-platform filesystems
         pass
     print(f"response_written: {response_path}")
 

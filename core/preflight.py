@@ -354,7 +354,7 @@ def _check_session_binding_dir(project: str) -> PreflightItem:
                 message=f"binding directory not found at {binding_dir} but tmux sessions exist for {project}",
                 fix_command=f"mkdir -p {binding_dir}",
             )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):  # silent-ok: tmux/fs unavailable; binding check is best-effort, return no warning
         pass
 
     return PreflightItem(

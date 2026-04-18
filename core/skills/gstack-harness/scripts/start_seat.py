@@ -409,8 +409,8 @@ def main() -> int:
                     f"Connect manually: tmux attach -t {session_name}",
                     file=sys.stderr,
                 )
-        except (ValueError, KeyError):
-            pass  # best-effort check, don't block seat startup
+        except (ValueError, KeyError):  # silent-ok: TUI state parse is best-effort; don't block seat startup on malformed JSON
+            pass
 
     # Retry pane capture with delay — the TUI may not have rendered yet
     import time as _time

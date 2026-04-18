@@ -41,7 +41,7 @@ def _real_user_home() -> Path:
         real = Path(pwd.getpwuid(os.getuid()).pw_dir)
         if real.is_dir():
             return real
-    except (KeyError, OSError):
+    except (KeyError, OSError):  # silent-ok: pwd lookup unavailable; fall back to HOME env or Path.home()
         pass
     env_home = os.environ.get("HOME")
     if env_home:
@@ -118,7 +118,7 @@ def write_json(output_dir: Path, name: str, data: dict) -> Path:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     try:
         os.chmod(path, 0o600)
-    except OSError:
+    except OSError:  # silent-ok: chmod is best-effort on read-only or cross-platform filesystems
         pass
     return path
 
@@ -240,7 +240,7 @@ def scan_openclaw() -> dict:
                 "accounts": list(feishu.get("accounts", {}).keys()),
                 "groups": list(feishu.get("groups", {}).keys()),
             }
-        except json.JSONDecodeError:
+        except json.JSONDecodeError:  # silent-ok: feishu config JSON may be malformed; skip and leave feishu data absent
             pass
 
     skills_dir = HOME / ".openclaw" / "skills"
@@ -306,7 +306,7 @@ def scan_clawseat() -> dict:
                     info["seats"] = parsed.get("seats", [])
                     info["seat_roles"] = parsed.get("seat_roles", {})
                     info["workspace_root"] = parsed.get("workspace_root")
-                except Exception:
+                except (tomllib.TOMLDecodeError, OSError, KeyError, TypeError, AttributeError):  # silent-ok: profile TOML may be malformed or partially written; skip unparseable entries
                     pass
             data["profiles"][profile_file.stem] = info
 
@@ -326,7 +326,7 @@ def scan_clawseat() -> dict:
                         for k in ("session", "tool", "provider", "auth_mode", "workspace"):
                             if k in parsed:
                                 seat_info[k] = parsed[k]
-                    except Exception:
+                    except (ModuleNotFoundError, ValueError, OSError, KeyError, TypeError):  # silent-ok: session TOML may be absent or malformed; skip the seat entry gracefully
                         pass
                     seats.append(seat_info)
             data["sessions"][project_dir.name] = seats
@@ -579,7 +579,7 @@ def scan_github() -> dict:
         if counts:
             try:
                 data["remote"]["user_summary"] = json.loads(counts)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError):  # silent-ok: gh output is optional; skip user_summary if unparseable
                 pass
     else:
         data["remote"]["fetch_skipped"] = "no_active_gh_auth"
