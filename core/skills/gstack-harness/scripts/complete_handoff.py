@@ -191,6 +191,7 @@ def persist_delivery(
     frontstage_disposition: str | None = None,
     user_summary: str | None = None,
     next_action: str | None = None,
+    correlation_id: str | None = None,
 ) -> tuple[Path, bool]:
     primary = profile.delivery_path(seat)  # type: ignore[attr-defined]
     try:
@@ -206,6 +207,7 @@ def persist_delivery(
             frontstage_disposition=frontstage_disposition,
             user_summary=user_summary,
             next_action=next_action,
+            correlation_id=correlation_id,
         )
         return primary, False
     except PermissionError as exc:
@@ -222,6 +224,7 @@ def persist_delivery(
             frontstage_disposition=frontstage_disposition,
             user_summary=user_summary,
             next_action=next_action,
+            correlation_id=correlation_id,
         )
         print(
             f"warn: delivery path {primary} not writable ({exc}); "
@@ -347,12 +350,14 @@ def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
+    correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     receipt = load_json(receipt_path) or {
         "kind": "completion",
         "task_id": args.task_id,
         "source": args.source,
         "target": args.target,
     }
+    receipt["correlation_id"] = correlation_id
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
 
@@ -442,6 +447,7 @@ def main() -> int:
         frontstage_disposition=args.frontstage_disposition,
         user_summary=args.user_summary,
         next_action=args.next_action,
+        correlation_id=correlation_id,
     )
     source_todo_path = complete_source_queue_if_possible(
         profile,

@@ -17,6 +17,7 @@ from _common import (
     notify,
     require_success,
     resolve_primary_feishu_group_id,
+    stable_dispatch_nonce,
     upsert_tasks_row,
     utc_now_iso,
     write_json,
@@ -299,6 +300,7 @@ def main() -> int:
     reply_to = args.reply_to or args.source
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
+    correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     append_task_to_queue(
         todo_path,
         task_id=args.task_id,
@@ -311,6 +313,7 @@ def main() -> int:
         skill_refs=effective_skill_refs,
         task_type=args.task_type,
         review_required=args.review_required,
+        correlation_id=correlation_id,
     )
     upsert_tasks_row(
         profile.tasks_doc,
@@ -327,6 +330,7 @@ def main() -> int:
     receipt = {
         "kind": "dispatch",
         "task_id": args.task_id,
+        "correlation_id": correlation_id,
         "source": args.source,
         "target": args.target,
         "title": args.title,

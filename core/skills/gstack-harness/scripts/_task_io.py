@@ -115,6 +115,7 @@ def write_delivery(
     frontstage_disposition: str | None = None,
     user_summary: str | None = None,
     next_action: str | None = None,
+    correlation_id: str | None = None,
 ) -> None:
     lines = [
         f"task_id: {task_id}",
@@ -122,6 +123,10 @@ def write_delivery(
         f"target: {target}",
         f"status: {status}",
         f"date: {utc_now_iso()}",
+    ]
+    if correlation_id:
+        lines.append(f"correlation_id: {correlation_id}")
+    lines += [
         "",
         f"# Delivery: {title}",
         "",
@@ -218,6 +223,7 @@ def append_task_to_queue(
     skill_refs: list[str] | None = None,
     task_type: str = "unspecified",
     review_required: bool = False,
+    correlation_id: str | None = None,
 ) -> None:
     existing = read_text(path)
 
@@ -244,6 +250,10 @@ def append_task_to_queue(
         f"source: {source}",
         f"reply_to: {reply_to}",
         f"dispatched_at: {utc_now_iso()}",
+    ]
+    if correlation_id:
+        entry_lines.append(f"correlation_id: {correlation_id}")
+    entry_lines += [
         "",
         "### Objective",
         "",
