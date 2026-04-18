@@ -7,6 +7,8 @@ description: Install and bootstrap ClawSeat for Codex or Claude Code, including 
 
 ## Overview
 
+If your chosen profile uses specialist seats (builder/reviewer/qa/designer), gstack is required; see README profile table.
+
 Use this skill to choose and run the standard ClawSeat installation path. Keep the flow narrow: confirm the target runtime, run preflight, bootstrap the project, and report the first-launch state clearly.
 Before creating anything new, resolve whether the target already has a workspace, project record, or live tmux/TUI seat. Reuse it if present.
 For OpenClaw or Feishu-facing usage, prefer the product entry skill

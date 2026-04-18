@@ -1,3 +1,5 @@
+# Minimal koder-only profile. No gstack required.
+# For the full install chain (planner + builder + reviewer), use ./install.toml — REQUIRES gstack.
 version = 1
 profile_name = "starter"
 description = "Generic ClawSeat starter profile — koder frontstage only. No cartooner dependency. Use install.toml for the canonical /cs install path or full-team.toml for a ready-made six-seat roster."

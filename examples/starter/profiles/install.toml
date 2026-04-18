@@ -1,3 +1,6 @@
+# Requires gstack skills installed (builder/reviewer/qa roles depend on gstack-investigate/review/qa).
+# Before using this profile, run: git clone https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup
+# If you do not want gstack, use ./starter.toml (koder-only) instead.
 version = 1
 profile_name = "install"
 description = "Canonical /cs install profile — koder frontstage + planner-first install chain with builder/reviewer workspaces precreated."

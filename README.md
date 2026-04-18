@@ -5,6 +5,21 @@ ClawSeat is an independent skill-first multi-agent control plane.
 It is not `cartooner`, `openclaw`, or `arena-pretext-ui`.
 Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core source tree.
 
+## Profile Selection
+
+| Profile | Seats | Requires gstack? | Use when |
+|---|---|---|---|
+| `starter.toml` | koder | No | Experimenting, no specialist seats needed |
+| `install.toml` | koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical `/cs` install flow |
+| `full-team.toml` | 6 seats | **Yes** | Full-roster projects |
+
+All profiles live in `examples/starter/profiles/`. To install gstack (required for `install.toml` and `full-team.toml`):
+
+```bash
+git clone https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
+cd ~/.gstack/repos/gstack && ./setup
+```
+
 ## Quick Install
 
 ```bash
