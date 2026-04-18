@@ -25,8 +25,11 @@ from _common import (
 
 # ── Planner event announce helpers ─────────────────────────────────────
 
-def _should_announce_planner_event(source: str, target: str) -> bool:
-    if os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS") != "1":
+def _should_announce_planner_event(source: str, target: str, profile=None) -> bool:
+    override = os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS")
+    if override is not None:
+        return override == "1" and (source == "planner" or target == "planner")
+    if profile is None or not getattr(profile.observability, "announce_planner_events", False):
         return False
     return source == "planner" or target == "planner"
 
@@ -372,7 +375,7 @@ def main() -> int:
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
     print(f"receipt: {receipt_path}")
-    if _should_announce_planner_event(args.source, args.target):
+    if _should_announce_planner_event(args.source, args.target, profile=profile):
         _try_announce_planner_event(
             project=profile.project_name,
             source=args.source,

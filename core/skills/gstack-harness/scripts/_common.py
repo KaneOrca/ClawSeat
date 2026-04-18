@@ -20,7 +20,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -107,6 +107,11 @@ from _heartbeat_helpers import (  # noqa: F401 — re-export
 
 
 @dataclass
+class ObservabilityConfig:
+    announce_planner_events: bool = False
+
+
+@dataclass
 class HarnessProfile:
     profile_path: Path
     profile_name: str
@@ -139,6 +144,7 @@ class HarnessProfile:
     compat_legacy_seats: bool = False
     legacy_seats: list[str] | None = None
     legacy_seat_roles: dict[str, str] | None = None
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
     def todo_path(self, seat: str) -> Path:
         return self.tasks_root / seat / "TODO.md"
@@ -382,6 +388,11 @@ def load_profile(path: str | Path) -> HarnessProfile:
         compat_legacy_seats=compat_legacy_seats,
         legacy_seats=legacy_seats,
         legacy_seat_roles=legacy_seat_roles,
+        observability=ObservabilityConfig(
+            announce_planner_events=bool(
+                data.get("observability", {}).get("announce_planner_events", False)
+            )
+        ),
     )
 
 
