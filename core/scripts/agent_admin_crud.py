@@ -514,6 +514,16 @@ class CrudHandlers:
         self.hooks.apply_template(session, project)
         return 0
 
+    def engineer_refresh_workspace(self, args: Any) -> int:
+        session = self.hooks.resolve_engineer_session(
+            args.engineer,
+            project_name=getattr(args, "project", None),
+        )
+        project = self.hooks.load_project(session.project)
+        self.hooks.apply_template(session, project)
+        print(f"refreshed\t{session.engineer_id}\t{session.session}\t{session.workspace}")
+        return 0
+
     def engineer_secret_set(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         if session.auth_mode != "api" or not session.secret_file:

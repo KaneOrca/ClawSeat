@@ -44,6 +44,7 @@ class ParserHooks:
     cmd_engineer_delete: Callable[[Any], int]
     cmd_engineer_rename: Callable[[Any], int]
     cmd_engineer_rebind: Callable[[Any], int]
+    cmd_engineer_refresh_workspace: Callable[[Any], int]
     cmd_engineer_secret_set: Callable[[Any], int]
     cmd_tui: Callable[[Any], int]
 
@@ -302,6 +303,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     rebind.add_argument("mode", choices=["oauth", "api"])
     rebind.add_argument("provider")
     rebind.set_defaults(func=hooks.cmd_engineer_rebind)
+
+    refresh_workspace = engineer_sub.add_parser("refresh-workspace")
+    refresh_workspace.add_argument("engineer")
+    refresh_workspace.add_argument("--project")
+    refresh_workspace.set_defaults(func=hooks.cmd_engineer_refresh_workspace)
 
     secret = engineer_sub.add_parser("secret-set")
     secret.add_argument("engineer")

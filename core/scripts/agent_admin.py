@@ -1019,6 +1019,10 @@ def cmd_engineer_rebind(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.engineer_rebind(args)
 
 
+def cmd_engineer_refresh_workspace(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_refresh_workspace(args)
+
+
 def cmd_engineer_secret_set(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.engineer_secret_set(args)
 
@@ -1073,6 +1077,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_engineer_delete=cmd_engineer_delete,
     cmd_engineer_rename=cmd_engineer_rename,
     cmd_engineer_rebind=cmd_engineer_rebind,
+    cmd_engineer_refresh_workspace=cmd_engineer_refresh_workspace,
     cmd_engineer_secret_set=cmd_engineer_secret_set,
     cmd_tui=cmd_tui,
 )

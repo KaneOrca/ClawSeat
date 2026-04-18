@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--project-name", help="Override project name from the profile.")
     parser.add_argument("--repo-root", help="Override repo root from the profile.")
     parser.add_argument("--start", action="store_true", help="Start the project monitor after bootstrap.")
+    parser.add_argument("--refresh-existing", action="store_true", help="Refresh workspace files for already-deployed seats from current template.")
     return parser.parse_args()
 
 
@@ -112,6 +113,17 @@ def main() -> int:
         for seat in (effective_profile.materialized_seats or effective_profile.seats):
             seed_empty_secret_from_peer(effective_profile, seat)
             # OAuth is user-managed via the TUI; nothing to seed here.
+        if args.refresh_existing:
+            for seat in (effective_profile.materialized_seats or effective_profile.seats):
+                refresh_cmd = [
+                    "python3", str(profile.agent_admin),
+                    "engineer", "refresh-workspace", seat,
+                    "--project", project_name,
+                ]
+                refresh_result = run_command(refresh_cmd, cwd=profile.repo_root)
+                require_success(refresh_result, f"bootstrap_harness refresh-existing {seat}")
+                if refresh_result.stdout.strip():
+                    print(refresh_result.stdout.strip())
         if args.start:
             start_result = run_command(
                 [
