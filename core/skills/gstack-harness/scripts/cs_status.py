@@ -177,7 +177,9 @@ def main() -> int:
     profile = load_profile(args.profile)
     rows = collect_rows(profile, seat_filter=args.seat, cid_filter=args.correlation_id)
     if args.emit_json:
-        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        # Map '-' sentinel (text-table only) to None for machine-readable output.
+        json_rows = [{**r, "correlation_id": r["correlation_id"] if r["correlation_id"] != "-" else None} for r in rows]
+        print(json.dumps(json_rows, ensure_ascii=False, indent=2))
     else:
         print(_fmt_table(rows))
     return 0

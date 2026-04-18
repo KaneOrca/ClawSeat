@@ -241,3 +241,30 @@ def test_main_json_output(tmp_path, monkeypatch, capsys):
     assert isinstance(data, list)
     assert data[0]["task_id"] == "task-z"
     assert exit_code == 0
+
+
+def test_json_output_legacy_entry_has_null_correlation_id(tmp_path, monkeypatch, capsys):
+    """JSON output maps missing correlation_id to null, not the string '-'."""
+    profile = _make_profile(tmp_path, ["builder-1"])
+    _write_todo(tmp_path, "builder-1", [
+        {"task_id": "legacy-task"},  # no correlation_id field
+    ])
+    monkeypatch.setattr("sys.argv", ["cs_status.py", "--profile", "dummy", "--json"])
+    import cs_status
+    monkeypatch.setattr(cs_status, "load_profile", lambda _: profile)
+
+    main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data[0]["correlation_id"] is None, f"expected null, got {data[0]['correlation_id']!r}"
+
+
+def test_help_flag_succeeds(tmp_path):
+    """subprocess --help exits 0 and prints usage — guards against import regressions."""
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, str(_SCRIPTS / "cs_status.py"), "--help"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "usage" in result.stdout.lower()
