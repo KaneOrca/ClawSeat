@@ -1,7 +1,8 @@
 """
 Smoke tests for scan_project.py using real repositories.
 
-SPEC §5.3.1 / §5.3.2 hard gate: assertions use real detector output as ground truth.
+These smoke tests enforce SPEC §5.3.1/§5.3.2 real-repo hard gate. Missing repos
+MUST fail loudly via pytest.fail() — do not reintroduce silent skip logic here.
 
 SPEC deviations from §5.3 text (calibrated 2026-04-18):
   - ClawSeat has_ci=True (SPEC assumed False); has .github/workflows/ci.yml
@@ -24,12 +25,21 @@ QUERY_SCRIPT = SCRIPTS_DIR / "query_memory.py"
 CLAWSEAT_REPO = Path("/Users/ywf/.clawseat")
 CARTOONER_REPO = Path("/Users/ywf/coding/cartooner")
 
-# Module-level guard: skip entire module if real repos are absent
-if not CLAWSEAT_REPO.exists() or not CARTOONER_REPO.exists():
-    pytest.skip(
-        "clawseat/cartooner real repo required for smoke tests",
-        allow_module_level=True,
-    )
+
+def _require_clawseat() -> None:
+    if not CLAWSEAT_REPO.exists():
+        pytest.fail(
+            f"real repo missing at {CLAWSEAT_REPO}; "
+            "SPEC §5.3.1/§5.3.2 mandates this as hard gate, cannot silently skip"
+        )
+
+
+def _require_cartooner() -> None:
+    if not CARTOONER_REPO.exists():
+        pytest.fail(
+            f"real repo missing at {CARTOONER_REPO}; "
+            "SPEC §5.3.1/§5.3.2 mandates this as hard gate, cannot silently skip"
+        )
 
 
 def _run_scan(
@@ -64,8 +74,8 @@ def _run_scan(
     return {}
 
 
-def _run_query(project: str, kind: str, tmp_path: Path) -> dict:
-    """Run query_memory.py and return parsed JSON."""
+def _run_query(project: str, kind: str, tmp_path: Path) -> list:
+    """Run query_memory.py and return parsed JSON list."""
     cmd = [
         sys.executable,
         str(QUERY_SCRIPT),
@@ -83,6 +93,7 @@ def _run_query(project: str, kind: str, tmp_path: Path) -> dict:
 
 def test_clawseat_shallow_scan(tmp_path):
     """ClawSeat shallow scan writes dev_env.json with correct anchors."""
+    _require_clawseat()
     _run_scan("clawseat", CLAWSEAT_REPO, "shallow", tmp_path, commit=True)
     dev_env_file = tmp_path / "projects/clawseat/dev_env.json"
     assert dev_env_file.exists()
@@ -97,6 +108,7 @@ def test_clawseat_shallow_scan(tmp_path):
 
 def test_cartooner_medium_scan(tmp_path):
     """cartooner medium scan produces 6 granular + dev_env files."""
+    _require_cartooner()
     _run_scan("cartooner", CARTOONER_REPO, "medium", tmp_path, commit=True)
     proj = tmp_path / "projects/cartooner"
     expected = ["dev_env.json", "runtime.json", "tests.json", "deploy.json", "ci.json", "lint.json", "structure.json"]
@@ -111,6 +123,7 @@ def test_cartooner_medium_scan(tmp_path):
 
 def test_cartooner_tests_frameworks(tmp_path):
     """cartooner tests.json contains pytest=True (vitest=False in reality)."""
+    _require_cartooner()
     _run_scan("cartooner", CARTOONER_REPO, "medium", tmp_path, commit=True)
     tests = json.loads((tmp_path / "projects/cartooner/tests.json").read_text())["data"]
     assert tests["pytest"] is True
@@ -119,6 +132,7 @@ def test_cartooner_tests_frameworks(tmp_path):
 
 def test_payload_budget_shallow(tmp_path):
     """ClawSeat shallow dev_env.json stays under 20KB."""
+    _require_clawseat()
     dry = _run_scan("clawseat", CLAWSEAT_REPO, "shallow", tmp_path)
     payload = json.dumps(dry["files"]["dev_env.json"], ensure_ascii=False).encode()
     assert len(payload) <= 20 * 1024, f"shallow payload too large: {len(payload)}"
@@ -126,6 +140,7 @@ def test_payload_budget_shallow(tmp_path):
 
 def test_payload_budget_medium(tmp_path):
     """cartooner medium 6 files total under 50KB."""
+    _require_cartooner()
     dry = _run_scan("cartooner", CARTOONER_REPO, "medium", tmp_path)
     total = sum(
         len(json.dumps(rec, ensure_ascii=False).encode())
@@ -136,6 +151,7 @@ def test_payload_budget_medium(tmp_path):
 
 def test_payload_budget_deep(tmp_path):
     """cartooner deep 7 files total under 70KB."""
+    _require_cartooner()
     dry = _run_scan("cartooner", CARTOONER_REPO, "deep", tmp_path)
     assert "env_templates.json" in dry["files"], "deep must include env_templates.json"
     total = sum(
@@ -147,6 +163,7 @@ def test_payload_budget_deep(tmp_path):
 
 def test_query_integration_runtime(tmp_path):
     """After committing a medium scan, query_memory returns valid runtime.json."""
+    _require_cartooner()
     _run_scan("cartooner", CARTOONER_REPO, "medium", tmp_path, commit=True)
     facts = _run_query("cartooner", "runtime", tmp_path)
     assert isinstance(facts, list)
@@ -159,6 +176,7 @@ def test_query_integration_runtime(tmp_path):
 
 def test_query_integration_dev_env(tmp_path):
     """After committing a shallow scan, query_memory returns dev_env record."""
+    _require_clawseat()
     _run_scan("clawseat", CLAWSEAT_REPO, "shallow", tmp_path, commit=True)
     facts = _run_query("clawseat", "dev_env", tmp_path)
     assert isinstance(facts, list)
@@ -169,12 +187,6 @@ def test_query_integration_dev_env(tmp_path):
 
 def test_dry_run_never_writes(tmp_path):
     """Default (no --commit) must not create any projects/ directory."""
+    _require_clawseat()
     _run_scan("clawseat", CLAWSEAT_REPO, "shallow", tmp_path)
     assert not (tmp_path / "projects").exists(), "dry-run must not write projects/"
-
-
-def test_real_repo_graceful_skip():
-    """If repos are absent, module skips gracefully (this test verifies the guard logic)."""
-    # Both repos exist (we're past the module-level guard) so just assert paths
-    assert CLAWSEAT_REPO.exists()
-    assert CARTOONER_REPO.exists()
