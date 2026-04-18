@@ -42,6 +42,7 @@ def main() -> int:
     profile = load_profile(args.profile)
     payload = build_payload(args)
     result = notify(profile, args.target, payload)
+    # silent-ok audit: require_success raises on non-sent status; failure is not silent
     require_success(result, "notify seat")
 
     if args.task_id and not args.skip_receipt:

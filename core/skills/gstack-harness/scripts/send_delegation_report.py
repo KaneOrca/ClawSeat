@@ -103,6 +103,7 @@ def main() -> int:
         return 0
 
     result = send_feishu_user_message(message, group_id=args.chat_id, pre_check_auth=True)
+    # silent-ok audit: status≠sent returns exit 1, caller surfaces failure via return code
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if result.get("status") == "sent" else 1
 

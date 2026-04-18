@@ -50,15 +50,21 @@ def _should_announce_planner_event(source: str, target: str, profile=None) -> bo
     )
 
 
-def _try_announce_planner_event(*, project: str, source: str, target: str, task_id: str, verb: str) -> None:
+def _try_announce_planner_event(*, project: str, source: str, target: str, task_id: str, verb: str) -> dict:
     message = f"[{project}] {source} → {target}: {task_id} {verb}"
     if len(message) > 80:
         message = message[:77] + "..."
     try:
         from _feishu import send_feishu_user_message
-        send_feishu_user_message(message, project=project)
+        result = send_feishu_user_message(message, project=project)
     except Exception as exc:
         print(f"warn: planner announce failed for {task_id}: {exc}", file=sys.stderr)
+        return {"status": "exception", "reason": str(exc)}
+    result = result or {}
+    if result.get("status") not in ("sent", "skipped"):
+        detail = result.get("stderr") or result.get("stdout") or result.get("reason", "unknown")
+        print(f"warn: planner announce feishu returned {result.get('status')!r} for {task_id}: {detail}", file=sys.stderr)
+    return result
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
