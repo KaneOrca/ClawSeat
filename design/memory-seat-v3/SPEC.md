@@ -217,3 +217,41 @@ M6（koder heartbeat）落地后**专门 commit** 清理老 flat *.json，留 2-
 - 本文件是 authoritative；koder / planner / 任何 seat 不得 "按自己理解" 改范围
 - 需要 scope 调整 → planner 回 koder `USER_DECISION_NEEDED` + 走 Feishu decision-gate → 用户同意后 spec 作者（始祖 CC / 张根铭）更新文件 → **重新 commit** 再动工
 - spec 更新后 `git diff --stat` 必可见，避免悄悄移动
+
+---
+
+## 10. Post-closeout correction log
+
+以下条目在 M1 / M2 chain 跑完后实地发现原文字与代码事实不符，保留 §4 正文不动，
+用本节记录真相与裁决，保证 SPEC 可追溯。
+
+### 10.1 §4 通用 schema — `ALLOWED_KINDS` 白名单（实施于 M2 eng-review 阶段）
+
+**原文字**（§4 记录的 "M1 existing kinds"）:
+```
+decision, finding, library_knowledge, reflection,
+credential, network, environment, repo, agent_config
+```
+
+**实际 M1 实现**（`core/skills/memory-oracle/scripts/_memory_schema.py:37-47`）:
+```
+decision, delivery, issue, finding, reflection,
+library_knowledge, example, pattern, event
+```
+
+后 5 个（credential / network / environment / repo / agent_config）是**规格作者主观脑补**、
+实际 M1 实施时采用不同的 9 项选择。两套名单**完全不重合后 5**。
+
+**裁决**（koder 2026-04-18，option A）: 接受实际 M1 9 项为 canonical 白名单。
+M2 时 §4 又加 8 项（`runtime / tests / deploy / ci / lint / structure / env_templates / dev_env`），
+合并总数 = 9 + 8 = **17 项**，固化为代码层事实。
+
+**追责**: 规格作者写 §4 时未 grep 实际代码交叉验证 → SPEC 文字与实现脱节。
+未来规格修改前必须先跑 `grep -n ALLOWED_KINDS core/skills/memory-oracle/scripts/_memory_schema.py`
+确认真实状态。
+
+**影响**: §5.2 的"M1 files 只读"红线**保住**（没被"按字面改 §4"触发 M1 regression）。
+
+**Credit**: 此修正由 planner 在 M2 eng-review 阶段识别差异 → `USER_DECISION_NEEDED`
+回 koder → koder 自行 grep 实际代码验证 → 选 option A → chain 恢复派发。
+整套流程是 §9 spec 变更纪律的活体示范。

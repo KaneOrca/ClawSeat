@@ -285,3 +285,50 @@ by the (now-reverted) schema if M2-written records live there; operator should
 
 **Canonical reference for dispatch**: `/Users/ywf/.clawseat/design/memory-seat-v3/M2-SPEC.md`
 (commit tracked under `cc79bc8`'s successor once committed).
+
+---
+
+## 9. Post-closeout correction log
+
+M2 实施完成 (commits `34a6a22` bundle-A + `0bdf08b` bundle-B + `7afb08d` fix-1) 后，
+实地扫描真实仓库发现 §5.3 的部分 acceptance 数字与现实不符。正文 §5.3 保留原样，
+这里记录每条事实偏差 + 裁决。
+
+### 9.1 §5.3.1 ClawSeat `has_ci`
+
+**原文字**: "ClawSeat has no Dockerfile / CI as of this writing — adjust only if reality changes"
+隐含 `has_ci=False`。
+
+**实际**: `.github/workflows/ci.yml` 确实存在 → scanner 正确返回 `has_ci=True`。
+
+**裁决**: 以扫描结果为 ground truth。builder-1 commit 的 acceptance test lock 到
+`has_ci=True`，没改 §5.3.1 原文。这里记录正解。
+
+### 9.2 §5.3.2 cartooner `python_version`
+
+**原文字**: cartooner `runtime.json.data.python_version = "3.11"` 期待。
+
+**实际**: 扫到 `None`。cartooner 仓库无 `.python-version`、`pyproject.toml` 没 `requires-python`
+段、也没能从 `venv/` 推断出 3.11 字符串。scanner 正确报 None。
+
+**裁决**: 以 None 为事实。如果希望获得 "3.11" 需要改 cartooner 仓库加 `.python-version`
+或升级 scanner 的 venv introspection 能力（M4/M5 范围）。
+
+### 9.3 §5.3.2 cartooner `vitest`
+
+**原文字**: `tests.json.data.vitest = True` 期待。
+
+**实际**: `False`。cartooner 实际用 `vitest` 但未通过我们 detector 检测到的 config 路径
+暴露。builder-1 的 detector 查 `vitest.config.{ts,js,mjs}` 和 `package.json.devDependencies.vitest`，
+两者都没命中（可能 cartooner 用 pnpm workspace 的间接依赖，detector 没下探）。
+
+**裁决**: 接受 `False` 为 M2 能力边界内的正确答案。M2 detector 是"浅扫"设计，
+不深入 monorepo 子包。提升覆盖留给未来 enhancement。
+
+### 9.4 SPEC 作者追责
+
+与 M1 §4 correction 同根因：规格作者写 §5.3 时**没实地 scan 一次验证数字**，直接按
+预期脑补。builder-1 calibrate 到真相是**正确的做法**，规格应当变为"基于扫描结果的
+契约"，而不是"先画靶后射箭"。
+
+未来 acceptance 写数值之前，先跑一次 scanner → 把真实输出粘贴进 SPEC → 再锁定。
