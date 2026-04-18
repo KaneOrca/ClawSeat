@@ -215,46 +215,50 @@ def test_config_gate_env_zero_overrides_profile_true(monkeypatch):
 
 
 def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
-    """Stub lark-cli; dispatch_task with profile announce=true triggers the stub."""
+    """Config gate opens when profile.observability.announce_planner_events=true and env unset."""
     import subprocess
-    import json
 
-    # Write a minimal stub lark-cli that records calls
-    stub_log = tmp_path / "lark_calls.log"
-    stub = tmp_path / "lark-cli"
-    stub.write_text(f"#!/bin/sh\necho \"$@\" >> {stub_log}\nexit 0\n")
-    stub.chmod(0o755)
-
-    # Build a temporary profile that has observability.announce_planner_events=true
-    # and minimal required fields
-    import tomllib
+    # Build an isolated profile with tasks_root/workspace/handoff redirected to tmp_path
+    # so dispatch_task.py does not write to the real ~/.agents/tasks.
     real_profile = Path("/Users/ywf/.agents/profiles/install-profile-dynamic.toml")
     if not real_profile.exists():
         pytest.skip("real profile not found")
 
-    # Make a copy of the profile with announce=true (it already has it, but be explicit)
+    import re as _re
     profile_text = real_profile.read_text(encoding="utf-8")
-    # If [observability] not present, add it
+
+    # Redirect FS paths to tmp_path to avoid polluting real task queue
+    tasks_tmp = tmp_path / "tasks"
+    ws_tmp = tmp_path / "workspaces"
+    handoff_tmp = tmp_path / "handoffs"
+    for d in (tasks_tmp / "install" / "builder-1", ws_tmp / "install", handoff_tmp):
+        d.mkdir(parents=True, exist_ok=True)
+
+    profile_text = _re.sub(r'tasks_root\s*=\s*"[^"]*"', f'tasks_root = "{tasks_tmp}/install"', profile_text)
+    profile_text = _re.sub(r'workspace_root\s*=\s*"[^"]*"', f'workspace_root = "{ws_tmp}/install"', profile_text)
+    profile_text = _re.sub(r'handoff_dir\s*=\s*"[^"]*"', f'handoff_dir = "{handoff_tmp}"', profile_text)
+    profile_text = _re.sub(r'project_doc\s*=\s*"[^"]*"', f'project_doc = "{tasks_tmp}/install/PROJECT.md"', profile_text)
+    profile_text = _re.sub(r'tasks_doc\s*=\s*"[^"]*"', f'tasks_doc = "{tasks_tmp}/install/TASKS.md"', profile_text)
+    profile_text = _re.sub(r'status_doc\s*=\s*"[^"]*"', f'status_doc = "{tasks_tmp}/install/STATUS.md"', profile_text)
+    profile_text = _re.sub(r'heartbeat_receipt\s*=\s*"[^"]*"', f'heartbeat_receipt = "{ws_tmp}/install/koder/HEARTBEAT_RECEIPT.toml"', profile_text)
+
     if "[observability]" not in profile_text:
         profile_text += "\n[observability]\nannounce_planner_events = true\n"
+
     tmp_profile = tmp_path / "test-profile.toml"
     tmp_profile.write_text(profile_text, encoding="utf-8")
 
-    env = {
-        **{k: v for k, v in __import__("os").environ.items()},
-        "PATH": f"{tmp_path}:{__import__('os').environ.get('PATH', '')}",
-    }
-    # Unset env override so config gate is exercised
-    env.pop("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS", None)
+    import os as _os
+    env = dict(_os.environ)
+    env.pop("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS", None)  # use config gate, not env override
 
-    scripts_dir = str(_SCRIPTS)
     result = subprocess.run(
         [
             "python3", str(_SCRIPTS / "dispatch_task.py"),
             "--profile", str(tmp_profile),
             "--source", "planner",
             "--target", "builder-1",
-            "--task-id", "smoke-announce-001",
+            "--task-id", "smoke-announce-e2e",
             "--title", "smoke test",
             "--objective", "verify announce gate",
             "--reply-to", "planner",
@@ -262,20 +266,14 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
         capture_output=True,
         text=True,
         env=env,
-        cwd=scripts_dir,
+        cwd=str(_SCRIPTS),
     )
-    # The dispatch may fail (no real session/workspace), but if announce fired
-    # the stub should have been called. We check stderr for announce warn OR
-    # stub_log for a call — either proves the gate opened.
-    stub_was_called = stub_log.exists() and stub_log.stat().st_size > 0
-    # Gate opened if stub was called OR announce warn appeared in stderr
-    # (fail-safe swallows feishu errors without changing exit code)
-    gate_opened = stub_was_called or "planner announce" in result.stderr
+    # Gate opened if announce warn appeared in stderr (fail-safe swallows feishu error)
+    gate_opened = "planner announce" in result.stderr
     assert gate_opened, (
-        "Config gate did not open: lark-cli stub not called and no announce warn in stderr.\n"
+        "Config gate did not open: no announce warn in stderr.\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
-    # Dispatch itself should succeed (rc=0) regardless of announce outcome
     assert result.returncode == 0, (
         f"dispatch_task.py failed (rc={result.returncode})\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
