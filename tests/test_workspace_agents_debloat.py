@@ -272,3 +272,44 @@ def test_handoff_md_placeholders_substituted(tmp_path):
     assert "<HARNESS_SCRIPTS>" not in content, "HARNESS_SCRIPTS placeholder not substituted"
     assert "<PROFILE>" not in content, "PROFILE placeholder not substituted"
     assert "/fake/scripts" in content or "handoff" in content.lower()
+
+
+# ── Test 11: symlink failure → copy fallback ──────────────────────────────────
+
+def test_protocol_md_symlink_failure_downgrades_to_copy(tmp_path, monkeypatch):
+    from unittest.mock import patch as _patch
+    session = _make_session("builder-1", workspace=str(tmp_path))
+    project = _make_project()
+    engineer = _make_engineer("builder")
+
+    real_symlink_to = Path.symlink_to
+
+    def _raise_oserror(self, target, target_is_directory=False):
+        raise OSError("symlink not supported")
+
+    with _patch.object(Path, "symlink_to", _raise_oserror):
+        aaw.render_dispatch_playbook_lines(session, project, engineer)
+
+    target = tmp_path / "TOOLS" / "protocol.md"
+    assert target.exists(), "protocol.md should exist after copy fallback"
+    assert not target.is_symlink(), "fallback copy should not be a symlink"
+    expected = (TOOLS_SHARED / "protocol.md").read_text(encoding="utf-8")
+    assert target.read_text(encoding="utf-8") == expected, "copy content should match shared source"
+
+
+# ── Test 12: symlink idempotent (existing correct symlink not rebuilt) ─────────
+
+def test_protocol_md_symlink_idempotent(tmp_path):
+    session = _make_session("builder-1", workspace=str(tmp_path))
+    project = _make_project()
+    engineer = _make_engineer("builder")
+
+    # First call materializes the symlink
+    aaw.render_dispatch_playbook_lines(session, project, engineer)
+    target = tmp_path / "TOOLS" / "protocol.md"
+    assert target.is_symlink(), "First call should create symlink"
+    link_stat_before = target.stat()
+
+    # Second call should be idempotent (no rebuild)
+    aaw.render_dispatch_playbook_lines(session, project, engineer)
+    assert target.is_symlink(), "Symlink should still exist after second call"
