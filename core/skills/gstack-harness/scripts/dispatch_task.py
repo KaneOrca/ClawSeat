@@ -80,7 +80,14 @@ def _try_announce_planner_event(*, project: str, source: str, target: str, task_
 #
 # All four MUST move together — the SKILL.md text is the source of truth.
 
-_GSTACK_SKILLS_ROOT = "/Users/ywf/.gstack/repos/gstack/.agents/skills"
+def _resolve_gstack_skills_root() -> str:
+    env = os.environ.get("GSTACK_SKILLS_ROOT")
+    if env:
+        return env
+    return str(Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills")
+
+
+_GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
 
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
