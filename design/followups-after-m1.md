@@ -343,6 +343,51 @@
 
 ---
 
+### 26. planner announce gate 要用 config 而不是孤立 env（supersedes #24） (P0)
+
+**发现**: #24 落地后实地抓 `tmux show-environment -t install-planner-claude CLAWSEAT_ANNOUNCE_PLANNER_EVENTS` 返回 `unknown variable`。profile TOML 的 `[env]` 段写了 `CLAWSEAT_ANNOUNCE_PLANNER_EVENTS="1"`，但 codebase 里 0 处代码读 `[env]`，tmux 启动时也无 env 注入。结果 `_try_announce_planner_event()` 的 env gate 第一行就返回 False，**广播永远不触发**。代码/单测都绿，运行时失效。
+
+这是 SPEC 盲区：我让 builder 用 env var + TOML `[env]` 段，但 TOML 段从来不是运行时 source of truth。qa-1 用 `monkeypatch.setenv` 测试只验证"如果 env 在 → 代码路径对"，不验证"env 在不在"。
+
+**修复（best practice: config 为主 + env 为 override，Twelve-Factor 合规）**:
+
+1. **profile TOML 新 section** 替代 `[env]` 做 feature toggle:
+   ```toml
+   [observability]
+   announce_planner_events = true
+   ```
+
+2. **`_should_announce_planner_event()` 改为**:
+   ```python
+   override = os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS")
+   if override is not None:
+       return override == "1"
+   return profile.observability.announce_planner_events
+   ```
+   env 优先（调试），profile 兜底（项目级 default）。
+
+3. **删除 `[env]` 孤岛**：TOML 里清理，或改 comment 说明"not-yet-wired for tmux env injection"。
+
+4. **不要**搞 `[env]` → tmux 注入基建：那是 premature infrastructure，唯一客户是一个 toggle，多 seat 同步 + 活 seat reload 等边界问题多。
+
+**文件**:
+- `core/skills/gstack-harness/scripts/dispatch_task.py`
+- `core/skills/gstack-harness/scripts/complete_handoff.py`
+- `examples/starter/profiles/install-with-memory.toml` 及相关 profile 模板
+- `tests/test_planner_announce.py`
+
+---
+
+### 27. qa SPEC 缺 end-to-end smoke（针对 env/config 驱动 feature） (P1)
+
+**发现**: #24 的 qa-1 verdict 有 9 条 scenario 都 PASS，但 **runtime 实际不触发**。因为 qa 测都用 `monkeypatch.setenv` 模拟 gate 开，没做"真实 tmux seat 环境中 spawn subprocess，断言 Feishu 群收到消息"的端到端。
+
+**修复**: qa skill / qa AGENTS.md 加一条规则："对于 env-var / config-file 驱动的 feature，除单元测试外必须有一条 end-to-end smoke，路径是 tmux seat env → subprocess call → 远端可观察效应 assert（如 mock lark-cli 落盘参数）"。
+
+**文件**: `core/skills/gstack-qa/SKILL.md`（或对应 qa skill 路径） + template.toml qa role_details
+
+---
+
 ### 25. Seat 在 feature branch 上工作，不是 main (P2)
 
 **发现**: 2026-04-18 push 时发现 `memory-v3-m2-bundle-b` feature branch 上堆了 4 commits（bundle-B + fix1 + bootstrap-sync 2），builder-1 或 planner 在上面跑不提示。违反"默认 main 工作"约定，并且 `git push origin main` 这种常规操作看起来"up-to-date"但其实 local main 跟 HEAD 不同步。
