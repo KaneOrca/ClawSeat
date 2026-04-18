@@ -190,12 +190,18 @@ def validate_all(
     registry_path: Path | None = None,
     role: str | None = None,
     source: str | None = None,
+    active_roles: set[str] | None = None,
 ) -> SkillCheckResult:
     """Validate skill paths.  Returns a SkillCheckResult.
 
     Accepts optional filters:
     - *role*: check only skills for a specific role
     - *source*: check only skills from a specific source layer
+    - *active_roles*: if provided, a skill marked required=true is only treated
+      as required when its roles list is empty (universal) OR overlaps active_roles.
+      Skills whose roles are non-empty and disjoint from active_roles are downgraded
+      to optional — they belong to seat types not present in this profile.
+      Pass None (default) to preserve the existing global required=true behaviour.
     """
     if entries is None:
         entries = load_registry(registry_path)
@@ -203,6 +209,18 @@ def validate_all(
         entries = skills_for_role(entries, role)
     if source:
         entries = skills_for_source(entries, source)
+
+    if active_roles is not None:
+        # Downgrade required skills whose roles don't intersect active_roles.
+        # Skills with roles=[] are always applicable (universal).
+        adjusted: list[SkillEntry] = []
+        for e in entries:
+            if e.required and e.roles and not (set(e.roles) & active_roles):
+                from dataclasses import replace
+                e = replace(e, required=False)
+            adjusted.append(e)
+        entries = adjusted
+
     items = [_check_one(e) for e in entries]
     return SkillCheckResult(items=items)
 

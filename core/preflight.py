@@ -539,14 +539,37 @@ def _check_optional_cli(binary: str, label: str, install_hint: str) -> Preflight
     )
 
 
-def _check_skills() -> list[PreflightItem]:
+def _load_active_roles(project: str) -> set[str] | None:
+    """Return the union of role values from the project's dynamic profile, or None if unavailable."""
+    try:
+        candidates = [
+            _dynamic_profile_path(project),
+            Path(f"/tmp/{project}-profile.toml"),
+        ]
+        profile_path = next((p for p in candidates if p.exists()), None)
+        if profile_path is None:
+            return None
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore
+        with open(profile_path, "rb") as fh:
+            data = tomllib.load(fh)
+        seat_roles: dict = data.get("seat_roles", {})
+        roles = {str(v).strip() for v in seat_roles.values() if v}
+        return roles if roles else None
+    except (OSError, KeyError, Exception):  # silent-ok: profile unreadable, fall back to no filter
+        return None
+
+
+def _check_skills(active_roles: set[str] | None = None) -> list[PreflightItem]:
     """Validate all skills in the registry are present on disk."""
     try:
         try:
             from core.skill_registry import load_registry, validate_all
         except ImportError:
             from skill_registry import load_registry, validate_all
-        result = validate_all()
+        result = validate_all(active_roles=active_roles)
         items: list[PreflightItem] = []
         for si in result.items:
             if si.exists:
@@ -635,8 +658,10 @@ def preflight_check(project: str) -> PreflightResult:
             ),
         ))
 
-    # skill registry validation
-    items.extend(_check_skills())
+    # skill registry validation (profile-aware: downgrade role-specific required skills
+    # to optional when those roles are absent from this profile's seat_roles)
+    active_roles = _load_active_roles(project)
+    items.extend(_check_skills(active_roles=active_roles))
 
     # Categorize
     hard_blocked = [i for i in items if i.status == PreflightStatus.HARD_BLOCKED]
