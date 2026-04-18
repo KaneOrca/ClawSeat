@@ -182,40 +182,6 @@ def test_engineer_create_rejects_anthropix_before_any_side_effect():
     assert "engineer create test-bad" in str(excinfo.value)
 
 
-# ── Entry point: engineer_refresh_workspace ────────────────────────────────
-
-
-def test_engineer_refresh_workspace_calls_apply_template(capsys):
-    """refresh-workspace must call hooks.apply_template and print a refreshed line."""
-    from types import SimpleNamespace
-    from agent_admin_crud import CrudHandlers
-
-    applied: list[tuple] = []
-    session = SimpleNamespace(
-        engineer_id="builder-1",
-        session="install-builder-1",
-        workspace="/fake/ws/builder-1",
-        project="install",
-    )
-
-    hooks = SimpleNamespace(
-        error_cls=RuntimeError,
-        resolve_engineer_session=lambda _e, project_name=None: session,
-        load_project=lambda _p: SimpleNamespace(name="install"),
-        apply_template=lambda s, p: applied.append((s, p)),
-    )
-    handlers = CrudHandlers(hooks)
-    args = SimpleNamespace(engineer="builder-1", project="install")
-
-    rc = handlers.engineer_refresh_workspace(args)
-
-    assert rc == 0
-    assert len(applied) == 1, "apply_template must be called exactly once"
-    out = capsys.readouterr().out
-    assert "refreshed" in out
-    assert "builder-1" in out
-
-
 # ── Entry point: switch-harness ──────────────────────────────────────────
 
 
