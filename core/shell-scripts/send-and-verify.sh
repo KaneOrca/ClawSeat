@@ -12,16 +12,68 @@ if [ -z "$SESSION" ] || [ -z "$MSG" ]; then
   echo "Usage: send-and-verify.sh [--project <project>] <session> \"<message>\""; exit 1
 fi
 
-TMUX_BIN="$(command -v tmux 2>/dev/null || for c in /opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux; do [ -x "$c" ] && echo "$c" && break; done || true)"
-[ -z "$TMUX_BIN" ] && { echo "send-and-verify: TMUX_MISSING"; exit 1; }
+# Allow TMUX_BIN env override (same injection pattern as AGENTCTL_BIN, used in tests)
+if [ -z "${TMUX_BIN:-}" ]; then
+  TMUX_BIN="$(command -v tmux 2>/dev/null || for c in /opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux; do [ -x "$c" ] && echo "$c" && break; done || true)"
+fi
+if [ -z "$TMUX_BIN" ] || ! [ -x "$TMUX_BIN" ]; then
+  echo "send-and-verify: TMUX_MISSING"
+  {
+    echo "  reason: tmux_missing"
+    echo "  searched: /opt/homebrew/bin/tmux /usr/local/bin/tmux /usr/bin/tmux"
+    echo "  PATH: $PATH"
+    echo "  fix: brew install tmux  # macOS | apt install tmux  # Linux"
+  } >&2
+  exit 1
+fi
 
 AGENTCTL="${AGENTCTL_BIN:-$REPO_ROOT/core/shell-scripts/agentctl.sh}"
-if [ -n "$PROJECT" ]; then RESOLVED="$("$AGENTCTL" session-name "$SESSION" --project "$PROJECT")"
-else RESOLVED="$("$AGENTCTL" session-name "$SESSION")"; fi
-[ -z "$RESOLVED" ] && { echo "send-and-verify: SESSION_NOT_FOUND project=$PROJECT seat=$SESSION"; exit 1; }
+_agentctl_err_file="$(mktemp)"
+trap 'rm -f "$_agentctl_err_file"' EXIT
+_agentctl_rc=0
+if [ -n "$PROJECT" ]; then
+  RESOLVED="$("$AGENTCTL" session-name "$SESSION" --project "$PROJECT" 2>"$_agentctl_err_file")" || _agentctl_rc=$?
+else
+  RESOLVED="$("$AGENTCTL" session-name "$SESSION" 2>"$_agentctl_err_file")" || _agentctl_rc=$?
+fi
+_agentctl_err="$(cat "$_agentctl_err_file" 2>/dev/null || true)"
+
+if [ -z "$RESOLVED" ]; then
+  echo "send-and-verify: SESSION_NOT_FOUND project=$PROJECT seat=$SESSION"
+  {
+    echo "  reason: session_not_found"
+    echo "  project: ${PROJECT:-<unset>}"
+    echo "  requested_seat: $SESSION"
+    echo "  agentctl_bin: $AGENTCTL"
+    echo "  agentctl_rc: $_agentctl_rc"
+    [ -n "$_agentctl_err" ] && echo "  agentctl_stderr: $_agentctl_err"
+    echo "  possible_causes: seat not started | project name typo | agentctl not registered for seat"
+    echo "  fix: agentctl list / agentctl start --profile <profile>"
+  } >&2
+  exit 1
+fi
 SESSION="$RESOLVED"
-env -u TMUX "$TMUX_BIN" has-session -t "$SESSION" 2>/dev/null \
-  || { echo "send-and-verify: SESSION_DEAD session=$SESSION"; exit 1; }
+
+if ! env -u TMUX "$TMUX_BIN" has-session -t "$SESSION" 2>/dev/null; then
+  echo "send-and-verify: SESSION_DEAD session=$SESSION"
+  {
+    echo "  reason: session_dead"
+    echo "  session: $SESSION"
+    echo "  tmux_bin: $TMUX_BIN"
+    echo "  fix: tmux ls to check active sessions; if none, agentctl start to restart seat"
+    if [ "${CLAWSEAT_SEND_VERIFY_DEBUG:-0}" = "1" ]; then
+      echo "  tmux_sessions: $(env -u TMUX "$TMUX_BIN" list-sessions 2>/dev/null || true)"
+    fi
+  } >&2
+  exit 1
+fi
+
+if [ "${CLAWSEAT_SEND_VERIFY_DEBUG:-0}" = "1" ]; then
+  {
+    echo "send-and-verify: DEBUG"
+    echo "  tmux_sessions: $(env -u TMUX "$TMUX_BIN" list-sessions 2>/dev/null || true)"
+  } >&2
+fi
 
 env -u TMUX "$TMUX_BIN" send-keys -l -t "$SESSION" "$MSG"
 sleep 0.3
