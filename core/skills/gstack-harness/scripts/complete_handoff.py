@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -27,6 +29,77 @@ from _common import (
     write_json,
     write_todo,
 )
+
+
+def _do_prune(text: str, task_id: str) -> str:
+    """Return text with first [pending]/[queued] block matching task_id removed.
+
+    Returns the same object (identity) if no match found.
+    """
+    # Split off # Completed section so we only touch the active queue
+    if "\n# Completed" in text:
+        queue_part, completed_part = text.split("\n# Completed", 1)
+        completed_section = "\n# Completed" + completed_part
+    else:
+        queue_part = text
+        completed_section = ""
+
+    # Find where entries start (first ## [)
+    first_entry_m = re.search(r"^## \[", queue_part, re.MULTILINE)
+    if not first_entry_m:
+        return text
+
+    header = queue_part[: first_entry_m.start()]
+    entries_text = queue_part[first_entry_m.start():]
+
+    # Split entries by the separator written by append_task_to_queue
+    entries = re.split(r"\n\n---\n\n", entries_text)
+
+    task_re = re.compile(rf"^task_id:\s*{re.escape(task_id)}\s*$", re.MULTILINE)
+    status_re = re.compile(r"^## \[(pending|queued)\]", re.MULTILINE)
+
+    found = None
+    for i, entry in enumerate(entries):
+        if status_re.search(entry) and task_re.search(entry):
+            found = i
+            break
+
+    if found is None:
+        return text
+
+    new_entries = entries[:found] + entries[found + 1:]
+    if new_entries:
+        new_queue = header + "\n\n---\n\n".join(new_entries)
+    else:
+        new_queue = header.rstrip("\n")
+
+    result = new_queue + completed_section
+    if result and not result.endswith("\n"):
+        result += "\n"
+    return result
+
+
+def _prune_todo_entry(todo_path: Path, task_id: str) -> None:
+    """Delete first [pending]/[queued] block for task_id from todo_path.
+
+    Atomic write via tempfile + os.replace. Fail-safe: any IO/regex error is
+    printed to stderr and swallowed — ACK main flow is unaffected.
+    """
+    if not todo_path.exists():
+        return
+    try:
+        text = todo_path.read_text(encoding="utf-8")
+        pruned = _do_prune(text, task_id)
+        if pruned is text:
+            return  # no match, nothing to write
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=todo_path.parent, delete=False, suffix=".tmp"
+        ) as tf:
+            tf.write(pruned)
+            tmp_name = tf.name
+        os.replace(tmp_name, todo_path)
+    except Exception as exc:
+        print(f"warn: prune_todo_entry failed for {task_id}: {exc}", file=sys.stderr)
 
 
 VALID_VERDICTS = {
@@ -260,6 +333,7 @@ def main() -> int:
             task_id=args.task_id,
             source=args.source,
         )
+        _prune_todo_entry(ack_path, args.task_id)
         receipt["consumed_at"] = utc_now_iso()
         receipt["consumed_ack"] = ack_line
         receipt["todo_path"] = str(ack_path)
