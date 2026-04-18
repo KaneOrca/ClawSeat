@@ -262,6 +262,7 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
             "--title", "smoke test",
             "--objective", "verify announce gate",
             "--reply-to", "planner",
+            "--skip-notify",
         ],
         capture_output=True,
         text=True,
