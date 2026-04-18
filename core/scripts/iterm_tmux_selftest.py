@@ -5,12 +5,19 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
 from types import SimpleNamespace
+
+_TEST_CLAUDE_BIN = shutil.which("claude") or (
+    "/opt/homebrew/bin/claude"
+    if os.path.exists("/opt/homebrew/bin/claude")
+    else "claude"
+)
 
 import agent_admin
 import agent_admin_window
@@ -99,7 +106,7 @@ def setup_agent_home(agent_home: Path) -> None:
     write_text(
         session_root / "session.toml",
         textwrap.dedent(
-            """\
+            f"""\
             project = "demo"
             engineer_id = "seat1"
             tool = "claude"
@@ -109,7 +116,7 @@ def setup_agent_home(agent_home: Path) -> None:
             workspace = "/tmp/demo-workspace"
             runtime_dir = "/tmp/demo-runtime"
             session = "demo-seat-claude"
-            bin_path = "/opt/homebrew/bin/claude"
+            bin_path = "{_TEST_CLAUDE_BIN}"
             monitor = true
             legacy_sessions = []
             launch_args = []
@@ -464,7 +471,7 @@ def test_build_runtime_exports_shared_agent_home(env: dict[str, str]) -> dict[st
         tool="claude",
         auth_mode="api",
         provider="minimax",
-        bin_path="/opt/homebrew/bin/claude",
+        bin_path=_TEST_CLAUDE_BIN,
         runtime_dir=str(runtime_dir),
         secret_file=str(secret_file),
         engineer_id="seat1",

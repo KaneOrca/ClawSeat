@@ -7,10 +7,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from agent_admin_config import DEFAULT_PATH
+
 
 HOME = Path.home()
 REPO_ROOT = Path(os.environ.get("CODE_REPO_ROOT", str(HOME / "coding"))).expanduser()
-DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 RUNTIME_ROOT = HOME / ".agents" / "runtime" / "identities"
 SECRETS_ROOT = HOME / ".agents" / "secrets"
 

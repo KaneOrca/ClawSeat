@@ -1,6 +1,29 @@
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 from pathlib import Path
+
+
+def _resolve_tool_bin(name: str) -> str:
+    resolved = shutil.which(name)
+    if resolved:
+        return resolved
+    homebrew = f"/opt/homebrew/bin/{name}"
+    if os.path.exists(homebrew):
+        return homebrew
+    return name
+
+
+def _default_path() -> str:
+    override = os.environ.get("CLAWSEAT_DEFAULT_PATH")
+    if override:
+        return override
+    base = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    if sys.platform == "darwin":
+        return "/opt/homebrew/bin:" + base
+    return base
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -16,7 +39,7 @@ LEGACY_ROOT = AGENTS_ROOT / "legacy"
 STATE_ROOT = AGENTS_ROOT / "state"
 CURRENT_PROJECT_PATH = STATE_ROOT / "current_project"
 TEMPLATES_ROOT = REPO_ROOT / "core" / "templates"
-DEFAULT_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+DEFAULT_PATH = _default_path()
 AGENTCTL_SH = REPO_ROOT / "core" / "shell-scripts" / "agentctl.sh"
 AGENT_ADMIN_SH = REPO_ROOT / "core" / "shell-scripts" / "agent-admin.sh"
 SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
@@ -181,9 +204,9 @@ LEGACY_ENGINEERS = {
 }
 
 TOOL_BINARIES = {
-    "codex": "/opt/homebrew/bin/codex",
-    "claude": "/opt/homebrew/bin/claude",
-    "gemini": "/opt/homebrew/bin/gemini",
+    "codex": _resolve_tool_bin("codex"),
+    "claude": _resolve_tool_bin("claude"),
+    "gemini": _resolve_tool_bin("gemini"),
 }
 
 DEFAULT_TOOL_ARGS = {
