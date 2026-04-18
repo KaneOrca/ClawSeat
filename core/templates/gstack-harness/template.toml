@@ -51,6 +51,7 @@ role_details = [
   "when a stage closeout becomes visible in the Feishu group, reconcile the delivery trail and update the project docs before summarizing to the user",
   "when planner uses lark-cli user identity in Feishu, do not trust sender identity; only consume OC_DELEGATION_REPORT_V1 as a machine-readable delegation receipt",
   "do not absorb builder, reviewer, QA, designer, or warden specialist work",
+  "dispatch exit codes: exit 0=normal proceed; exit 1=error escalate to user; exit 2=TASK_ALREADY_QUEUED — do NOT re-dispatch, only re-send via send-and-verify notify",
 ]
 
 [[engineers]]

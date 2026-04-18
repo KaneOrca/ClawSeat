@@ -1,13 +1,134 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 from agent_admin_config import validate_runtime_combo
+
+
+# ── Profile TOML helpers (text-based, preserves comments and order) ────────────
+
+
+def _toml_inline_list_add(text: str, key: str, value: str, *, section: str | None = None) -> str:
+    """Add *value* to an inline TOML list; no-op if already present or key not found."""
+    if section is not None:
+        sec_m = re.search(rf'^\[{re.escape(section)}\]', text, re.MULTILINE)
+        if not sec_m:
+            return text
+        after_sec = text[sec_m.end():]
+        nxt = re.search(r'^\[', after_sec, re.MULTILINE)
+        search_text = after_sec[: nxt.start()] if nxt else after_sec
+        base_offset = sec_m.end()
+    else:
+        search_text = text
+        base_offset = 0
+
+    pat = re.compile(rf'^{re.escape(key)}\s*=\s*\[([^\]]*)\]', re.MULTILINE)
+    km = pat.search(search_text)
+    if not km:
+        return text
+
+    inner = km.group(1)
+    existing = [v.strip().strip("\"'") for v in inner.split(",") if v.strip().strip("\"'")]
+    if value in existing:
+        return text
+
+    new_inner = (inner + f', "{value}"') if inner.strip() else f'"{value}"'
+    new_entry = f"{key} = [{new_inner}]"
+    abs_start = base_offset + km.start()
+    abs_end = base_offset + km.end()
+    return text[:abs_start] + new_entry + text[abs_end:]
+
+
+def _toml_seat_role_set(text: str, seat_id: str, role: str) -> str:
+    """Set seat_roles.<seat_id> = role in the [seat_roles] section."""
+    sec_m = re.search(r'^\[seat_roles\]', text, re.MULTILINE)
+    if not sec_m:
+        return text.rstrip("\n") + f'\n\n[seat_roles]\n{seat_id} = "{role}"\n'
+
+    after = text[sec_m.end():]
+    nxt = re.search(r'^\[', after, re.MULTILINE)
+    sec_len = nxt.start() if nxt else len(after)
+    sec_content = after[:sec_len]
+
+    km = re.search(rf'^{re.escape(seat_id)}\s*=.*$', sec_content, re.MULTILINE)
+    if km:
+        new_sec = sec_content[: km.start()] + f'{seat_id} = "{role}"' + sec_content[km.end():]
+    else:
+        new_sec = sec_content.rstrip("\n") + f'\n{seat_id} = "{role}"\n'
+
+    return text[: sec_m.end()] + new_sec + text[sec_m.end() + sec_len:]
+
+
+def _toml_seat_overrides_set(
+    text: str,
+    seat_id: str,
+    tool: str,
+    auth_mode: str,
+    provider: str,
+    model: str | None,
+    *,
+    update: bool = False,
+) -> str:
+    """Add (or update when update=True) a [seat_overrides.<seat_id>] block."""
+    block_key = f"seat_overrides.{seat_id}"
+    block_m = re.search(rf'^\[{re.escape(block_key)}\]', text, re.MULTILINE)
+
+    lines = [f"[{block_key}]", f'tool = "{tool}"', f'auth_mode = "{auth_mode}"', f'provider = "{provider}"']
+    if model:
+        lines.append(f'model = "{model}"')
+    new_block = "\n".join(lines) + "\n"
+
+    if block_m:
+        if not update:
+            return text  # already exists — idempotent skip for create
+        after = text[block_m.end():]
+        nxt = re.search(r'^\[', after, re.MULTILINE)
+        block_end = block_m.end() + (nxt.start() if nxt else len(after))
+        before = text[: block_m.start()].rstrip("\n") + "\n\n"
+        rest = text[block_end:].lstrip("\n")
+        return before + new_block + ("\n" + rest if rest else "")
+
+    return text.rstrip("\n") + "\n\n" + new_block
+
+
+def _update_profile_seat(
+    profile_path: Path,
+    seat_id: str,
+    role: str,
+    tool: str,
+    auth_mode: str,
+    provider: str,
+    model: str | None = None,
+    *,
+    rebind: bool = False,
+) -> None:
+    """Update a harness profile TOML with seat metadata.
+
+    For create (rebind=False): idempotently appends seat to seats,
+    materialized_seats, seat_roles, and seat_overrides.
+    For rebind (rebind=True): only updates seat_overrides (always overwrites).
+    """
+    if not re.match(r'^[a-zA-Z0-9_-]+$', seat_id):
+        raise ValueError(f"Invalid seat_id {seat_id!r}: must match [a-zA-Z0-9_-]+")
+
+    text = profile_path.read_text(encoding="utf-8")
+
+    if not rebind:
+        text = _toml_inline_list_add(text, "seats", seat_id)
+        text = _toml_inline_list_add(text, "materialized_seats", seat_id, section="dynamic_roster")
+        text = _toml_seat_role_set(text, seat_id, role)
+        text = _toml_seat_overrides_set(text, seat_id, tool, auth_mode, provider, model)
+    else:
+        text = _toml_seat_overrides_set(text, seat_id, tool, auth_mode, provider, model, update=True)
+
+    profile_path.write_text(text, encoding="utf-8")
 
 
 @dataclass
@@ -345,6 +466,31 @@ class CrudHandlers:
         if session.monitor and session.engineer_id not in project.monitor_engineers:
             project.monitor_engineers.append(session.engineer_id)
         self.hooks.write_project(project)
+
+        profile_path = getattr(args, "profile", None)
+        if profile_path:
+            session_toml = self.hooks.session_path(project.name, engineer_id)
+            if not session_toml.exists():
+                print(
+                    f"warn: session.toml not found at {session_toml}; skipping profile update",
+                    file=sys.stderr,
+                )
+            else:
+                try:
+                    session_data = self.hooks.load_toml(session_toml)
+                    role_val = (getattr(args, "role", None) or "").strip() or engineer_id.split("-")[0]
+                    _update_profile_seat(
+                        Path(profile_path),
+                        engineer_id,
+                        role_val,
+                        session_data.get("tool", args.tool),
+                        session_data.get("auth_mode", args.mode),
+                        session_data.get("provider", args.provider),
+                        session_data.get("model"),
+                    )
+                except Exception as exc:
+                    print(f"warn: profile update failed: {exc}", file=sys.stderr)
+
         print(session.engineer_id)
         return 0
 
@@ -512,6 +658,32 @@ class CrudHandlers:
         session.secret_file = new_secret_file
         self.hooks.write_session(session)
         self.hooks.apply_template(session, project)
+
+        profile_path = getattr(args, "profile", None)
+        if profile_path:
+            session_toml = self.hooks.session_path(session.project, session.engineer_id)
+            if not session_toml.exists():
+                print(
+                    f"warn: session.toml not found at {session_toml}; skipping profile update",
+                    file=sys.stderr,
+                )
+            else:
+                try:
+                    session_data = self.hooks.load_toml(session_toml)
+                    role_val = session.engineer_id.split("-")[0]
+                    _update_profile_seat(
+                        Path(profile_path),
+                        session.engineer_id,
+                        role_val,
+                        session_data.get("tool", session.tool),
+                        session_data.get("auth_mode", mode),
+                        session_data.get("provider", provider),
+                        session_data.get("model"),
+                        rebind=True,
+                    )
+                except Exception as exc:
+                    print(f"warn: profile update failed: {exc}", file=sys.stderr)
+
         return 0
 
     def engineer_refresh_workspace(self, args: Any) -> int:
@@ -532,3 +704,36 @@ class CrudHandlers:
         values[args.key] = args.value
         self.hooks.write_env_file(Path(session.secret_file), values, self.hooks.ensure_dir, self.hooks.write_text)
         return 0
+
+
+if __name__ == "__main__":
+    import argparse as _ap
+
+    _p = _ap.ArgumentParser(description="Profile-only seat operations (no session bootstrap)")
+    _p.add_argument("command", choices=["engineer_create", "engineer_rebind"])
+    _p.add_argument("seat_id")
+    _p.add_argument("--profile", required=True)
+    _p.add_argument("--role")
+    _p.add_argument("--tool", default="claude")
+    _p.add_argument("--mode", default="oauth")
+    _p.add_argument("--provider", default="anthropic")
+    _p.add_argument("--model")
+    _a = _p.parse_args()
+    _profile_path = Path(_a.profile)
+    _role = (_a.role or "").strip() or _a.seat_id.split("-")[0]
+    _rebind = _a.command == "engineer_rebind"
+    try:
+        _update_profile_seat(
+            _profile_path,
+            _a.seat_id,
+            _role,
+            _a.tool,
+            _a.mode,
+            _a.provider,
+            _a.model,
+            rebind=_rebind,
+        )
+        print(f"updated profile {_profile_path}: {_a.seat_id} ({_a.command})")
+    except Exception as _exc:
+        print(f"error: {_exc}", file=sys.stderr)
+        sys.exit(1)

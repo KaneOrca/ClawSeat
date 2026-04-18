@@ -440,6 +440,18 @@ bash {shell}/send-and-verify.sh --project <project> <seat> "message"
 ```
 
 > 只用于 notify_seat.py 不可用时的 fallback。日常任务派发和交接 **禁止** 用这个。
+
+## Retry semantics（exit code 含义）
+
+dispatch_task.py / complete_handoff.py 的退出码有三种含义：
+
+| exit code | 含义 | koder 应对 |
+|---|---|---|
+| 0 | 正常完成 | 继续流程 |
+| 1 | 错误，需升级 | 排查原因，向用户汇报 |
+| 2 | 任务已存在（TASK_ALREADY_QUEUED）| **不重跑 dispatch**；仅用 send-and-verify 补发通知 |
+
+exit 2 时只需 re-send（notify），不重新 dispatch。重复 dispatch 同一 task_id 会被 guard 拦截并再次 exit 2。
 """
 
 

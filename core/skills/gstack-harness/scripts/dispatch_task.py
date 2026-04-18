@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -24,6 +25,18 @@ from _common import (
 
 
 # ── Planner event announce helpers ─────────────────────────────────────
+
+def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
+    """Return True if task_id appears under a [pending] or [queued] header in todo_path."""
+    if not todo_path.exists():
+        return False
+    content = todo_path.read_text(encoding="utf-8")
+    return bool(re.search(
+        rf'^## \[(pending|queued)\]\s+{re.escape(task_id)}\b',
+        content,
+        re.MULTILINE,
+    ))
+
 
 def _should_announce_planner_event(source: str, target: str, profile=None) -> bool:
     override = os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS")
@@ -264,6 +277,12 @@ def main() -> int:
         args.skill_refs,
     )
     todo_path = profile.todo_path(args.target)
+    if _is_task_already_queued(todo_path, args.task_id):
+        print(
+            f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
+            file=sys.stderr,
+        )
+        return 2
     reply_to = args.reply_to or args.source
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
