@@ -19,9 +19,14 @@ except ModuleNotFoundError:  # pragma: no cover
 _MIGRATION_DIR = Path(__file__).resolve().parent  # .../ClawSeat/core/migration
 _CLAWSEAT_ROOT_FOR_COMMON = _MIGRATION_DIR.parent.parent  # .../ClawSeat
 ORIGINAL_COMMON = _CLAWSEAT_ROOT_FOR_COMMON / "core" / "skills" / "gstack-harness" / "scripts" / "_common.py"
+if not ORIGINAL_COMMON.exists():
+    raise RuntimeError(
+        f"harness common module missing at {ORIGINAL_COMMON}; "
+        "the ClawSeat checkout is incomplete. Re-clone or run openclaw_first_install.py."
+    )
 SPEC = importlib.util.spec_from_file_location("gstack_harness_common_dynamic", ORIGINAL_COMMON)
 if SPEC is None or SPEC.loader is None:
-    raise SystemExit(f"unable to load harness common module from {ORIGINAL_COMMON}")
+    raise RuntimeError(f"unable to load harness common module from {ORIGINAL_COMMON}")
 BASE_COMMON = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = BASE_COMMON
 SPEC.loader.exec_module(BASE_COMMON)
