@@ -5,6 +5,23 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+# Engineer profile boolean fields. Single source of truth for load + write so
+# a new authority flag only needs to be added here; forgetting either half
+# used to silently drop the flag on disk or on read without any error.
+ENGINEER_BOOL_FIELDS: tuple[str, ...] = (
+    "human_facing",
+    "active_loop_owner",
+    "dispatch_authority",
+    "patrol_authority",
+    "unblock_authority",
+    "escalation_authority",
+    "remind_active_loop_owner",
+    "review_authority",
+    "qa_authority",
+    "design_authority",
+)
+
+
 @dataclass
 class StoreHooks:
     error_cls: type[Exception]
@@ -129,6 +146,9 @@ class StoreHandlers:
 
     def load_engineer(self, engineer_id: str) -> Any:
         data = self.hooks.load_toml(self.engineer_path(engineer_id))
+        bool_kwargs = {
+            field: bool(data.get(field, False)) for field in ENGINEER_BOOL_FIELDS
+        }
         return self.hooks.engineer_cls(
             engineer_id=data["id"],
             display_name=data.get("display_name", data["id"]),
@@ -136,19 +156,10 @@ class StoreHandlers:
             role=data.get("role", ""),
             role_details=list(data.get("role_details", [])),
             skills=list(data.get("skills", [])),
-            human_facing=bool(data.get("human_facing", False)),
-            active_loop_owner=bool(data.get("active_loop_owner", False)),
-            dispatch_authority=bool(data.get("dispatch_authority", False)),
-            patrol_authority=bool(data.get("patrol_authority", False)),
-            unblock_authority=bool(data.get("unblock_authority", False)),
-            escalation_authority=bool(data.get("escalation_authority", False)),
-            remind_active_loop_owner=bool(data.get("remind_active_loop_owner", False)),
-            review_authority=bool(data.get("review_authority", False)),
-            qa_authority=bool(data.get("qa_authority", False)),
-            design_authority=bool(data.get("design_authority", False)),
             default_tool=data.get("default_tool", data.get("tool", "")),
             default_auth_mode=data.get("default_auth_mode", data.get("auth_mode", "")),
             default_provider=data.get("default_provider", data.get("provider", "")),
+            **bool_kwargs,
         )
 
     def load_engineers(self) -> dict[str, Any]:
@@ -368,19 +379,12 @@ class StoreHandlers:
         ]
         if engineer.role_details:
             lines.append(f"role_details = {self.hooks.q_array(engineer.role_details)}")
+        lines.append(f"skills = {self.hooks.q_array(engineer.skills)}")
+        for field in ENGINEER_BOOL_FIELDS:
+            value = "true" if getattr(engineer, field) else "false"
+            lines.append(f"{field} = {value}")
         lines.extend(
             [
-                f"skills = {self.hooks.q_array(engineer.skills)}",
-                f"human_facing = {'true' if engineer.human_facing else 'false'}",
-                f"active_loop_owner = {'true' if engineer.active_loop_owner else 'false'}",
-                f"dispatch_authority = {'true' if engineer.dispatch_authority else 'false'}",
-                f"patrol_authority = {'true' if engineer.patrol_authority else 'false'}",
-                f"unblock_authority = {'true' if engineer.unblock_authority else 'false'}",
-                f"escalation_authority = {'true' if engineer.escalation_authority else 'false'}",
-                f"remind_active_loop_owner = {'true' if engineer.remind_active_loop_owner else 'false'}",
-                f"review_authority = {'true' if engineer.review_authority else 'false'}",
-                f"qa_authority = {'true' if engineer.qa_authority else 'false'}",
-                f"design_authority = {'true' if engineer.design_authority else 'false'}",
                 f"default_tool = {self.hooks.q(engineer.default_tool)}",
                 f"default_auth_mode = {self.hooks.q(engineer.default_auth_mode)}",
                 f"default_provider = {self.hooks.q(engineer.default_provider)}",
