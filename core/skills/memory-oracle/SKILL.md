@@ -70,4 +70,4 @@ python3 scan_project.py --project clawseat --repo /Users/ywf/.clawseat --depth s
 
 M1 scanners (`scan_environment.py`) → machine layer; M2 (`scan_project.py`) → project layer.
 
-Seats reach memory via the query protocol defined in [../../clawseat-install/references/memory-query-protocol.md]. Memory is required (not optional) in the install flow; see [../../clawseat-install/references/install-flow.md]'s "Start Memory Seat" section.
+Seats reach memory via the query protocol defined in [../clawseat-install/references/memory-query-protocol.md]. Memory is required (not optional) in the install flow; see [../clawseat-install/references/install-flow.md]'s "Start Memory Seat" section.
