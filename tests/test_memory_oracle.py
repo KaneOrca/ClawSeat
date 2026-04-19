@@ -94,6 +94,80 @@ class TestScanCredentials:
         assert isinstance(result["keys"], dict)
 
 
+# Fix 1: 6 additional scanner test classes (brief §5.1 required ≥6 core scanners)
+
+class TestScanOpenclaw:
+    def test_happy_path_returns_schema(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(se, "HOME", tmp_path)
+        result = se.scan_openclaw()
+        assert "exists" in result
+        assert "skills" in result
+        assert isinstance(result["skills"], list)
+        assert "feishu" in result
+        assert "scanned_at" in result
+
+
+class TestScanGstack:
+    def test_happy_path_returns_schema(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(se, "HOME", tmp_path)
+        result = se.scan_gstack()
+        assert "exists" in result
+        assert "repos" in result
+        assert isinstance(result["repos"], list)
+        assert "skills" in result
+        assert "scanned_at" in result
+
+
+class TestScanClawseat:
+    def test_happy_path_returns_schema(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(se, "HOME", tmp_path)
+        result = se.scan_clawseat()
+        assert "profiles" in result
+        assert isinstance(result["profiles"], dict)
+        assert "sessions" in result
+        assert "workspaces" in result
+        assert "agents_root" in result
+
+
+class TestScanRepos:
+    def test_happy_path_no_coding_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(se, "HOME", tmp_path)
+        result = se.scan_repos()
+        assert "repos" in result
+        assert isinstance(result["repos"], list)
+        assert "scan_dirs" in result
+        assert "scanned_at" in result
+
+    def test_with_git_repo(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(se, "HOME", tmp_path)
+        coding = tmp_path / "coding" / "myrepo"
+        coding.mkdir(parents=True)
+        (coding / ".git").mkdir()
+        result = se.scan_repos()
+        names = [r["name"] for r in result["repos"]]
+        assert "myrepo" in names
+
+
+class TestScanNetwork:
+    def test_happy_path_returns_schema(self):
+        result = se.scan_network()
+        assert "proxy" in result
+        assert isinstance(result["proxy"], dict)
+        assert "endpoints" in result
+        assert "scanned_at" in result
+
+
+class TestScanGithub:
+    def test_happy_path_returns_schema(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(se, "HOME", tmp_path)
+        result = se.scan_github()
+        assert "gitconfig" in result
+        assert "gh_cli" in result
+        assert "ssh_keys" in result
+        assert isinstance(result["ssh_keys"], list)
+        assert "scanned_at" in result
+
+
 class TestParseEnvFile:
     def test_basic_key_value(self):
         text = "FOO=bar\nBAZ=qux"
@@ -373,6 +447,40 @@ class TestVerifyClaims:
             "claims": [{
                 "statement": "Minimax key exists",
                 "evidence": [{"file": "credentials", "path": "keys.MINIMAX.value", "expected_value": "sk-xyz"}],
+            }]
+        }
+        result = qm.verify_claims(response, mem)
+        assert result["all_verified"] is True
+
+    # Fix 2: brief-required normalize/coerce pass cases.
+    # verify_claims uses strict equality (actual != expected) with no normalization.
+    # Marked xfail — planner should dispatch T-verify-normalize to implement these.
+
+    @pytest.mark.xfail(
+        reason="verify_claims uses strict equality; whitespace+case normalization not implemented — T-verify-normalize track needed",
+        strict=True,
+    )
+    def test_pass_string_normalize_whitespace_case(self, tmp_path):
+        mem = _make_memory(tmp_path, {"machine/credentials.json": {"key": "sk-abc"}})
+        response = {
+            "claims": [{
+                "statement": "Key normalized whitespace+case",
+                "evidence": [{"file": "credentials", "path": "key", "expected_value": "  SK-ABC  "}],
+            }]
+        }
+        result = qm.verify_claims(response, mem)
+        assert result["all_verified"] is True
+
+    @pytest.mark.xfail(
+        reason="verify_claims uses strict equality; str/int type coercion not implemented — T-verify-normalize track needed",
+        strict=True,
+    )
+    def test_pass_numeric_type_coerce(self, tmp_path):
+        mem = _make_memory(tmp_path, {"machine/credits.json": {"count": 123}})
+        response = {
+            "claims": [{
+                "statement": "Count is 123 (string expected vs int actual)",
+                "evidence": [{"file": "credits", "path": "count", "expected_value": "123"}],
             }]
         }
         result = qm.verify_claims(response, mem)

@@ -8,7 +8,7 @@ Each script outputs structured JSON: `{"all_passed": bool, "stages": [...]}`.
 Validates the full memory lifecycle without the MiniMax LLM API:
 
 ```
-scan_env → write_fixture → query (key/file/search) → verify_claims (pass + mismatch) → ask_dry_run
+bootstrap → dispatch_scan → query (key/file/search/ask) → verify → teardown
 ```
 
 ### Dry-run mode (default, CI-safe)
@@ -34,14 +34,33 @@ Do not run in CI unless the secret is available.
 
 ## Dependencies
 
-| Dependency | Required for |
+### Required for dry-run
+
+| Dependency | Notes |
 |---|---|
-| Python ≥ 3.11 | All scripts |
-| `query_memory.py` (in-repo) | memory_smoke.py |
-| `scan_environment.py` (in-repo) | memory_smoke.py |
-| MiniMax API key | `--live` only |
+| Python ≥ 3.11 | Required |
+| `query_memory.py` (in-repo) | Imported directly |
+| `scan_environment.py` (in-repo) | Imported directly |
+
+### Required for live mode only
+
+| Dependency | Notes |
+|---|---|
+| MiniMax API key | `~/.agents/secrets/claude/minimax/memory.env` |
+| `dispatch_task.py` (in-repo) | Called via subprocess |
+
+### Optional
+
+| Dependency | Install | Notes |
+|---|---|---|
+| `pytest-cov` | `pip install pytest-cov` | Needed for `coverage report` on the memory-oracle module (T10 R8 coverage check) |
 
 No third-party pip packages required for dry-run mode.
+
+## Known Issues
+
+- **coverage report fails without pytest-cov**: If `pytest --cov=...` fails with `no module named pytest_cov`, install with `pip install pytest-cov` (or `pip3 install --break-system-packages pytest-cov` on Homebrew-managed Python).
+- **query_ask stage fails if dispatch blocked**: The `query_ask` stage runs `query_memory.py --ask` in a sandbox HOME. It asserts that the responses directory is created, then dispatch fails (expected, as T9 blocks `--target memory`). This is intentional — the stage verifies infrastructure setup, not a live dispatch.
 
 ## Adding New Smoke Tests
 
