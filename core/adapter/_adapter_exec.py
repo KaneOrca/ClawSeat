@@ -14,6 +14,23 @@ from ._adapter_types import AdapterResult, PendingFrontstageItem
 
 
 # ---------------------------------------------------------------------------
+# PENDING_FRONTSTAGE section labels
+# ---------------------------------------------------------------------------
+# Keep the parser and the writer pointing at the SAME literal. Before this
+# change, the strings "## 字段定义" / "## 待处理事项" / "## 已归档" /
+# "## 用户摘要" were scattered as `"## \u5f85\u5904\u7406\u4e8b\u9879"`
+# etc. in both parse and render paths. Renaming a section (or typo-fixing
+# one of the copies) would silently make the parser stop finding items the
+# writer emitted, and the only symptom would be the pending list rendering
+# empty. Centralising forces both sides to move together.
+
+SECTION_HEADER_FIELD_DEFS = "## 字段定义"       # field specification
+SECTION_HEADER_PENDING = "## 待处理事项"         # pending items (unresolved)
+SECTION_HEADER_ARCHIVED = "## 已归档"             # archived items (resolved)
+SECTION_HEADER_USER_SUMMARY = "## 用户摘要"      # user-facing brief summary
+
+
+# ---------------------------------------------------------------------------
 # File-parsing helpers
 # ---------------------------------------------------------------------------
 
@@ -77,7 +94,7 @@ def parse_brief(path: Path) -> dict[str, str]:
                 parsed[field] = stripped.split(":", 1)[1].strip()
                 break
         else:
-            if stripped == "## \u7528\u6237\u6458\u8981":
+            if stripped == SECTION_HEADER_USER_SUMMARY:
                 in_user_summary = True
                 continue
             if in_user_summary and stripped.startswith("## "):
@@ -167,11 +184,11 @@ def parse_pending_frontstage(path: Path) -> list[PendingFrontstageItem]:
 
     for line in lines:
         stripped = line.strip()
-        if stripped == "## \u5f85\u5904\u7406\u4e8b\u9879":
+        if stripped == SECTION_HEADER_PENDING:
             flush()
             section = "pending"
             continue
-        if stripped == "## \u5df2\u5f52\u6863":
+        if stripped == SECTION_HEADER_ARCHIVED:
             flush()
             section = "archived"
             continue
@@ -221,23 +238,23 @@ def write_pending_frontstage(path: Path, items: list[PendingFrontstageItem]) -> 
     lines = [
         "# PENDING_FRONTSTAGE",
         "",
-        "## \u5b57\u6bb5\u5b9a\u4e49",
+        SECTION_HEADER_FIELD_DEFS,
         "",
-        "- `id`: \u552f\u4e00\u4e8b\u9879 id\uff0c\u4f8b\u5982 `PF-001`",
+        "- `id`: 唯一事项 id，例如 `PF-001`",
         "- `type`: `decision | clarification`",
-        "- `related_task`: \u5173\u8054\u4efb\u52a1 id",
-        "- `summary`: \u4e00\u53e5\u8bdd\u4e2d\u6587\u6458\u8981",
-        "- `planner_recommendation`: planner \u5efa\u8bae\u65b9\u6848",
-        "- `koder_default_action`: koder \u4e0d\u4e0a\u6d6e\u7528\u6237\u65f6\u7684\u9ed8\u8ba4\u52a8\u4f5c",
+        "- `related_task`: 关联任务 id",
+        "- `summary`: 一句话中文摘要",
+        "- `planner_recommendation`: planner 建议方案",
+        "- `koder_default_action`: koder 不上浮用户时的默认动作",
         "- `user_input_needed`: `true | false`",
         "- `blocking`: `true | false`",
-        "- `options`: \u53ef\u9009\u9879\u5217\u8868",
+        "- `options`: 可选项列表",
         "- `resolved`: `true | false`",
         "- `resolved_by`: `koder | user`",
         "- `resolved_at`: ISO timestamp",
-        "- `resolution`: \u6700\u7ec8\u51b3\u5b9a\u6216\u8865\u5145\u8bf4\u660e",
+        "- `resolution`: 最终决定或补充说明",
         "",
-        "## \u5f85\u5904\u7406\u4e8b\u9879",
+        SECTION_HEADER_PENDING,
         "",
     ]
     if pending:
@@ -245,7 +262,7 @@ def write_pending_frontstage(path: Path, items: list[PendingFrontstageItem]) -> 
             lines.extend(render_pending_item(item))
     lines.extend(
         [
-            "## \u5df2\u5f52\u6863",
+            SECTION_HEADER_ARCHIVED,
             "",
         ]
     )
