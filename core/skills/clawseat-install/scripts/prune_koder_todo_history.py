@@ -27,14 +27,10 @@ _HANDOFFS_GLOB_PATTERN = "patrol/handoffs"
 
 def _handoffs_dir_for_project(identities_root: Path, project: str) -> list[Path]:
     """Find patrol/handoffs dirs for all koder identities for the given project."""
-    results = []
     if not identities_root.exists():
-        return results
-    for identity_dir in identities_root.iterdir():
-        candidate = identity_dir / project / "koder" / "home" / ".agents" / "tasks" / project / "koder" / "patrol" / "handoffs"
-        if candidate.is_dir():
-            results.append(candidate)
-    return results
+        return []
+    results = list(identities_root.rglob(f"home/.agents/tasks/{project}/patrol/handoffs"))
+    return [p for p in results if p.is_dir()]
 
 
 def _find_koder_todo_paths(identities_root: Path, project: str) -> list[Path]:
@@ -43,14 +39,9 @@ def _find_koder_todo_paths(identities_root: Path, project: str) -> list[Path]:
     if glob_override:
         return list(identities_root.glob(glob_override))
 
-    results = []
     if not identities_root.exists():
-        return results
-    for identity_dir in identities_root.iterdir():
-        candidate = identity_dir / project / "koder" / "home" / ".agents" / "tasks" / project / "koder" / "TODO.md"
-        if candidate.is_file():
-            results.append(candidate)
-    return results
+        return []
+    return list(identities_root.rglob(f"home/.agents/tasks/{project}/koder/TODO.md"))
 
 
 # ── TODO.md parsing ───────────────────────────────────────────────────────────

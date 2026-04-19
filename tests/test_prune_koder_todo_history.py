@@ -129,3 +129,55 @@ def test_idempotent_second_run_noop(tmp_path):
     assert result2["written"] is False
     # File unchanged
     assert todo.read_text(encoding="utf-8") == text_after_first
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Test 8 (F1 regression): default discovery walks nested identity layout
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_default_discovery_walks_nested_identity_layout(tmp_path, monkeypatch):
+    """rglob-based discovery finds TODO.md at real 4-level-deep identity path.
+
+    Layout mirrors production:
+      identities/<tool>/<auth_mode>/<full-identity>/home/.agents/tasks/<project>/koder/TODO.md
+    """
+    task_id = "nested-task-001"
+    project = "install"
+
+    # Build nested identity tree
+    identity_base = (
+        tmp_path / "runtime" / "identities"
+        / "claude" / "oauth" / "claude.oauth.anthropic.install.planner"
+        / "home" / ".agents" / "tasks" / project
+    )
+    koder_dir = identity_base / "koder"
+    koder_dir.mkdir(parents=True)
+
+    # Seed TODO.md with one stale block
+    todo_path = koder_dir / "TODO.md"
+    stale_block = (
+        f"## [completed] {task_id}\n"
+        f"task_id: {task_id}\n"
+        "title: Nested stale task\n\n"
+        "Some content.\n\n"
+    )
+    todo_path.write_text(_HEADER + stale_block, encoding="utf-8")
+
+    # Seed consumed handoff files in patrol/handoffs (also nested)
+    handoffs_dir = identity_base / "patrol" / "handoffs"
+    handoffs_dir.mkdir(parents=True)
+    import json as _json
+    (handoffs_dir / f"{task_id}__planner__koder.json").write_text(_json.dumps({"task_id": task_id}))
+    (handoffs_dir / f"{task_id}__planner__koder__consumed.json").write_text(_json.dumps({"task_id": task_id}))
+
+    # Ensure env override is NOT set so rglob path is exercised
+    monkeypatch.delenv("CLAWSEAT_KODER_TODO_GLOB", raising=False)
+
+    identities_root = tmp_path / "runtime" / "identities"
+    rc = pkt.main(["--project", project, "--yes"], identities_root=identities_root)
+
+    assert rc == 0
+    pruned_text = todo_path.read_text(encoding="utf-8")
+    assert task_id not in pruned_text, "stale block should have been pruned"
+    bak_files = list(koder_dir.glob("*.bak"))
+    assert bak_files, "backup .bak file should have been created"
