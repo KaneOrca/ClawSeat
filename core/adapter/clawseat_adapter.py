@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,47 @@ def _get_migration_root() -> Path:
     if clawseat_root:
         return Path(clawseat_root) / "core" / "migration"
     return Path.home() / "coding" / "ClawSeat" / "core" / "migration"
+
+
+def _write_snapshot_failure_log(
+    *, profile_path: Path, returncode: int, stdout: str, stderr: str
+) -> Path:
+    """Persist a profile-snapshot subprocess failure to a 0600 log file.
+
+    Keeps the full stderr (which may include profile contents, URLs, or — in
+    misconfigured setups — secrets) off of the raised exception and any
+    downstream log handler that might forward or fan out to less-trusted
+    sinks. Returns the path to the log so the caller can point operators at
+    it without surfacing the body.
+    """
+    agents_root = Path(os.environ.get("AGENTS_ROOT", "")).expanduser()
+    if not agents_root:
+        agents_root = Path.home() / ".agents"
+    log_dir = agents_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        log_dir.chmod(0o700)
+    except OSError:
+        # Directory might already exist with a parent-controlled mode — not
+        # fatal, but the subsequent file chmod still applies.
+        pass
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    log_path = log_dir / f"profile_snapshot_{ts}_{os.getpid()}.log"
+    header = (
+        f"# ClawSeat profile snapshot failure\n"
+        f"# profile_path: {profile_path}\n"
+        f"# returncode: {returncode}\n"
+        f"# timestamp: {ts}\n"
+        f"# WARNING: may contain profile contents, including secrets.\n"
+        f"# ----- stdout -----\n"
+    )
+    body = header + (stdout or "") + "\n# ----- stderr -----\n" + (stderr or "")
+    log_path.write_text(body, encoding="utf-8")
+    try:
+        log_path.chmod(0o600)
+    except OSError:
+        pass
+    return log_path
 
 
 def _default_python_bin() -> str:
@@ -669,11 +711,27 @@ class ClawseatAdapter:
             ]
         )
         if not result.ok:
-            detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
-            raise RuntimeError(f"failed to load profile snapshot for {profile_path}: {detail}")
+            # The helper loads a profile TOML that may include seat_overrides with
+            # provider URLs, auth endpoints, and (if a user misconfigured it) API
+            # keys. A subprocess traceback surfaces the parser's view of that
+            # content, so bubbling stderr into the exception message would leak
+            # it into any caller's error log. Write the full stderr/stdout to a
+            # 0600 log file instead and keep the raised message opaque.
+            log_path = _write_snapshot_failure_log(
+                profile_path=profile_path,
+                returncode=result.returncode,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
+            raise RuntimeError(
+                f"failed to load profile snapshot for {profile_path} "
+                f"(rc={result.returncode}); full diagnostic in {log_path}"
+            )
         try:
             return json.loads(result.stdout)
         except json.JSONDecodeError as exc:
+            # JSON decode errors come from OUR helper's print() — no profile
+            # content leaks here, safe to include exc.
             raise RuntimeError(f"invalid profile snapshot output for {profile_path}: {exc}") from exc
 
     def _profile_project_name(self, path: Path) -> str:
