@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -103,6 +104,106 @@ def _link_sandbox_tasks_to_real_home(
             print(f"warn: _link_sandbox_tasks: failed to link for {seat}: {exc}", file=sys.stderr)
 
 
+def _sync_workspaces_host_to_sandbox(
+    profile: HarnessProfile,
+    seats: list[str],
+    *,
+    strict: bool = False,
+    _agents_home: Path | None = None,
+) -> None:
+    """Rsync host workspace → sandbox workspace for each seat (add-only, never delete).
+
+    Fixes split-brain: seats run inside a sandbox HOME that may not have TOOLS/
+    written by init_koder on the host side. --ignore-existing preserves
+    sandbox-specific files while seeding host canonical content into the sandbox.
+
+    Prints per-seat:  workspace_sync: <seat> host=<p> sandbox=<p> files=<N> status=ok|skip|fail
+    Fail-safe: warns on error, never raises (unless strict=True).
+    """
+    try:
+        import tomllib as _tomllib
+    except ModuleNotFoundError:
+        import tomli as _tomllib  # type: ignore
+
+    agents_home = _agents_home or (Path.home() / ".agents")
+
+    for seat in seats:
+        host_workspace = profile.workspace_root / seat
+        if not host_workspace.is_dir():
+            print(
+                f"workspace_sync: {seat} status=skip reason=host_workspace_not_found host={host_workspace}"
+            )
+            continue
+
+        session_path = agents_home / "sessions" / profile.project_name / seat / "session.toml"
+        if not session_path.is_file():
+            print(f"workspace_sync: {seat} status=skip reason=no_session")
+            continue
+
+        try:
+            with open(session_path, "rb") as _f:
+                session_data = _tomllib.load(_f)
+        except Exception as exc:
+            print(f"workspace_sync: {seat} status=skip reason=session_read_error: {exc}")
+            continue
+
+        runtime_dir = session_data.get("runtime_dir", "")
+        if not runtime_dir:
+            print(f"workspace_sync: {seat} status=skip reason=no_runtime_dir")
+            continue
+
+        sandbox_home = Path(runtime_dir) / "home"
+        if not sandbox_home.is_dir():
+            print(
+                f"workspace_sync: {seat} status=skip reason=sandbox_home_not_found sandbox={sandbox_home}"
+            )
+            continue
+
+        sandbox_workspace = sandbox_home / ".agents" / "workspaces" / profile.project_name / seat
+        sandbox_workspace.mkdir(parents=True, exist_ok=True)
+
+        # rsync: append-only (--ignore-existing), preserve attrs (-a)
+        src = str(host_workspace).rstrip("/") + "/"
+        dst = str(sandbox_workspace).rstrip("/") + "/"
+
+        try:
+            result = subprocess.run(
+                ["rsync", "-a", "--ignore-existing", src, dst],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                transferred = [
+                    ln for ln in result.stdout.splitlines()
+                    if ln and not ln.startswith("sent") and not ln.startswith("total")
+                ]
+                print(
+                    f"workspace_sync: {seat} host={host_workspace} sandbox={sandbox_workspace}"
+                    f" files={len(transferred)} status=ok"
+                )
+            else:
+                msg = (
+                    f"workspace_sync: {seat} host={host_workspace} sandbox={sandbox_workspace}"
+                    f" status=fail rc={result.returncode}"
+                )
+                if strict:
+                    raise RuntimeError(msg)
+                print(f"warn: {msg}", file=sys.stderr)
+        except FileNotFoundError:
+            msg = f"workspace_sync: {seat} status=fail reason=rsync_not_found"
+            if strict:
+                raise RuntimeError(msg)
+            print(f"warn: {msg}", file=sys.stderr)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            msg = f"workspace_sync: {seat} status=fail reason={exc}"
+            if strict:
+                raise RuntimeError(msg)
+            print(f"warn: {msg}", file=sys.stderr)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Bootstrap a project from a gstack harness profile.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
@@ -111,6 +212,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start", action="store_true", help="Start the project monitor after bootstrap.")
     parser.add_argument("--refresh-existing", action="store_true", help="Refresh workspace files for already-deployed seats from current template.")
     parser.add_argument("--link-tasks", action="store_true", help="Only create sandbox→real tasks symlinks (skip full bootstrap).")
+    parser.add_argument("--no-workspace-sync", action="store_true", help="Skip host→sandbox workspace rsync step.")
+    parser.add_argument("--strict-workspace-sync", action="store_true", help="Abort bootstrap if any workspace rsync fails.")
     return parser.parse_args()
 
 
@@ -208,6 +311,12 @@ def main() -> int:
             effective_profile,
             list(effective_profile.materialized_seats or effective_profile.seats),
         )
+        if not args.no_workspace_sync:
+            _sync_workspaces_host_to_sandbox(
+                effective_profile,
+                list(effective_profile.materialized_seats or effective_profile.seats),
+                strict=args.strict_workspace_sync,
+            )
         for seat in (effective_profile.materialized_seats or effective_profile.seats):
             seed_empty_secret_from_peer(effective_profile, seat)
             # OAuth is user-managed via the TUI; nothing to seed here.
