@@ -6,7 +6,7 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -251,7 +251,7 @@ class HeartbeatHandlers:
             f"manifest_path = {self.hooks.q(str(self.manifest_path(session)))}",
             f"install_fingerprint = {self.hooks.q(self.install_fingerprint(session, manifest))}",
             f"manifest_fingerprint = {self.hooks.q(self.manifest_fingerprint(manifest))}",
-            f"verified_at = {self.hooks.q(datetime.now().isoformat(timespec='seconds'))}",
+            f"verified_at = {self.hooks.q(datetime.now(timezone.utc).isoformat(timespec='seconds'))}",
             f"verification_method = {self.hooks.q(verification_method)}",
         ]
         if job_id:
