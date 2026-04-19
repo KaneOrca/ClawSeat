@@ -113,8 +113,12 @@ def test_host_workspace_copies_to_sandbox_when_both_exist(tmp_path):
 # Test 2: sandbox existing files are NOT overwritten (--ignore-existing)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_sandbox_existing_files_not_overwritten(tmp_path):
-    """Sandbox already has a file with different content → rsync preserves sandbox version."""
+def test_sandbox_existing_files_not_overwritten(tmp_path, monkeypatch):
+    """Sandbox already has a file with different content → rsync preserves sandbox version.
+
+    Also asserts that subprocess.run is called with --ignore-existing in argv
+    so that future flag changes are caught by this test.
+    """
     project = "testproj"
     seat = "koder"
     agents_home = tmp_path / "agents"
@@ -133,11 +137,28 @@ def test_sandbox_existing_files_not_overwritten(tmp_path):
     sandbox_agents_md.write_text("sandbox version")
     _write_session_toml(agents_home, project, seat, str(runtime_dir))
 
+    # Wrap subprocess.run to capture argv while still running the real rsync
+    import bootstrap_harness as bh
+    _real_run = bh.subprocess.run
+    captured_cmds: list[list] = []
+
+    def _capturing_run(cmd, *args, **kwargs):
+        captured_cmds.append(list(cmd) if isinstance(cmd, (list, tuple)) else [cmd])
+        return _real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(bh.subprocess, "run", _capturing_run)
+
     _sync_workspaces_host_to_sandbox(profile, [seat], _agents_home=agents_home)
 
     # --ignore-existing must NOT overwrite the sandbox copy
     assert sandbox_agents_md.read_text() == "sandbox version", \
         "rsync --ignore-existing must not overwrite sandbox-existing file"
+
+    # Argv guard: ensure the rsync call contained --ignore-existing
+    assert captured_cmds, "subprocess.run should have been called for rsync"
+    rsync_argv = captured_cmds[0]
+    assert "--ignore-existing" in rsync_argv, \
+        f"expected --ignore-existing in rsync argv, got {rsync_argv}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
