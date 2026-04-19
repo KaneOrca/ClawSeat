@@ -29,6 +29,7 @@ Contract:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -97,6 +98,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Show the planned symlink operations without changing the filesystem.",
     )
+    parser.add_argument(
+        "--no-feishu-checklist",
+        action="store_true",
+        help="Skip the Feishu post-install checklist printed after a successful overlay.",
+    )
     return parser.parse_args(argv)
 
 
@@ -147,11 +153,75 @@ def _candidate_workspaces(openclaw_home: Path) -> list[str]:
     return names
 
 
+_FEISHU_PLACEHOLDER = "<USER_MUST_PROVISION_NEW_FEISHU_APP>"
+
+
+def _print_feishu_checklist(agent: str, openclaw_home: Path, *, no_checklist: bool) -> None:
+    """Print post-install Feishu platform requirements checklist to stdout.
+
+    Reads appId from ~/.openclaw/openclaw.json (channels.feishu.accounts.<agent>.appId).
+    If not found or placeholder, prints a warning instead of the URL.
+    Zero side effects — purely informational print.
+    """
+    if no_checklist:
+        return
+
+    app_id: str | None = None
+    config_path = openclaw_home / "openclaw.json"
+    try:
+        if config_path.is_file():
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            channels = data.get("channels", {})
+            feishu = channels.get("feishu", {})
+            accounts = feishu.get("accounts", {})
+            agent_cfg = accounts.get(agent, {})
+            app_id = agent_cfg.get("appId") or None
+    except Exception:
+        pass
+
+    missing = not app_id or app_id == _FEISHU_PLACEHOLDER
+    if missing:
+        app_id_line = "  App ID: <未配置 — 请先在 openclaw.json 填写 appId>"
+        url_line = "  Feishu Open Platform URL: https://open.feishu.cn/app/<appId>/event-subscription"
+    else:
+        app_id_line = f"  App ID: {app_id}"
+        url_line = f"  Feishu Open Platform URL: https://open.feishu.cn/app/{app_id}/event-subscription"
+
+    sep = "=" * 60
+    print()
+    print(sep)
+    print("Post-install Checklist — Feishu platform requirements")
+    print(sep)
+    print(f"  Agent: {agent}")
+    print(app_id_line)
+    print(url_line)
+    if missing:
+        print()
+        print("  WARNING: appId 未配置，请先在 openclaw.json 填写 appId")
+    print()
+    print("  REQUIRED event scopes (to enable group_msg no-@mention dispatch):")
+    print("    \u2022 im:message (聊天消息事件)")
+    print("    \u2022 im:message.group_msg:receive  (群消息免@)")
+    print("    \u2022 im:chat:access (聊天管理)")
+    print()
+    print("  REQUIRED bot permissions:")
+    print("    \u2022 im:chat (读写群消息)")
+    print("    \u2022 im:chat.members (读取群成员)")
+    print()
+    print("  REQUIRED published version: 2026.4.9+ 或 latest")
+    print("    (发布流程: 开放平台 \u2192 版本管理与发布 \u2192 提交审核 \u2192 发布)")
+    print()
+    print("  Reference: core/skills/clawseat-install/references/feishu-bridge-setup.md")
+    print(sep)
+    print()
+
+
 def install_overlay(
     openclaw_home: Path,
     agent: str,
     *,
     dry_run: bool,
+    no_feishu_checklist: bool = False,
 ) -> int:
     """Install workspace skill symlinks for ``agent`` into ``openclaw_home``.
 
@@ -193,6 +263,7 @@ def install_overlay(
         print("  Finalize the koder workspace with the managed scaffolding:")
         print(f'     python3 "{CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/init_koder.py" \\')
         print(f'       --workspace "{workspace}" --project <project>')
+        _print_feishu_checklist(agent, openclaw_home, no_checklist=no_feishu_checklist)
 
     return 0
 
@@ -216,7 +287,11 @@ def main(argv: list[str] | None = None) -> int:
     if not CLAWSEAT_ROOT.exists():
         raise RuntimeError(f"CLAWSEAT_ROOT not found: {CLAWSEAT_ROOT}")
 
-    return install_overlay(openclaw_home, args.agent, dry_run=args.dry_run)
+    return install_overlay(
+        openclaw_home, args.agent,
+        dry_run=args.dry_run,
+        no_feishu_checklist=args.no_feishu_checklist,
+    )
 
 
 if __name__ == "__main__":

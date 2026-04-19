@@ -6,6 +6,25 @@
 - OpenClaw gateway running
 - A Feishu group that the project bot has been added to
 
+## Event Scope Checklist
+
+Before testing Feishu dispatch, confirm these are enabled in Feishu Open Platform → App → Event Subscriptions:
+
+| Scope | Purpose | Required |
+|---|---|---|
+| `im:message` | 聊天消息事件 | Yes |
+| `im:message.group_msg:receive` | 群消息免@ — koder responds without @mention | **Critical** |
+| `im:chat:access` | 聊天管理 | Yes |
+
+And in Permissions & Scopes:
+
+| Permission | Purpose | Required |
+|---|---|---|
+| `im:chat` | 读写群消息 | Yes |
+| `im:chat.members` | 读取群成员 | Yes |
+
+After enabling scopes, publish a new app version (版本管理与发布 → 提交审核 → 发布). Scope changes are not active until published.
+
 ## Step 1: Verify lark-cli auth
 
 Use the built-in auth check before anything else:
@@ -155,6 +174,7 @@ echo $CLAWSEAT_FEISHU_GROUP_ID
 | `auth_needs_refresh` | Token needs refresh | User runs `lark-cli auth login` |
 | `permission_denied` | Missing `im:message` scope | Re-run `lark-cli auth login` and ensure the OAuth scope includes `im:message` |
 | `group_not_found` | Group ID invalid or bot not in group | Verify group ID; ensure the bot app is added to the target group in Feishu admin |
+| `event scope missing` | 群消息 not delivered without @mention | Enable `im:message.group_msg:receive` in Feishu Open Platform → Event Subscriptions, then publish a new app version |
 | `network_error` | Network connectivity issue | Check internet; retry |
 | `no_group_id_found` | No group ID resolved from env/config/sessions | Pass `--chat-id` explicitly or `export CLAWSEAT_FEISHU_GROUP_ID=oc_xxx` |
 

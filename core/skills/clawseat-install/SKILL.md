@@ -101,6 +101,7 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
    - OpenClaw (Phase 0 + Phase 3):
      1. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"` — agent-neutral shared skills
      2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 5-phase flow
+     - After overlay, a **Feishu post-install checklist** is printed; if Feishu platform event scopes (`im:message.group_msg:receive`) are not enabled, chain closeouts cannot reach koder without @mention.
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:

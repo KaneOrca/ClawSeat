@@ -196,3 +196,44 @@ That wrapper will:
 | `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |
 | memory seat not started | Query protocol unavailable; seats will guess or block | Run `start_seat.py --seat memory --confirm-start` immediately after bootstrap |
 | `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or query memory for agent status |
+| Feishu event scope missing | 群消息 not delivered without @mention | Enable `im:message.group_msg:receive` in Feishu Open Platform → Event Subscriptions |
+
+## Phase 5: Feishu Platform Requirements
+
+After Phase 3 overlay completes, `install_koder_overlay.py` prints a post-install checklist. **Complete these steps before testing Feishu dispatch:**
+
+### Required event scopes
+
+Enable in Feishu Open Platform → App → Event Subscriptions:
+
+- `im:message` — 聊天消息事件
+- `im:message.group_msg:receive` — 群消息免@（critical: without this, koder only responds to @mentions）
+- `im:chat:access` — 聊天管理
+
+### Required bot permissions
+
+Enable in Feishu Open Platform → App → Permissions & Scopes:
+
+- `im:chat` — 读写群消息
+- `im:chat.members` — 读取群成员
+
+### requireMention strategy
+
+| Group type | requireMention | Reason |
+|---|---|---|
+| Main koder-facing group | `true` (default) | Prevents noise from unrelated messages |
+| Project-specific koder group | `false` | Enables no-@mention dispatch for chain closeouts |
+
+See `references/feishu-group-no-mention.md` for configuration details.
+
+### Publish the app version
+
+After enabling scopes, publish a new version:
+
+> 开放平台 → 版本管理与发布 → 提交审核 → 发布
+
+Required version: **2026.4.9+** or latest. Unpublished scope changes are not active.
+
+### Reference
+
+Full setup guide: [feishu-bridge-setup.md](feishu-bridge-setup.md)
