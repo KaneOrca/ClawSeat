@@ -13,7 +13,7 @@ CLAWSEAT_ROOT=~/.clawseat python3 ~/.clawseat/shells/openclaw-plugin/install_bun
 然后读 ~/.openclaw/skills/clawseat-install/SKILL.md 继续
 ```
 
-agent 会自动完成剩余步骤：init_koder → preflight → bootstrap → 配置 seat → 启动 planner。
+agent 会按 5-phase 流程继续：Phase 1（启动 memory seat）→ Phase 2（向 memory 查询目标 agent）→ Phase 3（为该 agent 执行 install_koder_overlay.py --agent &lt;name&gt;）→ Phase 4（启动 planner + 配置 seat）。详见 core/skills/clawseat-install/references/install-flow.md。
 
 ---
 

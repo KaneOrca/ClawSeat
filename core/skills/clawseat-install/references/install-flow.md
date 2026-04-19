@@ -109,8 +109,6 @@ Omitting `--agent` → exit 2. If this happens, return to Phase 2 and consult th
 
 ## Phase 4 — Start Planner + Configuration
 
-## Entry Skill Install
-
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
 ```

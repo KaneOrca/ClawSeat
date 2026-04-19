@@ -73,7 +73,7 @@ developer path, use the two-step install:
 
 ```bash
 export CLAWSEAT_ROOT=/path/to/ClawSeat
-python3 “$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py”
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 ```
 
 This installs the minimum ClawSeat-facing skill surface into `~/.openclaw/skills/`:
@@ -87,7 +87,7 @@ exit 0 = all OK; exit 2 = external dependency missing (gstack / lark-cli).
 **Phase 3 — Per-agent koder overlay** (requires `--agent <NAME>`):
 
 ```bash
-python3 “$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py” \
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
   --agent <agent-name> \
   [--openclaw-home <path>] \
   [--dry-run]
@@ -101,8 +101,8 @@ python3 “$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py” \
 
 **Deprecated wrapper** — `install_openclaw_bundle.py` is now a thin compatibility shim that runs Phase 0 only and prints a hint to run Phase 3 manually. It will be removed in a future release (date/version TBD). New installs should use the two-step path above.
 
-After Phase 0 + Phase 3, the user should interact with OpenClaw by saying “安装 ClawSeat” or
-“启动 ClawSeat”. OpenClaw should load `clawseat` as the product entry.
+After Phase 0 + Phase 3, the user should interact with OpenClaw by saying "安装 ClawSeat" or
+"启动 ClawSeat". OpenClaw should load `clawseat` as the product entry.
 
 ## Environment Variables
 
