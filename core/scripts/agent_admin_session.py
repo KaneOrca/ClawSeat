@@ -12,6 +12,69 @@ TMUX_COMMAND_RETRIES = 2
 TMUX_COMMAND_TIMEOUT_SECONDS = 8.0
 TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 
+# ── iTerm integration ─────────────────────────────────────────────────────────
+
+_ITERM_CLOSE_SCRIPT_TEMPLATE = """\
+tell application "iTerm"
+    repeat with w in windows
+        repeat with t in tabs of w
+            repeat with s in sessions of t
+                if tty of s is "{tty}" then
+                    close t
+                    return "ok"
+                end if
+            end repeat
+        end repeat
+    end repeat
+    return "not_found"
+end tell\
+"""
+
+
+def _get_tmux_tty(session_name: str) -> str | None:
+    """Return the tty of the first attached client for a tmux session, or None."""
+    try:
+        result = subprocess.run(
+            ["tmux", "list-clients", "-t", session_name, "-F", "#{client_tty}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5.0,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().splitlines()[0].strip() or None
+    except Exception:  # silent-ok: best-effort tty lookup; missing client is normal (no attached client)
+        pass
+    return None
+
+
+def _close_iterm_tab_by_tty(tty: str) -> dict:
+    """Close the iTerm tab owning the given tty via osascript.
+
+    Returns {"status": "ok"|"not_found"|"error", "detail": str|None}.
+    Never raises — all errors are returned in the dict.
+    """
+    script = _ITERM_CLOSE_SCRIPT_TEMPLATE.format(tty=tty)
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5.0,
+        )
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "detail": result.stderr.strip() or f"rc={result.returncode}",
+            }
+        output = result.stdout.strip()
+        if output == "ok":
+            return {"status": "ok", "detail": None}
+        return {"status": "not_found", "detail": output}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
 
 class SessionStartError(RuntimeError):
     """Raised when a seat session cannot be created into a verified running tmux state."""
@@ -217,7 +280,23 @@ class SessionService:
             check=False,
         )
 
-    def stop_engineer(self, session: Any) -> None:
+    def stop_engineer(self, session: Any, *, keep_iterm_tab: bool = False) -> None:
+        if not keep_iterm_tab:
+            tty = _get_tmux_tty(session.session)
+            if tty:
+                result = _close_iterm_tab_by_tty(tty)
+                if result["status"] == "ok":
+                    print(f"iterm_tab_closed: tty={tty} session={session.session}")
+                elif result["status"] == "not_found":
+                    print(
+                        f"warn: iterm_tab_not_found: tty={tty} session={session.session}",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"warn: iterm_tab_close_failed: tty={tty} session={session.session} detail={result['detail']}",
+                        file=sys.stderr,
+                    )
         self._run_tmux_with_retry(
             ["kill-session", "-t", session.session],
             reason=f"stop engineer {session.session}",
