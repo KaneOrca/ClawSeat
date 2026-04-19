@@ -67,23 +67,41 @@ This keeps the user experience product-shaped:
 - do not require the user to understand `/cs` or `gstack-harness`
 
 If you are working on a local checkout and explicitly want the symlink-based
-developer path, use:
+developer path, use the two-step install:
+
+**Phase 0 — Agent-neutral bundled skills** (no workspace touch):
 
 ```bash
 export CLAWSEAT_ROOT=/path/to/ClawSeat
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
+python3 “$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py”
 ```
 
-This installs the minimum ClawSeat-facing skill surface into `~/.openclaw`:
+This installs the minimum ClawSeat-facing skill surface into `~/.openclaw/skills/`:
 
-- global skills:
-  - `clawseat`
-  - `clawseat-install`
-  - `clawseat-koder-frontstage`
-- koder workspace skill:
-  - `workspace-koder/skills/clawseat-koder-frontstage`
+- `clawseat`
+- `clawseat-install`
+- `clawseat-koder-frontstage`
 
-After that, the user should interact with OpenClaw by saying “安装 ClawSeat” or
+exit 0 = all OK; exit 2 = external dependency missing (gstack / lark-cli).
+
+**Phase 3 — Per-agent koder overlay** (requires `--agent <NAME>`):
+
+```bash
+python3 “$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py” \
+  --agent <agent-name> \
+  [--openclaw-home <path>] \
+  [--dry-run]
+```
+
+- `--agent <NAME>`: required — the OpenClaw agent workspace to overlay. Query memory (Phase 2) to determine which agent to use; do not hardcode.
+- `--openclaw-home`: override `~/.openclaw` (default).
+- `--dry-run`: preview changes without writing.
+- Omitting `--agent` → exit 2; consult [memory-query-protocol.md](../../core/skills/clawseat-install/references/memory-query-protocol.md).
+- Exit 3: target agent workspace does not exist — verify agent was created first.
+
+**Deprecated wrapper** — `install_openclaw_bundle.py` is now a thin compatibility shim that runs Phase 0 only and prints a hint to run Phase 3 manually. It will be removed in a future release (date/version TBD). New installs should use the two-step path above.
+
+After Phase 0 + Phase 3, the user should interact with OpenClaw by saying “安装 ClawSeat” or
 “启动 ClawSeat”. OpenClaw should load `clawseat` as the product entry.
 
 ## Environment Variables

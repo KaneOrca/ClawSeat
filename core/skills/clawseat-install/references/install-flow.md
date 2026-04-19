@@ -30,7 +30,18 @@ export CLAWSEAT_ROOT="/path/to/ClawSeat"
 
 If `CLAWSEAT_ROOT` is unset, check the current checkout before doing anything else.
 
-## Project Bootstrap
+## Phase 0 — Install Bundled Skills
+
+Install agent-neutral shared skills into `~/.openclaw/skills/`. Does NOT touch any per-agent workspace.
+
+```sh
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
+```
+
+- Creates symlinks for `clawseat`, `clawseat-install`, `clawseat-koder-frontstage`, and memory-oracle skills.
+- Checks external dependencies: gstack + lark-cli.
+- exit 0 = all OK; exit 2 = external dependency missing (gstack/lark-cli).
+- Profile bootstrap follows once skills are in place; see below.
 
 ```sh
 PROJECT=my-project
@@ -52,7 +63,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
 - `clawseat` is the product path for OpenClaw/Feishu; `/cs` is the local-runtime exception path that counts as explicit approval to bootstrap or resume `install` and start `planner`.
 - `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
 
-## Start Memory Seat
+## Phase 1 — Start Memory Seat
 
 Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). Start it immediately after bootstrap, BEFORE dispatching work to planner or any specialist:
 
@@ -64,6 +75,39 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
 Every other seat (including koder and the ancestor Claude Code agent) must query memory before guessing environment facts. See [memory-query-protocol.md](memory-query-protocol.md) for the mandatory query/escalation contract.
 
 If memory seat is not declared in the profile roster, add it before rerunning bootstrap — memory is no longer optional.
+
+## Phase 2 — Query Memory for Target Agent
+
+Before applying any per-agent overlay, query memory to enumerate the available OpenClaw agents. Do not hardcode "koder" — ask memory which agent should receive the overlay:
+
+```sh
+# Search for known agents
+python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+  --search agents
+
+# Or reasoning query with profile context
+python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+  --ask "which OpenClaw agent should receive the koder overlay?" --profile "/tmp/${PROJECT}-profile-dynamic.toml"
+```
+
+If memory returns no result, escalate to memory seat per the [query protocol](memory-query-protocol.md) before proceeding. Do not guess.
+
+## Phase 3 — Install Koder Overlay
+
+Apply the ClawSeat koder templates into the chosen agent's workspace (`~/.openclaw/workspace-<agent>/skills/`). Requires `--agent <NAME>` — the name resolved in Phase 2:
+
+```sh
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
+  --agent <chosen-agent-name>
+```
+
+Optional flags:
+- `--openclaw-home <path>` — override `~/.openclaw` (default)
+- `--dry-run` — preview changes without writing
+
+Omitting `--agent` → exit 2. If this happens, return to Phase 2 and consult the memory seat query protocol.
+
+## Phase 4 — Start Planner + Configuration
 
 ## Entry Skill Install
 
@@ -153,3 +197,4 @@ That wrapper will:
 | `dynamic profile not found` | Project profile missing | `install` 项目会自动从 shipped `install.toml` 补种；其他项目需先创建 `/tmp/{project}-profile-dynamic.toml` |
 | `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |
 | memory seat not started | Query protocol unavailable; seats will guess or block | Run `start_seat.py --seat memory --confirm-start` immediately after bootstrap |
+| `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or query memory for agent status |

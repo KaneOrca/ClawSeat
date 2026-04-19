@@ -98,7 +98,9 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. **Install skill symlinks** — this is mandatory, do NOT skip:
-   - OpenClaw: `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"`
+   - OpenClaw (Phase 0 + Phase 3):
+     1. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"` — agent-neutral shared skills
+     2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 5-phase flow
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:

@@ -7,7 +7,9 @@
 ```
 克隆并安装 ClawSeat：
 git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
-CLAWSEAT_ROOT=~/.clawseat python3 ~/.clawseat/shells/openclaw-plugin/install_openclaw_bundle.py
+# Phase 0：安装 agent 无关的 skill 符号链接
+CLAWSEAT_ROOT=~/.clawseat python3 ~/.clawseat/shells/openclaw-plugin/install_bundled_skills.py
+# Phase 3 overlay 在 install flow 的 Phase 3 阶段由 agent 执行（需 --agent <name>）
 然后读 ~/.openclaw/skills/clawseat-install/SKILL.md 继续
 ```
 
@@ -57,12 +59,13 @@ cd ~/.gstack/repos/gstack && ./setup
 git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
 export CLAWSEAT_ROOT="$HOME/.clawseat"
 
-# 2. 安装 skill symlinks 到 ~/.openclaw/skills/
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
+# 2. Phase 0：安装 agent 无关的 skill 符号链接
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 
 # 3. 在 OpenClaw 里说 "安装 ClawSeat" 或读 clawseat-install skill
-# agent 会自动执行：
-#   init_koder.py → preflight → bootstrap → 配置 → 启动 planner
+# agent 会自动执行 5 阶段流程：
+#   Phase 1 memory seat → Phase 2 查询目标 agent → Phase 3 koder overlay → preflight → bootstrap → 配置 → 启动 planner
+# Phase 3: python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <name>
 ```
 
 ### 路径 B：本地 Claude Code / Codex
@@ -84,10 +87,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skill
 ## 安装流程详解（OpenClaw 路径）
 
 ```
-1. install_openclaw_bundle.py
-   └── 创建 10 个 skill symlinks 到 ~/.openclaw/skills/
-   └── 检查 gstack + lark-cli 外部依赖
-   └── exit 0=全部成功, 2=外部依赖缺失
+1a. install_bundled_skills.py  [Phase 0 — agent 无关]
+    └── 创建 skill symlinks 到 ~/.openclaw/skills/
+    └── 检查 gstack + lark-cli 外部依赖
+    └── exit 0=全部成功, 2=外部依赖缺失
+
+1b. install_koder_overlay.py --agent <name>  [Phase 3 — 按 agent 叠加]
+    └── 将 koder 模板写入 ~/.openclaw/workspace-<name>/skills/
+    └── --dry-run 预览; --openclaw-home 覆盖路径
+    └── exit 2=缺少 --agent; exit 3=目标 workspace 不存在
+    └── 在 Phase 2 通过 memory 确认 <name> 后执行
 
 2. init_koder.py --workspace <koder工作区> --project install
    └── 写入 IDENTITY.md, SOUL.md, TOOLS.md, MEMORY.md, AGENTS.md
