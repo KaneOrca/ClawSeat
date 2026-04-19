@@ -298,11 +298,28 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     rename.add_argument("new")
     rename.set_defaults(func=hooks.cmd_engineer_rename)
 
-    rebind = engineer_sub.add_parser("rebind")
+    rebind = engineer_sub.add_parser(
+        "rebind",
+        help="Change auth_mode + provider only (cannot change tool).",
+        description=(
+            "rebind changes auth_mode + provider only; it CANNOT change the tool "
+            "(e.g. claude → codex). To swap tools, use 'engineer delete' followed "
+            "by 'engineer create'."
+        ),
+    )
     rebind.add_argument("engineer")
     rebind.add_argument("--project")
     rebind.add_argument("mode", choices=["oauth", "api"])
     rebind.add_argument("provider")
+    rebind.add_argument(
+        "--tool",
+        choices=["claude", "codex"],
+        default=None,
+        help=(
+            "Safety check only; must match current tool. "
+            "Use delete+create to actually swap tools."
+        ),
+    )
     rebind.set_defaults(func=hooks.cmd_engineer_rebind)
 
     refresh_workspace = engineer_sub.add_parser("refresh-workspace")

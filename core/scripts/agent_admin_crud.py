@@ -629,6 +629,14 @@ class CrudHandlers:
 
     def engineer_rebind(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
+        requested_tool = getattr(args, "tool", None)
+        if requested_tool is not None and requested_tool != session.tool:
+            print(
+                f"error: rebind cannot change tool (current={session.tool}, requested={requested_tool}). "
+                f"Use 'engineer delete {args.engineer}' then 'engineer create' with the new tool.",
+                file=sys.stderr,
+            )
+            return 2
         project = self.hooks.load_project(session.project)
         provider = args.provider
         mode = args.mode
