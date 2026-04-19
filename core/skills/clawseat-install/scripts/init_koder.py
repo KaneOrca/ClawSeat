@@ -673,6 +673,13 @@ python3 {memory_scripts}/query_memory.py --key credentials.keys.MINIMAX_API_KEY.
 python3 {memory_scripts}/query_memory.py --key github.gh_cli.active_login
 python3 {memory_scripts}/query_memory.py --key openclaw.feishu.groups
 
+# 凭证读取的推荐方式（走 audit log）:
+python3 {memory_scripts}/query_memory.py --unmask MINIMAX_API_KEY --reason "configure <seat>"
+
+# 不确定字段名时先问 schema（不会泄露凭证原文）:
+python3 {memory_scripts}/query_memory.py --schema
+python3 {memory_scripts}/query_memory.py --schema credentials --depth 4
+
 # 模糊搜索（不确定 key 在哪）:
 python3 {memory_scripts}/query_memory.py --search "minimax"
 python3 {memory_scripts}/query_memory.py --search "feishu"

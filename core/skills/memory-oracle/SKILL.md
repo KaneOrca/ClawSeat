@@ -39,16 +39,40 @@ Your job is simple and narrow: **know everything about this machine, answer any 
 
 ```
 ~/.agents/memory/
-├── system.json           # OS/hardware/brew packages
-├── environment.json      # env vars, PATH
-├── credentials.json      # API keys, tokens (明文，本地 only)
-├── openclaw.json         # OpenClaw config, skills, agents, feishu groups
-├── gstack.json           # gstack repos, skills
-├── clawseat.json         # ClawSeat profiles, sessions, workspaces
-├── repos.json            # local git repos and remotes
-├── network.json          # proxy, endpoints
-├── index.json            # metadata: scan time, version, file list
-└── response.json         # query responses (written by you, read by caller)
+├── system.json                      # OS/hardware/brew packages
+├── environment.json                 # env vars, PATH
+├── credentials.json                 # 凭证元数据 + 明文 value（向后兼容）
+├── openclaw.json                    # OpenClaw config, skills, agents, feishu groups
+├── gstack.json                      # gstack repos, skills
+├── clawseat.json                    # ClawSeat profiles, sessions, workspaces
+├── repos.json                       # local git repos and remotes
+├── network.json                     # proxy, endpoints
+├── github.json                      # git/gh 身份、SSH 公钥，含 _provenance 旁表
+├── index.json                       # metadata: scan_version, 文件列表, secrets_file 指针
+├── response.json                    # query responses (written by you, read by caller)
+└── secrets/                         # 0700，只含原始凭证 + audit log
+    ├── credentials.secrets.json     # 0600，raw {KEY: value} 表
+    └── audit.log                    # JSONL，每次 --unmask 追加一行
+```
+
+**credentials.json 的双写 schema（v2 起）**
+
+每个 key 条目同时含：
+
+```json
+{
+  "value": "sk-cp-...",                 // 向后兼容：明文
+  "source": "/Users/ywf/.env.global",   // 向后兼容：来源文件
+  "value_preview": "sk-cp-****OkRr2yM", // 可安全入日志
+  "value_length": 121,
+  "value_sha256": "e7f3...",            // 用于 hash 证据
+  "value_type": "api_key",              // api_key / base_url / token / secret / unknown
+  "_provenance": {
+    "source_file": "/Users/ywf/.env.global",
+    "source_line": 7,
+    "scanned_at": "2026-04-19T..."
+  }
+}
 ```
 
 ## 你会收到两类任务
@@ -138,6 +162,7 @@ python3 /Users/ywf/coding/ClawSeat/core/skills/memory-oracle/scripts/memory_deli
 - 你在回答里写的每一个值（API key、group id、路径、账户名、版本号等），**必须**能用 `query_memory.py --key <evidence.file>.<evidence.path>` 查到同样的字符串。
 - `statement` 描述 claim，`evidence[]` 里的 `file + path + expected_value` 是可验证的凭证。
 - caller 会程序化校验：如果 `evidence.expected_value != 磁盘实际值`，这个 claim 就是 **invalid**，caller 会拒绝使用。
+- **凭证类 claim 推荐用 `expected_value_sha256`**（见下文 "hash 证据"一节），避免明文写进 response.json；verify_claims 同等生效。
 
 ### 铁律 2：禁止"附近看起来合理的值"
 
@@ -160,12 +185,68 @@ python3 /Users/ywf/coding/ClawSeat/core/skills/memory-oracle/scripts/memory_deli
 
 | 问题 | 查哪个文件 |
 |------|-----------|
-| "minimax API key 是什么" | `credentials.json` → keys 下搜 "minimax" |
+| "minimax API key 是什么" | `credentials.json` → keys 下搜 "minimax"（或用 `--unmask`）|
 | "feishu group id for install project" | `openclaw.json` → feishu.groups |
 | "designer-1 用什么 provider" | `clawseat.json` → profiles.install.seats.designer-1 |
 | "gstack skills 装在哪" | `gstack.json` → skills_root |
 | "系统有多少核" | `system.json` → hardware.cpu_count |
 | "ANTHROPIC_BASE_URL 环境变量" | `environment.json` → vars.ANTHROPIC_BASE_URL |
+| "git user.email 从哪读到的" | `github.json` → _provenance.gitconfig.user_email |
+
+## 凭证的 masked / unmask 查询
+
+记忆库对凭证有两条通道：
+
+1. **元数据通道**（日志安全）——`credentials.json` 里的 `value_preview`、`value_sha256`、`value_length`、`_provenance`。任何写进 log 或 `response.json` 的场合都应该走这条：
+
+   ```bash
+   query_memory.py --key credentials.keys.MINIMAX_API_KEY.value_preview   # sk-cp-****OkRr2yM
+   query_memory.py --key credentials.keys.MINIMAX_API_KEY.value_sha256    # e7f3...
+   query_memory.py --key credentials.keys.MINIMAX_API_KEY._provenance     # 来源/行号
+   ```
+
+2. **原值通道**（审计）——`--unmask` 从 `secrets/credentials.secrets.json` 读原值，并在 `secrets/audit.log` 追加一行 JSONL（含 ts/key/reason/caller_pid/caller_cwd）：
+
+   ```bash
+   query_memory.py --unmask MINIMAX_API_KEY --reason "configure minimax designer"
+   ```
+
+   `--reason` 可选但**强烈推荐**写明用途。
+
+**向后兼容**：旧路径 `--key credentials.keys.X.value` 仍返回明文（不破坏现有 koder 文档）。新代码请优先用 `--unmask`。
+
+## response.json 里的 hash 证据
+
+对凭证类 claim，可以用 `expected_value_sha256` 代替 `expected_value`，不把明文塞进 response.json：
+
+```json
+{
+  "claims": [{
+    "statement": "MINIMAX_API_KEY 存在且源自 .env.global",
+    "evidence": [
+      {"file": "credentials",
+       "path": "keys.MINIMAX_API_KEY.value",
+       "expected_value_sha256": "e7f3..."},
+      {"file": "credentials",
+       "path": "keys.MINIMAX_API_KEY._provenance.source_file",
+       "expected_value": "/Users/ywf/.agents/.env.global"}
+    ]
+  }]
+}
+```
+
+`verify_claims()` 会对 `actual` 做 sha256 并比对。非凭证字段仍用 `expected_value`（更直观）。
+
+## Schema 自省
+
+不确定字段名时，**先问 schema 再猜**：
+
+```bash
+query_memory.py --schema                            # 列出所有文件 + 顶层 key
+query_memory.py --schema credentials --depth 4      # 某个文件的树形结构
+```
+
+`--schema` 输出**永远不会**包含 credential value 原文（`value` 字段只暴露 `type` + `sample_length`）。`value_preview` 已是脱敏形式，可入 sample。
 
 ## 上下文重启时的自检
 

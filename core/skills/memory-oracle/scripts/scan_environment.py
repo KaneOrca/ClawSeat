@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import platform
@@ -51,7 +52,9 @@ def _real_user_home() -> Path:
 
 HOME = _real_user_home()
 DEFAULT_OUTPUT = HOME / ".agents" / "memory"
-SCAN_VERSION = 1
+SCAN_VERSION = 2
+SECRETS_SUBDIR = "secrets"
+SECRETS_FILENAME = "credentials.secrets.json"
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -86,11 +89,15 @@ def safe_read(path: Path, *, max_bytes: int = 1_000_000) -> str | None:
         return None
 
 
-def parse_env_file(text: str) -> dict[str, str]:
-    """Parse KEY=VALUE lines, skipping comments. Strips surrounding quotes."""
-    result: dict[str, str] = {}
-    for line in text.splitlines():
-        line = line.strip()
+def parse_env_file(text: str) -> list[tuple[str, str, int]]:
+    """Parse KEY=VALUE lines, return (key, value, 1-based line number) tuples.
+
+    Skips comments/blank lines, strips 'export ' prefix and surrounding quotes.
+    Callers that only need a dict can build one from this list.
+    """
+    result: list[tuple[str, str, int]] = []
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
         # Strip "export " prefix if present
@@ -105,8 +112,43 @@ def parse_env_file(text: str) -> dict[str, str]:
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]
         if key:
-            result[key] = value
+            result.append((key, value, lineno))
     return result
+
+
+def sha256_hex(value: str) -> str:
+    """Hex sha256 of a string value (UTF-8)."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def make_preview(value: str) -> str:
+    """Return a masked preview of a credential value.
+
+    Rule: values <= 16 chars are fully masked. Longer values show the first
+    6 chars, then ``****``, then the last 10 chars. The preview is intended
+    to be safe to paste into logs or ``--schema`` output.
+    """
+    if not isinstance(value, str):
+        return "****"
+    if len(value) <= 16:
+        return "****"
+    return f"{value[:6]}****{value[-10:]}"
+
+
+def classify_key_type(name: str) -> str:
+    """Rough classification from the variable name. Used to hint consumers
+    whether a credential is a URL vs. a secret token.
+    """
+    upper = name.upper()
+    if upper.endswith("_URL") or "BASE_URL" in upper or "ENDPOINT" in upper:
+        return "base_url"
+    if "TOKEN" in upper:
+        return "token"
+    if "API_KEY" in upper or "APIKEY" in upper or upper.endswith("_KEY"):
+        return "api_key"
+    if "SECRET" in upper:
+        return "secret"
+    return "unknown"
 
 
 def write_json(output_dir: Path, name: str, data: dict) -> Path:
@@ -164,11 +206,25 @@ def scan_environment() -> dict:
 
 
 def scan_credentials() -> dict:
-    """API keys, tokens from known locations. Plaintext, local-only."""
+    """API keys, tokens from known locations.
+
+    Returns the metadata dict (safe to persist in ``credentials.json``).
+    The raw plaintext values are captured in ``data["_secrets"]`` as a side
+    channel so the caller can split them into a separate 0600 secrets file
+    in a different directory. The ``_secrets`` key is stripped before the
+    main credentials.json is written.
+
+    Backward compat: each key entry still has ``value`` (plaintext) and
+    ``source`` (string path). New fields (``value_preview``, ``value_sha256``,
+    ``value_length``, ``value_type``, ``_provenance``) are additive.
+    """
+    scan_ts = now_iso()
     data: dict = {
-        "scanned_at": now_iso(),
+        "scanned_at": scan_ts,
         "sources": [],
         "keys": {},
+        # Side-channel: raw values keyed by name. Caller consumes + discards.
+        "_secrets": {},
     }
 
     # Known files
@@ -201,10 +257,27 @@ def scan_credentials() -> dict:
         if not parsed:
             continue
         data["sources"].append(str(resolved))
-        for k, v in parsed.items():
+        for k, v, line_no in parsed:
             # Don't overwrite if same key already seen
-            if k not in data["keys"]:
-                data["keys"][k] = {"value": v, "source": str(resolved)}
+            if k in data["keys"]:
+                continue
+            data["keys"][k] = {
+                # Back-compat fields (plaintext — preserved for existing
+                # `--key credentials.keys.X.value` consumers).
+                "value": v,
+                "source": str(resolved),
+                # New metadata fields (safe to log / share)
+                "value_preview": make_preview(v),
+                "value_length": len(v),
+                "value_sha256": sha256_hex(v),
+                "value_type": classify_key_type(k),
+                "_provenance": {
+                    "source_file": str(resolved),
+                    "source_line": line_no,
+                    "scanned_at": scan_ts,
+                },
+            }
+            data["_secrets"][k] = v
 
     return data
 
@@ -395,13 +468,20 @@ def scan_github() -> dict:
     Captures the full picture an installer needs for GitHub-backed tasks:
     which gh account is active, what scopes the token has, git user config,
     and SSH public keys registered locally.
+
+    Provenance: top-level ``_provenance`` side-table records where each
+    non-obvious value came from (git config vs gh API vs hosts.yml). The
+    data schema itself is unchanged so existing ``--key github.X.Y``
+    consumers keep working.
     """
+    scan_ts = now_iso()
     data: dict = {
-        "scanned_at": now_iso(),
+        "scanned_at": scan_ts,
         "gitconfig": {},
         "git_credential_helpers": {},
         "gh_cli": {},
         "ssh_keys": [],
+        "_provenance": {},
     }
 
     # ── git global config ─────────────────────────────────────────
@@ -414,10 +494,19 @@ def scan_github() -> dict:
         signing_key = run_cmd(["git", "config", "--global", "--get", "user.signingkey"])
         if user_name:
             data["gitconfig"]["user_name"] = user_name
+            data["_provenance"]["gitconfig.user_name"] = {
+                "source": "git_config_global", "scanned_at": scan_ts,
+            }
         if user_email:
             data["gitconfig"]["user_email"] = user_email
+            data["_provenance"]["gitconfig.user_email"] = {
+                "source": "git_config_global", "scanned_at": scan_ts,
+            }
         if signing_key:
             data["gitconfig"]["signing_key"] = signing_key
+            data["_provenance"]["gitconfig.signing_key"] = {
+                "source": "git_config_global", "scanned_at": scan_ts,
+            }
         # Credential helpers per URL scheme
         lines = run_cmd(["git", "config", "--global", "--list"]).splitlines()
         for line in lines:
@@ -452,6 +541,9 @@ def scan_github() -> dict:
     login = run_cmd(["gh", "api", "user", "--jq", ".login"], timeout=10)
     if login:
         data["gh_cli"]["active_login"] = login
+        data["_provenance"]["gh_cli.active_login"] = {
+            "source": "gh_api_user", "scanned_at": scan_ts,
+        }
 
     # Live auth status (respects active keyring entry). NOTE: the "account"
     # token in the status output is the local keyring alias (same as the
@@ -615,6 +707,38 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def write_secrets_file(output_dir: Path, secrets: dict[str, str], scan_ts: str) -> Path | None:
+    """Persist raw credential values to secrets/credentials.secrets.json.
+
+    Creates the directory with 0700 and the file with 0600. Failures to
+    chmod are non-fatal (some filesystems don't support it) but are
+    surfaced on stderr.
+    """
+    if not secrets:
+        return None
+    secrets_dir = output_dir / SECRETS_SUBDIR
+    try:
+        secrets_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(secrets_dir, 0o700)
+    except OSError as exc:
+        print(f"warning: could not chmod {secrets_dir}: {exc}", file=sys.stderr)
+    payload = {
+        "_warning": "RAW SECRETS — chmod 600, never commit, never transmit.",
+        "scanned_at": scan_ts,
+        "keys": dict(sorted(secrets.items())),
+    }
+    path = secrets_dir / SECRETS_FILENAME
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    try:
+        os.chmod(path, 0o600)
+    except OSError as exc:
+        print(f"warning: could not chmod {path}: {exc}", file=sys.stderr)
+    return path
+
+
 def main() -> int:
     args = parse_args()
     output_dir = Path(args.output).expanduser().resolve()
@@ -632,12 +756,24 @@ def main() -> int:
 
     results: dict[str, dict] = {}
     errors: list[dict] = []
+    secrets_path: Path | None = None
+    secrets_count = 0
     for name in targets:
         scanner = SCANNERS[name]
         if not args.quiet:
             print(f"scanning {name}…", end=" ", flush=True)
         try:
             data = scanner()
+            # Extract credential secrets side-channel before persisting the
+            # sanitized credentials.json. The raw values go into a separate
+            # file under secrets/ with stricter permissions.
+            if name == "credentials" and isinstance(data, dict):
+                raw_secrets = data.pop("_secrets", {}) or {}
+                if raw_secrets:
+                    secrets_path = write_secrets_file(
+                        output_dir, raw_secrets, data.get("scanned_at", now_iso())
+                    )
+                    secrets_count = len(raw_secrets)
             path = write_json(output_dir, name, data)
             results[name] = {"path": str(path), "ok": True}
             if not args.quiet:
@@ -649,20 +785,29 @@ def main() -> int:
                 print(f"✗ ({exc.__class__.__name__}: {exc})")
 
     # Write index
-    index = {
+    index: dict = {
         "version": SCAN_VERSION,
         "scanned_at": now_iso(),
         "output_dir": str(output_dir),
         "scanners": list(results.keys()),
         "results": results,
         "errors": errors,
+        "schema_changelog": [
+            "v1: initial scanner set",
+            "v2: credentials dual-write (metadata + secrets sidecar), per-key provenance",
+        ],
     }
+    if secrets_path is not None:
+        index["secrets_file"] = str(secrets_path)
+        index["secrets_key_count"] = secrets_count
     index_path = write_json(output_dir, "index", index)
     if not args.quiet:
         total = len(results)
         ok = sum(1 for r in results.values() if r.get("ok"))
         print(f"\nscan complete: {ok}/{total} scanners succeeded")
         print(f"index: {index_path}")
+        if secrets_path is not None:
+            print(f"secrets: {secrets_path} ({secrets_count} keys)")
 
     return 0 if not errors else 1
 

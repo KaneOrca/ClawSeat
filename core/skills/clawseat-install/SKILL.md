@@ -70,9 +70,17 @@ Memory CC is an optional seat (`role = "memory-oracle"`, `tool = claude + api + 
 3. Wait for `~/.agents/memory/index.json` to appear
 4. Query via direct file read (fast) or `--ask` (reasoning):
    ```bash
-   # direct
+   # direct (backward compatible; returns plaintext)
    python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
      --key credentials.keys.MINIMAX_API_KEY.value
+
+   # preferred for credential reads — writes audit log to secrets/audit.log
+   python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+     --unmask MINIMAX_API_KEY --reason "configure minimax seat"
+
+   # discover available fields when unsure
+   python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+     --schema credentials --depth 4
 
    # reasoning
    python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
