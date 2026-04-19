@@ -8,6 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core._io import atomic_write_text
+
 from ._adapter_types import AdapterResult, PendingFrontstageItem
 
 
@@ -250,8 +252,7 @@ def write_pending_frontstage(path: Path, items: list[PendingFrontstageItem]) -> 
     if archived:
         for item in archived:
             lines.extend(render_pending_item(item))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
 
 
 # ---------------------------------------------------------------------------

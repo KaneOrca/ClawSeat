@@ -185,10 +185,25 @@ def ensure_dir(path: Path) -> None:
 
 
 def write_text(path: Path, content: str, mode: int | None = None) -> None:
+    """Atomic write. Temp + os.replace so crashes never leave a half-file.
+
+    Mirror of :func:`core._io.atomic_write_text`; inlined here because
+    this module's sys.path setup does not guarantee ``core.*`` is
+    importable when invoked as a top-level script.
+    """
     ensure_dir(path.parent)
-    path.write_text(content)
-    if mode is not None:
-        path.chmod(mode)
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        if mode is not None:
+            tmp.chmod(mode)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def load_toml(path: Path) -> dict:

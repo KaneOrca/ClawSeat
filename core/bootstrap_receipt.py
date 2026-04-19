@@ -10,11 +10,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import tomllib
 
+from core._io import atomic_write_text
 from core.resolve import try_resolve_clawseat_root as _resolve_clawseat_root
 
 
@@ -130,15 +132,35 @@ def write_receipt(
 
     path = _receipt_path(project)
     content = _render_toml(receipt)
-    path.write_text(content, encoding="utf-8")
+    atomic_write_text(path, content)
     return path
+
+
+class ReceiptCorruptedError(RuntimeError):
+    """BOOTSTRAP_RECEIPT.toml exists on disk but could not be parsed.
+
+    Callers that need to distinguish "never bootstrapped" (``read_receipt``
+    returns ``None``) from "file is there but unreadable" should use
+    :func:`read_receipt_strict`.
+    """
+
+    def __init__(self, path: Path, cause: Exception) -> None:
+        super().__init__(f"corrupted bootstrap receipt at {path}: {cause}")
+        self.path = path
+        self.cause = cause
 
 
 def read_receipt(project: str) -> dict[str, object] | None:
     """
     Read the BOOTSTRAP_RECEIPT.toml for the given project.
 
-    Returns the receipt dict or None if it doesn't exist or can't be parsed.
+    Returns the receipt dict, or ``None`` when the file is absent / unreadable.
+    Corruption and read errors are logged to stderr so operators notice the
+    difference, even though the return value is the same "fall back to
+    re-bootstrap" signal in both cases.
+
+    Callers that need to distinguish programmatically should use
+    :func:`read_receipt_strict` which raises :class:`ReceiptCorruptedError`.
     """
     path = _receipt_path(project)
     if not path.exists():
@@ -146,8 +168,37 @@ def read_receipt(project: str) -> dict[str, object] | None:
     try:
         with path.open("rb") as f:
             return tomllib.load(f)
-    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+        print(
+            f"warning: bootstrap receipt at {path} is corrupted ({exc}); "
+            "treating as absent so bootstrap will re-run",
+            file=sys.stderr,
+        )
         return None
+    except OSError as exc:
+        print(
+            f"warning: bootstrap receipt at {path} could not be read ({exc}); "
+            "treating as absent so bootstrap will re-run",
+            file=sys.stderr,
+        )
+        return None
+
+
+def read_receipt_strict(project: str) -> dict[str, object] | None:
+    """Like :func:`read_receipt` but raises on corruption instead of warning.
+
+    Returns ``None`` only when the receipt file truly does not exist.
+    Raises :class:`ReceiptCorruptedError` when the file is present but
+    cannot be parsed. OSError (permission, disk, etc.) propagates.
+    """
+    path = _receipt_path(project)
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as f:
+            return tomllib.load(f)
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+        raise ReceiptCorruptedError(path, exc) from exc
 
 
 def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
@@ -182,13 +233,11 @@ def is_valid(receipt: dict[str, object]) -> tuple[bool, str]:
         return False, "invalid timestamp in receipt"
 
     # Check tmux server is still running
-    import shutil as _sh
-    tmux_bin = _sh.which("tmux")
+    tmux_bin = shutil.which("tmux")
     if tmux_bin:
-        import subprocess as _sp
         try:
-            _sp.run([tmux_bin, "list-sessions"], capture_output=True, check=True, timeout=5)
-        except (_sp.CalledProcessError, _sp.TimeoutExpired, FileNotFoundError):
+            subprocess.run([tmux_bin, "list-sessions"], capture_output=True, check=True, timeout=5)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             return False, "tmux server not running (receipt stale)"
 
     # Check dynamic profile still exists

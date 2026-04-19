@@ -92,8 +92,25 @@ def read_text(path: Path) -> str:
 
 
 def write_text(path: Path, text: str) -> None:
+    """Atomic write with trailing-newline normalisation.
+
+    Temp + os.replace so crashes never leave a half-file. Mirror of
+    :func:`core._io.atomic_write_text`; inlined here because gstack-harness
+    scripts run as standalone entry points that do not add the ClawSeat
+    repo root to ``sys.path``.
+    """
     ensure_parent(path)
-    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+    normalised = text.rstrip() + "\n"
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    try:
+        tmp.write_text(normalised, encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def load_json(path: Path) -> dict[str, Any] | None:
