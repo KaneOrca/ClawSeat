@@ -1,5 +1,10 @@
 # ClawSeat Architecture
 
+> See also: [CANONICAL-FLOW.md](CANONICAL-FLOW.md) for the runtime protocol
+> (dispatch / completion / ACK), [PACKAGING.md](PACKAGING.md) for what ships
+> in the product bundle, [RUNTIME_ENV.md](RUNTIME_ENV.md) for env vars and
+> directory contracts.
+
 ## Goal
 
 ClawSeat is a reusable skill-first multi-agent control plane for running
@@ -83,7 +88,6 @@ Owns:
 
 Examples:
 
-- `adapters/projects/cartooner/`
 - `adapters/projects/openclaw/`
 
 ### 5. Sample / Fixture Layer
@@ -98,20 +102,21 @@ Examples:
 
 - `examples/arena-pretext-ui/`
 
-## Current Migration Status
+## Component Inventory
 
-Already inside ClawSeat:
+Inside ClawSeat (this repo):
 
-- control plane (`core/scripts/agent_admin*.py`)
-- core harness (`core/skills/gstack-harness/`)
-- shared transport helpers (`core/shell-scripts/`)
-- harness adapter interface + tmux-cli implementation (`core/harness_adapter.py`, `adapters/harness/tmux-cli/`)
-- Cartooner adapter (`adapters/projects/cartooner/`)
+- control plane — `core/scripts/agent_admin*.py`
+- core harness — `core/skills/gstack-harness/`
+- shared transport helpers — `core/shell-scripts/`
+- harness adapter interface + tmux-cli implementation — `core/harness_adapter.py`, `adapters/harness/tmux-cli/`
+- OpenClaw project adapter — `adapters/projects/openclaw/`
+- OpenClaw plugin shell — `shells/openclaw-plugin/`
 
-Still outside ClawSeat by design:
+Outside ClawSeat by design:
 
-- the full `cartooner` product source tree
-- the full `openclaw` product source tree
+- the full `cartooner` product source tree (separate repo)
+- the full `openclaw` product source tree (separate repo — ClawSeat only ships the plugin bridge)
 
 ## Non-Goals
 

@@ -1,6 +1,10 @@
 # Canonical Flow
 
-> Shortest明确、最不容误解的 ClawSeat dispatch/completion/ACK 协议说明。
+> 最简明、最不容误解的 ClawSeat dispatch/completion/ACK 协议说明。
+>
+> 看架构分层：[ARCHITECTURE.md](ARCHITECTURE.md) ｜
+> 装完怎么用：[POST_INSTALL.md](POST_INSTALL.md) ｜
+> iTerm/tmux 故障定位：[ITERM_TMUX_REFERENCE.md](ITERM_TMUX_REFERENCE.md)
 
 ---
 

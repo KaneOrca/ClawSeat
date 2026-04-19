@@ -1,8 +1,15 @@
 # ClawSeat 团队实例化与巡检协议计划
 
+> **历史设计文档**：本文捕获了从固定 `engineer-a/b/c` roster 向模板驱动、项目
+> 内实例化的重构意图。当前 ClawSeat 的行为**已按本文描述实现**——留在这里作为
+> 设计 rationale 与未来演化的参照，不是正在进行的 plan。
+>
+> 想看当前运行时协议：[CANONICAL-FLOW.md](CANONICAL-FLOW.md)
+> 想看架构分层：[ARCHITECTURE.md](ARCHITECTURE.md)
+
 ## Summary
 
-ClawSeat 将从固定 `engineer-a/b/c...` roster 模式重构为模板驱动、项目内实例化的团队框架。
+ClawSeat 从固定 `engineer-a/b/c...` roster 模式重构为模板驱动、项目内实例化的团队框架。
 
 重构后的主线：
 
@@ -113,10 +120,10 @@ provider 配置应模板化，不再依赖逐个 seat 手改 env。
 - Claude lane 使用 Claude 专用 key
 - Codex lane 使用 GPT 专用 key
 
-## 当前重构优先级
+## 重构优先级（历史顺序，已全部落地）
 
-1. 模板 schema 设计
-2. 项目内实例化引擎
-3. 从静态 roster 向模板驱动迁移
-4. `koder` 巡检 opt-in
-5. 协议与窗口/tab 规则同步
+1. 模板 schema 设计 ✓ — `core/templates/`
+2. 项目内实例化引擎 ✓ — `core/engine/instantiate_seat.py`
+3. 从静态 roster 向模板驱动迁移 ✓ — `core/migration/*.py` + `examples/starter/profiles/`
+4. `koder` 巡检 opt-in ✓ — `core/skills/gstack-harness/scripts/patrol_supervisor.py`
+5. 协议与窗口/tab 规则同步 ✓ — `core/scripts/agent_admin_window.py` + OC_DELEGATION_REPORT_V1

@@ -1,5 +1,12 @@
 # iTerm + tmux 操作基线（ClawSeat）
 
+> 这份文档是混合体：**第 1、2 节是合规审计**（ClawSeat 的 iTerm/tmux 实现 vs
+> 官方实践），**第 3-5 节是运行时故障处理参考**（错误码、诊断路径、恢复入口）。
+> 调试具体问题时直接跳到第 3-5 节。
+>
+> 相关：[CANONICAL-FLOW.md](CANONICAL-FLOW.md) 讲 dispatch/ACK 协议本身，
+> 本文只讲 tmux 发送层的可靠性保证。
+
 ## 1. 资料盘点（本地）
 
 ### A 级：主控（优先）

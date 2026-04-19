@@ -1,5 +1,9 @@
 # ClawSeat Packaging
 
+> See also: [ARCHITECTURE.md](ARCHITECTURE.md) for the layer breakdown,
+> [INSTALL_GUIDE.md](INSTALL_GUIDE.md) for the end-user install flow this
+> package enables, [RUNTIME_ENV.md](RUNTIME_ENV.md) for the env-var contract.
+
 ClawSeat should ship as one product package.
 
 For end users, `gstack-harness` is an internal runtime dependency, not a
