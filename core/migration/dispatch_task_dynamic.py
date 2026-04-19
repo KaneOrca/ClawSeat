@@ -5,6 +5,7 @@ import argparse
 
 from dynamic_common import (
     append_status_note,
+    assert_target_not_memory,
     build_notify_message,
     load_profile,
     notify,
@@ -34,6 +35,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # T9: block dispatch to memory before profile load — memory is a
+    # synchronous oracle, never a task worker. See _common.py guard docstring.
+    assert_target_not_memory(args.target, "dispatch_task_dynamic.py")
     profile = load_profile(args.profile)
     source = args.source or preferred_planner_seat(profile)
     todo_path = profile.todo_path(args.target)

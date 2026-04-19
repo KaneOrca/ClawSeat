@@ -10,6 +10,7 @@ from pathlib import Path
 from _common import (
     append_status_note,
     append_task_to_queue,
+    assert_target_not_memory,
     broadcast_feishu_group_message,
     build_notify_message,
     load_profile,
@@ -276,6 +277,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # T9: block dispatch to memory before touching the profile — memory is an
+    # oracle, never a task worker; this check is profile-independent.
+    assert_target_not_memory(args.target, "dispatch_task.py")
     profile = load_profile(args.profile)
     if args.target not in profile.seats:
         raise SystemExit(

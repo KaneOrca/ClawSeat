@@ -3,7 +3,14 @@ from __future__ import annotations
 
 import argparse
 
-from _common import load_profile, notify, require_success, utc_now_iso, write_json
+from _common import (
+    assert_target_not_memory,
+    load_profile,
+    notify,
+    require_success,
+    utc_now_iso,
+    write_json,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,6 +46,10 @@ def build_payload(args: argparse.Namespace) -> str:
 
 def main() -> int:
     args = parse_args()
+    # T9: block notify to memory before touching the profile — memory is an
+    # oracle; reach it via query_memory.py instead. Check before load_profile
+    # so the guard works even when the profile path is bogus.
+    assert_target_not_memory(args.target, "notify_seat.py")
     profile = load_profile(args.profile)
     payload = build_payload(args)
     result = notify(profile, args.target, payload)

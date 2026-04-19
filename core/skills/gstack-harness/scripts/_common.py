@@ -884,3 +884,61 @@ def seed_empty_secret_from_peer(profile: HarnessProfile, seat: str) -> Path | No
 # ClawSeat's only job is to spin up tmux + CLI + iTerm tab; credentials
 # live in whatever CODEX_HOME / HOME / XDG dirs the CLI manages itself.
 # We intentionally DO NOT seed or copy oauth tokens across identities.
+
+
+# ── Memory-seat target guard (T9) ─────────────────────────────────────
+#
+# Memory is a synchronous oracle, not a task worker. It runs a `/clear`
+# Stop hook so every turn starts with no LLM context; its knowledge
+# lives on disk under ~/.agents/memory/*.json and is re-read on demand.
+#
+# Dispatching a task (TODO.md + tmux notify) or sending a free-form
+# notification to memory therefore fails silently: by the time the
+# notify text lands in the tmux pane, memory has already /clear'd and
+# cannot see the TODO queue. Callers must instead use the read-only
+# query_memory.py tool, which writes a prompt file the UserPromptSubmit
+# hook can inject a fresh context for.
+#
+# This guard lives in _common.py so both dispatch_task.py and
+# notify_seat.py pick it up from the same import surface they already
+# use. See core/skills/clawseat-install/references/memory-query-protocol.md
+# for the full seat→memory contract.
+
+MEMORY_SEAT_NAME = "memory"
+
+MEMORY_QUERY_POINTER = (
+    "To interact with memory, use the read-only query tool:\n"
+    "  python3 $CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py \\\n"
+    "    --ask \"<question>\" --profile <profile>\n"
+    "\n"
+    "Or for a direct key / file lookup:\n"
+    "  python3 $CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py \\\n"
+    "    --key <dot.path>\n"
+    "  python3 $CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py \\\n"
+    "    --file <file-stem> --section <section>\n"
+    "\n"
+    "See core/skills/clawseat-install/references/memory-query-protocol.md"
+)
+
+
+def assert_target_not_memory(target: str, caller_tool: str) -> None:
+    """Exit 2 if ``target`` is the memory seat.
+
+    Both dispatch_task.py and notify_seat.py call this after argparse,
+    before writing any TODO / receipt / tmux notification. The exit code
+    mirrors argparse's own exit code for bad invocations so scripted
+    callers can treat "bad target" and "bad flag" uniformly.
+    """
+    import sys as _sys
+
+    if target == MEMORY_SEAT_NAME:
+        print(
+            f"error: {caller_tool} does not support --target memory.\n"
+            "       Memory is a synchronous oracle; dispatching writes TODO\n"
+            "       entries the target cannot read because its context is\n"
+            "       cleared between turns (/clear Stop hook).\n"
+            "\n"
+            f"{MEMORY_QUERY_POINTER}",
+            file=_sys.stderr,
+        )
+        raise SystemExit(2)

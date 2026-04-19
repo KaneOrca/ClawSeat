@@ -94,6 +94,9 @@ class HarnessProfile:
         return self.workspace_for(seat) / "HEARTBEAT_RECEIPT.toml"
 
 
+assert_target_not_memory = BASE_COMMON.assert_target_not_memory
+MEMORY_SEAT_NAME = BASE_COMMON.MEMORY_SEAT_NAME
+MEMORY_QUERY_POINTER = BASE_COMMON.MEMORY_QUERY_POINTER
 sanitize_name = BASE_COMMON.sanitize_name
 utc_now_iso = BASE_COMMON.utc_now_iso
 ensure_dir = BASE_COMMON.ensure_dir
