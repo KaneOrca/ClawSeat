@@ -1,6 +1,6 @@
 ---
 name: agent-monitor
-description: 观察、联络、解阻电脑上正在运行的其他 ClawSeat seat（工程师、planner、koder）。适用于：查看各 seat 当前在做什么，向工程师 / planner 发消息，向 Claude Desktop 架构师发消息并截图确认。非适用：业务编码、任务分配、交付审查、修改项目源码。
+description: 观察、联络、解阻电脑上正在运行的其他 ClawSeat seat（工程师、planner、koder）。每当用户问起其他 seat 的状态或想给某个 seat 发消息，都走这条——哪怕用户没用 "seat" 这个词。典型触发："planner 在做什么"、"X 卡住了"、"给 builder-1 发一条"、"看下所有工程师"、"截图给架构师"、"看看 tmux 那边什么情况"、"工程师还在跑吗"。适用于查看各 seat 当前屏幕内容、向工程师 / planner 发消息、向 Claude Desktop 架构师发消息并截图确认。非适用：业务编码、任务分配、交付审查、修改项目源码。
 ---
 
 # Agent Monitor

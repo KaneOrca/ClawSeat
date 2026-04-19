@@ -1,6 +1,6 @@
 ---
 name: clawseat-install
-description: Install and bootstrap ClawSeat for Codex or Claude Code, including detecting and reusing existing workspaces or live TUIs. Use when a user asks to install ClawSeat, 安装 ClawSeat, wire a shell bundle, create a starter profile, run preflight/bootstrap, start `koder`, or troubleshoot first-launch and tmux/PTY failures.
+description: The actual install mechanics for ClawSeat — preflight, symlink bundle, workspace scaffolding, first-launch gate. This is the "how" skill; for the product-level "decide + route + announce" entrypoint use the `clawseat` skill instead, and for post-install resume shortcuts use `cs`. Trigger this skill when a user asks to install ClawSeat, 安装 ClawSeat, bootstrap the install project, wire a shell bundle, create a starter profile, run preflight / bootstrap, start `koder`, troubleshoot first-launch / tmux / PTY failures, or recover from a half-installed state. Reuses existing workspaces and live TUIs when present.
 ---
 
 # ClawSeat Install
@@ -100,18 +100,17 @@ Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0
 2. Read [install-flow.md](references/install-flow.md) for the command sequence and fallback rules.
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
-5. **Install skill symlinks** — this is mandatory, do NOT skip:
+5. **Install skill symlinks via the scripts, not manual `cp`.** The scripts do three things a manual copy cannot: they create symlinks pointing at the canonical checkout (so `git pull` in `~/.clawseat` propagates immediately without re-copying), they check external dependencies (gstack, lark-cli) and report clearly what's missing, and they keep the two mount points (`~/.openclaw/skills/*` and `~/.openclaw/workspace-koder/skills/*`) in sync. A manual copy decouples the runtime from your dev checkout, and every skill update silently diverges.
    - OpenClaw: `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"`
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
-   - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
    - Prefer the canonical one-shot installer:
      - `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py"`
    - This script now owns bundle repair, runtime-aware preflight, koder workspace init/refresh, dynamic profile creation, materialized-seat bootstrap, and planner config gating.
    - **Ask the user for their Feishu group ID** (format: `oc_xxx`) before first install when possible. If they don't have one yet, pass empty string and configure later:
      - `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py" --feishu-group-id <group_id>`
-   - After it refreshes `workspace-koder`, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
-   - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
+   - After it refreshes `workspace-koder`, re-read your AGENTS.md and TOOLS.md to load the koder role details and available commands — the refresh replaced these files from the latest template.
+   - **You (the current agent) ARE koder.** In OpenClaw / Feishu mode the frontstage agent *is* the koder seat; spawning a separate tmux session for koder would create a second frontstage racing with you for user input. Only backend seats (planner / builder / reviewer / ...) live in tmux.
    - The canonical project name is `install`
    - If `planner` is still unconfigured, stop at the printed configuration gate instead of guessing seat config
    - Read the profile fields correctly:
@@ -119,11 +118,11 @@ Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0
      - `materialized_seats` = seats whose runtime/session scaffold already exists after bootstrap
      - `default_start_seats` = first seats frontstage should offer/start
      - `bootstrap_seats` = compatibility/frontstage-bootstrap field, not the backend roster
-   - After bootstrap, **you MUST ask the user** for each backend seat's configuration before starting ANY seat. Do NOT use template defaults without user confirmation. For each seat, ask:
+   - After bootstrap, ask the user for each backend seat's tool / auth / provider before starting any seat. Template defaults exist so the harness can validate the profile, but they almost never match what this particular user actually has available (their API keys, their OAuth identities, which CLIs they installed). Starting a seat with wrong config wastes the user's time on a failed OAuth flow or a provider they don't have credentials for. Ask per seat:
      - Tool: Claude Code / Codex / Gemini?
      - Auth: OAuth (recommended) or API key?
      - Provider: which provider?
-   - Ask about planner first, then each specialist (builder-1, reviewer-1, etc.) one by one
+   - Ask about planner first, then each specialist (builder-1, reviewer-1, etc.) one by one.
    - Only after the user confirms each seat's config, start planner:
      ```bash
      python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
@@ -131,7 +130,7 @@ Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0
        --tool <X> --auth-mode <Y> --provider <Z> --confirm-start
      ```
    - Wait for user to confirm planner OAuth/auth is complete
-   - Then dispatch remaining specialist seat startups to planner. **You MUST use `dispatch_task.py`** — do NOT use raw `tmux send-keys`:
+   - Then dispatch remaining specialist seat startups to planner via `dispatch_task.py` (not raw `tmux send-keys` — see note below):
      ```bash
      python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
        --profile <profile.toml> \
@@ -143,8 +142,8 @@ Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0
          reviewer-1: tool=<X> auth-mode=<Y> provider=<Z>
          (include all remaining seats with their confirmed configs)"
      ```
-   - **CRITICAL: 禁止直接用 `tmux send-keys` 给 seat 发消息。** `tmux send-keys` 没有 1 秒延迟，消息会卡在 TUI 输入框不提交。所有 seat 通信必须用 `dispatch_task.py`（派发任务）、`notify_seat.py`（发通知）、或 `send-and-verify.sh`（tmux transport with auto-retry）。
-   - **Never let planner choose seat configs on its own** — all config decisions come from the user through koder
+   - **别用 `tmux send-keys` 直接发消息。** `send-keys` 的文本和 Enter 之间没有 1 秒延迟，消息会卡在 TUI 输入框不提交（Codex / Gemini TUI 有时需要等 IME 才真正入队）。所有 seat 通信走三个封装脚本之一：`dispatch_task.py`（派发任务）、`notify_seat.py`（发通知）、`send-and-verify.sh`（tmux transport with auto-retry + 入队确认）。
+   - 不要让 planner 自行决定 seat 的 tool/auth/provider。这不是越权问题——是因为 planner 看不到你和用户的对话上下文，它只能猜，而用户刚才已经明确告诉你想用什么了。所有 config 决策都从用户经 koder 下达。
 7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install.toml`, and starts `planner`.
 8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
 9. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install.toml` for the canonical install project, or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`.

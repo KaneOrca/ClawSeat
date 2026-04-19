@@ -1,11 +1,13 @@
 ---
 name: workflow-architect
 description: >
-  Planner 专属 skill。接收 koder 传来的结构化用户需求 brief，将用户的真实操作步骤
-  映射到系统原子能力（seats / tools / skills），设计出可执行的工作流规格（workflow spec），
-  并将其沉淀为可复用模板。不做用户访谈（访谈由 koder 的 socratic-requirements 完成），
-  不负责工具参数填充（参数由 designer 席位负责），只负责工作流「骨架设计」和「dispatch」。
-planner-exclusive: true
+  Planner 专属 skill（只在当前 seat 是 planner 时加载；其它 seat 看到这条不要触发）。
+  接收 koder 传来的结构化用户需求 brief，将用户的真实操作步骤映射到系统原子能力
+  （seats / tools / skills），设计出可执行的工作流规格（workflow spec），并将其
+  沉淀为可复用模板。适用于：TODO.md 的 task_type=workflow_design、或 brief 中包含
+  ≥ 3 个跨席位步骤的操作流程。不做用户访谈（访谈由 koder 的 socratic-requirements
+  完成），不负责工具参数填充（参数由 designer 席位负责），只负责工作流「骨架设计」
+  和「dispatch」。
 ---
 
 # Workflow Architect

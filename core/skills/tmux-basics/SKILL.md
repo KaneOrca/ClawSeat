@@ -1,11 +1,17 @@
 ---
 name: tmux-basics
 description: >
-  tmux session control for ClawSeat seats. Covers session naming, essential
-  commands (send-keys, capture-pane), ClawSeat script wrappers
-  (send-and-verify, check-engineer-status, wait-for-text, detect-prompt-state),
-  common pitfalls (paste overflow, Enter swallowed, focus mismatch, TMUX env),
-  and self-diagnosis. Loaded by koder and planner for seat communication.
+  tmux session control for ClawSeat seats. Reach for this skill whenever you
+  drive or debug a tmux session that hosts a seat — driving keystrokes, reading
+  pane contents, diagnosing "my Enter was swallowed" / "paste overflowed" / "I
+  sent a message but nothing happened" / "which session name should I use" /
+  "tmux server is weird" / "check if engineer is still alive". Covers session
+  naming (`<project>-<seat>` convention), essential commands (send-keys,
+  capture-pane), ClawSeat script wrappers (send-and-verify,
+  check-engineer-status, wait-for-text, detect-prompt-state), the four common
+  pitfalls (paste overflow, Enter swallowed, focus mismatch, TMUX env leak),
+  and self-diagnosis. Primary consumers are koder and planner, but load this
+  skill whenever you need to talk to a backend seat or debug its tmux layer.
 ---
 
 # tmux Basics

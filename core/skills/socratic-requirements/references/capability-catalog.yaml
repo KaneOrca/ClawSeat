@@ -1,3 +1,36 @@
+# =============================================================================
+# Capability Catalog — socratic-requirements reference
+# =============================================================================
+#
+# Top-level entries (14 total). 跳到对应行号直接看某一项，不用顺序读完全文件：
+#
+#   line   key                         domain
+#   ----   ---                         ------
+#      1   cartooner-video             创作：视频工作流（TikTok / Shorts / MV 等）
+#     62   claw-image                  创作：图像生成
+#    106   frontend-slides             创作：前端技术 slides
+#    149   pptx                        创作：PPT 演示文稿
+#    181   remotion-video-production   创作：Remotion 程序化视频
+#    212   script-writing-expert       创作：剧本写作
+#    244   storyboard-forge            创作：分镜 / 故事板
+#    276   art-director-expert         创作：美术指导
+#    309   song-creator                创作：歌曲创作
+#    355   minimax-speech              创作：语音合成
+#    389   viral-copywriter            创作：爆款文案
+#    421   dashscope-video-fx          创作：视频特效
+#    455   koder                       工程：ClawSeat 前台 seat
+#    482   workflow-architect          工程：工作流架构设计（planner 专属）
+#
+# 用法：用户意图是创作类时，按上面 1–421 行里匹配 triggers；是工程/产品类时
+# 看 455 / 482。每一项的字段约定：
+#   - description: 一句话职责
+#   - triggers: 自然语言关键词（socratic-requirements 的意图路由用）
+#   - 其余字段按 entry 类型不同（创作类通常有 input/output/stages，工程类有 skills）
+#
+# 文件很长（497 行 YAML）——别从头读，按 TOC 跳。
+#
+# =============================================================================
+
 cartooner-video:
   description: 视频工作流的创建、管理、执行与交付
   triggers:
