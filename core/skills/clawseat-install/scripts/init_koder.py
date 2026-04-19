@@ -86,6 +86,7 @@ MANAGED_FILES = (
     "TOOLS/seat.md",
     "TOOLS/memory.md",
     "TOOLS/install.md",
+    "TOOLS/koder-hygiene.md",
     "MEMORY.md",
     "AGENTS.md",
     "WORKSPACE_CONTRACT.toml",
@@ -222,6 +223,7 @@ def build_workspace_files(
         "TOOLS/seat.md": render_tools_seat(REPO_ROOT, heartbeat_owner=heartbeat_owner, backend_seats=backend),
         "TOOLS/memory.md": render_tools_memory(REPO_ROOT, heartbeat_owner=heartbeat_owner),
         "TOOLS/install.md": render_tools_install(REPO_ROOT),
+        "TOOLS/koder-hygiene.md": (REPO_ROOT / "core/templates/shared/TOOLS/koder-hygiene.md").read_text(encoding="utf-8"),
         "MEMORY.md": render_memory(
             project,
             profile_path,

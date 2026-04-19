@@ -77,3 +77,20 @@ python3 <HARNESS_SCRIPTS>/complete_handoff.py \
 ```
 
 Resume when koder sends `seat_ready: <seat>`.
+
+## Koder Consume ACK
+
+When planner closeout arrives at koder with `frontstage_disposition: AUTO_ADVANCE`, koder must immediately prune its own TODO entry via `--ack-only`. No user notification needed.
+
+```bash
+# When planner closeout arrives with AUTO_ADVANCE:
+python3 <HARNESS_SCRIPTS>/complete_handoff.py \
+  --profile <PROFILE> \
+  --source planner --target koder \
+  --task-id <TASK_ID> \
+  --ack-only
+```
+
+For `USER_DECISION_NEEDED`: do NOT auto-ack. Hold the entry, relay summary to user, and wait.
+
+See `TOOLS/koder-hygiene.md` for full Rule 1 / Rule 2 / Rule 3 decision table.
