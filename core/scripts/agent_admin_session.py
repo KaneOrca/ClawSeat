@@ -280,8 +280,8 @@ class SessionService:
             check=False,
         )
 
-    def stop_engineer(self, session: Any, *, keep_iterm_tab: bool = False) -> None:
-        if not keep_iterm_tab:
+    def stop_engineer(self, session: Any, *, close_iterm_tab: bool = False) -> None:
+        if close_iterm_tab:
             tty = _get_tmux_tty(session.session)
             if tty:
                 result = _close_iterm_tab_by_tty(tty)

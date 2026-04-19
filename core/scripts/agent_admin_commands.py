@@ -180,7 +180,7 @@ class CommandHandlers:
 
     def session_stop_engineer(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
-        self.hooks.session_service.stop_engineer(session, keep_iterm_tab=getattr(args, "keep_iterm_tab", False))
+        self.hooks.session_service.stop_engineer(session, close_iterm_tab=not getattr(args, "keep_iterm_tab", False))
         return 0
 
     def session_start_project(self, args: Any) -> int:
