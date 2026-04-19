@@ -48,14 +48,14 @@ Preflight now supports runtime-aware install gating:
 - OpenClaw first install: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install --runtime openclaw --auto-fix`
 - Local runtime: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install`
 
-## Optional: Use Memory CC to Avoid Guessing
+## Memory Seat (Required)
 
-Memory CC is an optional seat (`role = "memory-oracle"`, `tool = claude + api + minimax + MiniMax-M2.7-highspeed`) that scans the machine once and answers environment queries during install. Use it when you don't know where API keys, feishu group IDs, or provider URLs live.
+Memory CC (`role = "memory-oracle"`, `tool = claude + api + minimax + MiniMax-M2.7-highspeed`) is the mandatory knowledge oracle for environment facts. Start it immediately after bootstrap and before dispatching any work to planner or specialist seats. Every seat — including koder and the ancestor Claude Code agent — must query memory before guessing or asking the user for API keys, provider config, feishu group IDs, or file locations.
 
-**When to use**:
-- Install is about to prompt the user for something the machine already knows (e.g. minimax API key already in `~/.agents/.env.global`)
-- Multiple seats need the same secret / URL / provider config
-- You (an AI agent running the install) don't want to guess paths
+**Must start before**:
+- Dispatching work to planner or any specialist seat
+- Prompting the user for something the machine already knows (e.g. minimax API key in `~/.agents/.env.global`)
+- Any seat that needs provider / base URL / endpoint configuration
 
 **Minimum flow**:
 1. Start memory seat after bootstrap (before planner):
@@ -88,6 +88,8 @@ python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
 ```
 
 Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0600`. Do not copy it off the machine.
+
+Seat-to-memory query protocol: see [references/memory-query-protocol.md](references/memory-query-protocol.md).
 
 ## Standard Flow
 

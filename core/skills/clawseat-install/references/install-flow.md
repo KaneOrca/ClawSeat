@@ -52,6 +52,19 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
 - `clawseat` is the product path for OpenClaw/Feishu; `/cs` is the local-runtime exception path that counts as explicit approval to bootstrap or resume `install` and start `planner`.
 - `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
 
+## Start Memory Seat
+
+Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). Start it immediately after bootstrap, BEFORE dispatching work to planner or any specialist:
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" --seat memory --confirm-start
+```
+
+Every other seat (including koder and the ancestor Claude Code agent) must query memory before guessing environment facts. See [memory-query-protocol.md](memory-query-protocol.md) for the mandatory query/escalation contract.
+
+If memory seat is not declared in the profile roster, add it before rerunning bootstrap — memory is no longer optional.
+
 ## Entry Skill Install
 
 ```sh
@@ -139,3 +152,4 @@ That wrapper will:
 | `CLAWSEAT_ROOT` missing | Environment not initialized | Export the repo root and rerun preflight |
 | `dynamic profile not found` | Project profile missing | `install` 项目会自动从 shipped `install.toml` 补种；其他项目需先创建 `/tmp/{project}-profile-dynamic.toml` |
 | `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |
+| memory seat not started | Query protocol unavailable; seats will guess or block | Run `start_seat.py --seat memory --confirm-start` immediately after bootstrap |
