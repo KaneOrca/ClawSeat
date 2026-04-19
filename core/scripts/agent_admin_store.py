@@ -77,7 +77,10 @@ class StoreHandlers:
     def get_current_project_name(self, projects: dict[str, Any] | None = None) -> str | None:
         project_map = projects or self.load_projects()
         if self.hooks.current_project_path.exists():
-            value = self.hooks.current_project_path.read_text().strip()
+            # Strip BOM (u+FEFF) that some editors add, plus regular whitespace.
+            # Without this, a CRLF-saved file or one touched by a BOM-prepending
+            # editor makes the value never match project_map.
+            value = self.hooks.current_project_path.read_text().lstrip("\ufeff").strip()
             if value in project_map:
                 return value
         if project_map:
@@ -159,17 +162,24 @@ class StoreHandlers:
 
     def load_session(self, project: str, engineer_id: str) -> Any:
         data = self.hooks.load_toml(self.session_path(project, engineer_id))
+        tool = data["tool"]
+        bin_path = data.get("bin_path") or self.hooks.tool_binaries.get(tool)
+        if not bin_path:
+            raise self.hooks.error_cls(
+                f"Session {project}/{engineer_id} references unknown tool {tool!r}. "
+                "Fix by editing session.toml or registering the tool in TOOL_BINARIES."
+            )
         return self.hooks.session_record_cls(
             engineer_id=data["engineer_id"],
             project=data["project"],
-            tool=data["tool"],
+            tool=tool,
             auth_mode=data["auth_mode"],
             provider=data["provider"],
             identity=data["identity"],
             workspace=data["workspace"],
             runtime_dir=data["runtime_dir"],
             session=data["session"],
-            bin_path=data.get("bin_path", self.hooks.tool_binaries[data["tool"]]),
+            bin_path=bin_path,
             monitor=bool(data.get("monitor", True)),
             legacy_sessions=list(data.get("legacy_sessions", [])),
             launch_args=list(data.get("launch_args", [])),
