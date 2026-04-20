@@ -9,7 +9,7 @@ schema placement, and harness protocol details stay inside this wrapper.
 
 Usage (inline JSON, preferred):
     python3 memory_deliver.py \\
-      --profile /Users/ywf/.agents/profiles/memory-test-profile.toml \\
+      --profile <profile.toml> \\
       --task-id MEMORY-QUERY-XXX \\
       --target memory-client \\
       --response-inline '{"query_id": "...", "claims": [...], ...}'

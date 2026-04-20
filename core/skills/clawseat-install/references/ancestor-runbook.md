@@ -26,14 +26,14 @@ Before running Phase 0:
 2. Memory query for all environment facts BEFORE hardcoding values:
    ```bash
    python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-     --memory-dir ~/.agents/memory --key credentials.keys.MINIMAX_API_KEY
+     --memory-dir "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory" --key credentials.keys.MINIMAX_API_KEY
    ```
    **Rule**: Never guess API keys, agent names, group IDs, or provider config. Always query memory first.
 
 3. Confirm the OpenClaw agent target is known:
    ```bash
    python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-     --memory-dir ~/.agents/memory --search agents
+     --memory-dir "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory" --search agents
    ```
 
 **Halt condition**: If `CLAWSEAT_ROOT` is unset or memory is unreachable → write `USER_DECISION_NEEDED: missing prerequisites` to status file and halt.
@@ -69,23 +69,37 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skill
 
 **Halt condition**: script exits non-zero → USER_DECISION_NEEDED.
 
-### Step 0.3 — OpenClaw first install (G5)
+### Step 0.3 — Canonical staged ordering (G5)
 
-For a fresh OpenClaw + Feishu install, prefer the one-shot installer:
+For a fresh OpenClaw + Feishu install, keep the ordering explicit:
 
-```bash
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/openclaw_first_install.py"
-```
+1. `install_bundled_skills.py`
+2. Seed `~/.agents/memory/` if `index.json` is missing
+3. Start `memory`
+4. Query memory for the target agent
+5. `install_koder_overlay.py --agent <NAME>`
+6. `init_koder.py` / `bootstrap_harness.py` / planner config gate
 
-*Trade-off*: The one-shot installer handles dependency ordering. Individual scripts (`install_koder_overlay` → `init_koder` → `bootstrap_harness`) are still valid for partial reinstall or repair, but require correct ordering. If the project already exists, skip to Phase 1.
+There is no longer a canonical one-shot `openclaw_first_install.py` wrapper. If the project already exists, skip to Phase 1.
 
 ---
 
-## Phase 1 — Memory Seat Start + Scan (G2)
+## Phase 1 — Ancestor Scan + Memory Seat Start (G2)
 
-Memory seat is the authoritative oracle. Start it BEFORE any per-agent queries.
+Memory seat is the authoritative oracle, but first install must seed the local KB before memory can answer queries reliably.
 
-### Step 1.1 — Start memory seat
+### Step 1.1 — Seed the initial knowledge base (ancestor agent)
+
+```bash
+test -f "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory/index.json" || \
+  python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+```
+
+**Verify**: `test -f "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory/index.json" && echo MEMORY_READY`
+
+**Halt condition**: `index.json` still missing → USER_DECISION_NEEDED: initial memory scan failed.
+
+### Step 1.2 — Start memory seat
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
@@ -98,33 +112,18 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
 
 **Halt condition**: memory seat not running after start → USER_DECISION_NEEDED: memory seat failed to start.
 
-### Step 1.2 — Dispatch MEMORY-SCAN-001
+### Step 1.3 — Missing-fact enrichment goes through notify_seat.py
 
 ```bash
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --source koder \
   --target memory \
-  --task-id MEMORY-SCAN-001 \
-  --title 'Initial environment scan' \
-  --objective 'Scan openclaw.json, gstack config, credentials, and list all known agents' \
-  --intent ship \
-  --reply-to koder
+  --task-id MEM-ENRICH-001 \
+  --message '请补充缺失环境事实并更新知识库'
 ```
 
-### Step 1.3 — Wait for memory index
-
-```bash
-# Poll up to 60 seconds
-for i in $(seq 1 12); do
-  test -f ~/.agents/memory/index.json && echo "MEMORY_READY" && break
-  sleep 5
-done
-```
-
-**Verify**: `~/.agents/memory/index.json` exists. Exit 0.
-
-**Halt condition**: index.json missing after 60s → USER_DECISION_NEEDED: memory scan did not complete.
+**Rule**: do not use `dispatch_task.py --target memory` for the initial scan or later enrichment.
 
 ---
 
@@ -136,7 +135,7 @@ Use the canonical query syntax with `--memory-dir` (NOT `--file`):
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-  --memory-dir ~/.agents/memory \
+  --memory-dir "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory" \
   --search agents
 ```
 
@@ -144,7 +143,7 @@ Or ask for specific agent:
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-  --memory-dir ~/.agents/memory \
+  --memory-dir "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory" \
   --ask "which OpenClaw agent should receive the koder overlay for project ${PROJECT}?"
 ```
 
@@ -452,10 +451,10 @@ Each item maps to a Phase anchor and is checked by `install_complete.py`.
 | ID | Description | Phase | install_complete check |
 |----|-------------|-------|----------------------|
 | G1 | install_bundled_skills.py run | Phase 0.1 | `~/.openclaw/skills/` symlinks present |
-| G2 | Memory seat started + MEMORY-SCAN-001 dispatched + index.json exists | Phase 1 | `~/.agents/memory/index.json` mtime |
+| G2 | Initial memory KB seeded + memory seat started | Phase 1 | `~/.agents/memory/index.json` mtime |
 | G3 | Memory queried for target agent before overlay | Phase 2.1 | memory log contains agent query |
 | G4 | install_entry_skills.py run | Phase 0.2 | `.entry_skills_installed` marker or skill paths |
-| G5 | openclaw_first_install.py used or equivalent ordering | Phase 0.3 | advisory check only |
+| G5 | canonical staged OpenClaw ordering used | Phase 0.3 | advisory check only |
 | G6 | Feishu 7-step canonical completed | Phase 5 | `BRIDGE.toml` present + lark-cli auth ok |
 | G7 | Project-group binding confirmed with user | Phase 5.3 | BRIDGE.toml bound_by field |
 | G8 | bind_project_to_group() called → BRIDGE.toml | Phase 5.4 | `BRIDGE.toml` exists |

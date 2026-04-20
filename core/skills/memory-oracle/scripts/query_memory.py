@@ -28,13 +28,15 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-HOME = Path.home()
-DEFAULT_MEMORY_DIR = HOME / ".agents" / "memory"
-
 # Ensure sibling scripts (e.g. _memory_paths) are importable
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+
+from _memory_paths import MEMORY_ROOT  # noqa: E402
+
+
+DEFAULT_MEMORY_DIR = MEMORY_ROOT
 
 
 def now_iso() -> str:
@@ -417,40 +419,55 @@ def cmd_list(
     return 0 if results else 1
 
 
-# ── Ask handler (unchanged from v1) ──────────────────────────────────────────
+# ── Ask handler ──────────────────────────────────────────────────────────────
 
 
-def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
-    """Ask Memory CC via dispatch_task.py + poll responses/{task_id}.json."""
+def cmd_ask(
+    question: str,
+    *,
+    profile_path: str | None,
+    timeout: float,
+    memory_dir: Path = DEFAULT_MEMORY_DIR,
+) -> int:
+    """Ask Memory CC via notify_seat.py + poll responses/{task_id}.json."""
     if not profile_path:
         print("error: --ask requires --profile <profile.toml>", file=sys.stderr)
         return 2
 
     task_id = f"MEMORY-QUERY-{int(time.time())}-{os.getpid()}"
-    responses_dir = DEFAULT_MEMORY_DIR / "responses"
+    responses_dir = memory_dir / "responses"
     responses_dir.mkdir(parents=True, exist_ok=True)
     response_path = responses_dir / f"{task_id}.json"
 
     script_dir = Path(__file__).resolve().parent
     clawseat_root = script_dir.parents[3]
-    dispatch = clawseat_root / "core" / "skills" / "gstack-harness" / "scripts" / "dispatch_task.py"
-    if not dispatch.is_file():
-        print(f"error: dispatch_task.py not found at {dispatch}", file=sys.stderr)
+    notify = clawseat_root / "core" / "skills" / "gstack-harness" / "scripts" / "notify_seat.py"
+    if not notify.is_file():
+        print(f"error: notify_seat.py not found at {notify}", file=sys.stderr)
         return 2
 
     import subprocess
+    message = (
+        "MEMORY QUERY REQUEST\n"
+        f"question: {question.strip()}\n"
+        f"task_id: {task_id}\n"
+        "Reply via memory_deliver.py using:\n"
+        f"  --profile {profile_path}\n"
+        f"  --task-id {task_id}\n"
+        "  --target memory-client\n"
+        "Ground every claim in ~/.agents/memory evidence; do not guess."
+    )
     cmd = [
-        "python3", str(dispatch),
+        "python3", str(notify),
         "--profile", profile_path,
         "--source", "memory-client",
         "--target", "memory",
         "--task-id", task_id,
-        "--title", "Memory query",
-        "--objective", question,
+        "--message", message,
     ]
-    dispatch_result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if dispatch_result.returncode != 0:
-        print(f"error: dispatch failed: {dispatch_result.stderr}", file=sys.stderr)
+    notify_result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if notify_result.returncode != 0:
+        print(f"error: memory query notify failed: {notify_result.stderr}", file=sys.stderr)
         return 1
 
     deadline = time.time() + timeout
@@ -459,7 +476,7 @@ def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
             try:
                 response = json.loads(response_path.read_text(encoding="utf-8"))
                 if response.get("query_id") == task_id:
-                    verified = verify_claims(response, DEFAULT_MEMORY_DIR)
+                    verified = verify_claims(response, memory_dir)
                     response["verification"] = verified
                     print(json.dumps(response, indent=2, ensure_ascii=False))
                     return 0 if verified["all_verified"] else 3
@@ -581,7 +598,7 @@ Examples (v1 backward-compatible):
     group.add_argument("--status", action="store_true", help="Show memory DB status")
 
     p.add_argument("--section", help="With --file: dotted sub-path to extract")
-    p.add_argument("--profile", help="With --ask: profile TOML for dispatch")
+    p.add_argument("--profile", help="With --ask: profile TOML for memory query transport")
     p.add_argument("--timeout", type=float, default=60.0, help="With --ask: poll timeout seconds")
     p.add_argument("--files", help="With --search: comma-separated file names to restrict scope")
 
@@ -634,7 +651,7 @@ def main() -> int:
         files = args.files.split(",") if args.files else None
         return cmd_search(memory_dir, args.search, files=files)
     if args.ask:
-        return cmd_ask(args.ask, profile_path=args.profile, timeout=args.timeout)
+        return cmd_ask(args.ask, profile_path=args.profile, timeout=args.timeout, memory_dir=memory_dir)
 
     # Nothing given
     import argparse as _ap

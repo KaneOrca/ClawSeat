@@ -60,7 +60,7 @@ No third-party pip packages required for dry-run mode.
 ## Known Issues
 
 - **coverage report fails without pytest-cov**: If `pytest --cov=...` fails with `no module named pytest_cov`, install with `pip install pytest-cov` (or `pip3 install --break-system-packages pytest-cov` on Homebrew-managed Python).
-- **query_ask stage fails if dispatch blocked**: The `query_ask` stage runs `query_memory.py --ask` in a sandbox HOME. It asserts that the responses directory is created, then dispatch fails (expected, as T9 blocks `--target memory`). This is intentional — the stage verifies infrastructure setup, not a live dispatch.
+- **query_ask stage may fail without a live memory seat**: The `query_ask` stage runs `query_memory.py --ask` in a sandbox HOME. It asserts that the responses directory is created, then the transport/poll can fail because there is no live memory seat or valid profile in smoke mode. This is intentional — the stage verifies infrastructure setup, not a live response round-trip.
 
 ## Adding New Smoke Tests
 

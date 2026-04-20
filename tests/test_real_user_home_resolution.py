@@ -161,6 +161,30 @@ def test_group_id_resolves_from_sandbox_via_real_home(tmp_path, monkeypatch, cle
     )
 
 
+def test_group_id_resolves_from_named_openclaw_workspace(tmp_path, monkeypatch, clean_env):
+    fake_sandbox = tmp_path / "sandbox_home"
+    fake_sandbox.mkdir()
+
+    real_home = tmp_path / "real_home"
+    contract_dir = real_home / ".openclaw" / "workspace-cartooner"
+    contract_dir.mkdir(parents=True)
+    contract_path = contract_dir / "WORKSPACE_CONTRACT.toml"
+    contract_path.write_text(
+        'project = "install"\nfeishu_group_id = "oc_CARTOONER_GROUP"\n',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("HOME", str(fake_sandbox))
+
+    feishu = _reload_feishu()
+
+    with mock.patch("pwd.getpwuid") as m_pwd:
+        m_pwd.return_value = mock.Mock(pw_dir=str(real_home))
+        result = feishu.resolve_primary_feishu_group_id(project="install")
+
+    assert result == "oc_CARTOONER_GROUP"
+
+
 def test_group_id_from_clawseat_managed_workspace(tmp_path, monkeypatch, clean_env):
     """Second resolution path: ~/.agents/workspaces/<project>/koder/WORKSPACE_CONTRACT.toml."""
     fake_sandbox = tmp_path / "sandbox"

@@ -4,7 +4,7 @@
 The original responsibilities of this script have been split into two
 agent-neutral entrypoints so the install flow can pick the koder overlay
 target based on the memory seat's knowledge base instead of hardcoding
-``workspace-koder``:
+one fixed workspace name:
 
 * ``install_bundled_skills.py`` — Phase 0. Installs ``~/.openclaw/skills/``
   symlinks and checks external skills. Agent-neutral.
@@ -13,7 +13,7 @@ target based on the memory seat's knowledge base instead of hardcoding
 
 This wrapper is kept for one release so existing docs and muscle
 memory continue to work. It runs Phase 0 only and prints a pointer for
-Phase 3. It no longer overlays skill symlinks into ``workspace-koder``
+Phase 3. It no longer overlays skill symlinks into a default workspace
 by default — that was the hardcoded behavior that motivated the split.
 
 Callers that previously relied on the old one-step behavior should

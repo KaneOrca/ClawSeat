@@ -106,6 +106,8 @@ def test_install_koder_overlay_main_missing_agent_prints_memory_hint(capsys):
     err = capsys.readouterr().err
     assert "memory-query-protocol.md" in err
     assert "query_memory.py" in err
+    assert "--search agents" in err
+    assert "--file openclaw --section agents" not in err
 
 
 def test_install_koder_overlay_installs_into_chosen_agent_workspace(tmp_path):
@@ -210,3 +212,24 @@ def test_install_openclaw_bundle_wrapper_delegates_and_warns(tmp_path, monkeypat
     assert not (openclaw_home / "workspace-koder" / "skills").exists()
     # But it must have installed the global skills (via delegation).
     assert (openclaw_home / "skills").is_dir()
+
+
+def test_install_bundled_skills_main_prints_updated_memory_query_steps(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        install_bundled_skills, "check_agent_skills", lambda dry_run: []
+    )
+    monkeypatch.setattr(
+        install_bundled_skills, "check_gstack_skills", lambda dry_run: []
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["install_bundled_skills.py", "--openclaw-home", str(tmp_path / ".openclaw")]
+    )
+
+    rc = install_bundled_skills.main()
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "scan_environment.py" in out
+    assert "--memory-dir" in out
+    assert "--search agents" in out
+    assert "--file openclaw --section agents" not in out

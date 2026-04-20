@@ -364,8 +364,62 @@ class TestCmdAskPromptFile:
 
     def test_ask_with_nonexistent_profile_returns_error(self, tmp_path, capsys):
         rc = qm.cmd_ask("test question", profile_path="/nonexistent/profile.toml", timeout=0.1)
-        # dispatch will fail because dispatch_task.py won't find the profile or binary
+        # notify will fail because notify_seat.py won't find the profile
         assert rc in (1, 2)
+
+    def test_ask_uses_notify_and_explicit_memory_dir(self, tmp_path, monkeypatch, capsys):
+        mem = _make_memory(
+            tmp_path,
+            {"machine/credentials.json": {"keys": {"TEST_KEY": {"value": "abc123"}}}},
+        )
+
+        def fake_run(cmd, capture_output, text, check):  # noqa: ANN001
+            task_id = cmd[cmd.index("--task-id") + 1]
+            response_path = mem / "responses" / f"{task_id}.json"
+            response_path.parent.mkdir(parents=True, exist_ok=True)
+            response_path.write_text(
+                json.dumps(
+                    {
+                        "query_id": task_id,
+                        "claims": [
+                            {
+                                "statement": "TEST_KEY exists",
+                                "evidence": [
+                                    {
+                                        "file": "credentials",
+                                        "path": "keys.TEST_KEY.value",
+                                        "expected_value": "abc123",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            class Result:
+                returncode = 0
+                stderr = ""
+
+            assert cmd[1].endswith("notify_seat.py")
+            assert "--message" in cmd
+            return Result()
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+        monkeypatch.setattr(qm.time, "sleep", lambda _: None)
+
+        rc = qm.cmd_ask(
+            "Where is TEST_KEY?",
+            profile_path="/tmp/install-profile.toml",
+            timeout=0.1,
+            memory_dir=mem,
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["verification"]["all_verified"] is True
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

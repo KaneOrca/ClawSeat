@@ -12,10 +12,10 @@ OpenClaw agent workspace), run install_koder_overlay.py separately.
 Rationale for the split
 -----------------------
 Before this change, install_openclaw_bundle.py hardcoded
-``~/.openclaw/workspace-koder/skills/`` as the overlay target. That
-forced every install to use the agent named "koder" and prevented
-users from overlaying ClawSeat onto a different OpenClaw agent
-(cartooner, mor, scout, etc.). Splitting the script keeps Phase 0
+one specific ``workspace-<agent>/skills/`` directory as the overlay
+target. That forced every install to use a single agent identity and
+prevented users from overlaying ClawSeat onto a different OpenClaw
+agent (cartooner, mor, scout, etc.). Splitting the script keeps Phase 0
 (shared skills) deterministic and defers the "which agent" choice to
 Phase 2 (after the memory seat can enumerate the candidates).
 """
@@ -192,13 +192,16 @@ def main() -> int:
         print("bundled_skills_install_ok")
         print()
         print("next_steps:")
-        print("  1. Start the memory seat so the installer can enumerate OpenClaw agents:")
+        print("  1. If this is the first install and memory is empty, seed the local KB:")
+        print('     test -f "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory/index.json" || \\')
+        print(f'       python3 "{CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/scan_environment.py"')
+        print("  2. Start the memory seat so the installer can enumerate OpenClaw agents:")
         print(f'     python3 "{CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/start_seat.py" \\')
         print('       --profile "/tmp/<project>-profile-dynamic.toml" --seat memory --confirm-start')
-        print("  2. Query memory for the agent list and pick your koder overlay target:")
+        print("  3. Query memory for the agent list and pick your koder overlay target:")
         print(f'     python3 "{CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py" \\')
-        print("       --file openclaw --section agents")
-        print("  3. Overlay ClawSeat koder templates into the chosen agent workspace:")
+        print('       --memory-dir "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory" --search agents')
+        print("  4. Overlay ClawSeat koder templates into the chosen agent workspace:")
         print(f'     python3 "{CLAWSEAT_ROOT}/shells/openclaw-plugin/install_koder_overlay.py" \\')
         print("       --agent <AGENT_NAME>")
 

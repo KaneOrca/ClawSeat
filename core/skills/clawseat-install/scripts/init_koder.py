@@ -401,7 +401,7 @@ python3 {scripts}/dispatch_task.py \\
 python3 {scripts}/dispatch_task.py \\
   --profile ... --source koder --target planner --task-id T --title '...' \\
   --objective '**Review the architecture**, lock in the plan — 验收...' \\
-  --skill-refs /Users/ywf/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md
+  --skill-refs "${{CLAWSEAT_REAL_HOME:-$HOME}}/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md"
 ```
 
 要手动嵌 **trigger 词**（见每个 gstack skill 自己的 description）+ `--skill-refs` 绝对路径。**优先用 `--intent`**，它会替你做这两件事。
@@ -477,7 +477,7 @@ def render_tools_project(clawseat_root: Path, *, heartbeat_owner: str) -> str:
 读你自己 workspace 的 `WORKSPACE_CONTRACT.toml` 的 `project` 字段：
 
 ```bash
-python3 -c "import tomllib; print(tomllib.loads(open('/Users/ywf/.openclaw/workspace-koder/WORKSPACE_CONTRACT.toml').read())['project'])"
+python3 -c "import os, pathlib, tomllib; home=pathlib.Path(os.environ.get('CLAWSEAT_REAL_HOME', os.path.expanduser('~'))); ws=home/'.openclaw'/'workspace-{heartbeat_owner}'; print(tomllib.loads((ws/'WORKSPACE_CONTRACT.toml').read_text())['project'])"
 ```
 
 ## 新建项目（用户让你启动新团队时）
@@ -809,35 +809,35 @@ def render_tools_memory(clawseat_root: Path, *, heartbeat_owner: str) -> str:
 
 ```bash
 # 精确路径查询（知道 key 在哪）:
-python3 {memory_scripts}/query_memory.py --key credentials.keys.MINIMAX_API_KEY.value
-python3 {memory_scripts}/query_memory.py --key github.gh_cli.active_login
-python3 {memory_scripts}/query_memory.py --key openclaw.feishu.groups
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --key credentials.keys.MINIMAX_API_KEY.value
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --key github.gh_cli.active_login
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --key openclaw.feishu.groups
 
 # 模糊搜索（不确定 key 在哪）:
-python3 {memory_scripts}/query_memory.py --search "minimax"
-python3 {memory_scripts}/query_memory.py --search "feishu"
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --search "minimax"
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --search "feishu"
 
 # 列所有文件 + 总览:
-python3 {memory_scripts}/query_memory.py --status
-python3 {memory_scripts}/query_memory.py --file openclaw --section feishu
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --status
+python3 {memory_scripts}/query_memory.py --memory-dir "${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory" --search "agents"
 ```
 
 当前知识库含 9 个类别：
 `system`, `environment`, `credentials`, `openclaw`, `gstack`, `clawseat`, `repos`, `network`, `github`。
 
-## Step 2: Memory CC dispatch（仅 Step 1 miss 时 fallback）
+## Step 2: Memory CC notify（仅 Step 1 miss 时 fallback）
 
 当本地知识库里**真的没有**所需事实（比如用户提到了一个从未记录过的新 API provider），
-才委派 Memory CC 主动去扫描 / 联网查 / 更新知识库：
+才通知 Memory CC 主动去扫描 / 联网查 / 更新知识库。
+**禁止** `dispatch_task.py --target memory`：
 
 ```bash
-python3 {scripts}/dispatch_task.py \\
+python3 {scripts}/notify_seat.py \\
   --profile <profile.toml 路径> \\
   --source {heartbeat_owner} \\
   --target memory \\
   --task-id MEM-ENRICH-<timestamp> \\
-  --title "补充 XXX 知识" \\
-  --objective "本地知识库里没有 <具体项>，请扫描/查证后写入对应的 ~/.agents/memory/*.json，然后通过 memory_deliver.py 回复我"
+  --message "知识库缺少 <具体项>；请扫描/查证后写入 ${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/memory/"
 ```
 
 Memory CC 完成后会自动更新知识库 + 发 DELIVERY.md 给你，你再回 Step 1 重查即可。
@@ -866,10 +866,13 @@ bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>
 ## 首次安装
 
 ```bash
-python3 {clawseat_root}/shells/openclaw-plugin/install_openclaw_bundle.py
+python3 {clawseat_root}/shells/openclaw-plugin/install_bundled_skills.py
+python3 {clawseat_root}/core/skills/memory-oracle/scripts/scan_environment.py
 python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
+python3 {clawseat_root}/shells/openclaw-plugin/install_koder_overlay.py --agent <agent>
 python3 {clawseat_root}/core/skills/clawseat-install/scripts/init_koder.py \\
-  --workspace <workspace> --project <project>
+  --workspace "${{CLAWSEAT_REAL_HOME:-$HOME}}/.openclaw/workspace-<agent>" \\
+  --project <project> --profile <profile>
 ```
 
 ## 更新后刷新所有 workspace（git pull 之后必须跑，零参数自动检测）
@@ -910,7 +913,7 @@ Seat roster and backend list are authoritative in `WORKSPACE_CONTRACT.toml`.
 Read them there, not here:
 
 ```bash
-python3 -c "import tomllib; d=tomllib.loads(open('/Users/ywf/.openclaw/workspace-{heartbeat_owner}/WORKSPACE_CONTRACT.toml').read()); print('seats:', d.get('seats'))"
+python3 -c "import os, pathlib, tomllib; home=pathlib.Path(os.environ.get('CLAWSEAT_REAL_HOME', os.path.expanduser('~'))); ws=home/'.openclaw'/'workspace-{heartbeat_owner}'; d=tomllib.loads((ws/'WORKSPACE_CONTRACT.toml').read_text()); print('seats:', d.get('seats'))"
 ```
 
 ## Recommended startup order (render-time suggestion)
@@ -976,7 +979,7 @@ def render_agents(
 
 > Additional OpenClaw-native skills may be symlinked by OpenClaw itself
 > (e.g. `acpx-guide`, `capability-evolver`, `openclaw-governance-audit`,
-> `skill-vetter`). For the live set run `ls /Users/ywf/.openclaw/workspace-{heartbeat_owner}/skills/`.
+> `skill-vetter`). For the live set run `ls "${{CLAWSEAT_REAL_HOME:-$HOME}}/.openclaw/workspace-{heartbeat_owner}/skills/"`.
 
 ## Operational details
 
@@ -1002,7 +1005,7 @@ def render_agents(
 - Use `dispatch_task.py` for formal task dispatch (see `TOOLS/dispatch.md` for the command shape)
 - Use `notify_seat.py` for ad hoc messages
 - Use `send-and-verify.sh` for tmux transport (fallback only)
-- Every dispatch must produce a handoff receipt under `/Users/ywf/.agents/tasks/<project>/patrol/handoffs/`
+- Every dispatch must produce a handoff receipt under `${{CLAWSEAT_REAL_HOME:-$HOME}}/.agents/tasks/<project>/patrol/handoffs/`
 - Only backend seats may be started from this workspace: {backend_list}
   (Starting a seat is setup/provisioning — see `TOOLS/seat.md`. It does not violate the
   "don't absorb specialist work" rule, which applies to dispatched work-items.)

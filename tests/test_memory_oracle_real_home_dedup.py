@@ -46,6 +46,20 @@ def _import_memory_paths_fresh():
     return _memory_paths
 
 
+def _import_query_memory_fresh():
+    for name in list(sys.modules.keys()):
+        if (
+            name == "query_memory"
+            or name.endswith(".query_memory")
+            or "_memory_paths" in name
+        ):
+            sys.modules.pop(name, None)
+    import importlib
+    import query_memory
+    importlib.reload(query_memory)
+    return query_memory
+
+
 def test_feishu_and_memory_paths_agree_on_real_home(tmp_path, monkeypatch, clean_home_env):
     """Both implementations must return the same path for the same env/pwd state."""
     real_home = tmp_path / "shared_real_home"
@@ -81,3 +95,17 @@ def test_memory_paths_pwd_beats_env_home(tmp_path, monkeypatch, clean_home_env):
     assert result == real_home, (
         f"_memory_paths._real_user_home should use pwd, got {result}"
     )
+
+
+def test_query_memory_default_dir_uses_memory_paths_real_home(tmp_path, monkeypatch, clean_home_env):
+    sandbox_home = tmp_path / "sandbox"
+    sandbox_home.mkdir()
+    real_home = tmp_path / "real"
+    real_home.mkdir()
+
+    monkeypatch.setenv("HOME", str(sandbox_home))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(real_home))
+
+    query_memory = _import_query_memory_fresh()
+
+    assert query_memory.DEFAULT_MEMORY_DIR == real_home / ".agents" / "memory"

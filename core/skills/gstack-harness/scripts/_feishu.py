@@ -26,7 +26,7 @@ from _utils import (
 #   ~/.agents/runtime/identities/<tool>/<auth>/<identity>/home/
 # so Path.home() inside a seat returns THAT, not the operator's real HOME.
 # Many resources live at the operator's real HOME — lark-cli config,
-# OpenClaw workspace-koder WORKSPACE_CONTRACT.toml with the per-project
+# the OpenClaw workspace WORKSPACE_CONTRACT.toml with the per-project
 # feishu_group_id, the OpenClaw openclaw.json — and if we resolve them
 # against the sandbox HOME they all miss and we silently fall off canonical
 # paths. That is EXACTLY what caused planner→koder `complete_handoff.py`
@@ -178,6 +178,18 @@ def collect_feishu_group_ids_from_sessions() -> list[str]:
     return found
 
 
+def iter_openclaw_workspace_contracts(real_home: Path) -> list[tuple[Path, dict[str, Any]]]:
+    root = real_home / ".openclaw"
+    if not root.exists():
+        return []
+    contracts: list[tuple[Path, dict[str, Any]]] = []
+    for contract_path in sorted(root.glob("workspace-*/WORKSPACE_CONTRACT.toml")):
+        contract = load_toml(contract_path)
+        if contract:
+            contracts.append((contract_path, contract))
+    return contracts
+
+
 def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     """Resolve the feishu group ID for this project.
 
@@ -204,19 +216,27 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     # tmux instead of Feishu.
     if project:
         real_home = _real_user_home()
-        contract_paths = [
-            # OpenClaw koder workspace
-            real_home / ".openclaw" / "workspace-koder" / "WORKSPACE_CONTRACT.toml",
-            # ClawSeat managed workspace
-            real_home / ".agents" / "workspaces" / project / "koder" / "WORKSPACE_CONTRACT.toml",
+        openclaw_contracts = iter_openclaw_workspace_contracts(real_home)
+        matching_contracts = [
+            contract
+            for _, contract in openclaw_contracts
+            if str(contract.get("project", "")).strip() == project
         ]
-        for cp in contract_paths:
-            if cp.exists():
-                contract = load_toml(cp)
-                if contract:
-                    gid = str(contract.get("feishu_group_id", "")).strip()
-                    if gid:
-                        return gid
+        contracts_to_check = matching_contracts or (
+            [contract for _, contract in openclaw_contracts] if len(openclaw_contracts) == 1 else []
+        )
+        for contract in contracts_to_check:
+            gid = str(contract.get("feishu_group_id", "")).strip()
+            if gid:
+                return gid
+
+        managed_contract = real_home / ".agents" / "workspaces" / project / "koder" / "WORKSPACE_CONTRACT.toml"
+        if managed_contract.exists():
+            contract = load_toml(managed_contract)
+            if contract:
+                gid = str(contract.get("feishu_group_id", "")).strip()
+                if gid:
+                    return gid
 
     # 3. OpenClaw config fallback (may return wrong group in multi-project).
     # OPENCLAW_CONFIG_PATH is derived from OPENCLAW_HOME which respects

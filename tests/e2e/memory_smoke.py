@@ -135,12 +135,11 @@ def stage_query_search(mem_dir: Path) -> dict:
 
 
 def stage_query_ask(tmp_root: Path) -> dict:
-    """Stage 6: query_ask — assert cmd_ask creates responses dir before dispatch fails.
+    """Stage 6: query_ask — assert cmd_ask creates responses dir before transport fails.
 
-    Runs query_memory.py --ask via subprocess with HOME=tmp_root so that
-    DEFAULT_MEMORY_DIR resolves into the sandbox. The dispatch will fail
-    (no real memory seat / T9 blocks --target memory), but cmd_ask creates
-    the responses/ directory before attempting dispatch — this confirms the
+    Runs query_memory.py --ask via subprocess with HOME=tmp_root. The transport/poll will fail
+    in smoke mode (no real memory seat / valid profile), but cmd_ask creates
+    the responses/ directory before attempting delivery — this confirms the
     infrastructure setup path is exercised.
     """
     t0 = time.monotonic()
@@ -165,7 +164,7 @@ def stage_query_ask(tmp_root: Path) -> dict:
             timeout=8.0,
         )
         responses_dir = tmp_root / ".agents" / "memory" / "responses"
-        # cmd_ask creates responses_dir before dispatch; dispatch fails → rc in (1, 2)
+        # cmd_ask creates responses_dir before notify/poll; transport fails → rc in (1, 2)
         prompt_dir_created = responses_dir.is_dir()
         rc_acceptable = result.returncode in (1, 2)
         passed = prompt_dir_created and rc_acceptable

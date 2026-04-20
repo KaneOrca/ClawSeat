@@ -31,6 +31,13 @@ from pathlib import Path
 def _real_user_home() -> Path:
     import pwd
 
+    override = (
+        os.environ.get("CLAWSEAT_REAL_HOME")
+        or os.environ.get("LARK_CLI_HOME")
+    )
+    if override:
+        return Path(override).expanduser()
+
     try:
         real = Path(pwd.getpwuid(os.getuid()).pw_dir)
         if real.is_dir():

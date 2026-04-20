@@ -35,23 +35,60 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore
 
 
-# ── Auto-detection helpers ───────────────��───────────────────────────
+# ── Auto-detection helpers ───────────────────────────────────────────
+
+def _iter_openclaw_workspaces() -> list[Path]:
+    roots: list[Path] = []
+    env_home = os.environ.get("OPENCLAW_HOME")
+    if env_home:
+        roots.append(Path(env_home).expanduser())
+    roots.append(Path.home() / ".openclaw")
+
+    seen: set[Path] = set()
+    workspaces: list[Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for workspace in sorted(root.glob("workspace-*")):
+            if not workspace.is_dir():
+                continue
+            resolved = workspace.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            workspaces.append(workspace)
+    return workspaces
 
 def _detect_koder_workspace() -> str | None:
-    """Find the koder workspace by scanning common locations."""
-    candidates = [
-        Path.home() / ".openclaw" / "workspace-koder",
-        Path(os.environ.get("OPENCLAW_HOME", "")) / "workspace-koder" if os.environ.get("OPENCLAW_HOME") else None,
-    ]
-    # Also check if we're running inside a workspace that has WORKSPACE_CONTRACT.toml
+    """Find the frontstage workspace without assuming the directory is named koder."""
     cwd = Path.cwd()
     if (cwd / "WORKSPACE_CONTRACT.toml").exists():
         return str(cwd)
-    for c in candidates:
-        if c and c.exists() and (c / "WORKSPACE_CONTRACT.toml").exists():
-            return str(c)
-        if c and c.exists() and (c / "AGENTS.md").exists():
-            return str(c)
+
+    exact_frontstage: list[Path] = []
+    contract_candidates: list[Path] = []
+    fallback_candidates: list[Path] = []
+    for workspace in _iter_openclaw_workspaces():
+        contract_path = workspace / "WORKSPACE_CONTRACT.toml"
+        if contract_path.exists():
+            try:
+                data = tomllib.loads(contract_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            if str(data.get("seat_id", "")).strip() == "koder":
+                exact_frontstage.append(workspace)
+                continue
+            contract_candidates.append(workspace)
+            continue
+        if (workspace / "AGENTS.md").exists():
+            fallback_candidates.append(workspace)
+
+    if len(exact_frontstage) == 1:
+        return str(exact_frontstage[0])
+    if len(contract_candidates) == 1:
+        return str(contract_candidates[0])
+    if len(fallback_candidates) == 1 and not contract_candidates:
+        return str(fallback_candidates[0])
     return None
 
 

@@ -37,7 +37,7 @@ If `CLAWSEAT_ROOT` is unset, check the current checkout before doing anything el
 **Before any lark-cli call inside a tmux seat**:
 
 ```sh
-export AGENT_HOME=/Users/<real-user>   # e.g. /Users/ywf
+export AGENT_HOME=/Users/<real-user>   # e.g. /Users/alice
 ```
 
 The ClawSeat scripts pass `AGENT_HOME` automatically when launched via `start_seat.py`. If you see `FileNotFoundError: HOME/.openclaw not found` from `send_delegation_report.py` inside a tmux seat, check that `AGENT_HOME` is set.
@@ -87,9 +87,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
 - `clawseat` is the product path for OpenClaw/Feishu; `/cs` is the local-runtime exception path that counts as explicit approval to bootstrap or resume `install` and start `planner`.
 - `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
 
-## Phase 1 — Start Memory Seat
+## Phase 1 — Seed Initial Memory KB + Start Memory Seat
 
-Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). Start it immediately after bootstrap, BEFORE dispatching work to planner or any specialist:
+Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). On a fresh machine, seed the local KB first; then start memory BEFORE dispatching work to planner or any specialist:
+
+```sh
+test -f "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory/index.json" || \
+  python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+```
+
+Then start the memory seat:
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
@@ -99,6 +106,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
 Every other seat (including koder and the ancestor Claude Code agent) must query memory before guessing environment facts. See [memory-query-protocol.md](memory-query-protocol.md) for the mandatory query/escalation contract.
 
 If memory seat is not declared in the profile roster, add it before rerunning bootstrap — memory is no longer optional.
+Do not use `dispatch_task.py --target memory` for the initial scan; the initial scan is ancestor-led, and later enrichment goes through `notify_seat.py --target memory`.
 
 ## Phase 2 — Query Memory for Target Agent
 
@@ -108,7 +116,7 @@ Before applying any per-agent overlay, query memory to enumerate the available O
 # G15 — correct syntax: use --memory-dir + --key or --search (NOT --file --section)
 # Search for known agents
 python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-  --memory-dir ~/.agents/memory \
+  --memory-dir "${CLAWSEAT_REAL_HOME:-$HOME}/.agents/memory" \
   --search agents
 
 # Or reasoning query with profile context
