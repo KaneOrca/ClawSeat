@@ -18,7 +18,7 @@ python3 dispatch_task.py \
 ```
 
 **dispatch_task.py 自动完成：**
-1. 写入 `TODO.md`（target 的 inbox）
+1. 写入 `TODO.md`（target 的 inbox）— 详见 [§9 TODO.md / DELIVERY.md 格式](#9-todomd--deliverymd-格式) 的 schema
 2. 更新 `TASKS.md` / `STATUS.md`
 3. 通过 tmux 通知 target seat（`send-and-verify.sh`，1 秒后 Enter）
 4. 若配置了飞书群且 `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`，则向飞书群广播任务发布
@@ -184,3 +184,59 @@ OpenClaw bridge 操作方法：
 - auth_mode / provider 切换
 
 配置阶段完成且验证通过后，才进入正常执行阶段。
+
+---
+
+## 9. TODO.md / DELIVERY.md 格式
+
+`dispatch_task.py` / `complete_handoff.py` 写入的 inbox 文件有稳定契约，供 seat 读取与 patrol 扫描。对应 schema 实现在 `core/skills/gstack-harness/scripts/_task_io.py`。
+
+**TODO.md（target seat 的 inbox，由 dispatch_task 写入）**：
+
+```text
+task_id: <task-id>
+project: <project-name>
+owner: <target-seat>
+status: pending
+title: <task title>
+
+# Objective
+
+<objective body as markdown>
+
+# Dispatch
+
+source: <source-seat>
+reply_to: <reply-to-seat>
+dispatched_at: <ISO-8601 UTC>
+```
+
+**DELIVERY.md（source seat 的 outbox，由 complete_handoff 写入）**：
+
+```text
+task_id: <task-id>
+owner: <source-seat>
+target: <target-seat>
+status: completed
+date: <ISO-8601 UTC>
+correlation_id: <optional>
+
+# Delivery: <title>
+
+## Summary
+
+<summary body>
+
+Verdict: <pass|fail|defer|...>          # optional
+FrontstageDisposition: <AUTO_ADVANCE|HOLD|ESCALATE>  # optional
+UserSummary: <short user-facing line>   # optional
+NextAction: <optional>
+```
+
+**Consumed ACK**（frontstage 消费 delivery 后追加到 DELIVERY.md 末尾）：
+
+```text
+Consumed: <task-id> from <source-seat> at <ISO-8601 UTC>
+```
+
+Queue 模式（`append_task_to_queue` 写入）在 owner 已有 `[pending]`/`[queued]` 任务时把新任务标记为 `[queued]`；首任务完成后自动晋升下一条到 `[pending]`，完成条目归档到 `# Completed` 段落。具体规则见 `_task_io.py::append_task_to_queue` / `complete_task_in_queue`。
