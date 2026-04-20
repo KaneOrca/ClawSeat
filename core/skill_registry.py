@@ -24,7 +24,11 @@ DEFAULT_REGISTRY_PATH = REPO_ROOT / "core" / "skill_registry.toml"
 # Source-specific install hints shown when a skill is missing.
 SOURCE_INSTALL_HINTS: dict[str, str] = {
     "bundled": "Ensure the ClawSeat repo is intact: git status / git checkout",
-    "gstack": "Install gstack: see https://github.com/gstack-cli/gstack",
+    "gstack": (
+        "Install gstack at the canonical path: "
+        "git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git "
+        "~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup"
+    ),
     "agent": "Install lark-cli skills: see lark-cli skill install docs or copy from a peer machine",
 }
 

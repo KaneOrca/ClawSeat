@@ -177,7 +177,9 @@ def install_bundled_skills(openclaw_home: Path, *, dry_run: bool) -> int:
             print()
             print(f"gstack_skills_required: {', '.join(missing_gstack)}")
             print("  Specialist seats need gstack skills for implementation, review, QA, and design.")
-            print("  Install gstack first: see https://github.com/gstack-cli/gstack")
+            print("  Install gstack first (canonical path required by ClawSeat):")
+            print("    git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack")
+            print("    cd ~/.gstack/repos/gstack && ./setup")
     elif not dry_run:
         print(f"gstack_skills: all {len(REQUIRED_GSTACK_SKILLS)} required skills present")
 
