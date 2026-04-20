@@ -7,11 +7,31 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import tomllib
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parents[4]
+# The checked-in REPO_ROOT resolves one level above the actual repo root in
+# the standard checkout layout (ROOT.parents[3] is `…/ClawSeat`). The helper
+# below is the only new consumer we add in this file, so we resolve the
+# template path independently rather than risk shifting REPO_ROOT under the
+# existing callers (pre-existing REPO_ROOT drift is out of scope for this
+# change — see R2-TEMPLATE-001).
+TEMPLATE_PATH = ROOT.parents[3] / "core" / "templates" / "gstack-harness" / "template.toml"
+
+
+def template_engineer_ids() -> list[str]:
+    """Enumerate every engineer id declared in the canonical harness template.
+
+    The selftest scaffolds one task dir per seat; enumerating from the template
+    keeps this list in lockstep with the authoritative roster so a newly
+    added engineer stanza (e.g. builder-2) never silently falls out of the
+    self-test's setup path.
+    """
+    data = tomllib.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
+    return [str(engineer["id"]) for engineer in data.get("engineers", [])]
 
 
 def run(*args: str, expect: int = 0, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -46,7 +66,7 @@ def main() -> int:
         repo_root = temp_root / "repo"
         tasks_root = repo_root / ".tasks"
         handoff_dir = tasks_root / "patrol" / "handoffs"
-        for seat in ("koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"):
+        for seat in template_engineer_ids():
             (tasks_root / seat).mkdir(parents=True, exist_ok=True)
         handoff_dir.mkdir(parents=True, exist_ok=True)
 

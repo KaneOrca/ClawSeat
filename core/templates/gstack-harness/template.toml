@@ -149,6 +149,47 @@ role_details = [
 ]
 
 [[engineers]]
+id = "builder-2"
+role = "builder"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+model = "sonnet"
+effort = "auto"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-investigate/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-ship/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-freeze/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-unfreeze/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-land-and-deploy/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-checkpoint/SKILL.md",
+]
+role_details = [
+  "default implementation seat for code, script, config, template, and document changes",
+  "use gstack-investigate for systematic debugging with root cause analysis",
+  "use gstack-ship to create PRs and push changes",
+  "use gstack-browse for headless browser testing of UI changes",
+  "use gstack-freeze to restrict edits to the target directory when debugging",
+  "return implementation artifacts to planner; do not self-close the chain",
+  "NEVER use raw tmux send-keys to notify peer seats. Full stop. Use complete_handoff.py --user-summary as the only compliant rich text exit for completion messages.",
+]
+
+[[engineers]]
 id = "reviewer-1"
 role = "reviewer"
 tool = "codex"
