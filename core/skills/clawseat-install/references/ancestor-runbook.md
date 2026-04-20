@@ -45,6 +45,35 @@ to create OpenClaw from scratch — that's outside ClawSeat's scope.
 Prepare all workspace scaffolding and seed memory's auth so Phase 1 can
 start cleanly.
 
+### Step 0.0 — Preflight check (mandatory, halt on failure)
+
+```bash
+python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install
+```
+
+**Mandatory pass before any other P0 step.** The preflight verifies:
+
+- Python ≥ 3.11 available (tomllib stdlib dependency; macOS default
+  `python3` is 3.9 and WILL fail downstream on `agent_admin.py`)
+- tmux, gstack, lark-cli resolvable
+- CLAWSEAT_ROOT set
+- repo integrity
+
+**Halt rule**: if preflight exits non-zero (HARD_BLOCKED on any check),
+**stop** and relay the failure. Common fixes:
+
+| Failure | Fix |
+|---|---|
+| `python 3.9 < 3.11` | `brew install python@3.11` then re-run preflight |
+| `tmux not found` | `brew install tmux` |
+| `gstack skills missing` | `cd ~/.gstack/repos/gstack && ./setup` |
+| `CLAWSEAT_ROOT` unset | `export CLAWSEAT_ROOT=/path/to/ClawSeat` |
+
+Do not proceed to Step 0.1 until preflight passes. A failing preflight
+means subsequent scripts will crash at subprocess boundary (F3/F5 only
+fix intra-Python-3.11 inheritance; they don't bypass the 3.11 stdlib
+requirement itself).
+
 ### Step 0.1 — Install bundled OpenClaw skills (G1)
 
 ```bash
@@ -162,8 +191,34 @@ EOF
 chmod 600 ~/.agents/secrets/claude/minimax/memory.env
 ```
 
-**Halt condition**: no credentials discoverable and operator can't
-supply → `USER_DECISION_NEEDED: no provider`. Do not fabricate.
+**Halt conditions** (three cases — distinct operator prompts):
+
+Inspect the scan output:
+
+```python
+import json
+d = json.load(open("/tmp/ancestor-precheck/machine/credentials.json"))
+print("api_key_count:", len(d.get("keys", {})))
+print("oauth.has_any:", d.get("oauth", {}).get("has_any", False))
+print("oauth_sources:", d.get("oauth_sources", []))
+```
+
+1. **API key found** (`keys` has `MINIMAX_API_KEY` or
+   `ANTHROPIC_API_KEY` or similar) → proceed to seed `memory.env`.
+2. **No API key, but OAuth evidence** (`oauth.has_any` is true →
+   `~/.claude/credentials.json` exists OR `CLAUDE_CODE_OAUTH_TOKEN` in
+   env) → USER_DECISION_NEEDED. Present:
+   > I found Anthropic OAuth credentials but no MiniMax / Anthropic
+   > API key. You can (a) use the OAuth for Anthropic's direct API
+   > (slower path, no MiniMax cost advantage) or (b) give me a MiniMax
+   > API key to use. Which?
+3. **No API key AND no OAuth** (`keys` empty + `oauth.has_any` false)
+   → USER_DECISION_NEEDED. Present:
+   > No credentials found. Please provide a MiniMax API key (cheapest
+   > option), an Anthropic API key, or log in with `claude auth login`
+   > to enable the OAuth path.
+
+Do not fabricate credentials in any case.
 
 ---
 
@@ -179,23 +234,12 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
 
 **Verify**: `tmux has-session -t ${PROJECT}-memory-claude` → 0
 
-### Step 1.2 — Attach iTerm + operator completes TUI onboarding (USER ACTION)
+### Step 1.2 — Operator completes memory TUI onboarding (USER ACTION)
 
-`start_seat` creates the tmux session but does not open a terminal
-window. Ancestor opens one:
-
-```bash
-osascript <<'APPLESCRIPT'
-tell application "iTerm"
-  activate
-  set w to (create window with default profile)
-  tell current session of w
-    set name to "install-memory-claude (memory seat)"
-    write text "tmux attach -t install-memory-claude"
-  end tell
-end tell
-APPLESCRIPT
-```
+`start_seat.py` already opens the iTerm window attached to the new
+memory seat (via its internal `window open-engineer` step). **Do NOT
+run an additional `osascript`** — that creates a duplicate window
+attached to the same tmux session.
 
 Tell the operator:
 
@@ -221,8 +265,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --source ancestor --target memory \
   --task-id MEMORY-SCAN-001 --kind learning \
-  --message "LEARNING REQUEST: Run scan_environment.py --output ~/.agents/memory. Focus on openclaw (OpenClaw agent list, workspace directories, feishu group bindings). Confirm 5 machine/*.json files are written."
+  --message "LEARNING REQUEST: Run scan_environment.py (no --output flag — the default targets the operator's real ~/.agents/memory via pwd-based resolution, which the seat's sandbox HOME would otherwise mask). Focus on openclaw (OpenClaw agent list, workspace directories, feishu group bindings). Confirm 5 machine/*.json files are written. Report completion via complete_handoff.py."
 ```
+
+> **Why no `--output` flag**: bash expands `~` / `$HOME` against the
+> memory seat's sandbox HOME (e.g.
+> `~/.agents/runtime/identities/claude/api/.../home`), so an explicit
+> `--output ~/.agents/memory` in the LEARNING REQUEST ends up writing
+> to the sandbox instead of the real user home. `scan_environment.py`'s
+> `DEFAULT_OUTPUT` resolves via `_real_user_home()` (pwd.getpwuid) and
+> writes to the correct location when no flag is passed.
 
 > **Why notify_seat, not dispatch_task**: the T22 guard
 > (`assert_target_not_memory`) blocks `dispatch_task.py --target memory`

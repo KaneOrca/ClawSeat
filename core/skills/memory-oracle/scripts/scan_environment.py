@@ -167,11 +167,29 @@ def scan_environment() -> dict:
 
 
 def scan_credentials() -> dict:
-    """API keys, tokens from known locations. Plaintext, local-only."""
+    """API keys, tokens, and OAuth evidence from known locations. Plaintext, local-only.
+
+    Sections:
+      keys:         parsed `KEY=VALUE` env entries from .env / secret files
+      oauth:        evidence of OAuth-token-based auth (presence booleans + paths)
+      sources:      files that contributed to keys[]
+      oauth_sources: files that contributed to oauth[]
+
+    The install flow uses `oauth.has_any` to decide the P0.6 halt message:
+    if api_keys is empty AND oauth.has_any is false → prompt operator for
+    credentials; if OAuth evidence exists but no API key → offer operator
+    the choice between Anthropic OAuth mode and supplying a MiniMax key.
+    """
     data: dict = {
         "scanned_at": now_iso(),
         "sources": [],
         "keys": {},
+        "oauth": {
+            "has_any": False,
+            "claude_credentials_json": False,
+            "claude_code_oauth_token_env": False,
+        },
+        "oauth_sources": [],
     }
 
     # Known files
@@ -219,6 +237,25 @@ def scan_credentials() -> dict:
             # Don't overwrite if same key already seen
             if k not in data["keys"]:
                 data["keys"][k] = {"value": v, "source": str(resolved)}
+
+    # OAuth evidence (F8.3): Claude Code subscription / keychain-backed
+    # authentication does not land in .env files — its presence is the
+    # existence of `~/.claude/credentials.json` or an
+    # `CLAUDE_CODE_OAUTH_TOKEN` in the environment. The install flow needs
+    # to distinguish "no auth of any kind" (hard halt) from "OAuth available
+    # but no API key" (offer the operator a choice).
+    claude_creds = HOME / ".claude" / "credentials.json"
+    if claude_creds.is_file() and claude_creds.stat().st_size > 0:
+        data["oauth"]["claude_credentials_json"] = True
+        data["oauth_sources"].append(str(claude_creds))
+    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        data["oauth"]["claude_code_oauth_token_env"] = True
+        # env doesn't have a file path — mark the source symbolically
+        data["oauth_sources"].append("env:CLAUDE_CODE_OAUTH_TOKEN")
+    data["oauth"]["has_any"] = (
+        data["oauth"]["claude_credentials_json"]
+        or data["oauth"]["claude_code_oauth_token_env"]
+    )
 
     return data
 

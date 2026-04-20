@@ -62,6 +62,25 @@ troubleshooting context.
 Prepare the workspace and seat scaffolding, and seed memory's API
 credentials so it can start in Phase 1.
 
+### Step 0.0 — Preflight (halt on failure)
+
+```sh
+python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install
+```
+
+Verifies Python ≥ 3.11, tmux, gstack, lark-cli, and repo integrity. If
+any check is HARD_BLOCKED the script exits non-zero — **stop and fix
+before proceeding**. Installing Python 3.11 is the most common blocker
+on macOS (default `python3` is 3.9, which lacks `tomllib` and will
+crash downstream `agent_admin.py` subprocesses).
+
+| Failure | Fix |
+|---|---|
+| `python 3.9 < 3.11 (tomllib requires 3.11+)` | `brew install python@3.11` and rerun |
+| `tmux not found` | `brew install tmux` |
+| `gstack skills missing` | `cd ~/.gstack/repos/gstack && ./setup` |
+| `CLAWSEAT_ROOT` missing | `export CLAWSEAT_ROOT=/path/to/ClawSeat` |
+
 ### Step 0.1 — Install bundled OpenClaw skills (idempotent prerequisite)
 
 Symlinks the agent-neutral shared skills into `~/.openclaw/skills/`.
@@ -168,9 +187,17 @@ chmod 600 ~/.agents/.env.global
 # can write it directly here.
 ```
 
-**Halt condition**: no valid MiniMax / Anthropic credentials found and
-the operator cannot supply one → USER_DECISION_NEEDED: cannot proceed
-without a provider. Ask the operator.
+**Halt conditions** (three cases):
+
+1. **API key found** → seed `memory.env`, proceed.
+2. **No API key but OAuth evidence** (`credentials.json.oauth.has_any`
+   is `true` → `~/.claude/credentials.json` exists OR
+   `CLAUDE_CODE_OAUTH_TOKEN` in env) → USER_DECISION_NEEDED: present
+   both paths, ask operator to pick MiniMax API or OAuth.
+3. **No API key AND no OAuth** → USER_DECISION_NEEDED: ask operator to
+   supply a MiniMax / Anthropic API key OR run `claude auth login`.
+
+Do not fabricate credentials in any case.
 
 ---
 
@@ -188,23 +215,13 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
 
 ### Step 1.2 — (USER ACTION) Complete memory TUI onboarding
 
-Attach an iTerm window to the memory seat if one isn't already open:
-
-```sh
-osascript <<AS
-tell application "iTerm"
-  activate
-  set w to (create window with default profile)
-  tell current session of w
-    set name to "${PROJECT}-memory-claude (memory seat)"
-    write text "tmux attach -t ${PROJECT}-memory-claude"
-  end tell
-end tell
-AS
-```
+`start_seat.py` already opens an iTerm window attached to the new
+memory seat (via its internal `window open-engineer`). **Do NOT run
+an additional `osascript`** — that produces a duplicate iTerm window
+attached to the same tmux session.
 
 The operator clicks through the first-launch sequence in the iTerm
-window:
+window that `start_seat.py` opened:
 
 | Prompt | Answer |
 |---|---|
@@ -231,8 +248,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --source ancestor --target memory \
   --task-id MEMORY-SCAN-001 --kind learning \
-  --message "LEARNING REQUEST: Run scan_environment.py --output ~/.agents/memory. Focus emphasis on openclaw (OpenClaw agents, workspace directories, feishu bindings). Confirm 5 machine/*.json files are written."
+  --message "LEARNING REQUEST: Run scan_environment.py (no --output flag — the default resolves to the operator's real ~/.agents/memory via pwd-based _real_user_home(), bypassing the seat sandbox HOME). Focus on openclaw (OpenClaw agents, workspace directories, feishu bindings). Confirm 5 machine/*.json files are written. Report completion via complete_handoff.py."
 ```
+
+> **Why no `--output` flag**: bash in the memory seat expands `~` /
+> `$HOME` against the seat's isolated sandbox HOME (e.g.
+> `~/.agents/runtime/identities/claude/api/.../home`). An explicit
+> `--output ~/.agents/memory` would therefore write to the sandbox
+> instead of the operator's real home. Omitting the flag lets
+> `scan_environment.py`'s `DEFAULT_OUTPUT = _real_user_home() /
+> ".agents" / "memory"` resolve correctly via `pwd.getpwuid`.
 
 > **Why notify_seat, not dispatch_task**: the T22 guard
 > (`assert_target_not_memory`) blocks `dispatch_task.py --target memory`
