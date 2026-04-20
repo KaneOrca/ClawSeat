@@ -182,9 +182,20 @@ def scan_credentials() -> dict:
     ]
     # Glob ~/.env*
     known_files += [Path(p) for p in glob.glob(str(HOME / ".env*"))]
-    # Secret directory
-    secrets_root = HOME / ".agents" / "secrets"
-    if secrets_root.exists():
+    # F7: canonical secret directories (all rglob *.env).
+    # Covers ClawSeat seat secrets (~/.agent-runtime/secrets), OpenClaw,
+    # gstack, and XDG-style locations — not a full-disk scan.
+    secret_dirs = [
+        HOME / ".agents" / "secrets",
+        HOME / ".agent-runtime" / "secrets",
+        HOME / ".gstack" / "secrets",
+        HOME / ".openclaw" / "secrets",
+        HOME / ".config" / "clawseat",
+        HOME / ".config" / "openclaw",
+    ]
+    for secrets_root in secret_dirs:
+        if not secrets_root.exists():
+            continue
         for env_file in secrets_root.rglob("*.env"):
             known_files.append(env_file)
 
