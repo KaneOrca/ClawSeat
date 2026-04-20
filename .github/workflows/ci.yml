@@ -57,10 +57,10 @@ jobs:
           python -m py_compile core/preflight.py
           python -m py_compile core/bootstrap_receipt.py
           python -m py_compile core/skill_registry.py
-          python -m py_compile core/transport.py
+          python -m py_compile core/transport/transport_router.py
           python -m py_compile core/adapter/clawseat_adapter.py
 
       - name: mypy (strict modules)
         run: |
-          python -m mypy core/resolve.py core/skill_registry.py core/transport.py \
+          python -m mypy core/resolve.py core/skill_registry.py core/transport/transport_router.py \
             --ignore-missing-imports --no-error-summary
