@@ -41,9 +41,25 @@ Owns:
 - tmux/iTerm window layout
 - workspace contract rendering
 
-Primary home:
+Primary home — **split into focused modules (2026-04 refactor, commit `0e8999c`)**:
 
-- `core/scripts/agent_admin*.py`
+- `core/scripts/agent_admin.py` — dispatcher + top-level main; wires the hook dataclasses
+- `core/scripts/agent_admin_config.py` — paths, `SUPPORTED_RUNTIME_MATRIX`, `CodexProviderConfig` schema, backend CLI binary resolution
+- `core/scripts/agent_admin_runtime.py` — env/secret/identity helpers, codex `config.toml` renderer
+- `core/scripts/agent_admin_store.py` — project/engineer/session TOML I/O
+- `core/scripts/agent_admin_crud.py` — engineer create / rebind / delete
+- `core/scripts/agent_admin_session.py` — seat start/stop lifecycle
+- `core/scripts/agent_admin_switch.py` — harness/auth switch-in-place
+- `core/scripts/agent_admin_resolve.py` — seat resolution + provider seed
+- `core/scripts/agent_admin_template.py` — template rendering (workspace contracts)
+- `core/scripts/agent_admin_workspace.py` — workspace-guide / role / skill-catalog fragments
+- `core/scripts/agent_admin_window.py` — iTerm / tmux window layouts
+- `core/scripts/agent_admin_heartbeat.py` — heartbeat provision + receipt
+- `core/scripts/agent_admin_commands.py` — top-level CLI command handlers
+- `core/scripts/agent_admin_info.py` — engineer/session summary formatters
+- `core/scripts/agent_admin_parser.py` — argparse wiring
+- `core/scripts/agent_admin_legacy.py` — **imported lazily** from `agent_admin.py` only when a migration operation runs (audit H8); archive_if_exists is inlined on the hot path
+- `core/scripts/agent_admin_tui.py` — optional Textual UI
 
 ### 2. Runtime Contract Layer
 
@@ -53,12 +69,17 @@ Owns:
 - workspace contract
 - heartbeat manifest / receipt
 - dispatch / completion / ACK model
+- seat transport routing (tmux / OpenClaw-Feishu / file-only)
 
 Primary home:
 
-- `core/harness_adapter.py`
-- `core/templates/`
-- `core/skills/gstack-harness/`
+- `core/harness_adapter.py` — abstract HarnessAdapter Protocol
+- `core/templates/` — role template TOMLs
+- `core/skills/gstack-harness/` — canonical runtime skill (see §3)
+- `core/transport/transport_router.py` — **single entry point for dispatch/notify/complete/render-console** (audit H1). Routes to either `core/migration/*_dynamic.py` (dynamic-roster profiles) or `core/skills/gstack-harness/scripts/*.py` (legacy profiles) based on `[dynamic_roster].enabled`. Do not import the underlying scripts directly.
+- `core/migration/` — dynamic-roster siblings for `dispatch_task` / `notify_seat` / `complete_handoff` / `render_console`. Share `_task_io.build_notify_payload` and other helpers via `dynamic_common.BASE_COMMON` (audit H2).
+- `core/lib/seat_resolver.py` — tmux vs openclaw vs file-only routing hook used by notify_seat + complete_handoff (upstream T19)
+- `core/engine/instantiate_seat.py` — seat materialization: workspace + symlinks + session records + tmux config
 
 ### 3. Skill Layer
 
@@ -102,11 +123,21 @@ Examples:
 
 Already inside ClawSeat:
 
-- control plane (`core/scripts/agent_admin*.py`)
-- core harness (`core/skills/gstack-harness/`)
-- shared transport helpers (`core/shell-scripts/`)
+- control plane (`core/scripts/agent_admin*.py`, split into 15 focused modules as of 2026-04)
+- core harness (`core/skills/gstack-harness/` runtime + `core/migration/` dynamic-roster siblings)
+- canonical transport router (`core/transport/transport_router.py`; dead `core/transport.py` removed in audit H1)
+- shared transport helpers (`core/shell-scripts/`, with input validation on `send-and-verify.sh` — audit H3)
 - harness adapter interface + tmux-cli implementation (`core/harness_adapter.py`, `adapters/harness/tmux-cli/`)
+- shared shell shim base (`shells/_shim_base.py`; each bundle under `shells/*/adapter_shim.py` is a thin wrapper — audit M1)
+- memory-oracle skill (`core/skills/memory-oracle/`, introduced in upstream T7/T22)
 - Cartooner adapter (`adapters/projects/cartooner/`)
+
+Recent structural changes:
+
+- **2026-04 — agent_admin split (commit `0e8999c`)** — monolith → 15 focused modules.
+- **2026-04 — gstack-harness runtime embedded (commit `b35bfc0`)** — `core/skills/gstack-harness/scripts/` now carries the runtime scripts once shared with an external gstack checkout.
+- **2026-04 — core/migration/ layer** — houses `*_dynamic.py` scripts that replace the legacy harness scripts for profiles with `[dynamic_roster].enabled = true`. Traffic flows through `core/transport/transport_router.py` so callers never pick the wrong path by hand.
+- **2026-04 — transport/payload consolidation (audit P0/P1)** — `build_notify_payload` extracted into `_task_io.py`, rendering/validation for codex provider config moved into a typed `CodexProviderConfig` dataclass, shells/*/adapter_shim.py collapsed onto `_shim_base.py`.
 
 Still outside ClawSeat by design:
 

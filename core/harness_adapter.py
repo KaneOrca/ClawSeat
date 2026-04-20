@@ -84,46 +84,44 @@ class SeatObservable:
 
 
 class HarnessAdapter(ABC):
-    @abstractmethod
-    def materialize(self, plan: SeatPlan) -> SessionHandle:
-        raise NotImplementedError
+    # Abstract surface. ABC already enforces subclass implementation at
+    # instantiation time, so these bodies are pure contracts — `...`
+    # reads as "no default behavior" without the redundant
+    # `raise NotImplementedError` that static type checkers flagged
+    # (audit L2). If a subclass forgets a method, Python raises
+    # ``TypeError: Can't instantiate abstract class ... with abstract
+    # method ...`` at construction, which is clearer than a runtime
+    # NotImplementedError from an actual call.
 
     @abstractmethod
-    def start_session(self, seat_id: str, project: str, plan: SeatPlan) -> SessionHandle:
-        raise NotImplementedError
+    def materialize(self, plan: SeatPlan) -> SessionHandle: ...
 
     @abstractmethod
-    def stop_session(self, handle: SessionHandle) -> None:
-        raise NotImplementedError
+    def start_session(self, seat_id: str, project: str, plan: SeatPlan) -> SessionHandle: ...
 
     @abstractmethod
-    def destroy_session(self, handle: SessionHandle) -> None:
-        raise NotImplementedError
+    def stop_session(self, handle: SessionHandle) -> None: ...
 
     @abstractmethod
-    def resume_session(self, handle: SessionHandle) -> ResumeResult:
-        raise NotImplementedError
+    def destroy_session(self, handle: SessionHandle) -> None: ...
 
     @abstractmethod
-    def recover_session(self, handle: SessionHandle) -> RecoverResult:
-        raise NotImplementedError
+    def resume_session(self, handle: SessionHandle) -> ResumeResult: ...
 
     @abstractmethod
-    def send_message(self, handle: SessionHandle, text: str) -> SendResult:
-        raise NotImplementedError
+    def recover_session(self, handle: SessionHandle) -> RecoverResult: ...
 
     @abstractmethod
-    def get_output(self, handle: SessionHandle, lines: int = 50) -> str:
-        raise NotImplementedError
+    def send_message(self, handle: SessionHandle, text: str) -> SendResult: ...
 
     @abstractmethod
-    def probe_state(self, handle: SessionHandle) -> SessionState:
-        raise NotImplementedError
+    def get_output(self, handle: SessionHandle, lines: int = 50) -> str: ...
 
     @abstractmethod
-    def list_sessions(self, project: str) -> list[SessionHandle]:
-        raise NotImplementedError
+    def probe_state(self, handle: SessionHandle) -> SessionState: ...
 
     @abstractmethod
-    def get_auth_config(self, seat_id: str, project: str) -> AuthConfig:
-        raise NotImplementedError
+    def list_sessions(self, project: str) -> list[SessionHandle]: ...
+
+    @abstractmethod
+    def get_auth_config(self, seat_id: str, project: str) -> AuthConfig: ...

@@ -1,44 +1,38 @@
+"""Adapter shim for the Codex CLI ClawSeat bundle.
+
+Thin wrapper around `shells/_shim_base.py` — see that module for the
+shared logic and the history of the M1 de-duplication audit.
+"""
 from __future__ import annotations
 
-import importlib.util
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
 
+_SHELLS_DIR = Path(__file__).resolve().parent.parent
+if str(_SHELLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SHELLS_DIR))
+
+from _shim_base import (  # noqa: E402
+    create_adapter as _create_adapter,
+    load_harness_adapter_types as _load_harness_adapter_types,
+    load_tmux_cli_adapter_module as _load_tmux_cli_adapter_module,
+    resolve_clawseat_root as _resolve_clawseat_root,
+    shell_metadata as _shell_metadata,
+)
+
+
 def resolve_clawseat_root() -> Path:
-    """Resolve CLAWSEAT_ROOT via shared core/resolve.py."""
-    _script_dir = Path(__file__).resolve().parent
-    _repo_root = _script_dir.parents[1]  # shells/codex-bundle/ -> shells/ -> ClawSeat root
-    _core_path = str(_repo_root / "core")
-    if _core_path not in sys.path:
-        sys.path.insert(0, _core_path)
-    from resolve import resolve_clawseat_root as _shared
-    return _shared()
-
-
-def _load_module(name: str, path: Path) -> Any:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load module {name} from {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+    return _resolve_clawseat_root(Path(__file__))
 
 
 def load_harness_adapter_types() -> Any:
-    root = resolve_clawseat_root()
-    return _load_module("clawseat_core_harness_adapter", root / "core" / "harness_adapter.py")
+    return _load_harness_adapter_types(resolve_clawseat_root())
 
 
 def load_tmux_cli_adapter_module() -> Any:
-    root = resolve_clawseat_root()
-    return _load_module(
-        "clawseat_tmux_cli_adapter",
-        root / "adapters" / "harness" / "tmux-cli" / "adapter.py",
-    )
+    return _load_tmux_cli_adapter_module(resolve_clawseat_root())
 
 
 def create_adapter(
@@ -47,8 +41,8 @@ def create_adapter(
     sessions_root: str | Path | None = None,
     workspaces_root: str | Path | None = None,
 ) -> Any:
-    module = load_tmux_cli_adapter_module()
-    return module.TmuxCliAdapter(
+    return _create_adapter(
+        resolve_clawseat_root(),
         agents_root=agents_root,
         sessions_root=sessions_root,
         workspaces_root=workspaces_root,
@@ -56,11 +50,4 @@ def create_adapter(
 
 
 def shell_metadata() -> dict[str, str]:
-    root = resolve_clawseat_root()
-    return {
-        "shell": "codex-bundle",
-        "clawseat_root": str(root),
-        "adapter": str(root / "adapters" / "harness" / "tmux-cli" / "adapter.py"),
-        "contract": str(root / "core" / "harness_adapter.py"),
-        "core_skill": str(root / "core" / "skills" / "gstack-harness" / "SKILL.md"),
-    }
+    return _shell_metadata(resolve_clawseat_root(), shell="codex-bundle")
