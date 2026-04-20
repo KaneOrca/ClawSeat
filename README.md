@@ -66,6 +66,23 @@ Say "启动 ClawSeat" in OpenClaw/Feishu, or run `/cs` in a local Claude Code
 session. The `clawseat` skill (loaded via P0.1 symlinks) takes over from
 there.
 
+### Starting over / fresh-machine simulation
+
+If you want to re-run the install from a clean baseline — testing the git
+install on the same machine, uninstalling ClawSeat, or setting up a CI
+smoke fixture — use [`scripts/clean-slate.sh`](scripts/clean-slate.sh):
+
+```bash
+bash scripts/clean-slate.sh         # dry-run: shows what would be deleted
+bash scripts/clean-slate.sh --yes   # actually delete
+```
+
+The script preserves your OpenClaw account (`~/.openclaw/agents/`,
+`openclaw.json`), API secrets (`~/.agent-runtime/secrets/`), gstack, and
+lark-cli OAuth. It deletes `/tmp/ClawSeat`, ClawSeat-installed skill
+symlinks, `~/.agents/`, and sandbox residue. See the script header for the
+full preserve/delete list.
+
 > **Reminder**: canonical install profiles (`install.toml`,
 > `install-with-memory.toml`, `full-team.toml`) require `gstack` for
 > specialist seats — see the `./setup` command in the Profile Selection
