@@ -15,7 +15,10 @@ if _core_path not in sys.path:
 from resolve import dynamic_profile_path as _dpp
 
 PROJECT = "install"
-PROFILE_TEMPLATE = REPO_ROOT / "examples" / "starter" / "profiles" / "install.toml"
+# install-with-memory.toml declares the `memory` seat required by the
+# canonical install flow (Phase 1). install.toml (legacy) omits memory
+# and is incompatible with the 6-phase overlay flow.
+PROFILE_TEMPLATE = REPO_ROOT / "examples" / "starter" / "profiles" / "install-with-memory.toml"
 DYNAMIC_PROFILE = _dpp(PROJECT)
 AGENT_ADMIN = REPO_ROOT / "core" / "scripts" / "agent_admin.py"
 PRECHECK = REPO_ROOT / "core" / "preflight.py"

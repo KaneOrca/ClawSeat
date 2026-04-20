@@ -98,15 +98,20 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. **Install skill symlinks** — this is mandatory, do NOT skip:
-   - OpenClaw (Phase 0 bootstrap + Phase 3 overlay):
-     1. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"` — agent-neutral shared skills (P0.1 prerequisite)
-     2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 6-phase flow (Phase 0 bootstrap = skill install + `bootstrap_harness` → Phase 1 memory seat + comms smoke → Phase 2 query + user confirms agent → Phase 3 overlay → Phase 4 planner config → **Phase 5 Feishu bridge smoke**)
-     - After overlay, complete **Phase 5: Feishu Bridge Smoke Test** (7-step canonical): auth check → platform scopes → collect group ID → bind project → requireMention config → smoke test → verify parse. This phase is **mandatory** before any Feishu dispatch. See [references/install-flow.md#phase-5](references/install-flow.md) and [references/feishu-bridge-setup.md](references/feishu-bridge-setup.md).
+   - OpenClaw overlay mode — the canonical 6-phase flow:
+     - **Phase 0** Preflight + Bootstrap: `install_bundled_skills.py` → `install_entry_skills.py` → profile gen (use `install-with-memory.toml`) → `bootstrap_harness.py` (**no `--start`**) → `refresh_workspaces.py` → ancestor scans for credentials and seeds `memory.env`.
+     - **Phase 1** Memory online + scan: `start_seat.py --seat memory` → operator completes memory TUI onboarding → ancestor sends `notify_seat.py --target memory --kind learning` LEARNING REQUEST → operator reports memory finished → ancestor verifies `machine/` KB.
+     - **Phase 2** Query memory → operator picks OpenClaw agent: `query_memory.py --search agents` → present candidates → operator selects one.
+     - **Phase 3** Koder overlay + external confirmations: `install_koder_overlay.py --agent <chosen>` → `init_koder.py` → **operator verifies koder identity via `/new` in OpenClaw** → **operator creates Feishu group for koder** and gives the `oc_<alnum>` group id.
+     - **Phase 4** Planner + Feishu bridge smoke: `start_seat.py --seat planner` → `bind_project_to_group(...)` → ancestor dispatches smoke to planner via `dispatch_task.py` → planner runs `send_delegation_report.py --chat-id <group_id>` → **operator confirms koder received the smoke**.
+     - **Phase 5** Handoff: ancestor goes standby; operator talks to koder directly from here.
+     - See [references/install-flow.md](references/install-flow.md) and [references/ancestor-runbook.md](references/ancestor-runbook.md) for step detail + halt conditions.
+     - Feishu platform setup (event scopes, `requireMention`, app version publishing) is detailed in [references/feishu-bridge-setup.md](references/feishu-bridge-setup.md).
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
-   - Follow the canonical phase flow in [references/install-flow.md](references/install-flow.md) and [references/ancestor-runbook.md](references/ancestor-runbook.md): P0 Bootstrap → P1 Memory + Comms Smoke → P2 Query+Agent → P3 Overlay → P4 Planner Config → P5 Feishu.
-   - **Ask the user for their Feishu group ID** (format: `oc_xxx`) no later than P5.3. If not available at install time, leave Feishu bridge unconfigured and complete it later via `bind_project_to_group`.
+   - Follow the canonical 6-phase flow: **P0 Preflight+Bootstrap → P1 Memory online+scan → P2 Query+PickAgent → P3 Overlay+/new+FeishuGroup → P4 Planner+FeishuSmoke → P5 Handoff**. See [references/install-flow.md](references/install-flow.md) and [references/ancestor-runbook.md](references/ancestor-runbook.md).
+   - **Ask the operator for their Feishu group ID** (format: `oc_xxx`) at P3.4, AFTER the koder overlay is installed. If unavailable at install time, operator can skip Feishu and complete it later via `bind_project_to_group`.
    - After P3 refreshes the target workspace, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`

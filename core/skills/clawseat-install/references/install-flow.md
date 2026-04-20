@@ -1,26 +1,35 @@
 # ClawSeat Install Flow
 
+An **interactive 6-phase flow** driven by an ancestor Claude Code session
+that overlays ClawSeat onto an existing OpenClaw agent. Do NOT run
+individual scripts out of order; halt conditions and user-decision gates
+exist on purpose.
+
+Narrative in one paragraph:
+
+> The ancestor scans the host for API credentials, bootstraps the project
+> workspace, starts the memory seat, tells memory to scan the OpenClaw
+> configuration, waits for the operator to report back, asks the operator
+> which OpenClaw agent to overlay koder onto, installs the overlay,
+> prompts the operator to verify koder identity via `/new` in OpenClaw and
+> to create a Feishu group, starts planner, has planner push a Feishu
+> smoke message, and finally hands off control to koder — the ancestor
+> goes standby and only re-engages to debug.
+
 ## Critical: koder identity
 
-There are two runtime modes. The koder identity rule differs:
+There are two runtime modes. This flow is for the **overlay mode**:
 
-- **OpenClaw / Feishu mode**: You (the current agent) ARE koder. You do NOT
-  need a tmux session. Only backend seats (planner, builder, reviewer, qa,
-  designer) run in tmux. The canonical project name is `install`.
-- **Local CLI mode** (`/cs`): koder runs as a tmux session alongside other
-  seats. `cs_init.py` handles koder startup.
+- **OpenClaw / Feishu overlay mode** (this flow): ClawSeat templates are
+  overlaid onto an existing OpenClaw agent workspace. The chosen agent
+  (e.g. `mor`, `cartooner`) becomes koder. Koder is NOT a tmux seat —
+  only `memory`, `planner`, `builder-*`, `reviewer-*`, `qa-*`,
+  `designer-*` run in tmux.
+- **Local CLI mode** (`/cs`): `cs_init.py` handles a self-contained
+  koder-as-tmux startup. Not covered here.
 
 Never create a project named after yourself (e.g. `koder-frontstage`).
-Never run `start_seat.py --seat koder` in OpenClaw mode.
-
-## Decision Tree
-
-1. First check whether there is already a workspace, seat, or TUI for the requested project/seat label.
-2. If one exists, reuse it and report that the install is a resume/recovery path, not a fresh bootstrap.
-3. If the user wants OpenClaw or Feishu to load ClawSeat, use the `clawseat` product skill or the OpenClaw plugin shell as the entrypoint.
-4. If the user wants a local Claude/Codex runtime to load ClawSeat, use the relevant bundle first, then install the entry skills.
-5. If the user is following the local first-run shortcut path, have them execute `/cs`.
-6. If the user wants a new project outside the canonical install project, bootstrap a starter profile and run the harness.
+Never run `start_seat.py --seat koder` in overlay mode.
 
 ## Required Environment
 
@@ -28,47 +37,64 @@ Never run `start_seat.py --seat koder` in OpenClaw mode.
 export CLAWSEAT_ROOT="/path/to/ClawSeat"
 ```
 
-If `CLAWSEAT_ROOT` is unset, check the current checkout before doing anything else.
+If `CLAWSEAT_ROOT` is unset, check the current checkout before doing
+anything else.
 
-## AGENT_HOME — lark-cli in tmux seats (G12)
+## AGENT_HOME — lark-cli in tmux seats
 
-`lark-cli` auth config lives under the **real user HOME**, not the isolated seat runtime HOME. When running from inside a tmux seat, the seat's `HOME` points to a sandbox path. Without `AGENT_HOME`, lark-cli reads the wrong config and fails.
+`lark-cli` auth config lives under the **real user HOME**, not the
+isolated seat runtime HOME. When running from inside a tmux seat, the
+seat's `HOME` points to a sandbox path. Without `AGENT_HOME`, lark-cli
+reads the wrong config and fails.
 
-**Before any lark-cli call inside a tmux seat**:
+The ClawSeat scripts pass `AGENT_HOME` automatically when launched via
+`start_seat.py`. If you see `FileNotFoundError: HOME/.openclaw not found`
+from `send_delegation_report.py` inside a tmux seat, set
+`export AGENT_HOME=/Users/<real-user>` before the call.
 
-```sh
-export AGENT_HOME=/Users/<real-user>   # e.g. /Users/ywf
-```
+See [`feishu-bridge-setup.md`](feishu-bridge-setup.md) for the full
+troubleshooting context.
 
-The ClawSeat scripts pass `AGENT_HOME` automatically when launched via `start_seat.py`. If you see `FileNotFoundError: HOME/.openclaw not found` from `send_delegation_report.py` inside a tmux seat, check that `AGENT_HOME` is set.
+---
 
-See `references/feishu-bridge-setup.md` for the full troubleshooting context.
+## Phase 0 — Preflight + Bootstrap
 
-## Phase 0 — Bootstrap Project Workspace
+Prepare the workspace and seat scaffolding, and seed memory's API
+credentials so it can start in Phase 1.
 
-Bootstrap is the **headline P0 action**: it creates `~/.agents/projects/<project>/`, the profile runtime, the seat session.toml files (incl. memory), and the tasks_root. Without bootstrap, `start_seat.py --seat memory` at P1 exits because `~/.agents/sessions/<project>/memory/session.toml` does not exist.
+### Step 0.1 — Install bundled OpenClaw skills (idempotent prerequisite)
 
-### Step 0.1 — Install bundled skills (idempotent prerequisite)
-
-Agent-neutral skill symlinks into `~/.openclaw/skills/`. One-time per Claude Code install; idempotent on re-run.
+Symlinks the agent-neutral shared skills into `~/.openclaw/skills/`.
 
 ```sh
 python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 ```
 
-- Creates symlinks for `clawseat`, `clawseat-install`, `clawseat-koder-frontstage`, and memory-oracle skills.
-- Checks external dependencies: gstack + lark-cli.
-- exit 0 = all OK; exit 2 = external dependency missing (gstack/lark-cli).
+- Creates symlinks for `clawseat`, `clawseat-install`,
+  `clawseat-koder-frontstage`, `gstack-harness`, `memory-oracle`,
+  `socratic-requirements`, `agent-monitor`, `lark-shared`, `lark-im`,
+  `tmux-basics`, `cs`.
+- Checks for external dependencies: gstack + lark-cli.
+- exit 0 = all OK; exit 2 = external dependency missing.
 
-### Step 0.2 — Profile prep + bootstrap_harness (headline)
+### Step 0.2 — Install entry skills (ancestor / local CLI)
 
 ```sh
-PROJECT=my-project
-PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml"  # declares the memory seat P1 needs
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
+```
+
+Symlinks `clawseat`, `clawseat-install`, `cs` into `~/.claude/skills/`
+and `~/.codex/skills/` so the ancestor (and any other Claude/Codex on
+this host) can invoke `/clawseat` and `/cs`.
+
+### Step 0.3 — Generate project profile
+
+```sh
+PROJECT=install
+PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml"
 cp "$PROFILE_TEMPLATE" "/tmp/${PROJECT}-profile-dynamic.toml"
 
-# B2: tasks_root is quoted in the template ("~/.agents/tasks/install").
-# A simple `sed 's/install/my-project/'` misses the quote boundary. Use Python:
+# Profile substitution (B2 — handle quoted strings)
 python3 - <<PY
 import re, pathlib
 p = pathlib.Path("/tmp/${PROJECT}-profile-dynamic.toml")
@@ -78,324 +104,363 @@ t = re.sub(r'(tasks_root\s*=\s*["\']?)~/.agents/tasks/install',
           r'\g<1>~/.agents/tasks/${PROJECT}', t)
 p.write_text(t)
 PY
-
-python3 "$CLAWSEAT_ROOT/core/preflight.py" "$PROJECT"
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
-  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
-  --project-name "$PROJECT" \
-  --start
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
-  --profile "/tmp/${PROJECT}-profile-dynamic.toml"
 ```
 
+`install-with-memory.toml` is required — it declares the `memory` seat.
+`install.toml` (no memory) does not work with this flow.
+
+### Step 0.4 — Bootstrap workspace (**no `--start`**)
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --project-name "$PROJECT"
+```
+
+**Do NOT pass `--start`** in overlay mode. `--start` auto-launches the
+profile's `heartbeat_owner` (koder) as a tmux seat, which is wrong for
+overlay mode — koder will be the chosen OpenClaw agent, not a tmux seat.
+
 **Verify** (hard precondition for P1):
+
 ```sh
 test -f ~/.agents/sessions/${PROJECT}/memory/session.toml && echo "bootstrap_ok"
 ```
 
-- `install-with-memory.toml` (default) is `install.toml` plus a `memory` seat declaration — required for the P1 memory flow.
-- `starter.toml` creates a minimal frontstage entrypoint (no memory seat — not compatible with canonical P1).
-- `install.toml` (legacy) lacks a `memory` seat; P1 will fail unless you add it to the roster before bootstrap.
-- `full-team.toml` creates `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1` workspaces in one bootstrap.
-- Even with `full-team.toml`, `--start` still only auto-starts `koder`; other seats require explicit confirmation and launch.
-- `clawseat` is the product path for OpenClaw/Feishu; `/cs` is the local-runtime exception path that counts as explicit approval to bootstrap or resume `install` and start `planner`.
-- `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
+### Step 0.5 — Refresh workspaces
 
-> **Partial reinstall / repair**: All per-step scripts are idempotent. If `~/.agents/sessions/${PROJECT}/memory/session.toml` already exists (P0.2 produced it), skip straight to Phase 1 (memory). Re-running `install_bundled_skills.py` is also safe — it only patches missing symlinks.
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml"
+```
 
-## Phase 1 — Memory Seat + Comms Smoke
+Synchronizes ClawSeat templates into each seat's workspace.
 
-Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). P1 combines launching the seat with a round-trip smoke that both exercises the tmux/handoff path and tells memory to populate its KB.
+### Step 0.6 — Ancestor credential seed (ancestor-facing scan)
+
+The ancestor runs a narrow scan to locate the MiniMax (or Anthropic /
+xcode-best) API credentials and writes them to `memory.env` so memory
+can authenticate in Phase 1.
+
+```sh
+# Minimal scan: credentials + openclaw apiProvider only. Ancestor uses
+# these to pre-seed memory's secret file; it does NOT populate machine/
+# KB here — that's memory's job in Phase 1.
+python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py" \
+  --only credentials --output /tmp/ancestor-precheck
+```
+
+Then ask the operator which provider/auth to bind to the memory seat.
+**Recommend MiniMax API** (cheapest per-turn cost; Anthropic-compatible
+endpoint). Accept: `minimax`, `xcode-best`, `anthropic-oauth`.
+
+Seed `memory.env` (assuming MiniMax is chosen):
+
+```sh
+test -f ~/.agents/.env.global || cat > ~/.agents/.env.global <<EOF
+MINIMAX_API_KEY=<from credentials.json>
+MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
+EOF
+chmod 600 ~/.agents/.env.global
+
+# bootstrap_harness's seed_empty_secret_from_peer will populate
+# ~/.agents/secrets/claude/minimax/memory.env on next invocation, or you
+# can write it directly here.
+```
+
+**Halt condition**: no valid MiniMax / Anthropic credentials found and
+the operator cannot supply one → USER_DECISION_NEEDED: cannot proceed
+without a provider. Ask the operator.
+
+---
+
+## Phase 1 — Memory seat online + system knowledge base
 
 ### Step 1.1 — Start memory seat
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
-  --profile "/tmp/${PROJECT}-profile-dynamic.toml" --seat memory --confirm-start
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --seat memory --confirm-start
 ```
 
-**Verify**: `tmux has-session -t ${PROJECT}-memory-claude 2>/dev/null && echo seat_ok`
+**Verify**: `tmux has-session -t ${PROJECT}-memory-claude` → 0
 
-**Halt condition**: session not running → USER_DECISION_NEEDED (check P0.2 session.toml existence first).
+### Step 1.2 — (USER ACTION) Complete memory TUI onboarding
 
-### Step 1.2 — Ancestor → Memory comms smoke (LEARNING REQUEST)
+Attach an iTerm window to the memory seat if one isn't already open:
 
-One message exercises: tmux send-keys delivery, memory `/clear` Stop hook timing, `complete_handoff.py` receipt, and — via memory's SKILL.md routing — a `scan_environment.py` run that populates `machine/`.
+```sh
+osascript <<AS
+tell application "iTerm"
+  activate
+  set w to (create window with default profile)
+  tell current session of w
+    set name to "${PROJECT}-memory-claude (memory seat)"
+    write text "tmux attach -t ${PROJECT}-memory-claude"
+  end tell
+end tell
+AS
+```
+
+The operator clicks through the first-launch sequence in the iTerm
+window:
+
+| Prompt | Answer |
+|---|---|
+| Theme picker (1-7) | `1` + Enter |
+| Security notes | Enter |
+| Trust this folder | `1` + Enter |
+| Login method | `2` + Enter (Anthropic Console account — uses `ANTHROPIC_API_KEY`) |
+
+After onboarding, the TUI shows `❯` with `MiniMax-M2.7-highspeed · API
+Usage Billing` in the banner.
+
+**Halt condition**: TUI shows `Claude account with subscription` (OAuth
+mode) instead of `API Usage Billing` → `memory.env` credentials did not
+load. Go back to P0.6.
+
+### Step 1.3 — Dispatch the system-scan task
+
+Ancestor sends memory a canonical LEARNING REQUEST to scan the host and
+build its `machine/` knowledge base. The emphasis is **OpenClaw
+configuration** so Phase 2 agent enumeration has data.
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --source ancestor --target memory \
   --task-id MEMORY-SCAN-001 --kind learning \
-  --message "LEARNING REQUEST: Run scan_environment.py --output ~/.agents/memory to populate the machine/ knowledge base. Confirm 5 files (credentials, network, openclaw, github, current_context) land."
+  --message "LEARNING REQUEST: Run scan_environment.py --output ~/.agents/memory. Focus emphasis on openclaw (OpenClaw agents, workspace directories, feishu bindings). Confirm 5 machine/*.json files are written."
 ```
 
-> **Why notify_seat, not dispatch_task**: the T22 guard (`assert_target_not_memory`) blocks `dispatch_task.py --target memory` with exit 2 because memory does not read `TODO.md`. `notify_seat.py` is the canonical path for sending memory a learning request — see [tests/test_memory_target_guard.py](../../../../tests/test_memory_target_guard.py) and `core/templates/shared/TOOLS/memory.md`.
+> **Why notify_seat, not dispatch_task**: the T22 guard
+> (`assert_target_not_memory`) blocks `dispatch_task.py --target memory`
+> with exit 2 because memory does not read `TODO.md`. `notify_seat.py`
+> is the canonical path for learning requests — see
+> [`test_memory_target_guard.py`](../../../../tests/test_memory_target_guard.py)
+> and [`TOOLS/memory.md`](../../../templates/shared/TOOLS/memory.md).
 
-### Step 1.3 — Verify KB populated + receipt landed
+### Step 1.4 — (USER SYNC POINT) Wait for operator to report
+
+Memory runs `scan_environment.py` in its TUI, writes 5 files to
+`~/.agents/memory/machine/`, delivers a receipt via
+`complete_handoff.py`, and `/clear`s its context. The operator watches
+the memory iTerm window and reports back to the ancestor when memory
+confirms `machine/ KB ready` or equivalent.
+
+Ancestor blocks here. **Do not poll memory directly** — the sync is
+operator-visual + operator-verbal.
+
+**Halt condition**: operator does not report within a reasonable window
+(5 minutes) → USER_DECISION_NEEDED: memory did not respond. Check the
+memory iTerm for errors.
+
+### Step 1.5 — Verify KB landed
+
+After the operator reports, ancestor verifies:
 
 ```sh
 for f in credentials network openclaw github current_context; do
   test -f ~/.agents/memory/machine/${f}.json && echo "machine/${f}.json ok"
 done
 
-ls ~/.agents/tasks/${PROJECT}/MEMORY-SCAN-001/ 2>/dev/null | grep -E 'ack|receipt|done' || echo "WARN: no ACK yet — poll again after memory /clear fires"
+ls ~/.agents/tasks/${PROJECT}/MEMORY-SCAN-001/ 2>/dev/null \
+  | grep -E 'ack|receipt|done' || echo "WARN: no ACK receipt yet"
 ```
 
-**Halt condition**: any `machine/*.json` missing after 60s → USER_DECISION_NEEDED: memory scan did not complete. Do NOT proceed to P2 with empty KB.
+**Halt condition**: any `machine/*.json` missing → the scan did not
+complete. Re-send the LEARNING REQUEST or consult the memory iTerm.
 
-Every other seat (including koder and the ancestor Claude Code agent) must query memory before guessing environment facts. See [memory-query-protocol.md](memory-query-protocol.md) for the mandatory query/escalation contract.
+---
 
-If memory seat is not declared in the profile roster, add it before rerunning bootstrap — memory is no longer optional.
+## Phase 2 — Query memory → operator picks target agent
 
-## Phase 2 — Query Memory → Confirm Target Agent with User
-
-Before applying any per-agent overlay, query memory to enumerate the available OpenClaw agents, then **ask the user which agent** should receive the koder overlay. Do not hardcode "koder" and do not auto-pick even if memory returns a single candidate — agent selection is a user decision.
+### Step 2.1 — Ask memory for the OpenClaw agent list
 
 ```sh
-# G15 — correct syntax: use --memory-dir + --key or --search (NOT --file --section)
-# Search for known agents
 python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-  --memory-dir ~/.agents/memory \
-  --search agents
-
-# Or reasoning query with profile context
-python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
-  --ask "which OpenClaw agent should receive the koder overlay?" --profile "/tmp/${PROJECT}-profile-dynamic.toml"
+  --memory-dir ~/.agents/memory --search agents
 ```
 
-If memory returns no result, escalate to memory seat per the [query protocol](memory-query-protocol.md) before proceeding. Do not guess.
+Or a reasoning query:
 
-## Phase 3 — Install Koder Overlay
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+  --memory-dir ~/.agents/memory \
+  --ask "Which OpenClaw agents exist on this host? List with workspace paths."
+```
 
-Apply the ClawSeat koder templates into the chosen agent's workspace (`~/.openclaw/workspace-<agent>/skills/`). Requires `--agent <NAME>` — the name resolved in Phase 2:
+### Step 2.2 — Present candidates, wait for operator to choose
+
+Ancestor shows the operator the full list + any contextual notes
+(existing skills overlay, active state, group memberships). **Do not
+auto-pick** — agent selection is a user decision even if only one
+candidate exists.
+
+**Halt condition**: memory returns no agents → OpenClaw isn't installed
+or `~/.openclaw/workspace-*` dirs are empty. Block and ask operator.
+
+---
+
+## Phase 3 — Koder overlay + external confirmations
+
+### Step 3.1 — Install koder overlay
 
 ```sh
 python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
-  --agent <chosen-agent-name>
+  --agent <CHOSEN_AGENT>
 ```
 
-Optional flags:
-- `--openclaw-home <path>` — override `~/.openclaw` (default)
-- `--dry-run` — preview changes without writing
+Adds ClawSeat skill symlinks under
+`~/.openclaw/workspace-<CHOSEN_AGENT>/skills/`.
 
-Omitting `--agent` → exit 2. If this happens, return to Phase 2 and consult the memory seat query protocol.
+**Verify**: `ls ~/.openclaw/workspace-<CHOSEN_AGENT>/skills/ | wc -l` ≥ 6
 
-## Phase 4 — Start Planner + Configuration
-
-> **AGENT_HOME automatic resolution**: All `agent_admin` scripts and `install_complete.py`
-> automatically detect when they are running inside a seat sandbox HOME
-> (`~/.agents/runtime/identities/<tool>/<auth>/<identity>/home/`) and fall back to the
-> real operator HOME via `pwd.getpwuid`. The `CLAWSEAT_REAL_HOME` env var provides an
-> explicit override if auto-detection fails. You do **not** need to set `AGENT_HOME`
-> manually — it is injected by `start_seat.py` at seat startup.
-> Use `CLAWSEAT_SANDBOX_HOME_STRICT=1` only in tests to force sandbox paths.
+### Step 3.2 — Finalize koder scaffold
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --on-conflict backup
 ```
 
-Then, inside OpenClaw/Feishu, invoke `clawseat`. Inside local Claude Code or Codex, you may run:
+Generates `TOOLS/` and `WORKSPACE_CONTRACT.toml` inside the agent's
+workspace. Existing non-ClawSeat files are moved to `.backup-<ts>/`.
 
-```text
-/cs
-```
+### Step 3.3 — (USER ACTION) Verify koder identity in OpenClaw
 
-`/cs` delegates to:
+Tell the operator:
+
+> Please open OpenClaw and send `/new` to the `<CHOSEN_AGENT>` agent.
+> It should respond as **koder** with the ClawSeat frontstage skill loaded.
+> Come back and confirm.
+
+**Halt condition**: operator reports `<CHOSEN_AGENT>` still behaves as
+the pre-overlay agent → overlay did not take effect. Re-run
+`refresh_workspaces.py` and P3.1-3.2.
+
+### Step 3.4 — (USER ACTION) Create Feishu group for koder
+
+Tell the operator:
+
+> Please create a Feishu group named e.g. "koder-<project>". Add the
+> OpenClaw Feishu bot to the group. Give me the group ID
+> (format: `oc_<alnum>`).
+
+The operator creates the group and provides the `oc_xxx` id.
+
+**Halt condition**: operator can't create group (bot missing / scope not
+enabled) → escalate to [`feishu-bridge-setup.md`](feishu-bridge-setup.md).
+
+---
+
+## Phase 4 — Planner + Feishu smoke (end-to-end bridge test)
+
+### Step 4.1 — Start planner seat
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/cs_init.py"
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --seat planner --confirm-start
 ```
 
-That wrapper will:
+(USER ACTION) Operator completes planner TUI onboarding in iTerm
+(same 4-key sequence as memory in P1.2).
 
-- ensure `/tmp/install-profile-dynamic.toml` exists from `examples/starter/profiles/install.toml`
-- run preflight for `install`
-- bootstrap or repair the canonical `install` workspace
-- ensure every declared seat already has its managed scaffold (`session.toml`,
-  isolated `runtime_dir`, workspace guide, `WORKSPACE_CONTRACT.toml`, `repos/`,
-  and idle `TODO.md`) before dispatch begins
-- in local CLI mode: start or resume `koder` as a tmux session
-- in OpenClaw mode: skip koder startup — the current agent IS koder
-- start `planner` (the only backend seat started during bootstrap)
-- render the install console state
-- then tell frontstage to finish the OpenClaw/Feishu bridge:
-  ask the user for the group ID, keep `main` on `requireMention=true`, keep
-  the project-facing `koder` account on `requireMention=false` by default,
-  require an explicit project-binding confirmation, then delegate the smoke
-  test to `planner`, tell the user `收到测试消息即可回复希望完成什么任务`, and
-  bring up review in parallel
-- after bootstrap, enter a configuration phase before normal task execution:
-  finish project binding, Feishu bridge binding, provider/auth selection, API
-  key setup, and base URL / endpoint configuration
-- configuration should be split into configuration entry and configuration
-  verification; do not collapse secret entry and validation into one opaque step
-- once the project-group binding exists, planner decision gates and closeouts
-  should use that same group through `OC_DELEGATION_REPORT_V1`; do not rely on
-  the legacy auto-broadcast path as a control packet
+### Step 4.2 — Bind project to Feishu group
 
-## First-Launch Notes
-
-- Fresh Claude seats may ask for OAuth login, workspace trust, or permission confirmation.
-- Those prompts are normal onboarding, not install failures.
-- A pre-existing TUI is not "new install" state; do not create a second project when the first seat is already present.
-- For non-frontstage seats, require explicit confirmation before launching them.
-
-## User And Agent Interaction Mode
-
-- The agent should auto-run the deterministic setup steps: env check, preflight, starter profile preparation, bootstrap, and console verification.
-- The agent should pause only for real user actions: CLI login, workspace trust, permission prompts, or moving to a host terminal that supports PTY/tmux.
-- The agent should keep the user informed of which stage is active and whether `koder` is merely bootstrapped or already live.
-- The agent must not silently launch `planner` or specialist seats during manual installation.
-- `/cs` counts as an explicit user request to launch `planner` for the canonical `install` project.
-- once `planner` is up, the agent should proactively ask for the Feishu group ID
-  needed for the OpenClaw bridge; do not wait for the user to suggest group
-  wiring
-- once the user provides the group ID, the agent should first confirm whether
-  the group binds the current project, another existing project, or a new
-  project; only then should it delegate the bridge smoke test to `planner`,
-  tell the user `收到测试消息即可回复希望完成什么任务`, and start
-  `reviewer-1` in parallel when that seat exists
-- if the current chain is verification-heavy, start `qa-1` in parallel with
-  or immediately after `reviewer-1`; `qa-1` owns the smoke/regression lane
-  rather than execution planning
-- if configuration changes touch Feishu bridge settings, API keys, key
-  rotation, base URL / endpoint values, or auth/provider bindings, treat that
-  as configuration verification work and prefer launching `qa-1`
-- `qa-1` should verify connectivity and behavior, not become the long-term
-  owner of plaintext secrets
-- when the closeout eventually comes back to frontstage, koder should read the
-  linked delivery trail, reconcile the stage result, and update the project
-  docs before summarizing to the user
-
-## Common Failures
-
-| Symptom | Meaning | Action |
-|---|---|---|
-| `Device not configured` | Host PTY/tmux limitation | Tell the user to run in a real terminal session |
-| `CLAWSEAT_ROOT` missing | Environment not initialized | Export the repo root and rerun preflight |
-| `dynamic profile not found` | Project profile missing | `install` 项目会自动从 shipped `install.toml` 补种；其他项目需先创建 `/tmp/{project}-profile-dynamic.toml` |
-| `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |
-| memory seat not started | Query protocol unavailable; seats will guess or block | Run `start_seat.py --seat memory --confirm-start` immediately after bootstrap |
-| `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or query memory for agent status |
-| Feishu event scope missing | 群消息 not delivered without @mention | Enable `im:message.group_msg:receive` in Feishu Open Platform → Event Subscriptions |
-
-## Phase 5: Feishu Bridge Smoke Test
-
-After Phase 4 seat provisioning, complete the Feishu bridge setup. This is a **mandatory** phase — do not skip it. Full guide: [feishu-bridge-setup.md](feishu-bridge-setup.md).
-
-### Step 5.1: Verify lark-cli auth
-
-```bash
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" --check-auth
-```
-
-Expected: `"status": "ok"`. If not, run `lark-cli auth login` in a terminal with browser access (**user action** — agent cannot complete this).
-
-**In tmux seats**: lark-cli reads auth from the real user HOME, not the seat sandbox. Ensure `AGENT_HOME` is set:
-
-```bash
-export AGENT_HOME=/Users/<real-user>
-```
-
-**Halt condition**: auth not ok → USER_DECISION_NEEDED.
-
-### Step 5.2: Enable Feishu platform scopes (pre-smoke, user action)
-
-In Feishu Open Platform → App, enable **before** running any smoke test:
-
-**Event Subscriptions**:
-- `im:message` — 聊天消息事件
-- `im:message.group_msg:receive` — 群消息免@（**critical**: without this, koder only responds to @mentions）
-- `im:chat:access` — 聊天管理
-
-**Permissions & Scopes**:
-- `im:chat` — 读写群消息
-- `im:chat.members` — 读取群成员
-
-Then publish a new app version: 开放平台 → 版本管理与发布 → 提交审核 → 发布 (required version: **2026.4.9+**).
-
-**Halt condition**: scopes not enabled/published → USER_DECISION_NEEDED: enable and publish before proceeding.
-
-### Step 5.3: Collect Feishu group ID
-
-Ask the user for the group ID, or scan sessions:
-
-```bash
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/find_feishu_group_ids.py"
-```
-
-Format: `oc_` + hex string (e.g. `oc_0e1305956760980a9728cb427375c3b3`).
-
-**Confirm with user before binding**:
-1. Is this group for the current project?
-2. Or switch to an existing project?
-3. Or create a new project?
-
-One project = one group.
-
-### Step 5.4: Bind project to group
-
-```bash
-python3 - <<'PY'
+```sh
+python3 - <<PY
 import sys; sys.path.insert(0, "$CLAWSEAT_ROOT")
 from core.skills.clawseat_install.scripts.bind_project import bind_project_to_group
 bind_project_to_group(
     project="$PROJECT",
-    group_id="$GROUP_ID",
-    bound_by="<user>",
+    group_id="<GROUP_ID from P3.4>",
+    bound_by="operator",
     authorized=True,
 )
 PY
 ```
 
-Verify: `~/.agents/projects/$PROJECT/BRIDGE.toml` exists.
+Writes `~/.agents/projects/$PROJECT/BRIDGE.toml`.
 
-### Step 5.5: Configure requireMention
+### Step 4.3 — Dispatch smoke task to planner
 
-| Group type | requireMention | Reason |
-|---|---|---|
-| Main koder-facing group | `true` (default) | Prevents noise from unrelated messages |
-| Project koder group | `false` | Enables no-@mention dispatch for chain closeouts |
+Ancestor delegates the smoke send to planner (not to itself) — that
+exercises the real ancestor → planner → Feishu → koder chain:
 
-See `references/feishu-group-no-mention.md`.
-
-### Step 5.6: Smoke test (dry-run first, then real)
-
-```bash
-# Dry-run — verify envelope format
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
-  --project "$PROJECT" --lane planning --task-id BRIDGE-SMOKE-001 \
-  --report-status done --decision-hint proceed \
-  --user-gate none --next-action consume_closeout \
-  --summary 'Feishu bridge smoke test' --dry-run
-
-# Send for real
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
-  --project "$PROJECT" --lane planning --task-id BRIDGE-SMOKE-001 \
-  --report-status done --decision-hint proceed \
-  --user-gate none --next-action consume_closeout \
-  --summary 'Feishu bridge smoke test — if you see this message, the bridge is working' \
-  --chat-id "$GROUP_ID"
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --source ancestor --target planner \
+  --task-id BRIDGE-SMOKE-001 \
+  --title "Feishu bridge smoke" \
+  --objective "Send OC_DELEGATION_REPORT_V1 to the project group to prove the bridge works. Use --chat-id <GROUP_ID>." \
+  --intent ship --reply-to ancestor
 ```
 
-Tell the user: `收到测试消息即可回复希望完成什么任务`
+Planner picks this up from `TODO.md`, runs
+`send_delegation_report.py --chat-id <GROUP_ID> ...`, and posts the
+smoke message to the Feishu group.
 
-### Step 5.7: Verify koder receives and parses
+### Step 4.4 — (USER ACTION) Confirm koder receives the smoke
 
-Koder should receive `OC_DELEGATION_REPORT_V1` in the group and confirm:
-- `project=$PROJECT` matches
-- `task_id=BRIDGE-SMOKE-001`
-- `report_status=done` + `next_action=consume_closeout` → auto-advance
+Tell the operator:
 
-**Halt condition**: delivery fails → check AGENT_HOME (G12), platform scopes (G14), lark-cli auth; escalate via error reference in [feishu-bridge-setup.md](feishu-bridge-setup.md).
+> Check the Feishu group. You should see an `OC_DELEGATION_REPORT_V1`
+> envelope arrive, and koder (`<CHOSEN_AGENT>` in OpenClaw) should react
+> to it. Come back and confirm koder saw the smoke.
 
-### Common Feishu Failures
+**Halt condition**: smoke sent but koder did not react → Feishu event
+scope is missing (`im:message.group_msg:receive`) OR `requireMention` is
+still `true` on the project group. See
+[`feishu-bridge-setup.md`](feishu-bridge-setup.md) steps 5.2-5.5.
+
+---
+
+## Phase 5 — Handoff
+
+Once the smoke succeeds, the install is complete. Ancestor steps back:
+
+- From now on, the **operator talks to koder directly** (via OpenClaw or
+  Feishu). Koder drives normal task execution.
+- **Ancestor goes standby**. The operator re-engages the ancestor only
+  to debug install failures, rerun Phase 0-4 on a new agent, or
+  regenerate scaffolding.
+- `planner`, `builder-*`, `reviewer-*`, `qa-*`, `designer-*` seats are
+  brought up **lazily** by koder when a task chain needs them — not by
+  ancestor eagerly.
+
+No further ancestor action is required unless the operator asks.
+
+---
+
+## Interaction Mode Summary
+
+- The ancestor auto-runs deterministic plumbing (P0.1-0.5, P1.1/1.3/1.5,
+  P2.1, P3.1-3.2, P4.1-4.3).
+- The ancestor pauses at **operator-decision gates**: P0.6 provider
+  pick, P1.4 memory-scan-complete signal, P2.2 target agent pick, P3.3
+  koder identity verification, P3.4 Feishu group creation, P4.4 smoke
+  confirmation.
+- The ancestor keeps the operator informed of which phase is live and
+  which seats are running.
+- The ancestor must not silently launch `planner` or specialist seats
+  — always confirm before `start_seat` on a non-memory seat.
+
+## Common Failures
 
 | Symptom | Meaning | Action |
 |---|---|---|
-| `auth_expired` / `auth_needs_refresh` | OAuth token expired | User runs `lark-cli auth login` in terminal with browser access |
-| `lark_cli_missing` | lark-cli not in PATH | `brew install larksuite/cli/lark-cli` |
-| `event scope missing` | 群消息 not delivered without @mention | Enable `im:message.group_msg:receive` + publish new app version |
-| `group_not_found` / 404 | Group ID invalid or bot not in group | Verify group ID; ensure bot app is added to target group |
-| `message_id` duplicate / no delivery | Message sent but koder doesn't see it | Check `requireMention=false` + restart OpenClaw gateway |
+| `Device not configured` | Host PTY/tmux limitation | Tell the operator to run in a real terminal session |
+| `CLAWSEAT_ROOT` missing | Environment not initialized | Export the repo root and rerun preflight |
+| `dynamic profile not found` | Project profile missing | For `install` project, the profile auto-seeds; otherwise create `/tmp/{project}-profile-dynamic.toml` |
+| `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |
+| `memory.env is empty` | P0.6 credential seed didn't run | Run P0.6, or manually write `~/.agents/secrets/claude/minimax/memory.env` |
+| memory seat never shows `machine/ KB ready` | P1.3 didn't reach memory, or memory crashed | Check `~/.agents/tasks/${PROJECT}/MEMORY-SCAN-001/` and the memory iTerm scrollback |
+| `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or consult memory again for the canonical list |
+| Koder in OpenClaw still old identity after overlay | `refresh_workspaces.py` didn't copy templates | Re-run P0.5 then P3.1-3.2 |
+| Feishu smoke sent but koder silent | Platform scope or requireMention wrong | Enable `im:message.group_msg:receive` + publish new app version; set project group `requireMention=false` |
+| `group_not_found` from lark-cli / send_delegation_report | group ID invalid OR bot not in the group | Verify `oc_<alnum>` format; ensure the OpenClaw bot is a member of the target Feishu group |
+| `auth_expired` or `auth_needs_refresh` from send_delegation_report | lark-cli OAuth token stale | Operator: `lark-cli auth login` in a terminal with browser access |

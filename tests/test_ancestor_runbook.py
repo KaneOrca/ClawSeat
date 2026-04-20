@@ -13,13 +13,14 @@ def _text() -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Test 1: all Phase 0-6 section headings present (P0 Bootstrap, P1 Memory+smoke,
-# P2 Query+Overlay, P3 Config, P4 Feishu, P5 TUI decode, P6 Alarm discipline)
+# Test 1: all Phase 0-7 section headings present. Main install flow is P0-P5
+# (Preflight+Bootstrap, Memory+Scan, Query+PickAgent, KoderOverlay+External,
+# Planner+FeishuSmoke, Handoff). Appendices are P6 TUI decode + P7 Alarm.
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_runbook_has_phase_0_through_6():
+def test_runbook_has_phase_0_through_7():
     text = _text()
-    for phase in range(7):
+    for phase in range(8):
         assert f"Phase {phase}" in text, f"Phase {phase} heading missing from runbook"
 
 
