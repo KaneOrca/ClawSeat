@@ -394,7 +394,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_fei
 ```
 
 Sets `channels.feishu.accounts.<agent>.requireMention=false` in
-`~/.openclaw/openclaw.json` (account-level; per-group override added at P4.2).
+`~/.openclaw/openclaw.json` (account-level; per-group override added at P4.3).
 After the change, restart gateway so it picks up the new config:
 `exec "pnpm --dir ~/.openclaw/apps/gateway openclaw gateway restart"`.
 
@@ -429,24 +429,129 @@ scope not published) → escalate to
 
 ---
 
-## Phase 4 — Planner + Feishu bridge smoke (G6, G7, G8, G14)
+## Phase 4 — Configure + start all backend seats + Feishu smoke (G6, G7, G8, G14)
 
-### Step 4.1 — Start planner seat
+### Step 4.0 — Load memory's credential recommendations + enumerate seats
+
+Memory's P1 scan landed at `~/.agents/memory/machine/credentials.json`.
+Ancestor reads it to turn the per-seat Q&A from "five blank questions"
+into "five confirm-or-override questions":
+
+```bash
+python3 - <<PY
+import json, pathlib
+creds = json.load((pathlib.Path.home() / ".agents/memory/machine/credentials.json").open())
+print("api_keys_found:", sorted(creds.get("keys", {}).keys()))
+print("oauth_has_any:", creds.get("oauth", {}).get("has_any"))
+# Each keys[name] = {"value": "...", "source": "<path>"}. Do NOT print
+# `value` to the operator in cleartext — present the last 4 chars only.
+PY
+```
+
+Enumerate backend seats that still need operator input:
+
+```bash
+python3 - <<PY
+import tomllib
+p = tomllib.load(open("/tmp/${PROJECT}-profile-dynamic.toml", "rb"))
+backend = [s for s in p["seats"] if s not in ("memory", "koder")]
+print("configure_and_start:", backend)
+PY
+```
+
+Typical output for `install-with-memory.toml`: `[planner, builder-1,
+reviewer-1]`. Ancestor iterates 4.1 → 4.2 over this list.
+
+### Step 4.1 — Configure + start planner (the detailed template)
+
+**Present this structured prompt to the operator** (fill the bracketed
+hints from memory's scan; mask keys to the last 4 chars):
+
+> `planner` seat — please confirm or override:
+>
+> 1. **Harness (tool)**: `claude` / `codex` / `gemini` — memory suggests `<tool>` because `<reason>`
+> 2. **Login method (auth_mode)**: `oauth` / `api` — memory suggests `<auth>` (OAuth available: `<bool>`; API key available: `<bool>`)
+> 3. **Provider** (only when auth_mode=api): `anthropic` / `minimax` / `xcode-best` / … — memory has usable key for `<provider>`
+> 4. **API key**: memory has `…<last4>` from `<source-path>` — reuse or paste a new one
+> 5. **Base URL**: memory has `<url>` — reuse or override
+
+**After operator answers**, write the seat secret env file (mirror the
+`memory.env` pattern from P0.3 — anchor on the operator's `<tool>` and
+`<provider>` answers):
+
+```bash
+mkdir -p ~/.agents/secrets/<tool>/<provider>
+cat > ~/.agents/secrets/<tool>/<provider>/planner.env <<EOF
+ANTHROPIC_BASE_URL=<base_url>
+ANTHROPIC_AUTH_TOKEN=<api_key>
+ANTHROPIC_MODEL=<model>
+EOF
+chmod 600 ~/.agents/secrets/<tool>/<provider>/planner.env
+```
+
+(If the operator chose `oauth`, skip the env file — the seat's TUI
+drives login at first launch.)
+
+**Start the seat** with CLI overrides so `start_seat.py` writes
+session.toml with the confirmed config:
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
-  --seat planner --confirm-start
+  --seat planner \
+  --tool <tool> --auth-mode <auth> --provider <provider> \
+  --confirm-start
 ```
 
-Open iTerm attached (same pattern as P1.2). Operator completes planner's
-onboarding (same 4-key sequence).
+**AGENT_HOME note (G12)**: lark-cli reads from real user HOME.
+`start_seat.py` injects `AGENT_HOME` automatically; no manual export
+needed.
 
-**AGENT_HOME note (G12)**: lark-cli reads from real user HOME. The
-`start_seat.py` harness injects `AGENT_HOME` automatically; no manual
-export needed.
+**Operator completes TUI onboarding** in the iTerm window `start_seat`
+opens (same 4-key theme/security/trust/login sequence as memory in
+P1.2). For API auth_mode, the TUI should land on
+`<provider> · API Usage Billing`; for OAuth it lands on
+`Claude account with subscription`.
 
-### Step 4.2 — Verify lark-cli auth + bind project to group (G7, G8)
+**Halt condition**: TUI lands on OAuth prompt when `api` was expected
+→ secret env file missing or unreadable. Verify
+`~/.agents/secrets/<tool>/<provider>/planner.env` exists with 600 perms
+and the token/URL values are correct.
+
+### Step 4.2 — Configure + start remaining backend seats (builder-1, reviewer-1, …)
+
+Apply the exact same pattern as Step 4.1 to every seat from the
+`backend_seats` enumeration in 4.0 (except planner which is already
+up). For each:
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --seat <seat> \
+  --tool <tool> --auth-mode <auth> --provider <provider> \
+  --confirm-start
+```
+
+Ancestor MAY offer a shortcut — "reuse planner's config for the rest?"
+— but still names each seat and collects explicit confirmation before
+launching. **No silent defaulting; no silent re-use.**
+
+**End state check**:
+
+```bash
+tmux list-sessions | grep "${PROJECT}-"
+# Expect one line per seat: memory, planner, builder-1, reviewer-1, …
+```
+
+Every seat declared in the profile (minus `koder`, which is the
+OpenClaw overlay) must appear here before continuing to 4.3.
+
+**Halt condition**: tmux session missing for a configured seat →
+`start_seat` failed silently. Check `~/.agents/sessions/${PROJECT}/<seat>/`
+for error receipts and `~/.agents/secrets/<tool>/<provider>/<seat>.env`
+for perm/typo issues.
+
+### Step 4.3 — Verify lark-cli auth + bind project to group (G7, G8)
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
@@ -482,7 +587,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_fei
   --agent <CHOSEN_AGENT> --group-id "<GROUP_ID from P3.5>"
 ```
 
-### Step 4.3 — Dispatch Feishu smoke to planner (not ancestor direct)
+### Step 4.4 — Dispatch Feishu smoke to planner (not ancestor direct)
 
 Ancestor delegates the smoke send to planner. This exercises the real
 chain ancestor → planner → Feishu → koder:
@@ -500,7 +605,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
 Planner picks this up from its `TODO.md` and runs
 `send_delegation_report.py --chat-id <GROUP_ID> ...`.
 
-### Step 4.4 — Operator confirms koder received smoke (USER ACTION)
+### Step 4.5 — Operator confirms koder received smoke (USER ACTION)
 
 Tell the operator:
 
@@ -518,7 +623,7 @@ Platform AND project group's `requireMention=false`. See
 
 ## Phase 5 — Handoff
 
-Once the operator confirms P4.4, install is complete.
+Once the operator confirms P4.5, install is complete.
 
 ### Step 5.1 — Notify operator of handoff
 
@@ -607,12 +712,12 @@ Each item maps to a Phase anchor and is checked by `install_complete.py`.
 | G5 | Canonical phase ordering followed (credentials before bootstrap; no `--start` in P0.5) | Phase 0 | advisory check only |
 | G6 | Feishu bridge end-to-end smoke delivered via planner | Phase 4 | `BRIDGE.toml` present + koder receipt |
 | G7 | Project-group binding confirmed with operator | Phase 3.5 | BRIDGE.toml bound_by field |
-| G8 | bind_project_to_group() called → BRIDGE.toml | Phase 4.2 | `BRIDGE.toml` exists |
+| G8 | bind_project_to_group() called → BRIDGE.toml | Phase 4.3 | `BRIDGE.toml` exists |
 | G9 | Planner introduced AFTER koder overlay (not before) | Phase 4 | advisory |
 | G10 | Per-seat operator confirmation (no auto-defaults) | Phase 1.2 / 4.1 | advisory |
 | G11 | refresh_workspaces.py run | Phase 0.6 | `.last_refresh` or WORKSPACE_CONTRACT last_refresh |
 | G12 | AGENT_HOME auto-injected in tmux seats | Phase 4.1 | install-flow.md AGENT_HOME section |
-| G13 | lark-cli auth via canonical device flow | Phase 4.2 | advisory |
+| G13 | lark-cli auth via canonical device flow | Phase 4.3 | advisory |
 | G14 | Feishu platform scopes verified pre-install | Phase 3.5 | lark-cli permissions list |
 | G15 | Memory query uses correct --memory-dir --key syntax | Phase 2.1 | code check in brief |
 | B1 | init_koder --on-conflict=backup (non-interactive) | Phase 3.2 | default backup in init_koder.py |

@@ -409,20 +409,124 @@ enabled) → escalate to [`feishu-bridge-setup.md`](feishu-bridge-setup.md).
 
 ---
 
-## Phase 4 — Planner + Feishu smoke (end-to-end bridge test)
+## Phase 4 — Configure + start all backend seats, then Feishu smoke
 
-### Step 4.1 — Start planner seat
+Every backend tmux seat declared in the profile (`planner`, `builder-1`,
+`reviewer-1`, … — i.e. `profile.seats` minus `memory` which is already
+up and `koder` which is the OpenClaw overlay, not a tmux seat) must be
+configured with the operator and started by the end of install. For
+each seat ancestor asks the operator five questions — harness (tool),
+login method (auth_mode), provider, API key, base URL — and uses
+memory's P1 credential scan as the recommendation source.
+
+### Step 4.0 — Load memory's credential recommendations
+
+```sh
+python3 - <<PY
+import json, pathlib
+creds = json.load((pathlib.Path.home() / ".agents/memory/machine/credentials.json").open())
+print("api_keys_found:", sorted(creds.get("keys", {}).keys()))
+print("oauth_has_any:", creds.get("oauth", {}).get("has_any"))
+PY
+```
+
+The `keys` dict typically contains combinations such as
+`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`,
+`MINIMAX_API_KEY`, `MINIMAX_BASE_URL`. Ancestor uses these to suggest a
+default (tool, auth_mode, provider, key, url) tuple per seat; operator
+always has the final say.
+
+Also enumerate which seats are still to configure:
+
+```sh
+python3 - <<PY
+import tomllib
+p = tomllib.load(open("/tmp/${PROJECT}-profile-dynamic.toml", "rb"))
+backend_seats = [s for s in p["seats"] if s not in ("memory", "koder")]
+print("configure_and_start:", backend_seats)
+PY
+```
+
+### Step 4.1 — Configure + start planner (detailed template; repeated for every backend seat)
+
+**Present this structured prompt to the operator** (substitute memory
+recommendations into the bracketed hints):
+
+> `planner` seat — please confirm or override:
+>
+> 1. **Harness (tool)**: `claude` / `codex` / `gemini` — memory recommends `<tool>` because `<reason>`
+> 2. **Login method (auth_mode)**: `oauth` / `api` — memory recommends `<auth>` (OAuth available: `<bool>`; API key available: `<bool>`)
+> 3. **Provider** (only if auth_mode=api): `anthropic` / `minimax` / `xcode-best` / … — memory found usable key for `<provider>`
+> 4. **API key**: memory has `<MASKED_PREVIEW>` from `<source-path>` — reuse or paste a new one
+> 5. **Base URL**: memory has `<url>` — reuse or override
+
+Once operator has answered:
+
+**Write the seat secret env file** (anchors on `<tool>`/`<provider>`
+answers; mirror the `memory.env` pattern from P0.3):
+
+```sh
+mkdir -p ~/.agents/secrets/<tool>/<provider>
+cat > ~/.agents/secrets/<tool>/<provider>/planner.env <<EOF
+ANTHROPIC_BASE_URL=<base_url>
+ANTHROPIC_AUTH_TOKEN=<api_key>
+ANTHROPIC_MODEL=<model>
+EOF
+chmod 600 ~/.agents/secrets/<tool>/<provider>/planner.env
+```
+
+(For OAuth auth_mode, skip the secret file — the seat's TUI handles
+login at first launch.)
+
+**Start the seat** with CLI overrides so `start_seat.py` writes the
+session.toml with the operator-confirmed config:
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
-  --seat planner --confirm-start
+  --seat planner \
+  --tool <tool> --auth-mode <auth> --provider <provider> \
+  --confirm-start
 ```
 
-(USER ACTION) Operator completes planner TUI onboarding in iTerm
-(same 4-key sequence as memory in P1.2).
+**Operator completes TUI onboarding** in the iTerm window
+`start_seat.py` opens (same 4-key theme/security/trust/login sequence
+as memory in P1.2).
 
-### Step 4.2 — Bind project to Feishu group
+**Halt condition**: TUI lands on OAuth prompt when `api` was expected →
+the secret env file is missing or unreadable. Verify
+`~/.agents/secrets/<tool>/<provider>/planner.env` exists with 600 perms
+and the `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_BASE_URL` values are correct.
+
+### Step 4.2 — Configure + start remaining backend seats (builder-1, reviewer-1, …)
+
+Repeat the exact same pattern from Step 4.1 for every seat listed by
+the `backend_seats` enumeration at 4.0, substituting the seat name into
+both the prompt and the commands:
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --seat <seat> \
+  --tool <tool> --auth-mode <auth> --provider <provider> \
+  --confirm-start
+```
+
+Ancestor may offer the operator a shortcut — "should I reuse planner's
+config for the remaining seats?" — but must still present each seat by
+name and collect explicit confirmation before launching. **No silent
+defaulting.**
+
+**End state**: every seat in `profile.seats` except `koder` has a tmux
+session (`${PROJECT}-<seat>-<tool>`) with a completed TUI onboarding.
+Verify:
+
+```sh
+tmux list-sessions | grep "${PROJECT}-"
+# Expect one line per seat: memory, planner, builder-1, reviewer-1
+```
+
+### Step 4.3 — Bind project to Feishu group
 
 ```sh
 python3 - <<PY
@@ -446,7 +550,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_fei
   --agent <CHOSEN_AGENT> --group-id "<GROUP_ID from P3.5>"
 ```
 
-### Step 4.3 — Dispatch smoke task to planner
+### Step 4.4 — Dispatch smoke task to planner
 
 Ancestor delegates the smoke send to planner (not to itself) — that
 exercises the real ancestor → planner → Feishu → koder chain:
@@ -465,7 +569,7 @@ Planner picks this up from `TODO.md`, runs
 `send_delegation_report.py --chat-id <GROUP_ID> ...`, and posts the
 smoke message to the Feishu group.
 
-### Step 4.4 — (USER ACTION) Confirm koder receives the smoke
+### Step 4.5 — (USER ACTION) Confirm koder receives the smoke
 
 Tell the operator:
 
@@ -500,11 +604,12 @@ No further ancestor action is required unless the operator asks.
 ## Interaction Mode Summary
 
 - The ancestor auto-runs deterministic plumbing (P0.1-0.2, P0.4-0.6,
-  P1.1/1.3/1.5, P2.1, P3.1-3.3, P4.1-4.3).
+  P1.1/1.3/1.5, P2.1, P3.1-3.3, P4.0, P4.3, P4.4).
 - The ancestor pauses at **operator-decision gates**: P0.3 provider
   pick, P1.4 memory-scan-complete signal, P2.2 target agent pick, P3.4
-  koder identity verification, P3.5 Feishu group creation, P4.4 smoke
-  confirmation.
+  koder identity verification, P3.5 Feishu group creation, P4.1/4.2
+  per-seat harness+auth+provider+key+url pick (one prompt per backend
+  seat, recommendations surfaced from memory), P4.5 smoke confirmation.
 - The ancestor keeps the operator informed of which phase is live and
   which seats are running.
 - The ancestor must not silently launch `planner` or specialist seats
