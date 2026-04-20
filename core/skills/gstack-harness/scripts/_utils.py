@@ -179,5 +179,5 @@ def summarize_status_lines(lines: Iterable[str]) -> list[str]:
 
 def executable_command(path: Path, *extra_args: str) -> list[str]:
     if path.suffix == ".py":
-        return ["python3", str(path), *extra_args]
+        return [sys.executable, str(path), *extra_args]
     return [str(path), *extra_args]

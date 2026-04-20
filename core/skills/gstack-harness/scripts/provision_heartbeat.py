@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from _common import load_profile, materialize_profile_runtime, require_success, run_command
 
@@ -24,7 +25,7 @@ def main() -> int:
         print(f"heartbeat skipped: {args.seat} is not a heartbeat seat for {profile.profile_name}")
         return 0
     cmd = [
-        "python3",
+        sys.executable,
         str(profile.agent_admin),
         "session",
         "provision-heartbeat",

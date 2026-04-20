@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
 
 
@@ -18,7 +19,7 @@ def run(*args: str, expect: int = 0, env: dict[str, str] | None = None) -> subpr
     if env:
         merged_env.update(env)
     result = subprocess.run(
-        ["python3", *args],
+        [sys.executable, *args],
         text=True,
         capture_output=True,
         env=merged_env,
@@ -297,7 +298,7 @@ def main() -> int:
 
         missing_verdict = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 str(complete_handoff),
                 "--profile",
                 str(profile),
@@ -343,7 +344,7 @@ def main() -> int:
 
         missing_frontstage_disposition = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 str(complete_handoff),
                 "--profile",
                 str(profile),

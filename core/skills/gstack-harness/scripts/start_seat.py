@@ -167,7 +167,7 @@ def apply_config_overrides(profile, seat: str, *, tool: str | None, auth_mode: s
     if new_tool == current_tool and new_auth == current_auth and new_provider == current_provider:
         return False
     cmd = [
-        "python3",
+        sys.executable,
         str(profile.agent_admin),
         "session",
         "switch-harness",
@@ -219,7 +219,7 @@ def render_launch_summary(profile, seat: str) -> str:
 def print_effective_launch(profile, seat: str) -> None:
     result = run_command(
         [
-            "python3",
+            sys.executable,
             str(profile.agent_admin),
             "session",
             "effective-launch",
@@ -334,7 +334,7 @@ def main() -> int:
     from _common import _patch_claude_settings_from_profile
     _patch_claude_settings_from_profile(profile, [args.seat])
     cmd = [
-        "python3",
+        sys.executable,
         str(profile.agent_admin),
         "session",
         "start-engineer",
@@ -350,7 +350,7 @@ def main() -> int:
     if str(session_data.get("tool", "")).strip() == "codex":
         print_effective_launch(profile, args.seat)
     window_cmd = [
-        "python3",
+        sys.executable,
         str(profile.agent_admin),
         "window",
         "open-engineer",
@@ -384,7 +384,7 @@ def main() -> int:
     # TUI visibility check — ensure user can actually see the seat
     tui_check = run_command(
         [
-            "python3", "-c",
+            sys.executable, "-c",
             "import sys; sys.path.insert(0, %r); "
             "from agent_admin_window import verify_tui_visible; "
             "import json; print(json.dumps(verify_tui_visible(%r, retries=3, delay=2.0)))"

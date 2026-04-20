@@ -101,7 +101,7 @@ def refresh_backend_seats(profile_path: str, project: str, *, dry_run: bool) -> 
     print(f"re-applying template '{profile.template_name}' for project '{project}'...")
     result = subprocess.run(
         [
-            "python3", str(agent_admin),
+            sys.executable, str(agent_admin),
             "project", "bootstrap",
             "--template", profile.template_name,
             "--local", str(profile.profile_path),
@@ -139,7 +139,7 @@ def refresh_koder(
 ) -> int:
     init_koder = SCRIPT_DIR / "init_koder.py"
     cmd = [
-        "python3", str(init_koder),
+        sys.executable, str(init_koder),
         "--workspace", koder_workspace,
         "--project", project,
         "--profile", profile_path,
