@@ -1,7 +1,7 @@
 """install_complete.py — post-install validator for ClawSeat G1-G15 gaps.
 
 Usage:
-    python3 install_complete.py --project <name> [--verbose]
+    python3 install_complete.py --project <name> [--koder-agent <agent>] [--verbose]
 
 Checks each canonical gap and prints PASS / FAIL / N/A per check.
 Exit code: non-zero if any critical check (G1/G2/G6/G8/G11/G14) fails.
@@ -9,6 +9,7 @@ Exit code: non-zero if any critical check (G1/G2/G6/G8/G11/G14) fails.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,8 @@ _INSTALL_FLOW = _REPO_ROOT / "core" / "skills" / "clawseat-install" / "reference
 
 CRITICAL = {"G1", "G2", "G6", "G8", "G11", "G14"}
 
+_AGENT_FIELD_RE = re.compile(r'^\s*(?:koder_)?agent\s*=\s*["\']?(\w[\w\-]*)["\']?', re.MULTILINE)
+
 
 def _check(gid: str, desc: str, passed: bool, evidence: str = "", warn_only: bool = False) -> dict:
     level = "WARN" if warn_only else ("PASS" if passed else "FAIL")
@@ -31,21 +34,77 @@ def _check(gid: str, desc: str, passed: bool, evidence: str = "", warn_only: boo
     return {"id": gid, "desc": desc, "passed": passed, "evidence": evidence, "level": level}
 
 
-def run_checks(project: str, verbose: bool = False) -> list[dict]:
-    results: list[dict] = []
+def _resolve_koder_agent(
+    project: str,
+    agents_home: Path,
+    openclaw_home: Path,
+) -> str | None:
+    """Return the OpenClaw agent name for the koder seat of a project, or None."""
+    proj_dir = agents_home / "projects" / project
 
-    # ── G1: bundled skills symlinks ─────────────────────────────────────────
-    skills_dir = _OPENCLAW_HOME / "skills"
-    skill_links = list(skills_dir.glob("*")) if skills_dir.exists() else []
-    g1_pass = len(skill_links) >= 4
+    # Try openclaw.json first
+    openclaw_json = proj_dir / "openclaw.json"
+    if openclaw_json.exists():
+        try:
+            import json as _json
+            data = _json.loads(openclaw_json.read_text(encoding="utf-8"))
+            for key in ("koder_agent", "agent"):
+                if key in data and isinstance(data[key], str):
+                    return data[key]
+        except (OSError, ValueError):
+            pass
+
+    # Try BRIDGE.toml agent field
+    bridge_toml = proj_dir / "BRIDGE.toml"
+    if bridge_toml.exists():
+        try:
+            m = _AGENT_FIELD_RE.search(bridge_toml.read_text(encoding="utf-8"))
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
+
+    # Canonical fallback: install project always uses agent "koder"
+    if project == "install":
+        return "koder"
+
+    return None
+
+
+def run_checks(
+    project: str,
+    verbose: bool = False,
+    koder_agent: str | None = None,
+    *,
+    agents_home: Path | None = None,
+    openclaw_home: Path | None = None,
+) -> list[dict]:
+    # Resolve at call time so monkeypatching of module globals works in tests
+    if agents_home is None:
+        agents_home = _AGENTS_HOME
+    if openclaw_home is None:
+        openclaw_home = _OPENCLAW_HOME
+
+    results: list[dict] = []
+    agent = koder_agent or _resolve_koder_agent(project, agents_home, openclaw_home)
+    openclaw_workspace = (openclaw_home / f"workspace-{agent}") if agent else None
+
+    # ── G1: per-agent skills symlinks ────────────────────────────────────────
+    if agent is None:
+        g1_pass = False
+        g1_evidence = f"cannot resolve koder agent for project '{project}'; pass --koder-agent"
+    else:
+        skills_dir = openclaw_workspace / "skills"
+        skill_links = list(skills_dir.glob("*")) if skills_dir.exists() else []
+        g1_pass = len(skill_links) >= 4
+        g1_evidence = f"found {len(skill_links)} entries in {skills_dir}"
     results.append(_check(
-        "G1", "install_bundled_skills.py run (≥4 skill symlinks in ~/.openclaw/skills/)",
-        g1_pass,
-        f"found {len(skill_links)} entries in {skills_dir}",
+        "G1", "install_bundled_skills.py run (≥4 skill symlinks in workspace-<agent>/skills/)",
+        g1_pass, g1_evidence,
     ))
 
     # ── G2: memory index.json ──────────────────────────────────────────────
-    memory_index = _AGENTS_HOME / "memory" / "index.json"
+    memory_index = agents_home / "memory" / "index.json"
     g2_pass = memory_index.exists()
     results.append(_check(
         "G2", "Memory seat started + index.json present",
@@ -54,7 +113,7 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
     ))
 
     # ── G3: memory log contains agent query (advisory) ────────────────────
-    memory_dir = _AGENTS_HOME / "memory"
+    memory_dir = agents_home / "memory"
     g3_pass = False
     if memory_dir.exists():
         for f in memory_dir.rglob("*.json"):
@@ -69,15 +128,17 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
         g3_pass, "", warn_only=True,
     ))
 
-    # ── G4: entry skills installed ──────────────────────────────────────────
-    # Check for .entry_skills_installed marker in any workspace
-    g4_markers = list(_OPENCLAW_HOME.glob("workspace-*/.entry_skills_installed")) if _OPENCLAW_HOME.exists() else []
-    g4_pass = bool(g4_markers)
+    # ── G4: entry skills installed per-agent (advisory) ────────────────────
+    if agent is not None:
+        marker = openclaw_workspace / ".entry_skills_installed"
+        g4_pass = marker.exists()
+        g4_evidence = str(marker) + (" [exists]" if g4_pass else " [missing]")
+    else:
+        g4_pass = False
+        g4_evidence = f"cannot resolve koder agent for project '{project}'"
     results.append(_check(
-        "G4", "install_entry_skills.py run (.entry_skills_installed marker present)",
-        g4_pass,
-        f"markers found: {[str(m) for m in g4_markers]}" if g4_pass else "no .entry_skills_installed markers found",
-        warn_only=True,
+        "G4", "install_entry_skills.py run (.entry_skills_installed in workspace-<agent>/)",
+        g4_pass, g4_evidence, warn_only=True,
     ))
 
     # ── G5: advisory ──────────────────────────────────────────────────────
@@ -86,13 +147,13 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
         True, "advisory check only", warn_only=True,
     ))
 
-    # ── G6: Feishu bridge configured (BRIDGE.toml OR openclaw sessions) ───
-    bridge_toml = _AGENTS_HOME / "projects" / project / "BRIDGE.toml"
+    # ── G6: Feishu bridge configured (BRIDGE.toml OR agent sessions) ───────
+    bridge_toml = agents_home / "projects" / project / "BRIDGE.toml"
     g6_evidence = str(bridge_toml)
     g6_pass = bridge_toml.exists()
     if not g6_pass:
         # Fallback: check openclaw sessions.json for any group binding
-        for sessions_json in _OPENCLAW_HOME.rglob("sessions/sessions.json") if _OPENCLAW_HOME.exists() else []:
+        for sessions_json in openclaw_home.rglob("sessions/sessions.json") if openclaw_home.exists() else []:
             try:
                 import json as _json
                 data = _json.loads(sessions_json.read_text(encoding="utf-8"))
@@ -129,34 +190,47 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
     results.append(_check("G9", "Configuration phase separate from task execution (advisory)", True, "advisory", warn_only=True))
     results.append(_check("G10", "Per-seat user confirmation before startup (advisory)", True, "advisory", warn_only=True))
 
-    # ── G11: refresh_workspaces.py marker ─────────────────────────────────
-    # Check .last_refresh in any project workspace or WORKSPACE_CONTRACT.toml last_refresh
+    # ── G11: per-project workspace refresh marker ──────────────────────────
     g11_pass = False
-    project_ws_root = _AGENTS_HOME / "projects" / project
-    if project_ws_root.exists():
-        # Check .last_refresh file
-        if (project_ws_root / ".last_refresh").exists():
-            g11_pass = True
-        else:
-            # Check WORKSPACE_CONTRACT.toml in any seat workspace
-            for wc in project_ws_root.rglob("WORKSPACE_CONTRACT.toml"):
-                try:
-                    if "last_refresh" in wc.read_text(encoding="utf-8"):
-                        g11_pass = True
-                        break
-                except OSError:
-                    pass
-    # Also check ~/.agents/workspaces/<project>/*/WORKSPACE_CONTRACT.toml (canonical workspace init marker)
+    g11_evidence = "marker not found"
+
+    # Primary: per-project koder seat .last_refresh
+    koder_seat_ws = agents_home / "workspaces" / project / "koder"
+    if (koder_seat_ws / ".last_refresh").exists():
+        g11_pass = True
+        g11_evidence = str(koder_seat_ws / ".last_refresh") + " [exists]"
+
+    # Secondary: per-agent openclaw workspace WORKSPACE_CONTRACT.toml
+    if not g11_pass and openclaw_workspace is not None:
+        wc = openclaw_workspace / "WORKSPACE_CONTRACT.toml"
+        if wc.exists():
+            try:
+                if "last_refresh" in wc.read_text(encoding="utf-8"):
+                    g11_pass = True
+                    g11_evidence = str(wc) + " [last_refresh field present]"
+            except OSError:
+                pass
+
+    # Fallback: any WORKSPACE_CONTRACT.toml in workspaces/<project>/
     if not g11_pass:
-        ws_root = _AGENTS_HOME / "workspaces" / project
+        ws_root = agents_home / "workspaces" / project
         if ws_root.exists():
             for wc in ws_root.glob("*/WORKSPACE_CONTRACT.toml"):
                 if wc.exists():
                     g11_pass = True
+                    g11_evidence = str(wc) + " [exists]"
                     break
+
+    # Further fallback: projects/<project>/.last_refresh (used by legacy fixtures)
+    if not g11_pass:
+        proj_refresh = agents_home / "projects" / project / ".last_refresh"
+        if proj_refresh.exists():
+            g11_pass = True
+            g11_evidence = str(proj_refresh) + " [exists]"
+
     results.append(_check(
         "G11", "refresh_workspaces.py run (.last_refresh or WORKSPACE_CONTRACT present)",
-        g11_pass, "marker not found" if not g11_pass else "marker found",
+        g11_pass, g11_evidence,
     ))
 
     # ── G12: install-flow.md has AGENT_HOME section ────────────────────────
@@ -213,10 +287,12 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--project", required=True, help="Project name (e.g. install, hardening-b)")
+    p.add_argument("--koder-agent", default=None, dest="koder_agent",
+                   help="OpenClaw agent name override (auto-resolved if omitted)")
     p.add_argument("--verbose", action="store_true", help="Print evidence strings")
     args = p.parse_args(argv)
 
-    checks = run_checks(args.project, verbose=args.verbose)
+    checks = run_checks(args.project, verbose=args.verbose, koder_agent=args.koder_agent)
 
     failures: list[str] = []
     for c in checks:

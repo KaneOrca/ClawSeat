@@ -410,6 +410,8 @@ When observing Claude Code TUI in tmux, decode status bar correctly:
 
 ## Phase 7 — Alarm Discipline
 
+**Principle**: Before raising an alarm about a transient failure (e.g. pytest FAIL, file not found, seat stale), run the verification trifecta — `git log -5 --oneline` + `git status` + targeted `pytest`. Many alerts are cache/lock/transient and resolve on retry. Only escalate if the failure reproduces deterministically. This discipline is enforced by the `verify_transient_pytest_alerts` memory (2026-04-20 incident: ancestor CC false-alarm retracted after verification revealed file was out-of-scope).
+
 Before raising an alarm or sending a USER_DECISION_NEEDED escalation, run the verification trifecta:
 
 ```bash
