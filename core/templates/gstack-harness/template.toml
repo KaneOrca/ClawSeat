@@ -6,6 +6,11 @@ description = "Role-first harness template: koder frontstage + planner/builder/r
 window_mode = "tabs-1up"
 monitor_max_panes = 4
 open_detail_windows = false
+# Shared TOOLS/ files materialized into every seat workspace during workspace init.
+# See agent_admin_workspace.py _materialize_shared_tools().
+workspace_tools = [
+  "TOOLS/memory.md",
+]
 
 [[engineers]]
 id = "koder"

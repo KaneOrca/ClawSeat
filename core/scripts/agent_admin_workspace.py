@@ -495,6 +495,7 @@ def _materialize_planner_tools(
         "handoff.md": render_tools_handoff(session, project, engineer, profile_ref, root, planner_seat),
         "feishu.md": render_tools_feishu(session, project, engineer),
         "seat-lifecycle.md": render_tools_seat_lifecycle(session, project, engineer, profile_ref, root, planner_seat),
+        "memory.md": render_tools_memory_learning(),
     }
     for name, content in files.items():
         try:
@@ -524,6 +525,31 @@ def _materialize_specialist_protocol(session: Any) -> None:
                 target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
         except OSError:
             pass
+    # Also materialize memory.md for specialists (memory learning channel docs)
+    _materialize_shared_tools(workspace)
+
+
+def _materialize_shared_tools(workspace: Path) -> None:
+    """Copy shared TOOLS/ files (workspace_tools in template.toml) into the workspace."""
+    tools_dir = workspace / "TOOLS"
+    try:
+        tools_dir.mkdir(exist_ok=True)
+    except OSError:
+        return
+    memory_target = tools_dir / "memory.md"
+    if not memory_target.exists():
+        try:
+            memory_target.write_text(render_tools_memory_learning(), encoding="utf-8")
+        except OSError:
+            pass
+
+
+def render_tools_memory_learning() -> str:
+    """Read the shared TOOLS/memory.md learning-channel template."""
+    shared = TOOLS_SHARED_ROOT / "memory.md"
+    if shared.is_file():
+        return shared.read_text(encoding="utf-8")
+    return "# Memory Learning Channel\n\nSee `core/templates/shared/TOOLS/memory.md`.\n"
 
 
 def render_tools_intent(session: Any, project: Any, engineer: Any) -> str:
