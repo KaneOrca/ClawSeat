@@ -28,6 +28,35 @@ def build_completion_message(task_id: str, delivery_path: Path, *, source: str, 
     )
 
 
+def build_notify_payload(
+    *,
+    source: str,
+    target: str,
+    message: str,
+    kind: str = "notice",
+    task_id: str | None = None,
+    reply_to: str | None = None,
+    project_name: str | None = None,
+) -> str:
+    """Canonical payload for notify_seat dispatches.
+
+    Shared by both the static (`notify_seat.py`) and dynamic-roster
+    (`notify_seat_dynamic.py`) entrypoints so the two cannot drift.
+    `project_name` is optional; when provided, the payload is prefixed
+    with `[project_name]` (dynamic-roster convention).
+    """
+    prefix = f"{kind} from {source} to {target}"
+    if task_id:
+        prefix = f"{task_id} {prefix}"
+    suffix = ""
+    if reply_to:
+        suffix = f" Reply to {reply_to} if follow-up or completion is required."
+    core = f"{prefix}: {message.strip()}{suffix}"
+    if project_name:
+        return f"[{project_name}] {core}"
+    return core
+
+
 def upsert_tasks_row(path: Path, *, task_id: str, title: str, owner: str, status: str, notes: str) -> None:
     existing = read_text(path).splitlines()
     if not existing:

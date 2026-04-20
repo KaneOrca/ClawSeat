@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _EXTRA_PATHS = [
     str(REPO_ROOT),
     str(REPO_ROOT / "core"),
+    str(REPO_ROOT / "core" / "migration"),
     str(REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"),
     str(REPO_ROOT / "core" / "skills" / "clawseat-install" / "scripts"),
     str(REPO_ROOT / "shells" / "openclaw-plugin"),

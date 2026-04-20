@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 
-from _common import load_profile, notify, require_success, utc_now_iso, write_json
+from _common import build_notify_payload, load_profile, notify, require_success, utc_now_iso, write_json
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,20 +27,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_payload(args: argparse.Namespace) -> str:
-    prefix = f"{args.kind} from {args.source} to {args.target}"
-    if args.task_id:
-        prefix = f"{args.task_id} {prefix}"
-    suffix = ""
-    if args.reply_to:
-        suffix = f" Reply to {args.reply_to} if follow-up or completion is required."
-    return f"{prefix}: {args.message.strip()}{suffix}"
-
-
 def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
-    payload = build_payload(args)
+    payload = build_notify_payload(
+        source=args.source,
+        target=args.target,
+        message=args.message,
+        kind=args.kind,
+        task_id=args.task_id,
+        reply_to=args.reply_to,
+    )
     result = notify(profile, args.target, payload)
     require_success(result, "notify seat")
 
