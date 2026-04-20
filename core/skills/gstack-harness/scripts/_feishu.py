@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -89,12 +90,49 @@ VALID_DELEGATION_NEXT_ACTIONS = {
 
 # ── Group ID resolution ──────────────────────────────────────────────
 
+# Canonical Feishu open-chat id prefix. Every resolved group we actually
+# pass to `lark-cli` must match this — other strings (e.g. display names,
+# account ids, stray `"*"` wildcards, typo'd prefixes) are filtered out
+# early with a one-line stderr warning so the operator sees the typo
+# instead of getting a cryptic 404 from the downstream lark-cli call.
+# Audit M5.
+_FEISHU_GROUP_ID_RE = re.compile(r"^oc_[A-Za-z0-9_-]+$")
+
+
+def is_valid_feishu_group_id(value: str) -> bool:
+    """True when *value* has the canonical `oc_<10+ alphanum>` shape."""
+    if not value:
+        return False
+    return bool(_FEISHU_GROUP_ID_RE.match(value))
+
+
+def _reject_invalid_feishu_group_id(candidate: str, *, source: str) -> bool:
+    """If *candidate* fails the canonical shape check, emit a one-line
+    stderr warning referencing *source* and return False. Returns True
+    when the id is well-formed. Keeps failure visible without aborting
+    the wider resolve path — other sources may still yield a valid id.
+    """
+    if is_valid_feishu_group_id(candidate):
+        return True
+    import sys as _sys
+    print(
+        f"warn: Feishu group id {candidate!r} from {source} does not match "
+        "canonical 'oc_<alphanum>' shape; discarded (audit M5).",
+        file=_sys.stderr,
+    )
+    return False
+
+
 def collect_feishu_group_keys(payload: Any, *, found: list[str]) -> None:
     if isinstance(payload, dict):
         for key, value in payload.items():
             if isinstance(key, str) and key.startswith("group:"):
                 group_id = key.split("group:", 1)[1].strip()
-                if group_id and group_id not in found:
+                if (
+                    group_id
+                    and group_id not in found
+                    and _reject_invalid_feishu_group_id(group_id, source="sessions.json group: key")
+                ):
                     found.append(group_id)
             collect_feishu_group_keys(value, found=found)
     elif isinstance(payload, list):
@@ -107,7 +145,12 @@ def collect_feishu_group_ids_from_config(config: dict[str, Any]) -> list[str]:
 
     def add_group_id(value: Any) -> None:
         group_id = str(value).strip()
-        if group_id and group_id != "*" and group_id not in found:
+        if (
+            group_id
+            and group_id != "*"
+            and group_id not in found
+            and _reject_invalid_feishu_group_id(group_id, source="openclaw.json")
+        ):
             found.append(group_id)
 
     channels = config.get("channels")
@@ -168,7 +211,9 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     )
     if override:
         resolved = override.strip()
-        if resolved:
+        if resolved and _reject_invalid_feishu_group_id(
+            resolved, source="CLAWSEAT_FEISHU_GROUP_ID / OPENCLAW_FEISHU_GROUP_ID env var"
+        ):
             return resolved
 
     # 2. Project contract binding (SSOT for per-project group).
@@ -190,7 +235,9 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
                 contract = load_toml(cp)
                 if contract:
                     gid = str(contract.get("feishu_group_id", "")).strip()
-                    if gid:
+                    if gid and _reject_invalid_feishu_group_id(
+                        gid, source=f"WORKSPACE_CONTRACT.toml at {cp}"
+                    ):
                         return gid
 
     # 3. OpenClaw config fallback (may return wrong group in multi-project).

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -21,13 +22,20 @@ from core.adapter.clawseat_adapter import ClawseatAdapter
 # ---------------------------------------------------------------------------
 
 
+# Guarded with a lock so a multi-threaded bridge host cannot double-load
+# the adapter module (audit L8). Double-checked locking: the hot path
+# still reads the cached reference without taking the lock.
 _TMUX_ADAPTER_MODULE: Any = None
+_TMUX_ADAPTER_LOCK = threading.Lock()
 
 
 def _get_tmux_adapter_module() -> Any:
     global _TMUX_ADAPTER_MODULE
-    if _TMUX_ADAPTER_MODULE is None:
-        _TMUX_ADAPTER_MODULE = _load_tmux_adapter()
+    if _TMUX_ADAPTER_MODULE is not None:
+        return _TMUX_ADAPTER_MODULE
+    with _TMUX_ADAPTER_LOCK:
+        if _TMUX_ADAPTER_MODULE is None:
+            _TMUX_ADAPTER_MODULE = _load_tmux_adapter()
     return _TMUX_ADAPTER_MODULE
 
 
