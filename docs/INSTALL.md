@@ -58,9 +58,24 @@ Recommended first-run path:
    `~/.agents/profiles/install-profile-dynamic.toml` from the shipped `install-openclaw.toml`
    profile when the machine is starting from a blank state.
 2. In Claude Code or Codex local runtimes, install the entry skills with
-   `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
+   `python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
 3. Only in those local runtimes, use `/cs` as the convenience alias that
    creates or resumes the canonical `install` project and starts `planner`
+
+Command examples use `python3.11` explicitly. On macOS, `python3` is often 3.9
+and lacks `tomllib`, which several install helpers require.
+
+## Heartbeat Modes
+
+`heartbeat_transport` selects how the frontstage `heartbeat_owner` is reached.
+`runtime_seats` selects which seats get runtime/session records for the current
+profile. Those two fields are what separate the canonical local `/cs` flow from
+the canonical OpenClaw overlay flow.
+
+| Profile | `heartbeat_transport` | `runtime_seats` shape | `koder` behavior |
+|---|---|---|---|
+| `install-with-memory.toml` | `tmux` | local runtime seats include `koder`, `memory`, and the backend seats | `koder` runs as a tmux seat |
+| `install-openclaw.toml` | `openclaw` | backend runtime seats exclude `koder`; `memory` and specialist seats still run in tmux | `koder` stays frontstage as the chosen OpenClaw agent |
 
 For dynamic-roster profiles, keep bootstrap minimal:
 

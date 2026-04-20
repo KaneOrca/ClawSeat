@@ -570,11 +570,14 @@ Bind:
 
 ```bash
 python3 - <<PY
-import sys; sys.path.insert(0, "$CLAWSEAT_ROOT")
-from core.skills.clawseat_install.scripts.bind_project import bind_project_to_group
+import sys
+sys.path.insert(0, "$CLAWSEAT_ROOT/shells/openclaw-plugin")
+from _bridge_binding import bind_project_to_group
 bind_project_to_group(
     project="$PROJECT",
     group_id="<GROUP_ID from P3.5>",
+    account_id="main",
+    session_key="${PROJECT}-setup",
     bound_by="operator",
     authorized=True,
 )

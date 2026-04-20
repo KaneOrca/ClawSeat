@@ -8,7 +8,7 @@
 克隆并安装 ClawSeat：
 git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
 # Phase 0：安装 agent 无关的 skill 符号链接
-CLAWSEAT_ROOT=~/.clawseat python3 ~/.clawseat/shells/openclaw-plugin/install_bundled_skills.py
+CLAWSEAT_ROOT=~/.clawseat python3.11 ~/.clawseat/shells/openclaw-plugin/install_bundled_skills.py
 # Phase 3 overlay 在 install flow 的 Phase 3 阶段由 agent 执行（需 --agent <name>）
 然后读 ~/.openclaw/skills/clawseat-install/SKILL.md 继续
 ```
@@ -26,7 +26,7 @@ P4 Configure + start backend seats + Feishu smoke → P5 Handoff。
 
 | 依赖 | 版本 | 安装方式 | 必需？ |
 |------|------|---------|--------|
-| Python | ≥ 3.11 | `brew install python@3.12` 或 python.org | ✅ HARD_BLOCKED |
+| Python | ≥ 3.11 | `brew install python@3.11` 或 python.org | ✅ HARD_BLOCKED |
 | tmux | 最新 | `brew install tmux` | ✅ HARD_BLOCKED |
 | Node.js | ≥ 22 | `brew install node` | ✅ OpenClaw 需要 |
 | OpenClaw | 最新 | `npm install -g openclaw` | ✅ 宿主运行时 |
@@ -63,6 +63,10 @@ export GSTACK_SKILLS_ROOT=/absolute/path/to/gstack/.agents/skills
 
 ---
 
+下文命令统一使用 `python3.11`。macOS 默认 `python3` 常是 3.9，缺少 `tomllib`，会在安装脚本里直接失败。
+
+---
+
 ## 安装路径
 
 ### 路径 A：OpenClaw 安装（推荐）
@@ -73,7 +77,7 @@ git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
 export CLAWSEAT_ROOT="$HOME/.clawseat"
 
 # 2. Phase 0：安装 agent 无关的 skill 符号链接
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
+python3.11 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 
 # 3. 在 OpenClaw 里说 "安装 ClawSeat" 或读 clawseat-install skill
 # agent 会自动执行 6 阶段流程：
@@ -83,7 +87,7 @@ python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 #   P3 koder overlay + /new identity + Feishu 群
 #   P4 配置并启动 backend seats + Feishu smoke
 #   P5 handoff
-# Phase 3: python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <name>
+# Phase 3: python3.11 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <name>
 ```
 
 ### 路径 B：本地 Claude Code / Codex
@@ -94,7 +98,7 @@ git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
 export CLAWSEAT_ROOT="$HOME/.clawseat"
 
 # 2. 安装入口 skill
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
 
 # 3. 在 Claude Code 里输入
 /cs
@@ -163,7 +167,7 @@ Profile 中支持两种可移植占位符：
 `git pull` 后必须刷新所有 seat 的 workspace 文件：
 
 ```bash
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
 ```
 
 零参数，自动检测 project、profile、koder workspace、feishu group ID。
@@ -196,28 +200,28 @@ koder（前台，OpenClaw agent）→ planner → specialist seats
 
 ```bash
 # 环境预检
-python3 "$CLAWSEAT_ROOT/core/preflight.py" install
+python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install
 
 # Skill 验证
-python3 "$CLAWSEAT_ROOT/core/scripts/skill_manager.py" check
+python3.11 "$CLAWSEAT_ROOT/core/scripts/skill_manager.py" check
 
 # 查看团队状态
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
   --profile ~/.agents/profiles/install-profile-dynamic.toml
 
 # 分发任务
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
   --profile ~/.agents/profiles/install-profile-dynamic.toml \
   --source koder --target planner --task-id TASK-001 \
   --title "任务标题" --objective "任务目标"
 
 # 刷新 workspace（git pull 后）
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
 
 # 运行测试
-python3 -m pytest tests/ -v
-python3 core/skills/gstack-harness/scripts/selftest.py
-python3 core/scripts/iterm_tmux_selftest.py
+python3.11 -m pytest tests/ -v
+python3.11 core/skills/gstack-harness/scripts/selftest.py
+python3.11 core/scripts/iterm_tmux_selftest.py
 ```
 
 ---

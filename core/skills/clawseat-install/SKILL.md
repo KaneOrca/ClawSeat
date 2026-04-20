@@ -32,7 +32,7 @@ post-install convenience command.
 ## Prerequisites
 
 Before starting, verify these dependencies are installed:
-- **Python >= 3.11** — `python3 --version`
+- **Python >= 3.11** — `python3.11 --version`
 - **tmux** — `tmux -V` (if missing: `brew install tmux`)
 - **Node.js >= 22** — `node --version` (needed for OpenClaw)
 - **At least one seat CLI** — `claude --version` or `codex --version` or `gemini --version`
@@ -47,12 +47,12 @@ Before starting, verify these dependencies are installed:
 Preflight now supports install auto-fix, while OpenClaw runtime selection is
 env-driven:
 
-- OpenClaw first install: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install --auto-fix`
+- OpenClaw first install: `python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install --auto-fix`
   - when launched through `shells/openclaw-plugin/openclaw_bootstrap.py`, that
     bootstrap sets `CLAWSEAT_INSTALL_RUNTIME=openclaw` and
     `CLAWSEAT_INSTALL_PROFILE_TEMPLATE=install-openclaw.toml` before calling
     preflight
-- Local runtime: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install`
+- Local runtime: `python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install`
 
 ## Memory Seat (Required)
 
@@ -66,12 +66,12 @@ Memory CC (`role = "memory-oracle"`, `tool = claude + api + minimax + MiniMax-M2
 **Minimum flow**:
 1. Start memory seat after bootstrap (before planner):
    ```bash
-   python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+   python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
      --profile <profile.toml> --seat memory --confirm-start
    ```
 2. Dispatch the scan task:
    ```bash
-   python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
+   python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
      --profile <profile.toml> --source koder --target memory \
      --task-id MEMORY-SCAN-001 --kind learning \
      --message "LEARNING REQUEST: Run scan_environment.py and build ~/.agents/memory/"
@@ -80,17 +80,17 @@ Memory CC (`role = "memory-oracle"`, `tool = claude + api + minimax + MiniMax-M2
 4. Query via direct file read (fast) or `--ask` (reasoning):
    ```bash
    # direct
-   python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+   python3.11 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
      --key credentials.keys.MINIMAX_API_KEY.value
 
    # reasoning
-   python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+   python3.11 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
      --ask "Which provider should designer-1 use?" --profile <profile.toml>
    ```
 
 **Zero-dependency fallback**: You can also run the scanner directly without the TUI — it works as a standalone script:
 ```bash
-python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+python3.11 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
 ```
 
 Memory CC's knowledge base lives at `~/.agents/memory/` with file permissions `0600`. Do not copy it off the machine.
@@ -113,7 +113,7 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
      - **Phase 5** Handoff: ancestor goes standby; operator talks to koder directly from here.
      - See [references/install-flow.md](references/install-flow.md) and [references/ancestor-runbook.md](references/ancestor-runbook.md) for step detail + halt conditions.
      - Feishu platform setup (event scopes, `requireMention`, app version publishing) is detailed in [references/feishu-bridge-setup.md](references/feishu-bridge-setup.md).
-   - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
+   - Local CLI: `python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
    - Follow the canonical 6-phase flow: **P0 Preflight+Credentials+Bootstrap → P1 Memory online+scan → P2 Query+PickAgent → P3 Overlay+/new+FeishuGroup → P4 Configure+StartAllBackendSeats+FeishuSmoke → P5 Handoff**. See [references/install-flow.md](references/install-flow.md) and [references/ancestor-runbook.md](references/ancestor-runbook.md).
@@ -136,14 +136,14 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
    - Ask about planner first, then each specialist (builder-1, reviewer-1, etc.) one by one
    - Only after the user confirms each seat's config, start planner:
      ```bash
-     python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+     python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
        --profile <profile.toml> --seat planner \
        --tool <X> --auth-mode <Y> --provider <Z> --confirm-start
      ```
    - Wait for user to confirm planner OAuth/auth is complete
    - Then dispatch remaining specialist seat startups to planner. **You MUST use `dispatch_task.py`** — do NOT use raw `tmux send-keys`:
      ```bash
-     python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+     python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
        --profile <profile.toml> \
        --source koder --target planner \
        --task-id SEAT-STARTUP \
@@ -156,14 +156,14 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
    - **CRITICAL: 禁止直接用 `tmux send-keys` 给 seat 发消息。** `tmux send-keys` 没有 1 秒延迟，消息会卡在 TUI 输入框不提交。所有 seat 通信必须用 `dispatch_task.py`（派发任务）、`notify_seat.py`（发通知）、或 `send-and-verify.sh`（tmux transport with auto-retry）。
    - **Never let planner choose seat configs on its own** — all config decisions come from the user through koder
 7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install-with-memory.toml` (per F6 — `install.toml` is the legacy memory-less variant), and starts `planner`.
-8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
+8. For manual project-specific installs, run `python3.11 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
 9. If a fresh project is needed, copy one of these into `/tmp/{project}-profile-dynamic.toml`:
    - `examples/starter/profiles/starter.toml` — koder-only entrypoint (no gstack)
    - `examples/starter/profiles/install-with-memory.toml` — canonical local `/cs` install with memory seat (declares specialists; requires gstack)
    - `examples/starter/profiles/install-openclaw.toml` — canonical OpenClaw overlay install (`heartbeat_transport=openclaw`; koder is not tmux)
    - `examples/starter/profiles/install.toml` — legacy memory-less variant, kept for narrow local-CLI cases
    - `examples/starter/profiles/full-team.toml` — six-seat roster (requires gstack)
-10. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project}` (do NOT pass `--start` in OpenClaw mode — koder is already running).
+10. Bootstrap with `python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project}` (do NOT pass `--start` in OpenClaw mode — koder is already running).
 11. In local CLI mode only: start koder with `start_seat.py --seat koder`. In OpenClaw mode: skip this step — you are koder.
 12. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding for backend seats.
 
@@ -191,7 +191,7 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 After `git pull` or any ClawSeat code update, workspace MD files (AGENTS.md, TOOLS.md, WORKSPACE_CONTRACT.toml, settings.local.json) are stale. Run:
 
 ```bash
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
 ```
 
 Zero arguments needed — auto-detects project, profile, koder workspace, and feishu group ID from existing WORKSPACE_CONTRACT.toml. Regenerates all seat workspace files using the latest template and profile. **After refresh, re-read your AGENTS.md and TOOLS.md.**

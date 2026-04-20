@@ -31,7 +31,7 @@ Keep it thin. This skill does not define a second bootstrap flow. It delegates t
 2. Run:
 
    ```bash
-   python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/cs_init.py"
+   python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/cs_init.py"
    ```
 
 3. Report whether the result was:

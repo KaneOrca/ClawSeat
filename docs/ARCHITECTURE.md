@@ -81,6 +81,18 @@ Primary home:
 - `core/lib/seat_resolver.py` — tmux vs openclaw vs file-only routing hook used by notify_seat + complete_handoff (upstream T19)
 - `core/engine/instantiate_seat.py` — seat materialization: workspace + symlinks + session records + tmux config
 
+#### Heartbeat transport vs runtime seats
+
+Two profile fields control how the frontstage seat is represented at runtime:
+`heartbeat_transport` says whether the `heartbeat_owner` is a tmux seat or an
+OpenClaw-frontstage agent, while `runtime_seats` says which seats should
+receive runtime/session records for that profile.
+
+| Mode | Canonical profile | `heartbeat_transport` | `runtime_seats` effect |
+|---|---|---|---|
+| Local `/cs` | `install-with-memory.toml` | `tmux` | `koder` remains a tmux seat alongside `memory` and backend seats |
+| OpenClaw overlay | `install-openclaw.toml` | `openclaw` | `koder` stays frontstage and is excluded from tmux runtime records; `memory` and backend seats still run in tmux |
+
 ### 3. Skill Layer
 
 Owns:
