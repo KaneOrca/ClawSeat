@@ -44,9 +44,13 @@ The ClawSeat scripts pass `AGENT_HOME` automatically when launched via `start_se
 
 See `references/feishu-bridge-setup.md` for the full troubleshooting context.
 
-## Phase 0 — Install Bundled Skills
+## Phase 0 — Bootstrap Project Workspace
 
-Install agent-neutral shared skills into `~/.openclaw/skills/`. Does NOT touch any per-agent workspace.
+Bootstrap is the **headline P0 action**: it creates `~/.agents/projects/<project>/`, the profile runtime, the seat session.toml files (incl. memory), and the tasks_root. Without bootstrap, `start_seat.py --seat memory` at P1 exits because `~/.agents/sessions/<project>/memory/session.toml` does not exist.
+
+### Step 0.1 — Install bundled skills (idempotent prerequisite)
+
+Agent-neutral skill symlinks into `~/.openclaw/skills/`. One-time per Claude Code install; idempotent on re-run.
 
 ```sh
 python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
@@ -55,22 +59,26 @@ python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 - Creates symlinks for `clawseat`, `clawseat-install`, `clawseat-koder-frontstage`, and memory-oracle skills.
 - Checks external dependencies: gstack + lark-cli.
 - exit 0 = all OK; exit 2 = external dependency missing (gstack/lark-cli).
-- Profile bootstrap follows once skills are in place; see below.
+
+### Step 0.2 — Profile prep + bootstrap_harness (headline)
 
 ```sh
 PROJECT=my-project
-PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/starter.toml"  # or install.toml / full-team.toml
+PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml"  # declares the memory seat P1 needs
 cp "$PROFILE_TEMPLATE" "/tmp/${PROJECT}-profile-dynamic.toml"
-# B2: tasks_root may be quoted in the template ("~/.agents/tasks/install").
-# A simple sed 's/install/my-project/' will miss the quotes. Use Python:
-# python3 -c "
-#   import re, pathlib
-#   p = pathlib.Path('/tmp/${PROJECT}-profile-dynamic.toml')
-#   t = p.read_text()
-#   t = t.replace('project_name = \"install\"', 'project_name = \"${PROJECT}\"')
-#   t = re.sub(r'(tasks_root\s*=\s*[\"\\']?)~/.agents/tasks/install', r'\g<1>~/.agents/tasks/${PROJECT}', t)
-#   p.write_text(t)
-# "
+
+# B2: tasks_root is quoted in the template ("~/.agents/tasks/install").
+# A simple `sed 's/install/my-project/'` misses the quote boundary. Use Python:
+python3 - <<PY
+import re, pathlib
+p = pathlib.Path("/tmp/${PROJECT}-profile-dynamic.toml")
+t = p.read_text()
+t = t.replace('project_name = "install"', 'project_name = "${PROJECT}"')
+t = re.sub(r'(tasks_root\s*=\s*["\']?)~/.agents/tasks/install',
+          r'\g<1>~/.agents/tasks/${PROJECT}', t)
+p.write_text(t)
+PY
+
 python3 "$CLAWSEAT_ROOT/core/preflight.py" "$PROJECT"
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
@@ -80,29 +88,69 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml"
 ```
 
-- `starter.toml` creates a minimal frontstage entrypoint.
-- `install.toml` creates the canonical `install` workspace with `koder`, `planner`, `builder-1`, and `reviewer-1`.
+**Verify** (hard precondition for P1):
+```sh
+test -f ~/.agents/sessions/${PROJECT}/memory/session.toml && echo "bootstrap_ok"
+```
+
+- `install-with-memory.toml` (default) is `install.toml` plus a `memory` seat declaration — required for the P1 memory flow.
+- `starter.toml` creates a minimal frontstage entrypoint (no memory seat — not compatible with canonical P1).
+- `install.toml` (legacy) lacks a `memory` seat; P1 will fail unless you add it to the roster before bootstrap.
 - `full-team.toml` creates `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1` workspaces in one bootstrap.
 - Even with `full-team.toml`, `--start` still only auto-starts `koder`; other seats require explicit confirmation and launch.
 - `clawseat` is the product path for OpenClaw/Feishu; `/cs` is the local-runtime exception path that counts as explicit approval to bootstrap or resume `install` and start `planner`.
 - `qa-1` is not part of the default `/cs` first-launch roster; bring it up only for test / smoke / regression heavy chains, usually after the bridge or implementation lane has started.
 
-## Phase 1 — Start Memory Seat
+> **Partial reinstall / repair**: All per-step scripts are idempotent. If `~/.agents/sessions/${PROJECT}/memory/session.toml` already exists (P0.2 produced it), skip straight to Phase 1 (memory). Re-running `install_bundled_skills.py` is also safe — it only patches missing symlinks.
 
-Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). Start it immediately after bootstrap, BEFORE dispatching work to planner or any specialist:
+## Phase 1 — Memory Seat + Comms Smoke
+
+Memory seat is the knowledge oracle for environment facts (credentials, API keys, provider config, feishu group IDs). P1 combines launching the seat with a round-trip smoke that both exercises the tmux/handoff path and tells memory to populate its KB.
+
+### Step 1.1 — Start memory seat
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" --seat memory --confirm-start
 ```
 
+**Verify**: `tmux has-session -t ${PROJECT}-memory-claude 2>/dev/null && echo seat_ok`
+
+**Halt condition**: session not running → USER_DECISION_NEEDED (check P0.2 session.toml existence first).
+
+### Step 1.2 — Ancestor → Memory comms smoke (LEARNING REQUEST)
+
+One message exercises: tmux send-keys delivery, memory `/clear` Stop hook timing, `complete_handoff.py` receipt, and — via memory's SKILL.md routing — a `scan_environment.py` run that populates `machine/`.
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --source ancestor --target memory \
+  --task-id MEMORY-SCAN-001 --kind learning \
+  --message "LEARNING REQUEST: Run scan_environment.py --output ~/.agents/memory to populate the machine/ knowledge base. Confirm 5 files (credentials, network, openclaw, github, current_context) land."
+```
+
+> **Why notify_seat, not dispatch_task**: the T22 guard (`assert_target_not_memory`) blocks `dispatch_task.py --target memory` with exit 2 because memory does not read `TODO.md`. `notify_seat.py` is the canonical path for sending memory a learning request — see [tests/test_memory_target_guard.py](../../../../tests/test_memory_target_guard.py) and `core/templates/shared/TOOLS/memory.md`.
+
+### Step 1.3 — Verify KB populated + receipt landed
+
+```sh
+for f in credentials network openclaw github current_context; do
+  test -f ~/.agents/memory/machine/${f}.json && echo "machine/${f}.json ok"
+done
+
+ls ~/.agents/tasks/${PROJECT}/MEMORY-SCAN-001/ 2>/dev/null | grep -E 'ack|receipt|done' || echo "WARN: no ACK yet — poll again after memory /clear fires"
+```
+
+**Halt condition**: any `machine/*.json` missing after 60s → USER_DECISION_NEEDED: memory scan did not complete. Do NOT proceed to P2 with empty KB.
+
 Every other seat (including koder and the ancestor Claude Code agent) must query memory before guessing environment facts. See [memory-query-protocol.md](memory-query-protocol.md) for the mandatory query/escalation contract.
 
 If memory seat is not declared in the profile roster, add it before rerunning bootstrap — memory is no longer optional.
 
-## Phase 2 — Query Memory for Target Agent
+## Phase 2 — Query Memory → Confirm Target Agent with User
 
-Before applying any per-agent overlay, query memory to enumerate the available OpenClaw agents. Do not hardcode "koder" — ask memory which agent should receive the overlay:
+Before applying any per-agent overlay, query memory to enumerate the available OpenClaw agents, then **ask the user which agent** should receive the koder overlay. Do not hardcode "koder" and do not auto-pick even if memory returns a single candidate — agent selection is a user decision.
 
 ```sh
 # G15 — correct syntax: use --memory-dir + --key or --search (NOT --file --section)

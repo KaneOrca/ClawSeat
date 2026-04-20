@@ -201,7 +201,7 @@ def run_checks(
 
     # ── G5: advisory ──────────────────────────────────────────────────────
     results.append(_check(
-        "G5", "openclaw_first_install.py used (advisory — not enforced)",
+        "G5", "Canonical phase ordering followed: P0 bootstrap before P1 memory (advisory — not enforced)",
         True, "advisory check only", warn_only=True,
     ))
 

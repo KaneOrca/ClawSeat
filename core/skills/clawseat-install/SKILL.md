@@ -98,19 +98,16 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 3. Read [interaction-mode.md](references/interaction-mode.md) before interacting with the user during installation.
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. **Install skill symlinks** — this is mandatory, do NOT skip:
-   - OpenClaw (Phase 0 + Phase 3):
-     1. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"` — agent-neutral shared skills
-     2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 6-phase flow (Phase 0 install skills → Phase 1 memory → Phase 2 query → Phase 3 overlay → Phase 4 planner config → **Phase 5 Feishu bridge smoke**)
+   - OpenClaw (Phase 0 bootstrap + Phase 3 overlay):
+     1. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"` — agent-neutral shared skills (P0.1 prerequisite)
+     2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 6-phase flow (Phase 0 bootstrap = skill install + `bootstrap_harness` → Phase 1 memory seat + comms smoke → Phase 2 query + user confirms agent → Phase 3 overlay → Phase 4 planner config → **Phase 5 Feishu bridge smoke**)
      - After overlay, complete **Phase 5: Feishu Bridge Smoke Test** (7-step canonical): auth check → platform scopes → collect group ID → bind project → requireMention config → smoke test → verify parse. This phase is **mandatory** before any Feishu dispatch. See [references/install-flow.md#phase-5](references/install-flow.md) and [references/feishu-bridge-setup.md](references/feishu-bridge-setup.md).
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
-   - Prefer the canonical one-shot installer:
-     - `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py"`
-   - This script now owns bundle repair, runtime-aware preflight, koder workspace init/refresh, dynamic profile creation, materialized-seat bootstrap, and planner config gating.
-   - **Ask the user for their Feishu group ID** (format: `oc_xxx`) before first install when possible. If they don't have one yet, pass empty string and configure later:
-     - `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py" --feishu-group-id <group_id>`
-   - After it refreshes `workspace-koder`, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
+   - Follow the canonical phase flow in [references/install-flow.md](references/install-flow.md) and [references/ancestor-runbook.md](references/ancestor-runbook.md): P0 Bootstrap → P1 Memory + Comms Smoke → P2 Query+Agent → P3 Overlay → P4 Planner Config → P5 Feishu.
+   - **Ask the user for their Feishu group ID** (format: `oc_xxx`) no later than P5.3. If not available at install time, leave Feishu bridge unconfigured and complete it later via `bind_project_to_group`.
+   - After P3 refreshes the target workspace, **re-read your AGENTS.md and TOOLS.md** to load the koder role details and available commands
    - **You (the current agent) ARE koder** — do NOT create a tmux session for koder
    - The canonical project name is `install`
    - If `planner` is still unconfigured, stop at the printed configuration gate instead of guessing seat config

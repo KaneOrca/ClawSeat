@@ -13,12 +13,13 @@ def _text() -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Test 1: all Phase 0-7 section headings present
+# Test 1: all Phase 0-6 section headings present (P0 Bootstrap, P1 Memory+smoke,
+# P2 Query+Overlay, P3 Config, P4 Feishu, P5 TUI decode, P6 Alarm discipline)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_runbook_has_phase_0_through_7():
+def test_runbook_has_phase_0_through_6():
     text = _text()
-    for phase in range(8):
+    for phase in range(7):
         assert f"Phase {phase}" in text, f"Phase {phase} heading missing from runbook"
 
 
