@@ -135,6 +135,14 @@ Omitting `--agent` → exit 2. If this happens, return to Phase 2 and consult th
 
 ## Phase 4 — Start Planner + Configuration
 
+> **AGENT_HOME automatic resolution**: All `agent_admin` scripts and `install_complete.py`
+> automatically detect when they are running inside a seat sandbox HOME
+> (`~/.agents/runtime/identities/<tool>/<auth>/<identity>/home/`) and fall back to the
+> real operator HOME via `pwd.getpwuid`. The `CLAWSEAT_REAL_HOME` env var provides an
+> explicit override if auto-detection fails. You do **not** need to set `AGENT_HOME`
+> manually — it is injected by `start_seat.py` at seat startup.
+> Use `CLAWSEAT_SANDBOX_HOME_STRICT=1` only in tests to force sandbox paths.
+
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
 ```

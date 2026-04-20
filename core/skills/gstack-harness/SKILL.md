@@ -221,6 +221,22 @@ frontstage (koder), the caller must explicitly bypass tmux and use the Feishu
 user-message path (`complete_handoff.py` → `send_feishu_user_message`).
 Do not assume the adapter layer will detect and switch modes automatically.
 
+## Sandbox HOME resolution
+
+Seats run inside an isolated HOME at `~/.agents/runtime/identities/<tool>/<auth>/<identity>/home/`.
+`Path.home()` inside a seat returns this sandbox path — **not** the operator's real HOME.
+
+All `agent_admin` scripts and `_common.py` use `_resolve_effective_home()` to bypass sandbox isolation:
+
+1. `CLAWSEAT_REAL_HOME` env override (explicit, highest priority)
+2. `AGENT_HOME` env differing from `Path.home()` (injected by `start_seat.py`)
+3. `pwd.getpwuid(os.getuid()).pw_dir` — the OS's authoritative answer
+4. `Path.home()` as last-resort fallback
+
+**For tests**: set `CLAWSEAT_SANDBOX_HOME_STRICT=1` to force `Path.home()` (sandbox behavior).
+**For operators**: `--real-home <path>` on any `agent-admin` subcommand sets `CLAWSEAT_REAL_HOME` for that invocation.
+**DO NOT** use `Path.home()` directly in scripts that run inside seats — always go through `_resolve_effective_home()`.
+
 ## Seat configuration rule
 
 `koder` is responsible for configuring seats, not just launching them.

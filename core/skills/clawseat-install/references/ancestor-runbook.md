@@ -411,6 +411,13 @@ When observing Claude Code TUI in tmux, decode status bar correctly:
 | `---WAIT---` in lark-cli output | Device flow polling — lark-cli is waiting for user to approve in browser | Not a block; wait for approval or prompt user. Do NOT kill the process. |
 | `auth_needs_refresh` in send result | User OAuth token expired — must be renewed by a human with browser access | USER_DECISION_NEEDED: user runs `lark-cli auth login` in terminal, then retry |
 
+**Sandbox HOME errors**:
+
+| Error pattern | Meaning | Action |
+|---|---|---|
+| Path contains `/.agents/runtime/identities/` in error message | Script is resolving paths against sandbox HOME instead of real user HOME | The script should auto-detect via `_resolve_effective_home()`. If not, set `CLAWSEAT_REAL_HOME=/Users/<operator>` or check that `AGENT_HOME` is exported in the seat environment. |
+| `~/.agents/runtime/identities/.../home/.openclaw` not found | G6/G11/G14 check resolved sandbox `.openclaw` — no real resources there | Ensure `agent_admin_config.HOME` resolves via `_resolve_effective_home()`, not raw `Path.home()`. Run `python3 install_complete.py --project install` after verifying `AGENT_HOME` is set correctly. |
+
 **Rule**: Never send-keys when the TUI is waiting for user OAuth input or when the model is actively thinking.
 
 ---
