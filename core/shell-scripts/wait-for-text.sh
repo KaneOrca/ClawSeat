@@ -49,6 +49,14 @@ if ! [[ "$timeout" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
+# $target flows into `tmux capture-pane -t`. Restrict to the tmux target
+# grammar `session[:window[.pane]]` so a stray value cannot read an
+# unrelated pane.
+if ! [[ "$target" =~ ^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)?)?$ ]]; then
+  echo "target must match session[:window[.pane]] (letters/digits/_/- only), got: $target" >&2
+  exit 1
+fi
+
 if ! [[ "$lines" =~ ^[0-9]+$ ]]; then
   echo "lines must be an integer" >&2
   exit 1

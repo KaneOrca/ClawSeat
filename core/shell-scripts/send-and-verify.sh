@@ -23,13 +23,18 @@ fi
 # Bash cannot carry NUL inside a variable (truncated at parse), so no NUL case.
 MAX_MSG_BYTES=8192
 
-case "$SESSION" in
-  *$'\n'*|*$'\r'*|*$'\v'*|*$'\f'*)
-    echo "send-and-verify: INPUT_REJECTED session contains control character (LF/CR/VT/FF)" >&2
-    echo "send-and-verify: HARD_BLOCK caller must strip control chars before retry" >&2
-    exit 2
-    ;;
-esac
+reject_session_control_chars() {
+  local name="$1" origin="$2"
+  case "$name" in
+    *$'\n'*|*$'\r'*|*$'\v'*|*$'\f'*)
+      echo "send-and-verify: INPUT_REJECTED ${origin} session contains control character (LF/CR/VT/FF)" >&2
+      echo "send-and-verify: HARD_BLOCK caller must strip control chars before retry" >&2
+      exit 2
+      ;;
+  esac
+}
+
+reject_session_control_chars "$SESSION" "argv"
 case "$MSG" in
   *$'\r'*|*$'\v'*|*$'\f'*)
     echo "send-and-verify: INPUT_REJECTED message contains control character (CR/VT/FF)" >&2
@@ -85,6 +90,7 @@ if [ -z "$RESOLVED" ]; then
   } >&2
   exit 1
 fi
+reject_session_control_chars "$RESOLVED" "resolved"
 SESSION="$RESOLVED"
 
 if ! env -u TMUX "$TMUX_BIN" has-session -t "$SESSION" 2>/dev/null; then

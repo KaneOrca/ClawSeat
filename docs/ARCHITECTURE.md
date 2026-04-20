@@ -77,7 +77,7 @@ Primary home:
 - `core/templates/` — role template TOMLs
 - `core/skills/gstack-harness/` — canonical runtime skill (see §3)
 - `core/transport/transport_router.py` — **single entry point for dispatch/notify/complete/render-console** (audit H1). Routes to either `core/migration/*_dynamic.py` (dynamic-roster profiles) or `core/skills/gstack-harness/scripts/*.py` (legacy profiles) based on `[dynamic_roster].enabled`. Do not import the underlying scripts directly.
-- `core/migration/` — dynamic-roster siblings for `dispatch_task` / `notify_seat` / `complete_handoff` / `render_console`. Share `_task_io.build_notify_payload` and other helpers via `dynamic_common.BASE_COMMON` (audit H2).
+- `core/migration/` — dynamic-roster siblings for `dispatch_task` / `notify_seat` / `complete_handoff` / `render_console`. Share `_task_io.build_notify_payload` and other helpers via `dynamic_common.BASE_COMMON` (audit H2). Anti-drift is enforced by `tests/test_transport_router.py::test_shared_task_io_helpers_do_not_fork` over the full list in `SHARED_TASK_IO_HELPERS` — if you fork a helper into `dynamic_common.py` instead of re-exporting, that test fails.
 - `core/lib/seat_resolver.py` — tmux vs openclaw vs file-only routing hook used by notify_seat + complete_handoff (upstream T19)
 - `core/engine/instantiate_seat.py` — seat materialization: workspace + symlinks + session records + tmux config
 
@@ -93,6 +93,26 @@ Owns:
 Primary home:
 
 - `core/skills/gstack-harness/`
+
+#### Entry-point skill boundaries
+
+Four ClawSeat-owned entry-point skills share the `clawseat*` / `cs` namespace.
+Their responsibilities are deliberately non-overlapping — if you are unsure
+which one to edit, use this table before you touch either:
+
+| Skill | Role | Invoked by | Writes |
+|---|---|---|---|
+| `clawseat` | Product façade. One-liner that loads the install runbook and hands off. | OpenClaw / Feishu / Claude Code / Codex when the user says "启动 ClawSeat" | Nothing directly; delegates to `clawseat-install` |
+| `clawseat-install` | 6-phase install SOP (`core/skills/clawseat-install/scripts/*.py`). Phases P0–P5 in `references/ancestor-runbook.md`. | Ancestor agent, step-by-step per user confirmation | `~/.openclaw/skills/*`, `~/.agents/profiles/*.toml`, `~/.claude/skills/*`, Feishu bridge config |
+| `clawseat-koder-frontstage` | Runtime wrapper for the user-visible `koder` seat (reads `PLANNER_BRIEF`, enforces transport via router). Not an installer. | The `koder` seat itself after install | Never writes workspaces; only reads + dispatches |
+| `cs` | Local `/cs` convenience alias (**post-install only**). Resumes or creates the canonical `install` project and starts `planner`. | User in a local Claude Code / Codex session after `clawseat-install` has completed P0–P5 | Minimal — resumes existing `~/.agents/projects/install` state |
+
+Invariant — do not cross the boundaries:
+
+- `clawseat` must not write install state (no `~/.agents/*` writes; delegate to `clawseat-install`)
+- `clawseat-install` must not read from `PLANNER_BRIEF` (it runs before seats exist)
+- `clawseat-koder-frontstage` must not call `install_*` scripts (install is ancestor-owned)
+- `cs` must fail fast if `~/.agents/projects/install/session.toml` is missing (it is post-install only; guard with `install_entry_skills.py` check)
 
 ### 4. Adapter Layer
 

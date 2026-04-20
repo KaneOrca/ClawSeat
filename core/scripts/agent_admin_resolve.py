@@ -90,8 +90,23 @@ class ResolveHandlers:
                         f"{session.engineer_id} is missing OPENAI_API_KEY in {session.secret_file}"
                     )
                 auth_path = codex_home / "auth.json"
-                auth_path.write_text(json.dumps({"OPENAI_API_KEY": api_key}, ensure_ascii=True))
-                auth_path.chmod(0o600)
+                # Atomic 0o600 create: O_EXCL refuses to follow an attacker-
+                # planted symlink, and the mode is applied at creation so the
+                # key is never briefly world-readable under a loose umask.
+                auth_payload = json.dumps(
+                    {"OPENAI_API_KEY": api_key}, ensure_ascii=True
+                ).encode("ascii")
+                if auth_path.exists() or auth_path.is_symlink():
+                    auth_path.unlink()
+                fd = os.open(
+                    auth_path,
+                    os.O_CREAT | os.O_WRONLY | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                )
+                try:
+                    os.write(fd, auth_payload)
+                finally:
+                    os.close(fd)
                 self.hooks.write_codex_api_config(
                     session,
                     codex_home,

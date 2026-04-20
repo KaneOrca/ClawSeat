@@ -188,6 +188,58 @@ def test_payload_reply_to_suffix_respects_flag(
     assert ("Reply to" in payload) is expect_reply_suffix
 
 
+# ── H2b: dispatch/complete shared helper drift guard ─────────────────
+#
+# `build_notify_payload` is not the only helper shared by the dynamic and
+# legacy paths. `dispatch_task_dynamic.py` / `complete_handoff_dynamic.py`
+# import a wider set of `_task_io` helpers (write_todo, write_delivery,
+# build_completion_message, append_task_to_queue, upsert_tasks_row,
+# append_status_note, append_consumed_ack) through `dynamic_common.py`,
+# which re-exports them from the same private-loaded `_common` as the
+# legacy `from _common import ...` path.
+#
+# If anyone replaces a re-export with a dynamic-side reimplementation
+# (or forks a helper into `dynamic_common.py`), dispatch/complete output
+# silently diverges between the two transport paths. This test locks the
+# source-file identity of every helper consumed by BOTH sides.
+
+SHARED_TASK_IO_HELPERS = (
+    "build_notify_message",
+    "build_notify_payload",
+    "build_completion_message",
+    "write_todo",
+    "write_delivery",
+    "upsert_tasks_row",
+    "append_status_note",
+    "append_consumed_ack",
+    "notify",
+)
+
+
+@pytest.mark.parametrize("helper_name", SHARED_TASK_IO_HELPERS)
+def test_shared_task_io_helpers_do_not_fork(helper_name: str) -> None:
+    """Source-file identity check for every helper imported by both the
+    legacy (`_common`) and dynamic (`dynamic_common`) paths. A drift
+    here means the two transport backends are no longer emitting the
+    same TODO.md / DELIVERY.md / TASKS.md text — the symptom the audit
+    was trying to prevent."""
+    import inspect
+
+    import _common as legacy_common  # harness scripts dir on sys.path
+    from core.migration import dynamic_common
+
+    legacy_fn = getattr(legacy_common, helper_name)
+    dynamic_fn = getattr(dynamic_common, helper_name)
+    legacy_src = inspect.getsourcefile(legacy_fn)
+    dynamic_src = inspect.getsourcefile(dynamic_fn)
+    assert legacy_src == dynamic_src, (
+        f"{helper_name} has forked: legacy={legacy_src!r} "
+        f"dynamic={dynamic_src!r}. Re-export from BASE_COMMON in "
+        f"core/migration/dynamic_common.py instead of defining a new copy."
+    )
+    assert legacy_fn.__qualname__ == dynamic_fn.__qualname__
+
+
 # ── H1: dead core/transport.py must stay gone ────────────────────────
 
 def test_old_transport_module_is_deleted(repo_root: Path) -> None:

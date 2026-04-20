@@ -103,3 +103,25 @@ def test_plain_message_passes_validation_and_hits_tmux_layer() -> None:
         f"clean message was rejected as input (rc={result.returncode}); "
         f"stderr={result.stderr}"
     )
+
+
+def test_resolved_session_with_control_char_is_rejected(tmp_path: Path) -> None:
+    """A compromised or buggy agentctl could return a session name with
+    control characters. The original $SESSION passes validation; the
+    resolved name must be re-validated before it flows into tmux."""
+    fake_agentctl = tmp_path / "agentctl.sh"
+    fake_agentctl.write_text('#!/usr/bin/env bash\nprintf "koder\\npwned"\n')
+    fake_agentctl.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "koder", "hi"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env={"PATH": "/usr/bin:/bin", "AGENTCTL_BIN": str(fake_agentctl)},
+    )
+    assert result.returncode == REJECT_RC, (
+        f"resolved control char must be rejected (rc={result.returncode})\n"
+        f"stdout={result.stdout}\nstderr={result.stderr}"
+    )
+    assert "resolved" in result.stderr
+    assert "INPUT_REJECTED" in result.stderr
