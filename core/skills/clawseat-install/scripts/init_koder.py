@@ -408,7 +408,7 @@ python3 {scripts}/dispatch_task.py \\
 python3 {scripts}/dispatch_task.py \\
   --profile ... --source koder --target planner --task-id T --title '...' \\
   --objective '**Review the architecture**, lock in the plan — 验收...' \\
-  --skill-refs /Users/ywf/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md
+  --skill-refs ~/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md
 ```
 
 要手动嵌 **trigger 词**（见每个 gstack skill 自己的 description）+ `--skill-refs` 绝对路径。**优先用 `--intent`**，它会替你做这两件事。
@@ -484,7 +484,7 @@ def render_tools_project(clawseat_root: Path, *, heartbeat_owner: str) -> str:
 读你自己 workspace 的 `WORKSPACE_CONTRACT.toml` 的 `project` 字段：
 
 ```bash
-python3 -c "import tomllib; print(tomllib.loads(open('/Users/ywf/.openclaw/workspace-koder/WORKSPACE_CONTRACT.toml').read())['project'])"
+python3 -c "import pathlib,tomllib; print(tomllib.loads((pathlib.Path.home() / '.openclaw/workspace-koder/WORKSPACE_CONTRACT.toml').read_text())['project'])"
 ```
 
 ## 新建项目（用户让你启动新团队时）
@@ -928,7 +928,7 @@ Seat roster and backend list are authoritative in `WORKSPACE_CONTRACT.toml`.
 Read them there, not here:
 
 ```bash
-python3 -c "import tomllib; d=tomllib.loads(open('/Users/ywf/.openclaw/workspace-{heartbeat_owner}/WORKSPACE_CONTRACT.toml').read()); print('seats:', d.get('seats'))"
+python3 -c "import pathlib,tomllib; d=tomllib.loads((pathlib.Path.home() / '.openclaw/workspace-{heartbeat_owner}/WORKSPACE_CONTRACT.toml').read_text()); print('seats:', d.get('seats'))"
 ```
 
 ## Recommended startup order (render-time suggestion)
@@ -994,7 +994,7 @@ def render_agents(
 
 > Additional OpenClaw-native skills may be symlinked by OpenClaw itself
 > (e.g. `acpx-guide`, `capability-evolver`, `openclaw-governance-audit`,
-> `skill-vetter`). For the live set run `ls /Users/ywf/.openclaw/workspace-{heartbeat_owner}/skills/`.
+> `skill-vetter`). For the live set run `ls ~/.openclaw/workspace-{heartbeat_owner}/skills/`.
 
 ## Operational details
 
@@ -1020,7 +1020,7 @@ def render_agents(
 - Use `dispatch_task.py` for formal task dispatch (see `TOOLS/dispatch.md` for the command shape)
 - Use `notify_seat.py` for ad hoc messages
 - Use `send-and-verify.sh` for tmux transport (fallback only)
-- Every dispatch must produce a handoff receipt under `/Users/ywf/.agents/tasks/<project>/patrol/handoffs/`
+- Every dispatch must produce a handoff receipt under `~/.agents/tasks/<project>/patrol/handoffs/`
 - Only backend seats may be started from this workspace: {backend_list}
   (Starting a seat is setup/provisioning — see `TOOLS/seat.md`. It does not violate the
   "don't absorb specialist work" rule, which applies to dispatched work-items.)

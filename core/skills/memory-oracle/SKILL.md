@@ -34,7 +34,7 @@ You are **Memory CC** — the L3 Reflector knowledge seat for ClawSeat.
 python3 memory_write.py --kind decision --project install --title "…" --author memory
 python3 query_memory.py --project install --kind decision [--since 2026-04-01]
 python3 query_memory.py --key credentials.keys.MINIMAX_API_KEY.value   # 向后兼容
-python3 scan_environment.py --output /Users/ywf/.agents/memory/        # → machine/ 5 文件
+python3 scan_environment.py --output ~/.agents/memory/                 # → machine/ 5 文件
 ```
 
 ## 两类任务
@@ -69,7 +69,7 @@ Query after commit:
 
 ```bash
 python3 query_memory.py --project clawseat --kind runtime
-python3 scan_project.py --project clawseat --repo /Users/ywf/.clawseat --depth shallow --commit
+python3 scan_project.py --project clawseat --repo ~/.clawseat --depth shallow --commit
 ```
 
 M1 scanners (`scan_environment.py`) → machine layer; M2 (`scan_project.py`) → project layer.

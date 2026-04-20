@@ -175,7 +175,7 @@ def scan_credentials() -> dict:
       sources:      files that contributed to keys[]
       oauth_sources: files that contributed to oauth[]
 
-    The install flow uses `oauth.has_any` to decide the P0.6 halt message:
+    The install flow uses `oauth.has_any` to decide the P0.3 halt message:
     if api_keys is empty AND oauth.has_any is false → prompt operator for
     credentials; if OAuth evidence exists but no API key → offer operator
     the choice between Anthropic OAuth mode and supplying a MiniMax key.
