@@ -851,6 +851,11 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
         profile.patrol_script.chmod(0o755)
     _patch_claude_settings_from_profile(profile, all_seats)
     for seat in profile.heartbeat_seats:
+        # Skip heartbeat manifest/md for seats that don't run in tmux — the
+        # generated docs describe a tmux-only patrol transport (status_script,
+        # patrol_script, send_script) that cannot reach an openclaw frontstage.
+        if not profile.seat_runs_in_tmux(seat):
+            continue
         ensure_dir(profile.workspace_for(seat))
         write_text(heartbeat_md_path(profile, seat), render_heartbeat_md(profile, seat))
         write_text(heartbeat_manifest_path(profile, seat), render_heartbeat_manifest(profile, seat))

@@ -37,6 +37,9 @@ SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[3]
 
 
+from core.lib.real_home import real_user_home
+
+
 def _get_migration_root() -> Path:
     """Compute MIGRATION_ROOT at call time, not import time."""
     refac_override = os.environ.get("CLAWSEAT_REFAC_ROOT", "").strip()
@@ -46,7 +49,7 @@ def _get_migration_root() -> Path:
     clawseat_root = os.environ.get("CLAWSEAT_ROOT", "").strip()
     if clawseat_root:
         return Path(clawseat_root) / "core" / "migration"
-    return Path.home() / "coding" / "ClawSeat" / "core" / "migration"
+    return real_user_home() / "coding" / "ClawSeat" / "core" / "migration"
 
 
 def _default_python_bin() -> str:
@@ -509,7 +512,7 @@ class ClawseatAdapter:
         )
 
     def check_session(self, *, project_name: str, seat_id: str) -> SessionStatus:
-        session_path = Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions"))) / project_name / seat_id / "session.toml"
+        session_path = Path(os.environ.get("SESSIONS_ROOT", str(real_user_home() / ".agents" / "sessions"))) / project_name / seat_id / "session.toml"
         if not session_path.exists():
             return SessionStatus(
                 project_name=project_name,

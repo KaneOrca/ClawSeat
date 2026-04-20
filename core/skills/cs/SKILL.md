@@ -16,8 +16,9 @@ Keep it thin. This skill does not define a second bootstrap flow. It delegates t
 ## Default Behavior
 
 - project name is fixed to `install`
-- profile template is `{CLAWSEAT_ROOT}/examples/starter/profiles/install.toml` (local tmux frontstage only)
-- the install workspace roster is `koder + planner + builder-1 + reviewer-1`
+- profile template is `{CLAWSEAT_ROOT}/examples/starter/profiles/install-with-memory.toml`
+- the local `/cs` profile uses `heartbeat_transport = "tmux"`
+- the install workspace roster is `memory + koder + planner + builder-1 + reviewer-1`
 - `koder` is bootstrapped or resumed first
 - `planner` is then explicitly started so it can take over the install chain
 - after `planner` is live, follow the Feishu bridge setup and seat launch flow

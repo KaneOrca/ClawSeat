@@ -21,6 +21,7 @@ CLAWSEAT_ROOT = Path(
 CORE_ROOT = CLAWSEAT_ROOT / "core"
 
 from core.resolve import resolve_clawseat_root as _shared_resolve_clawseat_root
+from core.lib.real_home import real_user_home
 from core.harness_adapter import (
     AuthConfig,
     HarnessAdapter,
@@ -88,7 +89,7 @@ class TmuxCliAdapter(HarnessAdapter):
         workspaces_root: str | Path | None = None,
     ) -> None:
         inferred_agents_root = self._default_agents_root()
-        home = Path.home()
+        home = real_user_home()
         self.agents_root = Path(
             agents_root or os.environ.get("AGENTS_ROOT", str(inferred_agents_root or (home / ".agents")))
         ).expanduser()

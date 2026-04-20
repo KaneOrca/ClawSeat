@@ -29,19 +29,22 @@ export CLAWSEAT_ROOT="/path/to/ClawSeat"
 New projects should default to role-first seat ids such as `planner`,
 `builder-1`, and `reviewer-1`.
 
-Shipped starter profiles now come in three tiers:
+Shipped starter profiles now come in five tiers:
 
 - `examples/starter/profiles/starter.toml`
   - frontstage-only bootstrap
   - creates a minimal `koder` entrypoint first
-- `examples/starter/profiles/install.toml`
+- `examples/starter/profiles/install-with-memory.toml`
   - canonical local `/cs` bootstrap profile
-  - creates `koder`, `planner`, `builder-1`, and `reviewer-1`
+  - creates `memory`, `koder`, `planner`, `builder-1`, and `reviewer-1`
   - intended for the first post-install `install` project
 - `examples/starter/profiles/install-openclaw.toml`
   - canonical OpenClaw bootstrap profile
   - binds `koder` to the current OpenClaw agent instead of a tmux session
   - starts backend runtime seats `memory`, `planner`, `builder-1`, and `reviewer-1`
+- `examples/starter/profiles/install.toml`
+  - legacy local memory-less variant
+  - creates `koder`, `planner`, `builder-1`, and `reviewer-1`
 - `examples/starter/profiles/full-team.toml`
   - predeclares `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1`
   - creates all six personal workspaces during bootstrap

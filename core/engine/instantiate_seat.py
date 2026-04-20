@@ -26,6 +26,9 @@ AGENT_ADMIN_SCRIPTS = REPO_ROOT / "core" / "scripts"
 
 if str(AGENT_ADMIN_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(AGENT_ADMIN_SCRIPTS))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from core.lib.real_home import real_user_home
 
 import agent_admin_runtime
 from agent_admin_config import (
@@ -47,7 +50,7 @@ from agent_admin_runtime import (
 REPLICATED_PATTERN = re.compile(r"^\{role\}-\{n\}$")
 SUPPORTED_TEMPLATE_VERSION = 1
 # SESSIONS_ROOT: use SESSIONS_ROOT env var or default to ~/.agents/sessions
-_SESSIONS_ROOT_DEFAULT = str(Path.home() / ".agents" / "sessions")
+_SESSIONS_ROOT_DEFAULT = str(real_user_home() / ".agents" / "sessions")
 SESSIONS_ROOT = Path(os.environ.get("SESSIONS_ROOT", _SESSIONS_ROOT_DEFAULT))
 
 DEFAULT_PROJECT_SCOPED_FIELDS = [
@@ -151,7 +154,7 @@ def q_array(values: list[str]) -> str:
 def template_search_roots(repo_root: Path) -> list[Path]:
     return [
         repo_root / ".agents" / "templates" / "seats",
-        Path.home() / ".agents" / "templates" / "seats",
+        real_user_home() / ".agents" / "templates" / "seats",
         DEFAULT_TEMPLATE_ROOT,
     ]
 

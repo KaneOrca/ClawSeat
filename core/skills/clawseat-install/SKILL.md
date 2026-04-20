@@ -44,9 +44,14 @@ Before starting, verify these dependencies are installed:
   > ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
 - **lark-cli** (optional, for Feishu bridge) — `brew install larksuite/cli/lark-cli`
 
-Preflight now supports runtime-aware install gating:
+Preflight now supports install auto-fix, while OpenClaw runtime selection is
+env-driven:
 
-- OpenClaw first install: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install --runtime openclaw --auto-fix`
+- OpenClaw first install: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install --auto-fix`
+  - when launched through `shells/openclaw-plugin/openclaw_bootstrap.py`, that
+    bootstrap sets `CLAWSEAT_INSTALL_RUNTIME=openclaw` and
+    `CLAWSEAT_INSTALL_PROFILE_TEMPLATE=install-openclaw.toml` before calling
+    preflight
 - Local runtime: `python3 "$CLAWSEAT_ROOT/core/preflight.py" install`
 
 ## Memory Seat (Required)
@@ -66,10 +71,10 @@ Memory CC (`role = "memory-oracle"`, `tool = claude + api + minimax + MiniMax-M2
    ```
 2. Dispatch the scan task:
    ```bash
-   python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+   python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
      --profile <profile.toml> --source koder --target memory \
-     --task-id MEMORY-SCAN-001 --title "Environment scan" \
-     --objective "Run scan_environment.py and build ~/.agents/memory/"
+     --task-id MEMORY-SCAN-001 --kind learning \
+     --message "LEARNING REQUEST: Run scan_environment.py and build ~/.agents/memory/"
    ```
 3. Wait for `~/.agents/memory/index.json` to appear
 4. Query via direct file read (fast) or `--ask` (reasoning):
@@ -100,7 +105,7 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. **Install skill symlinks** — this is mandatory, do NOT skip:
    - OpenClaw overlay mode — the canonical 6-phase flow:
-     - **Phase 0** Preflight + Credentials + Bootstrap: `install_bundled_skills.py` → `install_entry_skills.py` → **ancestor scans credentials and seeds `.env.global` + `memory.env`** (P0.3, before bootstrap so `seed_empty_secret_from_peer` can propagate) → profile gen (use `install-with-memory.toml`) → `bootstrap_harness.py` (**no `--start`**) → `refresh_workspaces.py`.
+     - **Phase 0** Preflight + Credentials + Bootstrap: `install_bundled_skills.py` → `install_entry_skills.py` → **ancestor scans credentials and seeds `.env.global` + `memory.env`** (P0.3, before bootstrap so `seed_empty_secret_from_peer` can propagate) → profile gen (use `install-openclaw.toml`) → `bootstrap_harness.py` (**no `--start`**) → `refresh_workspaces.py`.
      - **Phase 1** Memory online + scan: `start_seat.py --seat memory` → operator completes memory TUI onboarding → ancestor sends `notify_seat.py --target memory --kind learning` LEARNING REQUEST → operator reports memory finished → ancestor verifies `machine/` KB.
      - **Phase 2** Query memory → operator picks OpenClaw agent: `query_memory.py --search agents` → present candidates → operator selects one.
      - **Phase 3** Koder overlay + external confirmations: `install_koder_overlay.py --agent <chosen>` → `init_koder.py` → **operator verifies koder identity via `/new` in OpenClaw** → **operator creates Feishu group for koder** and gives the `oc_<alnum>` group id.

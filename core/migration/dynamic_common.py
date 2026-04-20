@@ -107,6 +107,15 @@ class HarnessProfile:
     def heartbeat_receipt_for(self, seat: str) -> Path:
         return self.workspace_for(seat) / "HEARTBEAT_RECEIPT.toml"
 
+    def seat_runs_in_tmux(self, seat: str) -> bool:
+        # Mirrors HarnessProfile.seat_runs_in_tmux in
+        # core/skills/gstack-harness/scripts/_common.py: an openclaw
+        # frontstage owner is not a tmux seat even if it appears in the
+        # profile's seats list.
+        if seat == self.heartbeat_owner and self.heartbeat_transport == "openclaw":
+            return False
+        return seat in set(self.runtime_seats)
+
 
 assert_target_not_memory = BASE_COMMON.assert_target_not_memory
 MEMORY_SEAT_NAME = BASE_COMMON.MEMORY_SEAT_NAME
@@ -486,6 +495,11 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
         write_text(profile.patrol_script, BASE_COMMON.render_patrol_wrapper(profile))
         profile.patrol_script.chmod(0o755)
     for seat in profile.heartbeat_seats:
+        # Skip heartbeat manifest/md for seats that don't run in tmux — the
+        # generated docs describe a tmux-only patrol transport that cannot
+        # reach an openclaw frontstage.
+        if not profile.seat_runs_in_tmux(seat):
+            continue
         ensure_dir(profile.workspace_for(seat))
         write_text(heartbeat_md_path(profile, seat), render_heartbeat_md(profile, seat))
         write_text(heartbeat_manifest_path(profile, seat), render_heartbeat_manifest(profile, seat))

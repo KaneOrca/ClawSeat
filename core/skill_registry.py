@@ -8,10 +8,36 @@ This module is a pure library — the CLI lives in ``core/scripts/skill_manager.
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+# Import canonical real-HOME resolver (SSOT at core/lib/real_home.py). When
+# this module is imported from a seat sandbox HOME, os.path.expanduser and
+# Path.home() return the sandbox tree — so any "~" in a skill-registry
+# path resolves against `/Users/ywf/.agents/runtime/identities/.../home/`
+# instead of the operator's real home, and every gstack-skills lookup
+# misses. R1-VERIFY flagged this as BLOCKING because builder-1's R1-HOME
+# pass missed this file.
+_REAL_HOME_LIB = Path(__file__).resolve().parent / "lib"
+if str(_REAL_HOME_LIB) not in sys.path:
+    sys.path.insert(0, str(_REAL_HOME_LIB))
+from real_home import real_user_home as _real_user_home_ssot  # noqa: E402
+
+
+def _expand_tilde(value: str) -> str:
+    """Expand a leading ~ against the operator's real HOME (pwd-based).
+
+    Mirrors `os.path.expanduser(value)` semantics but uses the SSOT real-HOME
+    resolver so results do NOT depend on $HOME (which is the sandbox HOME
+    inside seat runtimes).
+    """
+    if value.startswith("~/") or value == "~":
+        return str(_real_user_home_ssot()) + value[1:]
+    return value
+
 
 # ── Path constants ──────────────────────────────────────────────────
 
@@ -179,12 +205,15 @@ def expand_skill_path(raw: str) -> Path:
     gstack_override = _resolve_gstack_skills_root()
     if gstack_override:
         # Match both the literal `~/...` form and an already-expanded home.
-        canonical_expanded = os.path.expanduser(_CANONICAL_GSTACK_PREFIX)
+        # `_expand_tilde` uses real_user_home() so a sandbox-HOME caller
+        # still produces the operator's real canonical prefix for comparison.
+        canonical_expanded = _expand_tilde(_CANONICAL_GSTACK_PREFIX)
         if expanded.startswith(_CANONICAL_GSTACK_PREFIX):
             expanded = gstack_override + expanded[len(_CANONICAL_GSTACK_PREFIX):]
         elif expanded.startswith(canonical_expanded):
             expanded = gstack_override + expanded[len(canonical_expanded):]
-    return Path(os.path.expanduser(expanded))
+    # Final expansion: route `~` through real_user_home, not $HOME.
+    return Path(_expand_tilde(expanded))
 
 
 def resolve_skill(entry: SkillEntry) -> tuple[Path, bool]:

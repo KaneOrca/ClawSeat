@@ -31,6 +31,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from core.resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root  # noqa: E402
 from core.resolve import dynamic_profile_path as _dynamic_profile_path  # noqa: E402
+from core.lib.real_home import real_user_home  # noqa: E402
 
 
 class PreflightStatus(Enum):
@@ -119,7 +120,7 @@ def _check_clawseat_root() -> PreflightItem:
     agents_root = os.environ.get("AGENTS_ROOT", "")
     if agents_root:
         candidates.append(Path(agents_root).parent / "coding" / "ClawSeat")
-    candidates.append(Path.home() / "coding" / "ClawSeat")
+    candidates.append(real_user_home() / "coding" / "ClawSeat")
 
     seen: set[Path] = set()
     for candidate in candidates:
@@ -336,7 +337,7 @@ def _check_dynamic_profile(project: str) -> PreflightItem:
 
 def _check_session_binding_dir(project: str) -> PreflightItem:
     """Check session binding directory exists, falling back to tmux session scan."""
-    sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions")))
+    sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(real_user_home() / ".agents" / "sessions")))
     binding_dir = sessions_root / project
     if binding_dir.exists():
         return PreflightItem(
@@ -429,7 +430,7 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                 if clawseat_root:
                     template_root = Path(clawseat_root).expanduser()
                 else:
-                    template_root = Path.home() / "coding" / "ClawSeat"
+                    template_root = real_user_home() / "coding" / "ClawSeat"
                 template_name = os.environ.get("CLAWSEAT_INSTALL_PROFILE_TEMPLATE", "").strip()
                 if not template_name:
                     runtime = os.environ.get("CLAWSEAT_INSTALL_RUNTIME", "").strip().lower()
@@ -456,7 +457,7 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
             if clawseat_root:
                 migrate_script = Path(clawseat_root) / "core" / "skills" / "gstack-harness" / "scripts" / "migrate_profile.py"
             else:
-                migrate_script = Path.home() / "coding" / "ClawSeat" / "core" / "skills" / "gstack-harness" / "scripts" / "migrate_profile.py"
+                migrate_script = real_user_home() / "coding" / "ClawSeat" / "core" / "skills" / "gstack-harness" / "scripts" / "migrate_profile.py"
             if not migrate_script.exists():
                 return PreflightItem(
                     name=item.name,
@@ -512,7 +513,7 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
 
     if item.name == "session_binding_dir":
         try:
-            sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions")))
+            sessions_root = Path(os.environ.get("SESSIONS_ROOT", str(real_user_home() / ".agents" / "sessions")))
             binding_dir = sessions_root / project
             binding_dir.mkdir(parents=True, exist_ok=True)
             return PreflightItem(
@@ -705,10 +706,10 @@ def preflight_check(project: str) -> PreflightResult:
                 ),
             ))
             # Continue with canonical default so later checks still fire.
-            gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+            gstack_root = real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
             gstack_source = "canonical (env var ignored because non-absolute)"
     else:
-        gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+        gstack_root = real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
         gstack_source = "canonical ~/.gstack/repos/gstack/.agents/skills"
     if not gstack_root.exists():
         profile_needs_gstack = bool(active_roles and (active_roles & _GSTACK_NEEDED_ROLES))

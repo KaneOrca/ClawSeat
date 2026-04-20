@@ -61,6 +61,16 @@ def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, boot
         legacy_seat_roles = {}
         legacy_seats = []
 
+    # migrate_profile emits tmux-transport profiles. runtime_seats should match
+    # materialized_seats for tmux (koder is a runtime seat); under openclaw the
+    # caller is expected to hand-edit. See the post-merge arch audit for why
+    # these fields must be explicit rather than relying on load_profile
+    # defaults (legacy profiles with implicit-only fields load as tmux, but
+    # surfacing the field makes the migration result self-documenting).
+    heartbeat_transport = "tmux"
+    materialized_seats_list = ["koder"]
+    runtime_seats_list = list(materialized_seats_list)
+
     lines = [
         "version = 2",
         f'profile_name = {q(str(data.get("profile_name", project_name + ".dynamic")))}',
@@ -79,11 +89,12 @@ def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, boot
         f'workspace_root = {q(workspace_root)}',
         f'handoff_dir = {q(tasks_root + "/patrol/handoffs")}',
         f'heartbeat_owner = {q(heartbeat_owner)}',
+        f'heartbeat_transport = {q(heartbeat_transport)}',
         f'active_loop_owner = {q(active_loop_owner)}',
         f'default_notify_target = {q(default_notify_target)}',
         f'heartbeat_receipt = {q(workspace_root + f"/{heartbeat_owner}/HEARTBEAT_RECEIPT.toml")}',
-        'seats = ["koder"]',
-        'heartbeat_seats = ["koder"]',
+        f'seats = {q_array(materialized_seats_list)}',
+        f'heartbeat_seats = {q_array(materialized_seats_list)}',
         "",
         "[seat_roles]",
         'koder = "frontstage-supervisor"',
@@ -91,9 +102,10 @@ def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, boot
         "[dynamic_roster]",
         "enabled = true",
         'session_root = "~/.agents/sessions"',
-        'materialized_seats = ["koder"]',
-        'bootstrap_seats = ["koder"]',
-        'default_start_seats = ["koder"]',
+        f'materialized_seats = {q_array(materialized_seats_list)}',
+        f'runtime_seats = {q_array(runtime_seats_list)}',
+        f'bootstrap_seats = {q_array(materialized_seats_list)}',
+        f'default_start_seats = {q_array(materialized_seats_list)}',
         f"compat_legacy_seats = {'false' if bootstrap_only else 'true'}",
         "",
         f"legacy_seats = {q_array([str(seat) for seat in legacy_seats])}",

@@ -74,6 +74,11 @@ at P1.2 (see Common Failures: `memory.env is empty`).
 python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install
 ```
 
+This runbook pins command examples to `python3.11`. On macOS, the default
+`python3` is often 3.9 and lacks `tomllib`; if `python3.11` is missing, run
+`brew install python@3.11` before continuing. Do **not** rely on
+`brew install python3` here.
+
 Verifies Python ≥ 3.11, tmux, gstack, lark-cli, and repo integrity. If
 any check is HARD_BLOCKED the script exits non-zero — **stop and fix
 before proceeding**. Installing Python 3.11 is the most common blocker
@@ -93,7 +98,7 @@ crash downstream `agent_admin.py` subprocesses).
 Symlinks the agent-neutral shared skills into `~/.openclaw/skills/`.
 
 ```sh
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
+python3.11 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 ```
 
 - Creates symlinks for `clawseat`, `clawseat-install`,
@@ -106,7 +111,7 @@ python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 ### Step 0.2 — Install entry skills (ancestor / local CLI)
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
 ```
 
 Symlinks `clawseat`, `clawseat-install`, `cs` into `~/.claude/skills/`
@@ -125,7 +130,7 @@ nothing to propagate and memory lands in OAuth prompt mode.
 # Minimal scan: credentials + oauth evidence only. Ancestor uses this
 # to pre-seed memory's secret file; it does NOT populate machine/ KB
 # here — that's memory's job in Phase 1.
-python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py" \
   --only credentials --output /tmp/ancestor-precheck
 ```
 
@@ -170,11 +175,11 @@ Do not fabricate credentials in any case.
 
 ```sh
 PROJECT=install
-PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml"
+PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/install-openclaw.toml"
 cp "$PROFILE_TEMPLATE" "/tmp/${PROJECT}-profile-dynamic.toml"
 
 # Profile substitution (B2 — handle quoted strings)
-python3 - <<PY
+python3.11 - <<PY
 import re, pathlib
 p = pathlib.Path("/tmp/${PROJECT}-profile-dynamic.toml")
 t = p.read_text()
@@ -185,13 +190,15 @@ p.write_text(t)
 PY
 ```
 
-`install-with-memory.toml` is required — it declares the `memory` seat.
-`install.toml` (no memory) does not work with this flow.
+`install-openclaw.toml` is the canonical overlay profile. It declares the
+`memory` seat and the OpenClaw frontstage transport. `install-with-memory.toml`
+is the canonical local `/cs` memory-first profile, while `install.toml` (no
+memory) does not work with this overlay flow.
 
 ### Step 0.5 — Bootstrap workspace (**no `--start`**)
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --project-name "$PROJECT"
 ```
@@ -209,7 +216,7 @@ test -f ~/.agents/sessions/${PROJECT}/memory/session.toml && echo "bootstrap_ok"
 ### Step 0.6 — Refresh workspaces
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml"
 ```
 
@@ -222,7 +229,7 @@ Synchronizes ClawSeat templates into each seat's workspace.
 ### Step 1.1 — Start memory seat
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --seat memory --confirm-start
 ```
@@ -260,7 +267,7 @@ build its `machine/` knowledge base. The emphasis is **OpenClaw
 configuration** so Phase 2 agent enumeration has data.
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/notify_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --source ancestor --target memory \
   --task-id MEMORY-SCAN-001 --kind learning \
@@ -320,14 +327,14 @@ complete. Re-send the LEARNING REQUEST or consult the memory iTerm.
 ### Step 2.1 — Ask memory for the OpenClaw agent list
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
   --memory-dir ~/.agents/memory --search agents
 ```
 
 Or a reasoning query:
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
   --memory-dir ~/.agents/memory \
   --ask "Which OpenClaw agents exist on this host? List with workspace paths."
 ```
@@ -349,7 +356,7 @@ or `~/.openclaw/workspace-*` dirs are empty. Block and ask operator.
 ### Step 3.1 — Install koder overlay
 
 ```sh
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
+python3.11 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
   --agent <CHOSEN_AGENT>
 ```
 
@@ -361,7 +368,9 @@ Adds ClawSeat skill symlinks under
 ### Step 3.2 — Finalize koder scaffold
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" \
+  --workspace <agent_workspace_path> \
+  --project "$PROJECT" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --on-conflict backup
 ```
@@ -372,7 +381,7 @@ workspace. Existing non-ClawSeat files are moved to `.backup-<ts>/`.
 ### Step 3.3 — Auto-configure Feishu no-mention (F10)
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
   --agent <CHOSEN_AGENT>
 ```
 
@@ -423,7 +432,7 @@ memory's P1 credential scan as the recommendation source.
 ### Step 4.0 — Load memory's credential recommendations
 
 ```sh
-python3 - <<PY
+python3.11 - <<PY
 import json, pathlib
 creds = json.load((pathlib.Path.home() / ".agents/memory/machine/credentials.json").open())
 print("api_keys_found:", sorted(creds.get("keys", {}).keys()))
@@ -440,7 +449,7 @@ always has the final say.
 Also enumerate which seats are still to configure:
 
 ```sh
-python3 - <<PY
+python3.11 - <<PY
 import tomllib
 p = tomllib.load(open("/tmp/${PROJECT}-profile-dynamic.toml", "rb"))
 backend_seats = [s for s in p["seats"] if s not in ("memory", "koder")]
@@ -483,7 +492,7 @@ login at first launch.)
 session.toml with the operator-confirmed config:
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --seat planner \
   --tool <tool> --auth-mode <auth> --provider <provider> \
@@ -506,7 +515,7 @@ the `backend_seats` enumeration at 4.0, substituting the seat name into
 both the prompt and the commands:
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --seat <seat> \
   --tool <tool> --auth-mode <auth> --provider <provider> \
@@ -530,7 +539,7 @@ tmux list-sessions | grep "${PROJECT}-"
 ### Step 4.3 — Bind project to Feishu group
 
 ```sh
-python3 - <<PY
+python3.11 - <<PY
 import sys; sys.path.insert(0, "$CLAWSEAT_ROOT")
 from core.skills.clawseat_install.scripts.bind_project import bind_project_to_group
 bind_project_to_group(
@@ -547,7 +556,7 @@ Writes `~/.agents/projects/$PROJECT/BRIDGE.toml`.
 Apply group-level `requireMention=false` (F10):
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
   --agent <CHOSEN_AGENT> --group-id "<GROUP_ID from P3.5>"
 ```
 
@@ -557,7 +566,7 @@ Ancestor delegates the smoke send to planner (not to itself) — that
 exercises the real ancestor → planner → Feishu → koder chain:
 
 ```sh
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --source ancestor --target planner \
   --task-id BRIDGE-SMOKE-001 \

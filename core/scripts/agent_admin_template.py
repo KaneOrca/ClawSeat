@@ -50,7 +50,10 @@ class TemplateHandlers:
 
     def _render_claude_settings(self, session: Any, engineer: Any = None) -> str:
         import json
-        import tomllib as _tomllib
+        try:
+            import tomllib as _tomllib
+        except ModuleNotFoundError:
+            import tomli as _tomllib
         from agent_admin_config import CLAUDE_API_PROVIDER_CONFIGS
 
         settings: dict[str, object] = {"workspace_label": session.engineer_id}

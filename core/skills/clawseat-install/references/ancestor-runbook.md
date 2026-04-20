@@ -176,7 +176,7 @@ Do not fabricate credentials in any case.
 
 ```bash
 PROJECT=install
-cp "$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml" \
+cp "$CLAWSEAT_ROOT/examples/starter/profiles/install-openclaw.toml" \
    "/tmp/${PROJECT}-profile-dynamic.toml"
 
 python3 - <<PY
@@ -380,6 +380,8 @@ ls ~/.openclaw/workspace-<CHOSEN_AGENT>/skills/ | wc -l   # expect ≥ 6
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" \
+  --workspace <agent_workspace_path> \
+  --project "$PROJECT" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --on-conflict backup
 ```
@@ -460,7 +462,7 @@ print("configure_and_start:", backend)
 PY
 ```
 
-Typical output for `install-with-memory.toml`: `[planner, builder-1,
+Typical output for `install-openclaw.toml`: `[planner, builder-1,
 reviewer-1]`. Ancestor iterates 4.1 → 4.2 over this list.
 
 ### Step 4.1 — Configure + start planner (the detailed template)

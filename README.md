@@ -10,10 +10,12 @@ Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core s
 | Profile | Seats | Requires gstack? | Use when |
 |---|---|---|---|
 | `starter.toml` | koder | No | Experimenting, no specialist seats needed |
-| `install.toml` | koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical `/cs` install flow |
+| `install-with-memory.toml` | memory + koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical local `/cs` install flow |
+| `install-openclaw.toml` | memory + koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical OpenClaw overlay install flow |
+| `install.toml` | koder + planner + builder-1 + reviewer-1 | **Yes** | Legacy local memory-less variant |
 | `full-team.toml` | 6 seats | **Yes** | Full-roster projects |
 
-All profiles live in `examples/starter/profiles/`. To install gstack (required for `install.toml`, `install-with-memory.toml`, and `full-team.toml` — **skip this block entirely if you only need `starter.toml`**):
+All profiles live in `examples/starter/profiles/`. To install gstack (required for `install-with-memory.toml`, `install-openclaw.toml`, `install.toml`, and `full-team.toml` — **skip this block entirely if you only need `starter.toml`**):
 
 ```bash
 # Default install location. ClawSeat preflight looks here unless you override below.
@@ -28,7 +30,7 @@ cd ~/.gstack/repos/gstack && ./setup
 
 > ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
 >
-> ℹ️  `starter.toml` is koder-only and does NOT need gstack — you can skip the block above entirely if that's your profile. `install.toml` / `install-with-memory.toml` / `full-team.toml` declare specialist seats (builder / reviewer / qa / designer) that require gstack; ClawSeat's `preflight install` will **HARD_BLOCK** if you try to run those profiles without gstack.
+> ℹ️  `starter.toml` is koder-only and does NOT need gstack — you can skip the block above entirely if that's your profile. `install-with-memory.toml` / `install-openclaw.toml` / `install.toml` / `full-team.toml` declare specialist seats (builder / reviewer / qa / designer) that require gstack; ClawSeat's `preflight install` will **HARD_BLOCK** if you try to run those profiles without gstack.
 
 ## Install
 
@@ -54,12 +56,12 @@ The flow, at a glance:
 
 | Phase | What happens | User interaction |
 |---|---|---|
-| P0 | `install_bundled_skills.py` (symlinks) + `bootstrap_harness.py` (workspace + `session.toml`) | Confirm project name |
-| P1 | `start_seat.py --seat memory` + `notify_seat.py --target memory --kind learning` → memory builds machine/ KB | Trust-folder + /theme on first memory seat launch |
-| P2 | `query_memory.py --search agents` → **ask user which OpenClaw agent** | **Pick target agent** (do not auto-pick) |
-| P3 | `install_koder_overlay.py --agent <NAME>` + `init_koder.py` | — |
-| P4 | Per-seat config: tool / auth_mode / provider / API key | OAuth login / API key entry |
-| P5 | Feishu bridge 7-step: `send_delegation_report.py --check-auth` → platform scopes → group ID → bind → smoke | `lark-cli auth login` + Feishu platform scope + group ID |
+| P0 | Preflight + credential seed + bootstrap | Confirm project name and resolve missing prerequisites |
+| P1 | Memory online + system-scan | Complete first-launch memory onboarding |
+| P2 | Query memory → operator picks target OpenClaw agent | Pick target agent, do not auto-pick |
+| P3 | Overlay + `/new` identity check + Feishu group creation | Verify koder identity and provide group ID |
+| P4 | Configure + start backend seats + Feishu bridge smoke | Confirm per-seat runtime/auth/provider choices, complete OAuth/API entry, and confirm smoke |
+| P5 | Handoff, ancestor standby | No more install actions unless debugging |
 
 ### Do NOT run individual scripts out of order
 
@@ -91,8 +93,8 @@ lark-cli OAuth. It deletes `/tmp/ClawSeat`, ClawSeat-installed skill
 symlinks, `~/.agents/`, and sandbox residue. See the script header for the
 full preserve/delete list.
 
-> **Reminder**: canonical install profiles (`install.toml`,
-> `install-with-memory.toml`, `full-team.toml`) require `gstack` for
+> **Reminder**: canonical install profiles (`install-with-memory.toml`,
+> `install-openclaw.toml`, `full-team.toml`) require `gstack` for
 > specialist seats — see the `./setup` command in the Profile Selection
 > block above if you have not installed it yet.
 

@@ -16,6 +16,7 @@ from pathlib import Path
 import tomllib
 
 from core.resolve import try_resolve_clawseat_root as _resolve_clawseat_root
+from core.lib.real_home import real_user_home
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ def _resolve_agents_root() -> Path:
     agents = os.environ.get("AGENTS_ROOT", "")
     if agents:
         return Path(agents).expanduser()
-    home = Path.home()
+    home = real_user_home()
     if (home / ".agents").exists():
         return home / ".agents"
     return home / ".agents"
