@@ -13,6 +13,7 @@ if str(_core_lib) not in sys.path:
 
 from _common import (
     assert_target_not_memory,
+    build_notify_payload,
     load_profile,
     notify,
     require_success,
@@ -46,24 +47,29 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_payload(args: argparse.Namespace) -> str:
-    prefix = f"{args.kind} from {args.source} to {args.target}"
-    if args.task_id:
-        prefix = f"{args.task_id} {prefix}"
-    suffix = ""
-    if args.reply_to:
-        suffix = f" Reply to {args.reply_to} if follow-up or completion is required."
-    return f"{prefix}: {args.message.strip()}{suffix}"
-
-
 def main() -> int:
     args = parse_args()
-    # T9: block notify to memory before touching the profile — memory is an
-    # oracle; reach it via query_memory.py instead. Check before load_profile
-    # so the guard works even when the profile path is bogus.
+    # T22 fold-in (from upstream): notify_seat.py is allowed to target
+    # memory because T7 memory-query-protocol Missing-Key Escalation
+    # requires it — memory needs to receive notification when a key it
+    # asked for is missing. dispatch_task.py + dynamic variants remain
+    # blocked by assert_target_not_memory. We still call the guard for
+    # non-memory targets so the caller_tool-scoped exemption is explicit.
     assert_target_not_memory(args.target, "notify_seat.py")
     profile = load_profile(args.profile)
-    payload = build_payload(args)
+    # H2 (PR #1): shared payload builder, replacing the local build_payload
+    # fork that drifted from notify_seat_dynamic.py.
+    payload = build_notify_payload(
+        source=args.source,
+        target=args.target,
+        message=args.message,
+        kind=args.kind,
+        task_id=args.task_id,
+        reply_to=args.reply_to,
+    )
+    # T19 (from upstream): route via seat_resolver — tmux seats get notify(),
+    # openclaw seats get the feishu-user broadcast, file-only targets write
+    # a receipt with a stderr warning.
     resolution = resolve_seat_from_profile(args.target, profile)
 
     if resolution.kind == "tmux":
@@ -71,8 +77,6 @@ def main() -> int:
         # silent-ok audit: require_success raises on non-sent status; failure is not silent
         require_success(result, "notify seat")
     elif resolution.kind == "openclaw":
-        # OpenClaw target: send via Feishu as a plain-text notice.
-        # The Feishu group is resolved from the target's workspace contract.
         broadcast = send_feishu_user_message(payload, project=profile.project_name)
         if broadcast.get("status") == "failed":
             detail = broadcast.get("stderr") or broadcast.get("stdout") or broadcast.get("reason", "unknown")

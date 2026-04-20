@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+"""
+transport_router.py — canonical entry for all seat dispatch/notify/complete traffic.
+
+This is the single source of truth for routing seat operations to either the
+dynamic-roster (`core/migration/*_dynamic.py`) or legacy (gstack-harness
+`scripts/*.py`) implementation. Routing is decided by whether the resolved
+profile has `[dynamic_roster].enabled = true`.
+
+Callers should always invoke this module via subprocess, e.g. from
+`core/adapter/clawseat_adapter.py`. Do not import the underlying scripts
+directly — that bypasses profile detection and can silently pin a stale
+code path.
+"""
 from __future__ import annotations
 
 import subprocess
