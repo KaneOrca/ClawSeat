@@ -21,13 +21,31 @@ REPO_ROOT = Path(
 
 DEFAULT_REGISTRY_PATH = REPO_ROOT / "core" / "skill_registry.toml"
 
+# Canonical prefix the registry and templates use for gstack skills. If an
+# operator cloned gstack to a non-canonical path, they export
+# GSTACK_SKILLS_ROOT and expand_skill_path() below rewrites the prefix.
+_CANONICAL_GSTACK_PREFIX = "~/.gstack/repos/gstack/.agents/skills"
+
+
+def _resolve_gstack_skills_root() -> str | None:
+    """Return the operator-provided GSTACK_SKILLS_ROOT override, or None.
+
+    Shared with core/skills/gstack-harness/scripts/dispatch_task.py's
+    identical resolver — keep the two in sync if either changes.
+    """
+    env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
+    return env or None
+
+
 # Source-specific install hints shown when a skill is missing.
 SOURCE_INSTALL_HINTS: dict[str, str] = {
     "bundled": "Ensure the ClawSeat repo is intact: git status / git checkout",
     "gstack": (
         "Install gstack at the canonical path: "
         "git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git "
-        "~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup"
+        "~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup\n"
+        "    (Or, if gstack is already installed elsewhere, export "
+        "GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills and re-run.)"
     ),
     "agent": "Install lark-cli skills: see lark-cli skill install docs or copy from a peer machine",
 }
@@ -131,8 +149,24 @@ def load_registry(registry_path: Path | None = None) -> list[SkillEntry]:
 # ── Path helpers ────────────────────────────────────────────────────
 
 def expand_skill_path(raw: str) -> Path:
-    """Expand ``{CLAWSEAT_ROOT}`` and ``~`` in a skill path."""
+    """Expand ``{CLAWSEAT_ROOT}``, ``~``, and optional ``GSTACK_SKILLS_ROOT``.
+
+    If the caller has exported ``GSTACK_SKILLS_ROOT`` (because they cloned
+    gstack somewhere other than the canonical ``~/.gstack/repos/gstack``),
+    any registry path that begins with the canonical gstack-skills prefix
+    is rewritten to the operator-supplied root. This is the single seam
+    that makes skill_registry.toml portable without rewriting its 20+
+    hardcoded gstack entries.
+    """
     expanded = raw.replace("{CLAWSEAT_ROOT}", str(REPO_ROOT))
+    gstack_override = _resolve_gstack_skills_root()
+    if gstack_override:
+        # Match both the literal `~/...` form and an already-expanded home.
+        canonical_expanded = os.path.expanduser(_CANONICAL_GSTACK_PREFIX)
+        if expanded.startswith(_CANONICAL_GSTACK_PREFIX):
+            expanded = gstack_override + expanded[len(_CANONICAL_GSTACK_PREFIX):]
+        elif expanded.startswith(canonical_expanded):
+            expanded = gstack_override + expanded[len(canonical_expanded):]
     return Path(os.path.expanduser(expanded))
 
 

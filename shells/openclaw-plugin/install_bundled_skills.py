@@ -25,6 +25,7 @@ canonical 6-phase flow.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -61,7 +62,24 @@ GLOBAL_SKILLS = {
 }
 
 LARK_SKILLS_REPO = "https://github.com/larksuite/cli.git"
-GSTACK_SKILLS_ROOT = _USER_HOME / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+
+
+def _resolve_gstack_skills_root() -> Path:
+    """Return the gstack skills root. Honors GSTACK_SKILLS_ROOT env.
+
+    Keep in sync with core/skill_registry.py::_resolve_gstack_skills_root
+    and core/skills/gstack-harness/scripts/dispatch_task.py. Operators who
+    cloned gstack outside the canonical `~/.gstack/repos/gstack` can export
+    GSTACK_SKILLS_ROOT=/abs/path/to/.agents/skills and this install step
+    will symlink from there instead.
+    """
+    env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
+    if env:
+        return Path(env).expanduser()
+    return _USER_HOME / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+
+
+GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
 
 # Skill lists are derived from the skill registry (SSOT) rather than hardcoded.
 try:
@@ -176,10 +194,14 @@ def install_bundled_skills(openclaw_home: Path, *, dry_run: bool) -> int:
         else:
             print()
             print(f"gstack_skills_required: {', '.join(missing_gstack)}")
+            print(f"  Looked under: {GSTACK_SKILLS_ROOT}")
             print("  Specialist seats need gstack skills for implementation, review, QA, and design.")
-            print("  Install gstack first (canonical path required by ClawSeat):")
+            print("  Install gstack at the canonical path:")
             print("    git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack")
             print("    cd ~/.gstack/repos/gstack && ./setup")
+            print("  Or, if gstack is already installed elsewhere:")
+            print("    export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills")
+            print("    # then re-run this install_bundled_skills.py")
     elif not dry_run:
         print(f"gstack_skills: all {len(REQUIRED_GSTACK_SKILLS)} required skills present")
 

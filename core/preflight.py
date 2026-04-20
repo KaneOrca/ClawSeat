@@ -658,15 +658,29 @@ def preflight_check(project: str) -> PreflightResult:
     items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
 
     # gstack skills (WARNING — needed for specialist seats)
-    gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+    # GSTACK_SKILLS_ROOT env lets operators who cloned gstack at a
+    # non-canonical path opt out of the default `~/.gstack/repos/gstack/`
+    # lookup. Keep the resolver pattern in sync with
+    # core/skill_registry.py::_resolve_gstack_skills_root and
+    # core/skills/gstack-harness/scripts/dispatch_task.py.
+    gstack_env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
+    if gstack_env:
+        gstack_root = Path(gstack_env).expanduser()
+    else:
+        gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
     if not gstack_root.exists():
         items.append(PreflightItem(
             name="gstack",
             status=PreflightStatus.WARNING,
-            message="gstack skills not found — specialist seats (builder, reviewer, qa, designer) will lack key capabilities",
+            message=(
+                f"gstack skills not found at {gstack_root} — specialist seats "
+                "(builder, reviewer, qa, designer) will lack key capabilities"
+            ),
             fix_command=(
                 "git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack\n"
-                "cd ~/.gstack/repos/gstack && ./setup"
+                "cd ~/.gstack/repos/gstack && ./setup\n"
+                "# If gstack is already installed elsewhere, export instead:\n"
+                "#   export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills"
             ),
         ))
 

@@ -42,6 +42,14 @@ cd ~/.gstack/repos/gstack && ./setup
 
 > `preflight` 会自动检测 gstack 是否安装，并给出安装命令。
 
+**如果 gstack 已经安装在非规范路径**（例如你之前 clone 到 `~/gstack/` 或 `/opt/gstack/`）：
+
+```bash
+export GSTACK_SKILLS_ROOT=/absolute/path/to/gstack/.agents/skills
+```
+
+四个消费方——preflight、`install_bundled_skills.py`、`skill_registry`、`dispatch_task.py`——都会识别这个环境变量。不用重新 clone。
+
 ### 没有 Homebrew？
 
 ```bash

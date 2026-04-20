@@ -72,7 +72,8 @@ python3.11 "$CLAWSEAT_ROOT/core/preflight.py" install
 |---|---|
 | `python 3.9 < 3.11` | `brew install python@3.11` then re-run preflight |
 | `tmux not found` | `brew install tmux` |
-| `gstack skills missing` | `cd ~/.gstack/repos/gstack && ./setup` |
+| `gstack skills missing` at canonical path | `cd ~/.gstack/repos/gstack && ./setup` |
+| `gstack skills missing` but already installed elsewhere | `export GSTACK_SKILLS_ROOT=/abs/path/to/.agents/skills`, then re-run preflight |
 | `CLAWSEAT_ROOT` unset | `export CLAWSEAT_ROOT=/path/to/ClawSeat` |
 
 Do not proceed to Step 0.1 until preflight passes. A failing preflight

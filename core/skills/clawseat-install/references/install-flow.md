@@ -84,7 +84,8 @@ crash downstream `agent_admin.py` subprocesses).
 |---|---|
 | `python 3.9 < 3.11 (tomllib requires 3.11+)` | `brew install python@3.11` and rerun |
 | `tmux not found` | `brew install tmux` |
-| `gstack skills missing` | `cd ~/.gstack/repos/gstack && ./setup` |
+| `gstack skills missing` at canonical path | `cd ~/.gstack/repos/gstack && ./setup` |
+| `gstack skills missing` but already installed elsewhere | `export GSTACK_SKILLS_ROOT=/abs/path/to/.agents/skills` and rerun preflight |
 | `CLAWSEAT_ROOT` missing | `export CLAWSEAT_ROOT=/path/to/ClawSeat` |
 
 ### Step 0.1 — Install bundled OpenClaw skills (idempotent prerequisite)

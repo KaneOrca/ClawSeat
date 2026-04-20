@@ -22,6 +22,16 @@ cd ~/.gstack/repos/gstack && ./setup
 
 > ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
 
+### Gstack at a non-canonical location
+
+If you already have gstack cloned somewhere other than `~/.gstack/repos/gstack/`, export:
+
+```bash
+export GSTACK_SKILLS_ROOT=/absolute/path/to/your/gstack/.agents/skills
+```
+
+ClawSeat's preflight, `install_bundled_skills.py`, `skill_registry`, and `dispatch_task.py` all honor this env var — you do not need to re-clone.
+
 ## Install
 
 **ClawSeat install is an interactive 6-phase flow, not a single script.**
