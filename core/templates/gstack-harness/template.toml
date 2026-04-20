@@ -265,6 +265,7 @@ role = "designer"
 tool = "gemini"
 auth_mode = "oauth"
 provider = "google"
+model = "gemini-2.0-flash"
 monitor = true
 optional = true
 human_facing = false

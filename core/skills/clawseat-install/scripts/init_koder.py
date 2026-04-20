@@ -100,52 +100,17 @@ MANAGED_FILES = (
 )
 
 
+# Conflict-handling plumbing is shared with init_specialist.py. The managed
+# file set differs per script, so we pass it in each call.
+from _seat_bootstrap import (  # noqa: E402
+    backup_managed_files,
+    resolve_conflict_policy,
+)
+from _seat_bootstrap import detect_managed_conflicts as _detect_managed_conflicts_generic  # noqa: E402
+
+
 def detect_managed_conflicts(workspace: Path) -> list[str]:
-    return [name for name in MANAGED_FILES if (workspace / name).exists()]
-
-
-def backup_managed_files(workspace: Path, conflicts: list[str]) -> Path:
-    """Move the managed files into a .backup-<timestamp>/ subdir.
-
-    Returns the backup dir path. Leaves every other file in the workspace
-    (skills/, repos/, etc.) untouched. Handles nested paths (e.g.
-    TOOLS/dispatch.md) by creating parent dirs under the backup root.
-    """
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_dir = workspace / f".backup-{stamp}"
-    backup_dir.mkdir(parents=True, exist_ok=False)
-    for name in conflicts:
-        src = workspace / name
-        dst = backup_dir / name
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        src.rename(dst)
-    return backup_dir
-
-
-def resolve_conflict_policy(
-    policy: str, conflicts: list[str], workspace: Path
-) -> str:
-    """For --on-conflict=ask, prompt the user. Otherwise return policy as-is."""
-    if policy != "ask":
-        return policy
-    print(f"\nworkspace {workspace} already has managed files:")
-    for name in conflicts:
-        print(f"  • {name}")
-    print("\nchoose:")
-    print("  1. overwrite  (discard the existing versions in place)")
-    print("  2. backup     (move them to .backup-<timestamp>/ then rewrite)")
-    print("  3. abort      (do nothing, exit)")
-    while True:
-        try:
-            choice = input("enter 1 / 2 / 3: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return "abort"
-        if choice == "1":
-            return "overwrite"
-        if choice == "2":
-            return "backup"
-        if choice == "3":
-            return "abort"
+    return _detect_managed_conflicts_generic(workspace, MANAGED_FILES)
 
 
 def load_template() -> dict:
