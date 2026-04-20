@@ -224,42 +224,122 @@ That wrapper will:
 | `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or query memory for agent status |
 | Feishu event scope missing | 群消息 not delivered without @mention | Enable `im:message.group_msg:receive` in Feishu Open Platform → Event Subscriptions |
 
-## Phase 5: Feishu Platform Requirements
+## Phase 5: Feishu Bridge Smoke Test
 
-After Phase 3 overlay completes, `install_koder_overlay.py` prints a post-install checklist. **Complete these steps before testing Feishu dispatch:**
+After Phase 4 seat provisioning, complete the Feishu bridge setup. This is a **mandatory** phase — do not skip it. Full guide: [feishu-bridge-setup.md](feishu-bridge-setup.md).
 
-### Required event scopes
+### Step 5.1: Verify lark-cli auth
 
-Enable in Feishu Open Platform → App → Event Subscriptions:
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" --check-auth
+```
 
+Expected: `"status": "ok"`. If not, run `lark-cli auth login` in a terminal with browser access (**user action** — agent cannot complete this).
+
+**In tmux seats**: lark-cli reads auth from the real user HOME, not the seat sandbox. Ensure `AGENT_HOME` is set:
+
+```bash
+export AGENT_HOME=/Users/<real-user>
+```
+
+**Halt condition**: auth not ok → USER_DECISION_NEEDED.
+
+### Step 5.2: Enable Feishu platform scopes (pre-smoke, user action)
+
+In Feishu Open Platform → App, enable **before** running any smoke test:
+
+**Event Subscriptions**:
 - `im:message` — 聊天消息事件
-- `im:message.group_msg:receive` — 群消息免@（critical: without this, koder only responds to @mentions）
+- `im:message.group_msg:receive` — 群消息免@（**critical**: without this, koder only responds to @mentions）
 - `im:chat:access` — 聊天管理
 
-### Required bot permissions
-
-Enable in Feishu Open Platform → App → Permissions & Scopes:
-
+**Permissions & Scopes**:
 - `im:chat` — 读写群消息
 - `im:chat.members` — 读取群成员
 
-### requireMention strategy
+Then publish a new app version: 开放平台 → 版本管理与发布 → 提交审核 → 发布 (required version: **2026.4.9+**).
+
+**Halt condition**: scopes not enabled/published → USER_DECISION_NEEDED: enable and publish before proceeding.
+
+### Step 5.3: Collect Feishu group ID
+
+Ask the user for the group ID, or scan sessions:
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/find_feishu_group_ids.py"
+```
+
+Format: `oc_` + hex string (e.g. `oc_0e1305956760980a9728cb427375c3b3`).
+
+**Confirm with user before binding**:
+1. Is this group for the current project?
+2. Or switch to an existing project?
+3. Or create a new project?
+
+One project = one group.
+
+### Step 5.4: Bind project to group
+
+```bash
+python3 - <<'PY'
+import sys; sys.path.insert(0, "$CLAWSEAT_ROOT")
+from core.skills.clawseat_install.scripts.bind_project import bind_project_to_group
+bind_project_to_group(
+    project="$PROJECT",
+    group_id="$GROUP_ID",
+    bound_by="<user>",
+    authorized=True,
+)
+PY
+```
+
+Verify: `~/.agents/projects/$PROJECT/BRIDGE.toml` exists.
+
+### Step 5.5: Configure requireMention
 
 | Group type | requireMention | Reason |
 |---|---|---|
 | Main koder-facing group | `true` (default) | Prevents noise from unrelated messages |
-| Project-specific koder group | `false` | Enables no-@mention dispatch for chain closeouts |
+| Project koder group | `false` | Enables no-@mention dispatch for chain closeouts |
 
-See `references/feishu-group-no-mention.md` for configuration details.
+See `references/feishu-group-no-mention.md`.
 
-### Publish the app version
+### Step 5.6: Smoke test (dry-run first, then real)
 
-After enabling scopes, publish a new version:
+```bash
+# Dry-run — verify envelope format
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
+  --project "$PROJECT" --lane planning --task-id BRIDGE-SMOKE-001 \
+  --report-status done --decision-hint proceed \
+  --user-gate none --next-action consume_closeout \
+  --summary 'Feishu bridge smoke test' --dry-run
 
-> 开放平台 → 版本管理与发布 → 提交审核 → 发布
+# Send for real
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
+  --project "$PROJECT" --lane planning --task-id BRIDGE-SMOKE-001 \
+  --report-status done --decision-hint proceed \
+  --user-gate none --next-action consume_closeout \
+  --summary 'Feishu bridge smoke test — if you see this message, the bridge is working' \
+  --chat-id "$GROUP_ID"
+```
 
-Required version: **2026.4.9+** or latest. Unpublished scope changes are not active.
+Tell the user: `收到测试消息即可回复希望完成什么任务`
 
-### Reference
+### Step 5.7: Verify koder receives and parses
 
-Full setup guide: [feishu-bridge-setup.md](feishu-bridge-setup.md)
+Koder should receive `OC_DELEGATION_REPORT_V1` in the group and confirm:
+- `project=$PROJECT` matches
+- `task_id=BRIDGE-SMOKE-001`
+- `report_status=done` + `next_action=consume_closeout` → auto-advance
+
+**Halt condition**: delivery fails → check AGENT_HOME (G12), platform scopes (G14), lark-cli auth; escalate via error reference in [feishu-bridge-setup.md](feishu-bridge-setup.md).
+
+### Common Feishu Failures
+
+| Symptom | Meaning | Action |
+|---|---|---|
+| `auth_expired` / `auth_needs_refresh` | OAuth token expired | User runs `lark-cli auth login` in terminal with browser access |
+| `lark_cli_missing` | lark-cli not in PATH | `brew install larksuite/cli/lark-cli` |
+| `event scope missing` | 群消息 not delivered without @mention | Enable `im:message.group_msg:receive` + publish new app version |
+| `group_not_found` / 404 | Group ID invalid or bot not in group | Verify group ID; ensure bot app is added to target group |
+| `message_id` duplicate / no delivery | Message sent but koder doesn't see it | Check `requireMention=false` + restart OpenClaw gateway |

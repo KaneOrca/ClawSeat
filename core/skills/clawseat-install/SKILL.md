@@ -100,8 +100,8 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 5. **Install skill symlinks** — this is mandatory, do NOT skip:
    - OpenClaw (Phase 0 + Phase 3):
      1. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"` — agent-neutral shared skills
-     2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 5-phase flow
-     - After overlay, a **Feishu post-install checklist** is printed; if Feishu platform event scopes (`im:message.group_msg:receive`) are not enabled, chain closeouts cannot reach koder without @mention.
+     2. `python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" --agent <agent>` — ask memory for `<agent>`; see [references/install-flow.md](references/install-flow.md) for the full 6-phase flow (Phase 0 install skills → Phase 1 memory → Phase 2 query → Phase 3 overlay → Phase 4 planner config → **Phase 5 Feishu bridge smoke**)
+     - After overlay, complete **Phase 5: Feishu Bridge Smoke Test** (7-step canonical): auth check → platform scopes → collect group ID → bind project → requireMention config → smoke test → verify parse. This phase is **mandatory** before any Feishu dispatch. See [references/install-flow.md#phase-5](references/install-flow.md) and [references/feishu-bridge-setup.md](references/feishu-bridge-setup.md).
    - Local CLI: `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
    - Do NOT manually copy skill directories — the scripts create symlinks and check dependencies
 6. If the runtime is **OpenClaw or Feishu-facing**:
