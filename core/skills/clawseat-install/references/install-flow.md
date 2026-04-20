@@ -30,6 +30,20 @@ export CLAWSEAT_ROOT="/path/to/ClawSeat"
 
 If `CLAWSEAT_ROOT` is unset, check the current checkout before doing anything else.
 
+## AGENT_HOME — lark-cli in tmux seats (G12)
+
+`lark-cli` auth config lives under the **real user HOME**, not the isolated seat runtime HOME. When running from inside a tmux seat, the seat's `HOME` points to a sandbox path. Without `AGENT_HOME`, lark-cli reads the wrong config and fails.
+
+**Before any lark-cli call inside a tmux seat**:
+
+```sh
+export AGENT_HOME=/Users/<real-user>   # e.g. /Users/ywf
+```
+
+The ClawSeat scripts pass `AGENT_HOME` automatically when launched via `start_seat.py`. If you see `FileNotFoundError: HOME/.openclaw not found` from `send_delegation_report.py` inside a tmux seat, check that `AGENT_HOME` is set.
+
+See `references/feishu-bridge-setup.md` for the full troubleshooting context.
+
 ## Phase 0 — Install Bundled Skills
 
 Install agent-neutral shared skills into `~/.openclaw/skills/`. Does NOT touch any per-agent workspace.
@@ -47,6 +61,16 @@ python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
 PROJECT=my-project
 PROFILE_TEMPLATE="$CLAWSEAT_ROOT/examples/starter/profiles/starter.toml"  # or install.toml / full-team.toml
 cp "$PROFILE_TEMPLATE" "/tmp/${PROJECT}-profile-dynamic.toml"
+# B2: tasks_root may be quoted in the template ("~/.agents/tasks/install").
+# A simple sed 's/install/my-project/' will miss the quotes. Use Python:
+# python3 -c "
+#   import re, pathlib
+#   p = pathlib.Path('/tmp/${PROJECT}-profile-dynamic.toml')
+#   t = p.read_text()
+#   t = t.replace('project_name = \"install\"', 'project_name = \"${PROJECT}\"')
+#   t = re.sub(r'(tasks_root\s*=\s*[\"\\']?)~/.agents/tasks/install', r'\g<1>~/.agents/tasks/${PROJECT}', t)
+#   p.write_text(t)
+# "
 python3 "$CLAWSEAT_ROOT/core/preflight.py" "$PROJECT"
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
@@ -81,8 +105,10 @@ If memory seat is not declared in the profile roster, add it before rerunning bo
 Before applying any per-agent overlay, query memory to enumerate the available OpenClaw agents. Do not hardcode "koder" — ask memory which agent should receive the overlay:
 
 ```sh
+# G15 — correct syntax: use --memory-dir + --key or --search (NOT --file --section)
 # Search for known agents
 python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/query_memory.py" \
+  --memory-dir ~/.agents/memory \
   --search agents
 
 # Or reasoning query with profile context

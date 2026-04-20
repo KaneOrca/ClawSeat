@@ -49,10 +49,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--on-conflict",
         choices=("ask", "overwrite", "backup", "abort"),
-        default="ask",
+        default="backup",
         help="When the workspace already has managed files (IDENTITY/SOUL/TOOLS/MEMORY/"
-             "AGENTS.md + WORKSPACE_CONTRACT.toml): ask the user interactively (default), "
-             "overwrite them in place, back them up to .backup-<timestamp>/ first, or abort.",
+             "AGENTS.md + WORKSPACE_CONTRACT.toml): back them up to .backup-<timestamp>/ first "
+             "(default), overwrite them in place, ask the user interactively, or abort.",
     )
     p.add_argument(
         "--memory-workspace",

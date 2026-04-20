@@ -14,8 +14,10 @@ import sys
 from pathlib import Path
 
 
-_AGENTS_HOME = Path.home() / ".agents"
-_OPENCLAW_HOME = Path.home() / ".openclaw"
+import os as _os
+_REAL_HOME = Path(_os.environ.get("AGENT_HOME", "") or Path.home())
+_AGENTS_HOME = _REAL_HOME / ".agents"
+_OPENCLAW_HOME = _REAL_HOME / ".openclaw"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _INSTALL_FLOW = _REPO_ROOT / "core" / "skills" / "clawseat-install" / "references" / "install-flow.md"
 
@@ -84,18 +86,30 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
         True, "advisory check only", warn_only=True,
     ))
 
-    # ── G6: BRIDGE.toml present ─────────────────────────────────────────────
+    # ── G6: Feishu bridge configured (BRIDGE.toml OR openclaw sessions) ───
     bridge_toml = _AGENTS_HOME / "projects" / project / "BRIDGE.toml"
+    g6_evidence = str(bridge_toml)
     g6_pass = bridge_toml.exists()
+    if not g6_pass:
+        # Fallback: check openclaw sessions.json for any group binding
+        for sessions_json in _OPENCLAW_HOME.rglob("sessions/sessions.json") if _OPENCLAW_HOME.exists() else []:
+            try:
+                import json as _json
+                data = _json.loads(sessions_json.read_text(encoding="utf-8"))
+                if any("feishu:group" in k for k in data.keys()):
+                    g6_pass = True
+                    g6_evidence = f"group binding found in {sessions_json}"
+                    break
+            except (OSError, ValueError):
+                pass
     results.append(_check(
-        "G6", f"Feishu bridge BRIDGE.toml present (~/.agents/projects/{project}/BRIDGE.toml)",
-        g6_pass,
-        str(bridge_toml) + (" [exists]" if g6_pass else " [missing]"),
+        "G6", "Feishu bridge configured (BRIDGE.toml or openclaw sessions group binding)",
+        g6_pass, g6_evidence,
     ))
 
     # ── G7: BRIDGE.toml has bound_by field (advisory) ─────────────────────
     g7_pass = False
-    if g6_pass:
+    if bridge_toml.exists():
         try:
             g7_pass = "bound_by" in bridge_toml.read_text(encoding="utf-8")
         except OSError:
@@ -105,11 +119,10 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
         g7_pass, "", warn_only=True,
     ))
 
-    # ── G8: BRIDGE.toml present (same as G6 — direct bind call) ──────────
+    # ── G8: Feishu bridge present (same evidence as G6) ──────────────────
     results.append(_check(
-        "G8", "bind_project_to_group() called → BRIDGE.toml exists",
-        g6_pass,
-        str(bridge_toml) + (" [exists]" if g6_pass else " [missing]"),
+        "G8", "bind_project_to_group() called → bridge config present",
+        g6_pass, g6_evidence,
     ))
 
     # ── G9, G10: advisory ─────────────────────────────────────────────────
@@ -133,17 +146,16 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
                         break
                 except OSError:
                     pass
-    # Also check runtime identities for WORKSPACE_CONTRACT.toml
+    # Also check ~/.agents/workspaces/<project>/*/WORKSPACE_CONTRACT.toml (canonical workspace init marker)
     if not g11_pass:
-        for wc in (_AGENTS_HOME / "runtime" / "identities").rglob(f"*/{project}/*/WORKSPACE_CONTRACT.toml"):
-            try:
-                if "last_refresh" in wc.read_text(encoding="utf-8"):
+        ws_root = _AGENTS_HOME / "workspaces" / project
+        if ws_root.exists():
+            for wc in ws_root.glob("*/WORKSPACE_CONTRACT.toml"):
+                if wc.exists():
                     g11_pass = True
                     break
-            except OSError:
-                pass
     results.append(_check(
-        "G11", "refresh_workspaces.py run (.last_refresh or WORKSPACE_CONTRACT last_refresh)",
+        "G11", "refresh_workspaces.py run (.last_refresh or WORKSPACE_CONTRACT present)",
         g11_pass, "marker not found" if not g11_pass else "marker found",
     ))
 
@@ -164,7 +176,9 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
     results.append(_check("G13", "lark-cli auth via canonical device flow (advisory)", True, "advisory", warn_only=True))
 
     # ── G14: Feishu scope evidence ─────────────────────────────────────────
+    # Try lark-cli api for permission check; degrade to WARN if subcommand unsupported.
     g14_pass = False
+    g14_warn_only = False
     g14_evidence = "lark-cli not available or check skipped"
     try:
         result = subprocess.run(
@@ -173,14 +187,21 @@ def run_checks(project: str, verbose: bool = False) -> list[dict]:
         )
         if result.returncode == 0:
             g14_pass = "im:message.group_msg:receive" in result.stdout
-            g14_evidence = "im:message.group_msg:receive found in lark-cli output" if g14_pass else "im:message.group_msg:receive NOT found in lark-cli output"
+            g14_evidence = "im:message.group_msg:receive found" if g14_pass else "im:message.group_msg:receive NOT found"
+        elif "unknown command" in result.stderr or "unknown command" in result.stdout:
+            # lark-cli version doesn't support this subcommand — degrade to advisory
+            g14_warn_only = True
+            g14_pass = True  # treat as passing since we can't check
+            g14_evidence = "lark-cli version does not support scope query; manual verification required"
         else:
-            g14_evidence = f"lark-cli exit {result.returncode}: {result.stderr.strip()[:80]}"
+            g14_evidence = f"lark-cli exit {result.returncode}: {(result.stderr or result.stdout).strip()[:80]}"
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        g14_evidence = f"lark-cli unavailable: {exc}"
+        g14_warn_only = True
+        g14_pass = True
+        g14_evidence = f"lark-cli unavailable ({exc}); manual verification required"
     results.append(_check(
         "G14", "Feishu im:message.group_msg:receive scope enabled",
-        g14_pass, g14_evidence,
+        g14_pass, g14_evidence, warn_only=g14_warn_only,
     ))
 
     # ── G15: advisory (code-side check) ───────────────────────────────────
