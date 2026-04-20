@@ -18,38 +18,19 @@ _TOOL_BIN_SOURCES: dict[str, str] = {}
 # so Path.home() inside a seat returns THAT, not the operator's real HOME.
 # All agent_admin path resolution must use the effective home to avoid
 # pointing at sandbox-local artifacts that don't exist there.
+#
+# Canonical implementation lives in core/lib/real_home.py; this module
+# re-exports the helpers (with their historical underscore-prefix names)
+# so existing agent_admin_* callers keep working.
 
-
-def _is_sandbox_home(path: Path) -> bool:
-    """Return True if *path* looks like a ClawSeat seat runtime sandbox HOME."""
-    return "/.agents/runtime/identities/" in str(path)
-
-
-def _real_user_home() -> Path:
-    """Return the operator's real HOME, bypassing seat sandbox isolation.
-
-    Resolution priority (most-authoritative first):
-    1. CLAWSEAT_REAL_HOME env override — set explicitly by the harness.
-    2. AGENT_HOME env differing from Path.home() — harness injected real path.
-    3. pwd.getpwuid — the OS's authoritative answer, immune to HOME env override.
-    4. Path.home() as last-resort fallback.
-    """
-    if os.environ.get("CLAWSEAT_SANDBOX_HOME_STRICT") == "1":
-        return Path.home()
-    override = os.environ.get("CLAWSEAT_REAL_HOME")
-    if override:
-        return Path(override).expanduser()
-    agent_home = os.environ.get("AGENT_HOME", "")
-    if agent_home and agent_home != str(Path.home()):
-        return Path(agent_home).expanduser()
-    try:
-        import pwd
-        pw = pwd.getpwuid(os.getuid())
-        if pw and pw.pw_dir:
-            return Path(pw.pw_dir)
-    except (ImportError, KeyError):
-        pass
-    return Path.home()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
+from real_home import (  # noqa: E402
+    is_sandbox_home as _is_sandbox_home,
+    real_user_home as _real_user_home,
+)
 
 
 def _resolve_effective_home() -> Path:

@@ -36,7 +36,16 @@ from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).resolve()
 CLAWSEAT_ROOT = SCRIPT_PATH.parents[2]
-DEFAULT_OPENCLAW_HOME = Path.home() / ".openclaw"
+
+# Resolve via core/lib/real_home — bypasses isolated/sandbox HOME so the
+# koder overlay target is ~/.openclaw/workspace-<agent>/ under the real
+# user home, not under the harness sandbox.
+_CORE_LIB = CLAWSEAT_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from real_home import real_user_home  # noqa: E402
+
+DEFAULT_OPENCLAW_HOME = real_user_home() / ".openclaw"
 
 # Skills symlinked into <agent_workspace>/skills/.
 # Intentionally a subset of GLOBAL_SKILLS from install_bundled_skills.py —

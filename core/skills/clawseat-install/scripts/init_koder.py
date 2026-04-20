@@ -33,6 +33,13 @@ _harness_scripts = str(CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness" / "s
 if _harness_scripts not in sys.path:
     sys.path.insert(0, _harness_scripts)
 
+# Canonical real-HOME resolver — used for default memory root under the
+# operator's real home, not the harness sandbox HOME.
+_core_lib = str(CLAWSEAT_ROOT / "core" / "lib")
+if _core_lib not in sys.path:
+    sys.path.insert(0, _core_lib)
+from real_home import real_user_home  # noqa: E402
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -1210,15 +1217,10 @@ def main() -> int:
     # Deploy memory inject hook if --memory-workspace is given (SPEC §5.1 item 12)
     if args.memory_workspace:
         mem_ws = Path(args.memory_workspace).expanduser().resolve()
-        import pwd
-        try:
-            real_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-        except (KeyError, OSError):
-            real_home = Path.home()
         mem_root = (
             Path(args.memory_root).expanduser().resolve()
             if args.memory_root
-            else real_home / ".agents" / "memory"
+            else real_user_home() / ".agents" / "memory"
         )
         if not args.dry_run:
             print(f"\ndeploying memory inject hook to {mem_ws}...")

@@ -34,56 +34,31 @@ from _utils import (
 # None under sandbox HOME) and hard-fail when koder's phantom tmux
 # session was missing.
 #
-# This helper is the single source of truth for "where is the operator's
-# real HOME, regardless of which sandbox we are running in". Used by every
-# resource lookup below.
+# Canonical implementation lives in core/lib/real_home.py; this module
+# adds a feishu-specific LARK_CLI_HOME pre-check and then delegates.
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_CORE_LIB = str(_Path(__file__).resolve().parents[3] / "lib")
+if _CORE_LIB not in _sys.path:
+    _sys.path.insert(0, _CORE_LIB)
+from real_home import (  # noqa: E402
+    is_sandbox_home as _is_sandbox_home,
+    real_user_home as _canonical_real_user_home,
+)
+
 
 def _real_user_home() -> Path:
-    """Return the operator's real HOME, bypassing any seat runtime isolation.
+    """Feishu-aware wrapper: honor LARK_CLI_HOME then delegate to canonical.
 
-    Resolution priority (most-authoritative first):
-
-    1. Explicit env override (CLAWSEAT_REAL_HOME / LARK_CLI_HOME) — set by
-       the installer / harness when it knows the real answer.
-    2. Explicit AGENT_HOME env differing from Path.home() — harness injected
-       the real path.
-    3. pwd.getpwuid(os.getuid()).pw_dir — the OS's own answer for "which
-       directory is this user's home". Reliable regardless of HOME env
-       override, regardless of sandbox residue. This is authoritative.
-    4. Path.home() as last-resort fallback (only if pwd lookup fails, which
-       should not happen on normal macOS/Linux).
-
-    NOTE on canary heuristics: an earlier version checked
-    `(Path.home() / ".lark-cli/config.json").exists()` as a "am I in a
-    sandbox?" signal. That was unsafe because sandbox HOMEs inherit / get
-    seeded with stale lark-cli config from earlier test runs, falsely
-    telling us the sandbox was the real HOME. pwd is the correct primary.
+    LARK_CLI_HOME is a feishu-specific override that the installer uses to
+    point lark-cli at a test HOME; we respect it before the generic probe.
     """
-    # 1. Explicit override
-    override = (
-        os.environ.get("CLAWSEAT_REAL_HOME")
-        or os.environ.get("LARK_CLI_HOME")
-    )
+    override = os.environ.get("LARK_CLI_HOME")
     if override:
         return Path(override).expanduser()
-    # 2. AGENT_HOME differs from Path.home() — harness told us where real is
-    if str(AGENT_HOME) != str(Path.home()):
-        return AGENT_HOME
-    # 3. pwd database — authoritative OS answer, immune to HOME env override
-    try:
-        import pwd
-        pw = pwd.getpwuid(os.getuid())
-        if pw and pw.pw_dir:
-            return Path(pw.pw_dir)
-    except (ImportError, KeyError):  # silent-ok: pwd module or uid key unavailable; fall back to Path.home()
-        pass
-    # 4. Last-resort fallback
-    return Path.home()
-
-
-def _is_sandbox_home(path: Path) -> bool:
-    """Return True if *path* looks like a ClawSeat seat runtime sandbox HOME."""
-    return "/.agents/runtime/identities/" in str(path)
+    return _canonical_real_user_home()
 
 
 def _resolve_effective_home() -> Path:

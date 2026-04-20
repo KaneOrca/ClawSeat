@@ -7,7 +7,15 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-HOME = Path.home()
+
+# Resolve via core/lib/real_home — bypasses isolated/sandbox HOME so symlinks
+# land under the real user's ~/.claude and ~/.codex, not the harness sandbox.
+_CORE_LIB = REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from real_home import real_user_home  # noqa: E402
+
+HOME = real_user_home()
 RUNTIME_SKILL_ROOTS = {
     "claude": HOME / ".claude" / "skills",
     "codex": HOME / ".codex" / "skills",

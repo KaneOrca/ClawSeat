@@ -28,7 +28,17 @@ from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).resolve()
 CLAWSEAT_ROOT = SCRIPT_PATH.parents[2]
-DEFAULT_OPENCLAW_HOME = Path.home() / ".openclaw"
+
+# Resolve via core/lib/real_home — bypasses isolated/sandbox HOME so skill
+# symlinks and gstack/lark skill probes target the real user home, not the
+# harness sandbox (ancestor CC launcher, tmux seat, Docker --user, etc.).
+_CORE_LIB = CLAWSEAT_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from real_home import real_user_home  # noqa: E402
+
+_USER_HOME = real_user_home()
+DEFAULT_OPENCLAW_HOME = _USER_HOME / ".openclaw"
 
 GLOBAL_SKILLS = {
     # Core runtime — loaded by ALL seats
@@ -48,7 +58,7 @@ GLOBAL_SKILLS = {
 }
 
 LARK_SKILLS_REPO = "https://github.com/larksuite/cli.git"
-GSTACK_SKILLS_ROOT = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+GSTACK_SKILLS_ROOT = _USER_HOME / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
 
 # Skill lists are derived from the skill registry (SSOT) rather than hardcoded.
 try:
@@ -112,7 +122,7 @@ def ensure_symlink(destination: Path, source: Path, *, dry_run: bool) -> None:
 
 def check_agent_skills(dry_run: bool) -> list[str]:
     """Check if required lark skills are installed in ~/.agents/skills/."""
-    agents_skills = Path.home() / ".agents" / "skills"
+    agents_skills = _USER_HOME / ".agents" / "skills"
     missing = []
     for skill_name in REQUIRED_AGENT_SKILLS:
         skill_path = agents_skills / skill_name / "SKILL.md"
