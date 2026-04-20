@@ -295,7 +295,7 @@ def main() -> int:
     local_path = make_local_override(profile, project_name=project_name, repo_root=repo_root)
     try:
         cmd = [
-            "python3",
+            sys.executable,
             str(profile.agent_admin),
             "project",
             "bootstrap",
@@ -323,7 +323,7 @@ def main() -> int:
         if args.refresh_existing:
             for seat in (effective_profile.materialized_seats or effective_profile.seats):
                 refresh_cmd = [
-                    "python3", str(profile.agent_admin),
+                    sys.executable, str(profile.agent_admin),
                     "engineer", "refresh-workspace", seat,
                     "--project", project_name,
                 ]
@@ -334,7 +334,7 @@ def main() -> int:
         if args.start:
             start_result = run_command(
                 [
-                    "python3",
+                    sys.executable,
                     str(profile.agent_admin),
                     "session",
                     "start-engineer",
@@ -349,7 +349,7 @@ def main() -> int:
                 print(start_result.stdout.strip())
             open_result = run_command(
                 [
-                    "python3",
+                    sys.executable,
                     str(profile.agent_admin),
                     "window",
                     "open-monitor",
