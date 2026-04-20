@@ -26,16 +26,47 @@ except ModuleNotFoundError:  # pragma: no cover
         ) from _exc
 
 
+# ── Real-user-HOME anchor (SSOT: core/lib/real_home.py) ──────────────
+#
+# Scripts in this directory are imported by ancestor-mode Claude Code
+# (which runs under a sandbox HOME at
+# ~/.agent-runtime/identities/<tool>/<auth>/<id>/home/) as well as by
+# backend tmux seats (which run under ~/.agents/runtime/identities/...).
+# In both cases `Path.home()` / `$HOME` return the SANDBOX, not the
+# operator's real home. If we anchor AGENT_HOME / AGENTS_ROOT /
+# OPENCLAW_HOME against Path.home() we end up writing to/looking under
+# the sandbox tree, which explains the live-install symptom
+# `workspace_sync: <seat> status=skip reason=host_workspace_not_found
+# host=/Users/ywf/.agent-runtime/.../home/.agents/workspaces/...` —
+# bootstrap resolved profile.workspace_root against the sandbox HOME
+# and the matching directory simply doesn't exist there.
+#
+# core/lib/real_home.real_user_home() is the canonical resolver
+# (CLAWSEAT_SANDBOX_HOME_STRICT → CLAWSEAT_REAL_HOME → AGENT_HOME env
+# → pwd.getpwuid → Path.home() fallback). Anchor every module-level
+# HOME constant on that so every callsite that reads these constants
+# is automatically sandbox-safe.
+_REAL_HOME_LIB = Path(__file__).resolve().parents[3] / "lib"
+if str(_REAL_HOME_LIB) not in sys.path:
+    sys.path.insert(0, str(_REAL_HOME_LIB))
+from real_home import real_user_home as _real_user_home_ssot  # noqa: E402
+
+
+def _anchored_home() -> Path:
+    """Return the operator's real HOME for AGENT_HOME/OPENCLAW_HOME defaults."""
+    return _real_user_home_ssot()
+
+
 # ── Path constants ───────────────────────────────────────────────────
 
 REPO_ROOT = Path(
     os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[4]))
 )
-AGENT_HOME = Path(os.environ.get("AGENT_HOME", str(Path.home()))).expanduser()
+AGENT_HOME = Path(os.environ.get("AGENT_HOME", str(_anchored_home()))).expanduser()
 AGENTS_ROOT = AGENT_HOME / ".agents"
 SCRIPTS_ROOT = REPO_ROOT / "core" / "shell-scripts"
 OPENCLAW_HOME = Path(
-    os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))
+    os.environ.get("OPENCLAW_HOME", str(_anchored_home() / ".openclaw"))
 ).expanduser()
 OPENCLAW_CONFIG_PATH = Path(
     os.environ.get("OPENCLAW_CONFIG_PATH", str(OPENCLAW_HOME / "openclaw.json"))

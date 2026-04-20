@@ -187,11 +187,20 @@ def test_group_id_from_clawseat_managed_workspace(tmp_path, monkeypatch, clean_e
 def test_unknown_project_returns_none(tmp_path, monkeypatch, clean_env):
     """If neither contract path exists and openclaw.json has no groups,
     return None (not crash).
+
+    Uses CLAWSEAT_REAL_HOME to anchor _utils / _feishu's module-level
+    OPENCLAW_CONFIG_PATH at the tmp home. The old test relied on
+    monkeypatching $HOME and a lazy pwd mock, but after the sandbox-HOME
+    anchor fix (HOME-fallback → real_user_home SSOT), module-level path
+    constants are captured at import time via pwd — so $HOME patches
+    applied after module load no longer leak through. CLAWSEAT_REAL_HOME
+    wins at import time and reliably seals the module to the fixture dir.
     """
     real_home = tmp_path / "empty_real"
     real_home.mkdir()
 
     monkeypatch.setenv("HOME", str(real_home))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(real_home))
     feishu = _reload_feishu()
 
     with mock.patch("pwd.getpwuid") as m_pwd:

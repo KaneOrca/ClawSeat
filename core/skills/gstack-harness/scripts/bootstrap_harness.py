@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from _common import (
+    AGENTS_ROOT,
     HarnessProfile,
     REPO_ROOT,
     load_profile,
@@ -43,7 +44,7 @@ def _link_sandbox_tasks_to_real_home(
     except ModuleNotFoundError:
         import tomli as _tomllib  # type: ignore
 
-    agents_home = _agents_home or (Path.home() / ".agents")
+    agents_home = _agents_home or AGENTS_ROOT
     real_tasks_root = profile.tasks_root
     real_tasks_root.mkdir(parents=True, exist_ok=True)
 
@@ -125,7 +126,7 @@ def _sync_workspaces_host_to_sandbox(
     except ModuleNotFoundError:
         import tomli as _tomllib  # type: ignore
 
-    agents_home = _agents_home or (Path.home() / ".agents")
+    agents_home = _agents_home or AGENTS_ROOT
 
     for seat in seats:
         host_workspace = profile.workspace_root / seat

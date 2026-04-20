@@ -227,6 +227,15 @@ CLAUDE_ONBOARDING_MARKERS: list[tuple[str, str]] = [
 # ── Profile loading ──────────────────────────────────────────────────
 
 def expand_profile_value(value: str) -> Path:
+    """Expand {PLACEHOLDER} and ~ in a profile TOML value.
+
+    Sandbox-safe: `~` is resolved against the operator's real HOME via
+    core/lib/real_home.real_user_home(), not os.path.expanduser() which
+    walks `$HOME` (the seat / ancestor sandbox HOME). Without this,
+    profile values like `workspace_root = "~/.agents/workspaces/install"`
+    resolve to `<sandbox>/.agents/workspaces/install` and bootstrap's
+    _sync_workspaces_host_to_sandbox reports `host_workspace_not_found`.
+    """
     defaults = {
         "CLAWSEAT_ROOT": str(REPO_ROOT),
         "AGENTS_ROOT": str(AGENTS_ROOT),
@@ -236,7 +245,14 @@ def expand_profile_value(value: str) -> Path:
         key = match.group(1)
         return os.environ.get(key, defaults.get(key, match.group(0)))
 
-    return Path(PLACEHOLDER_RE.sub(replace, value)).expanduser()
+    expanded = PLACEHOLDER_RE.sub(replace, value)
+    if expanded.startswith("~/") or expanded == "~":
+        # Manual ~ substitution anchored on the operator's real HOME.
+        # `_real_user_home` was re-exported from _feishu.py earlier in this
+        # module; using it keeps every profile-loaded path sandbox-safe.
+        expanded = str(_real_user_home()) + expanded[1:]
+    # Path.expanduser() still runs to catch any ~user/ forms not handled above.
+    return Path(expanded).expanduser()
 
 
 def normalize_role(role: str) -> str:
