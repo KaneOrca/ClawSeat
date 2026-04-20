@@ -24,6 +24,38 @@ if [ -z "$SESSION" ] || [ -z "$MSG" ]; then
   exit 1
 fi
 
+# — 输入校验 (audit H3) —
+# tmux send-keys -l 会把消息逐字按入 pane，因此 CR/LF/NUL 会在消息中间触发
+# 提交或截断，导致消息被拆成多条误发。此处硬拒这些字节。
+# SESSION 名参与 tmux 命令查找，同样禁止换行和 NUL。
+MAX_MSG_BYTES=8192
+
+validate_input() {
+  local label="$1"
+  local value="$2"
+  # Reject LF / CR / vertical tab / form feed — any of these would be
+  # pressed literally by `tmux send-keys -l`, splitting one logical send
+  # into several. Bash variables cannot carry NUL (truncated at parse),
+  # so there is no explicit NUL pattern here.
+  case "$value" in
+    *$'\n'*|*$'\r'*|*$'\v'*|*$'\f'*)
+      echo "send-and-verify: INPUT_REJECTED ${label} contains control character (LF/CR/VT/FF)" >&2
+      echo "send-and-verify: HARD_BLOCK caller must strip control chars before retry" >&2
+      exit 2
+      ;;
+  esac
+}
+
+validate_input "session" "$SESSION"
+validate_input "message" "$MSG"
+
+msg_bytes=${#MSG}
+if [ "$msg_bytes" -gt "$MAX_MSG_BYTES" ]; then
+  echo "send-and-verify: INPUT_REJECTED message length ${msg_bytes} exceeds ${MAX_MSG_BYTES} bytes" >&2
+  echo "send-and-verify: HARD_BLOCK caller must shorten message or chunk the send" >&2
+  exit 2
+fi
+
 resolve_tmux_bin() {
   if command -v tmux >/dev/null 2>&1; then
     command -v tmux

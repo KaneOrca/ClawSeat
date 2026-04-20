@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -49,7 +50,9 @@ from agent_admin_config import (
 )
 from agent_admin_crud import CrudHandlers, CrudHooks
 from agent_admin_info import InfoHandlers, InfoHooks
-from agent_admin_legacy import LegacyHandlers, LegacyHooks
+# agent_admin_legacy is imported lazily inside migrate_legacy / migrate_session_model
+# (audit H8): a top-level import forced the runtime path to pull in migration
+# code on every invocation, so any bug there leaked into normal operation.
 from agent_admin_parser import ParserHooks, build_parser as build_agent_admin_parser
 from agent_admin_runtime import (
     common_env,
@@ -667,16 +670,89 @@ def create_session_record(
     )
 
 
+def _archive_timestamp() -> str:
+    # Inlined from agent_admin_legacy.current_timestamp so that the hot path
+    # (CRUD delete/rebind → archive_if_exists) never imports the legacy module.
+    from datetime import datetime
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
 def archive_if_exists(path: Path, category: str) -> None:
-    LEGACY_HANDLERS.archive_if_exists(path, category)
+    """Move *path* into the legacy archive under *category* (runtime utility).
+
+    Previously this dispatched through ``LEGACY_HANDLERS`` which forced the
+    entire ``agent_admin_legacy`` module into every import (audit H8). The
+    actual behaviour is a bare ``shutil.move`` — no legacy state needed.
+    """
+    if not path.exists():
+        return
+    target = LEGACY_ROOT / category / f"{path.name}-{_archive_timestamp()}"
+    ensure_dir(target.parent)
+    shutil.move(str(path), str(target))
+
+
+def _build_legacy_handlers():
+    """Construct the on-demand LegacyHandlers. Import is deferred so the
+    runtime path never pulls in migration code unless the caller actually
+    needs a migration operation."""
+    from agent_admin_legacy import LegacyHandlers, LegacyHooks
+    return LegacyHandlers(
+        LegacyHooks(
+            legacy_root=LEGACY_ROOT,
+            engineers_root=ENGINEERS_ROOT,
+            legacy_gemini_sandboxes=LEGACY_GEMINI_SANDBOXES,
+            project_defaults=PROJECT_DEFAULTS,
+            legacy_engineers=LEGACY_ENGINEERS,
+            error_cls=AgentAdminError,
+            project_cls=Project,
+            engineer_cls=Engineer,
+            session_record_cls=SessionRecord,
+            tool_binaries=TOOL_BINARIES,
+            ensure_root_layout=ensure_root_layout,
+            ensure_dir=ensure_dir,
+            project_path=project_path,
+            load_toml=load_toml,
+            load_projects=load_projects,
+            write_project=write_project,
+            write_engineer=write_engineer,
+            write_session=write_session,
+            apply_template=apply_template,
+            create_engineer_profile=create_engineer_profile,
+            create_session_record=create_session_record,
+            write_env_file=write_env_file,
+            write_text=write_text,
+            ensure_secret_permissions=ensure_secret_permissions,
+        )
+    )
+
+
+def _legacy_state_present() -> bool:
+    """Cheap check for pre-migration engineer records (a `project` field in
+    engineer.toml). If none exist, migrate_session_model can short-circuit
+    without importing agent_admin_legacy."""
+    if not ENGINEERS_ROOT.exists():
+        return False
+    for path in ENGINEERS_ROOT.glob("*/engineer.toml"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Legacy files carried a top-level `project = "..."`; modern records do not.
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("project ") or stripped.startswith("project="):
+                return True
+    return False
 
 
 def migrate_session_model() -> None:
-    LEGACY_HANDLERS.migrate_session_model()
+    if not _legacy_state_present():
+        return
+    _build_legacy_handlers().migrate_session_model()
 
 
 def migrate_legacy(args: argparse.Namespace) -> int:
-    return LEGACY_HANDLERS.migrate_legacy(args)
+    return _build_legacy_handlers().migrate_legacy(args)
 
 
 def engineer_summary(engineer: Engineer, sessions: dict[tuple[str, str], SessionRecord] | None = None) -> str:
@@ -938,35 +1014,6 @@ CRUD_HANDLERS = CrudHandlers(
         ensure_secret_permissions=ensure_secret_permissions,
         session_service=SESSION_SERVICE,
         tmux_has_session=tmux_has_session,
-    )
-)
-
-LEGACY_HANDLERS = LegacyHandlers(
-    LegacyHooks(
-        legacy_root=LEGACY_ROOT,
-        engineers_root=ENGINEERS_ROOT,
-        legacy_gemini_sandboxes=LEGACY_GEMINI_SANDBOXES,
-        project_defaults=PROJECT_DEFAULTS,
-        legacy_engineers=LEGACY_ENGINEERS,
-        error_cls=AgentAdminError,
-        project_cls=Project,
-        engineer_cls=Engineer,
-        session_record_cls=SessionRecord,
-        tool_binaries=TOOL_BINARIES,
-        ensure_root_layout=ensure_root_layout,
-        ensure_dir=ensure_dir,
-        project_path=project_path,
-        load_toml=load_toml,
-        load_projects=load_projects,
-        write_project=write_project,
-        write_engineer=write_engineer,
-        write_session=write_session,
-        apply_template=apply_template,
-        create_engineer_profile=create_engineer_profile,
-        create_session_record=create_session_record,
-        write_env_file=write_env_file,
-        write_text=write_text,
-        ensure_secret_permissions=ensure_secret_permissions,
     )
 )
 
