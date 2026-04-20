@@ -18,7 +18,19 @@ except ModuleNotFoundError:  # pragma: no cover
 # Resolve ORIGINAL_COMMON relative to this file — no hardcoded maintainer path needed.
 _MIGRATION_DIR = Path(__file__).resolve().parent  # .../ClawSeat/core/migration
 _CLAWSEAT_ROOT_FOR_COMMON = _MIGRATION_DIR.parent.parent  # .../ClawSeat
-ORIGINAL_COMMON = _CLAWSEAT_ROOT_FOR_COMMON / "core" / "skills" / "gstack-harness" / "scripts" / "_common.py"
+_HARNESS_SCRIPTS_DIR = _CLAWSEAT_ROOT_FOR_COMMON / "core" / "skills" / "gstack-harness" / "scripts"
+ORIGINAL_COMMON = _HARNESS_SCRIPTS_DIR / "_common.py"
+
+# `_common.py` internally does bare-name `from _utils import ...` etc.;
+# those sibling modules only resolve if the harness scripts dir is on
+# sys.path *before* we exec the module. Without this prepend, invoking
+# any migration entry point (dispatch_task_dynamic, notify_seat_dynamic,
+# ...) as a top-level script dies at import time with `ModuleNotFoundError:
+# No module named '_utils'`. Smoke test `test_migration_script_help_runs`
+# locks this in.
+if str(_HARNESS_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HARNESS_SCRIPTS_DIR))
+
 SPEC = importlib.util.spec_from_file_location("gstack_harness_common_dynamic", ORIGINAL_COMMON)
 if SPEC is None or SPEC.loader is None:
     raise SystemExit(f"unable to load harness common module from {ORIGINAL_COMMON}")
