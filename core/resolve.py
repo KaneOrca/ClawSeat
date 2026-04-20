@@ -81,18 +81,60 @@ def dynamic_profile_path(project: str) -> Path:
     Primary: ~/.agents/profiles/{project}-profile-dynamic.toml (persistent)
     Fallback: /tmp/{project}-profile-dynamic.toml (legacy, lost on reboot)
 
-    If only the /tmp/ copy exists, returns that for backward compat.
-    New installs will use the persistent location.
+    If only the /tmp/ copy exists, it is migrated to the persistent
+    location on first access. Migration is **concurrency-safe**:
+
+    - all candidate writers go through the same `.lock` file under
+      `~/.agents/profiles/.migrating-{project}.lock` using `fcntl.flock`
+    - the copy lands in a sibling `.tmp` file and is then renamed, so
+      readers never observe a half-written target
+
+    Previously this used plain `shutil.copy2` with no lock, so two
+    concurrent startup paths (e.g. planner + heartbeat seat importing
+    at the same moment) could interleave writes and produce a truncated
+    or mixed TOML (audit H11).
     """
     persistent = Path.home() / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
     if persistent.exists():
         return persistent
     legacy = Path("/tmp") / f"{project}-profile-dynamic.toml"
     if legacy.exists():
-        # Migrate: copy to persistent location for durability
-        persistent.parent.mkdir(parents=True, exist_ok=True)
-        import shutil
-        shutil.copy2(legacy, persistent)
+        _atomic_migrate_profile(legacy, persistent)
         return persistent
     # Neither exists yet — return persistent location for new installs
     return persistent
+
+
+def _atomic_migrate_profile(source: Path, destination: Path) -> None:
+    """Copy *source* to *destination* atomically and concurrency-safely.
+
+    Holds an exclusive flock on a sibling `.lock` file while performing
+    `copy2 -> rename`. Multiple callers serialize; only one writes, the
+    others observe the completed destination and return.
+    """
+    import fcntl
+    import shutil
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = destination.parent / f".migrating-{destination.name}.lock"
+    tmp_path = destination.with_suffix(destination.suffix + ".tmp")
+
+    # Open lock file read/write so flock can take an exclusive hold; keep
+    # it open for the whole critical section.
+    with open(lock_path, "a+") as lock_fh:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+        try:
+            # Double-check after acquiring the lock — another process may
+            # have finished the migration while we were waiting.
+            if destination.exists():
+                return
+            shutil.copy2(source, tmp_path)
+            # os.replace is atomic on the same filesystem.
+            os.replace(tmp_path, destination)
+        finally:
+            # Clean up the tmp file if copy2 succeeded but replace failed.
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
