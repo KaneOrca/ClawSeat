@@ -54,16 +54,17 @@ When the user wants OpenClaw to run ClawSeat as a skill:
 
 **Critical: clone location**
 
-When cloning from git, install ClawSeat to a user-level directory, NOT inside
-`~/.openclaw/`. ClawSeat is a standalone project, not an OpenClaw internal
-component.
+When cloning from git, OpenClaw first install should use the canonical checkout:
 
-- Correct: `git clone <url>` in any user-level directory (e.g. home dir, projects dir)
-- Wrong: `git clone <url> ~/.openclaw/workspace-clawseat` or anywhere inside `~/.openclaw/`
+```bash
+git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
+export CLAWSEAT_ROOT="$HOME/.clawseat"
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py"
+```
 
-Then run `install_openclaw_bundle.py` to create symlinks from `~/.openclaw/skills/`
-into the repo. Do NOT manually copy skill directories — use the script so that
-dependency checks (lark-cli, gstack) run and symlinks stay in sync with the repo.
+Do NOT manually copy skill directories, and do NOT treat any checkout under
+`~/.openclaw/` as the canonical source tree.
 
 **Critical: koder identity in OpenClaw mode**
 

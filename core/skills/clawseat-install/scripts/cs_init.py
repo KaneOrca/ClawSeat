@@ -9,13 +9,14 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-_core_path = str(REPO_ROOT / "core")
-if _core_path not in sys.path:
-    sys.path.insert(0, _core_path)
-from resolve import dynamic_profile_path as _dpp
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core._bootstrap import CLAWSEAT_ROOT
+from core.resolve import dynamic_profile_path as _dpp
 
 PROJECT = "install"
-PROFILE_TEMPLATE = REPO_ROOT / "examples" / "starter" / "profiles" / "install.toml"
+PROFILE_TEMPLATE = CLAWSEAT_ROOT / "examples" / "starter" / "profiles" / "install.toml"
 DYNAMIC_PROFILE = _dpp(PROJECT)
 AGENT_ADMIN = REPO_ROOT / "core" / "scripts" / "agent_admin.py"
 PRECHECK = REPO_ROOT / "core" / "preflight.py"
@@ -50,7 +51,7 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         check=False,
-        env={**os.environ, "CLAWSEAT_ROOT": os.environ.get("CLAWSEAT_ROOT", str(REPO_ROOT))},
+        env={**os.environ, "CLAWSEAT_ROOT": os.environ.get("CLAWSEAT_ROOT", str(CLAWSEAT_ROOT))},
     )
     if result.returncode != 0:
         if result.stdout.strip():

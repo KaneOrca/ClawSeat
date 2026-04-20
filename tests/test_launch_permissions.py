@@ -1,3 +1,4 @@
+import dataclasses
 from pathlib import Path
 from types import SimpleNamespace
 import os
@@ -12,6 +13,7 @@ sys.path.insert(0, str(_REPO))
 from core.engine import instantiate_seat
 from core.scripts.agent_admin_config import CODEX_API_PROVIDER_CONFIGS, DEFAULT_TOOL_ARGS, TOOL_BINARIES
 from core.scripts.agent_admin_info import InfoHandlers, InfoHooks
+from core.scripts.agent_admin_parser import ParserHooks, build_parser
 from core.scripts.agent_admin_runtime import write_codex_api_config
 from core.scripts.agent_admin_store import StoreHandlers, StoreHooks
 from core.scripts.agent_admin_switch import SwitchHandlers, SwitchHooks
@@ -203,6 +205,23 @@ def test_run_engineer_uses_default_codex_launch_args_when_session_empty(monkeypa
 
     assert captured["binary"] == TOOL_BINARIES["codex"]
     assert captured["cmd"] == [TOOL_BINARIES["codex"], *DEFAULT_TOOL_ARGS["codex"]]
+
+
+def test_parser_keeps_project_flag_out_of_cmd_remainder():
+    noop = lambda args: 0
+    parser = build_parser(ParserHooks(**{field.name: noop for field in dataclasses.fields(ParserHooks)}))
+
+    effective_launch = parser.parse_args(["session", "effective-launch", "planner", "--project", "install"])
+    assert effective_launch.project == "install"
+    assert effective_launch.cmd == []
+
+    run_engineer = parser.parse_args(["run-engineer", "planner", "--project", "install"])
+    assert run_engineer.project == "install"
+    assert run_engineer.cmd == []
+
+    start = parser.parse_args(["start", "planner", "claude", "--project", "install"])
+    assert start.project == "install"
+    assert start.cmd == []
 
 
 def test_session_effective_launch_reports_default_codex_args(capsys, tmp_path):

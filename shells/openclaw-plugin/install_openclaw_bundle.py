@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 
 SCRIPT_PATH = Path(__file__).resolve()
 CLAWSEAT_ROOT = SCRIPT_PATH.parents[2]
+CANONICAL_CLAWSEAT_ROOT = Path.home() / ".clawseat"
 DEFAULT_OPENCLAW_HOME = Path.home() / ".openclaw"
 
 GLOBAL_SKILLS = {
@@ -37,13 +40,35 @@ WORKSPACE_KODER_SKILLS = {
 }
 
 
+@dataclass(slots=True)
+class InstallBundleResult:
+    missing_agent_skills: list[str]
+    missing_gstack_skills: list[str]
+
+    @property
+    def missing_count(self) -> int:
+        return len(self.missing_agent_skills) + len(self.missing_gstack_skills)
+
+
+def canonical_clawseat_root(home: Path | None = None) -> Path:
+    return (home or Path.home()).expanduser() / ".clawseat"
+
+
+def bundle_source_root() -> Path:
+    return CLAWSEAT_ROOT.resolve()
+
+
+def running_from_canonical_checkout(home: Path | None = None) -> bool:
+    return bundle_source_root() == canonical_clawseat_root(home).resolve()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Install the ClawSeat OpenClaw skill bundle into ~/.openclaw."
     )
     parser.add_argument(
         "--openclaw-home",
-        default=str(DEFAULT_OPENCLAW_HOME),
+        default=str(Path(os.environ.get("OPENCLAW_HOME", str(DEFAULT_OPENCLAW_HOME))).expanduser()),
         help="Path to the target OpenClaw home. Defaults to ~/.openclaw.",
     )
     parser.add_argument(
@@ -115,8 +140,8 @@ def check_agent_skills(dry_run: bool) -> list[str]:
     return missing
 
 
-def install_bundle(openclaw_home: Path, *, dry_run: bool) -> int:
-    """Install symlinks and check external skills. Returns count of missing required skills."""
+def install_bundle(openclaw_home: Path, *, dry_run: bool) -> InstallBundleResult:
+    """Install symlinks and report any missing external skills as warnings."""
     skills_root = openclaw_home / "skills"
     workspace_koder_skills_root = openclaw_home / "workspace-koder" / "skills"
 
@@ -158,7 +183,10 @@ def install_bundle(openclaw_home: Path, *, dry_run: bool) -> int:
     elif not dry_run:
         print("gstack_skills: all {0} required skills present".format(len(REQUIRED_GSTACK_SKILLS)))
 
-    return len(missing_agent_skills) + len(missing_gstack)
+    return InstallBundleResult(
+        missing_agent_skills=missing_agent_skills,
+        missing_gstack_skills=missing_gstack,
+    )
 
 
 def main() -> int:
@@ -168,18 +196,29 @@ def main() -> int:
     if not CLAWSEAT_ROOT.exists():
         raise RuntimeError(f"CLAWSEAT_ROOT not found: {CLAWSEAT_ROOT}")
 
-    missing_count = install_bundle(openclaw_home, dry_run=args.dry_run)
+    result = install_bundle(openclaw_home, dry_run=args.dry_run)
 
     if not args.dry_run:
         print()
-        if missing_count > 0:
-            print(f"install_incomplete: {missing_count} external skill(s) missing — seats may lack key capabilities")
-            print("  Run the install commands above, then re-run this script to verify.")
-            return 2  # partial install — bundled skills OK, external skills missing
+        if not running_from_canonical_checkout():
+            print(
+                "canonical_checkout_warning: "
+                f"OpenClaw 首装推荐从 {canonical_clawseat_root()} 运行当前脚本；"
+                f"当前 bundle source 是 {bundle_source_root()}。"
+            )
+        if result.missing_count > 0:
+            print(
+                f"install_warning: {result.missing_count} external skill(s) missing — "
+                "首装仍可继续，但 specialist / Feishu 能力可能受限。"
+            )
+            print("  先完成 canonical 首装；缺失项可按上面的命令补装后再复核。")
         print("next_steps:")
         print(f"  export CLAWSEAT_ROOT=\"{CLAWSEAT_ROOT}\"")
-        print("  在 OpenClaw / 飞书里直接说：安装 ClawSeat 或 启动 ClawSeat")
-        print("  OpenClaw 应优先加载 $clawseat，而不是要求用户输入 /cs")
+        print(
+            "  python3 "
+            f"\"{CLAWSEAT_ROOT / 'core' / 'skills' / 'clawseat-install' / 'scripts' / 'openclaw_first_install.py'}\""
+        )
+        print("  或在 OpenClaw / 飞书里直接说：安装 ClawSeat 或 启动 ClawSeat")
 
     return 0
 

@@ -7,6 +7,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from core.resolve import dynamic_profile_path as resolve_dynamic_profile_path
 
 REPO_ROOT = Path(
     os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[2]))
@@ -373,8 +374,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
 
 def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) -> list[str]:
     profile_path = HARNESS_PROFILE_ROOT / f"{project.name}.toml"
-    from resolve import dynamic_profile_path as _dpp
-    dynamic_profile_path = _dpp(project.name)
+    dynamic_profile_path = resolve_dynamic_profile_path(project.name)
     if profile_path.exists():
         profile_ref = str(profile_path)
     elif dynamic_profile_path.exists():
@@ -614,8 +614,7 @@ def render_workspace_contract_text(
     )
     fingerprint = workspace_contract_fingerprint(payload)
     # Resolve profile path for this project
-    from resolve import dynamic_profile_path as _dpp
-    _profile_path = str(_dpp(project.name))
+    _profile_path = str(resolve_dynamic_profile_path(project.name))
 
     lines = [
         'version = 1',

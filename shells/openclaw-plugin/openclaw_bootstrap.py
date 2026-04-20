@@ -28,11 +28,10 @@ OPENCLAW_WORKSPACES_ROOT = os.environ.get("WORKSPACES_ROOT", f"{OPENCLAW_AGENTS_
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]  # shells/openclaw-plugin/ → shells/ → ClawSeat root
 
-# Add core/ to sys.path so we can import the shared resolver
-_core_path = str(REPO_ROOT / "core")
-if _core_path not in sys.path:
-    sys.path.insert(0, _core_path)
-from resolve import resolve_clawseat_root as _resolve_clawseat_root
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.resolve import resolve_clawseat_root as _resolve_clawseat_root
 
 CLAWSEAT_ROOT = _resolve_clawseat_root(Path(OPENCLAW_AGENTS_ROOT))
 

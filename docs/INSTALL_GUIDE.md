@@ -1,202 +1,156 @@
 # ClawSeat 安装指南
 
-## 快速安装（OpenClaw 用户）
+## 支持范围
 
-告诉你的 OpenClaw agent：
+本轮首装稳定化优先保证：
 
-```
-克隆并安装 ClawSeat：
-git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
-CLAWSEAT_ROOT=~/.clawseat python3 ~/.clawseat/shells/openclaw-plugin/install_openclaw_bundle.py
-然后读 ~/.openclaw/skills/clawseat-install/SKILL.md 继续
-```
+- macOS
+- OpenClaw 首次安装
+- canonical checkout 固定为 `~/.clawseat`
 
-agent 会自动完成剩余步骤：init_koder → preflight → bootstrap → 配置 seat → 启动 planner。
+旧的任意 checkout 安装方式仍可兼容，但不再是首装主路径。
 
----
-
-## 环境依赖
-
-| 依赖 | 版本 | 安装方式 | 必需？ |
-|------|------|---------|--------|
-| Python | ≥ 3.11 | `brew install python@3.12` 或 python.org | ✅ HARD_BLOCKED |
-| tmux | 最新 | `brew install tmux` | ✅ HARD_BLOCKED |
-| Node.js | ≥ 22 | `brew install node` | ✅ OpenClaw 需要 |
-| OpenClaw | 最新 | `npm install -g openclaw` | ✅ 宿主运行时 |
-| gstack | 最新 | 见下方 | ⚠️ specialist seats 需要 |
-| Claude Code CLI | 最新 | `npm install -g @anthropic-ai/claude-code` | ⚠️ claude seats 需要 |
-| Codex CLI | 最新 | `npm install -g @openai/codex` | ⚠️ codex seats 需要 |
-| lark-cli | 最新 | `brew install larksuite/cli/lark-cli` | 可选（飞书桥接） |
-| iTerm2 | 最新 | `brew install --cask iterm2` | 可选（窗口管理） |
-
-### 安装 gstack
-
-gstack 提供 builder、reviewer、qa、designer 的核心工作技能。没有它，specialist seats 可以启动但缺少关键能力。
+## OpenClaw 首装 Quickstart
 
 ```bash
-git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
-cd ~/.gstack/repos/gstack && ./setup
-```
-
-> `preflight` 会自动检测 gstack 是否安装，并给出安装命令。
-
-### 没有 Homebrew？
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
----
-
-## 安装路径
-
-### 路径 A：OpenClaw 安装（推荐）
-
-```bash
-# 1. Clone
 git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
 export CLAWSEAT_ROOT="$HOME/.clawseat"
 
-# 2. 安装 skill symlinks 到 ~/.openclaw/skills/
 python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
-
-# 3. 在 OpenClaw 里说 "安装 ClawSeat" 或读 clawseat-install skill
-# agent 会自动执行：
-#   init_koder.py → preflight → bootstrap → 配置 → 启动 planner
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py"
 ```
 
-### 路径 B：本地 Claude Code / Codex
+`openclaw_first_install.py` 是 canonical 总入口。它会顺序执行：
+
+1. 校验当前 checkout 是否就是 `~/.clawseat`
+2. 修复 `~/.openclaw/skills/*` 和 `~/.openclaw/workspace-koder/skills/*` symlink
+3. 运行 `python3 "$CLAWSEAT_ROOT/core/preflight.py" install --runtime openclaw --auto-fix`
+4. 初始化或刷新 `~/.openclaw/workspace-koder`
+5. 确保 `~/.agents/profiles/install-profile-dynamic.toml` 已存在且符合当前 schema
+6. bootstrap `materialized_seats`
+7. 如果 `planner` 已有显式 `tool/auth_mode/provider`，自动启动 `planner`
+8. 如果 `planner` 尚未配置，明确停在 configuration gate 并打印唯一下一步
+
+## 依赖分级
+
+### HARD_BLOCKED
+
+这些缺失时，首装会直接失败并要求先补齐：
+
+| 项目 | 要求 | 安装方式 |
+|------|------|----------|
+| Python | `>= 3.11` | `brew install python@3.12` |
+| tmux | 已安装 | `brew install tmux` |
+| Node.js | `>= 22` | `brew install node` |
+| OpenClaw CLI | 可执行 | `npm install -g openclaw` |
+| backend CLI | `claude` / `codex` / `gemini` 至少一个 | 按 seat runtime 安装 |
+| CLAWSEAT_ROOT | OpenClaw 首装必须指向 `~/.clawseat` | `export CLAWSEAT_ROOT="$HOME/.clawseat"` |
+| repo integrity | repo 必须包含 ClawSeat 核心文件 | 重新 clone `~/.clawseat` |
+
+### RETRYABLE
+
+这些问题允许自动修复，`--auto-fix` 只负责修这类项：
+
+- tmux server 未启动
+- `install-profile-dynamic.toml` 缺失或 schema 过旧
+- `~/.openclaw/skills/*` 或 `workspace-koder/skills/*` symlink 漂移
+- `~/.openclaw/workspace-koder` 缺文件或 contract 过旧
+- `~/.agents/sessions/install` 绑定目录缺失
+
+### WARNING
+
+这些不会阻止首装通过，但会限制后续能力：
+
+- `gstack` 缺失：specialist seats 可物化，但 builder/reviewer/qa/designer 能力受限
+- `lark-cli` 缺失：当前未启用飞书桥接时只给 warning
+- iTerm2 等可选窗口能力缺失
+
+## Runtime-Aware Preflight
+
+OpenClaw 首装必须用 runtime-aware 模式：
 
 ```bash
-# 1. Clone
+python3 "$CLAWSEAT_ROOT/core/preflight.py" install --runtime openclaw --auto-fix
+```
+
+行为变化：
+
+- 不再逐个对 `claude` / `codex` / `gemini` 全量 warning
+- 改成只检查“是否至少存在一个可用 backend CLI”
+- seat-specific CLI 在 seat 已配置或即将启动时再精确校验
+
+如果你只想看状态，不自动修复：
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/preflight.py" install --runtime openclaw
+```
+
+## 首装成功的定义
+
+一个成功的 OpenClaw 首装，至少要满足：
+
+- `~/.openclaw/workspace-koder` 已生成并匹配当前模板
+- `~/.agents/profiles/install-profile-dynamic.toml` 已就绪
+- `materialized_seats` 的 session / workspace scaffold 已存在
+- install console 可正常渲染
+- 如果 `planner` 已配置，`planner` 已启动
+- 如果 `planner` 未配置，安装流程必须明确停在配置 gate，而不是模糊失败
+
+## Planner 配置 Gate
+
+ClawSeat 仍然保持当前产品策略：backend seat 第一次启动前，必须显式配置 `tool/auth_mode/provider`。
+
+如果 `openclaw_first_install.py` 停在 configuration gate，按它打印的命令执行即可，格式类似：
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
+  --profile "$HOME/.agents/profiles/install-profile-dynamic.toml" \
+  --seat planner \
+  --tool codex \
+  --auth-mode oauth \
+  --provider xcode-best \
+  --confirm-start
+```
+
+## 机器漂移 / 更新后修复
+
+更新 ClawSeat 或怀疑 OpenClaw 还挂在旧 checkout 时，优先重跑 canonical 总入口：
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/openclaw_first_install.py"
+```
+
+只想刷新 workspace 生成物时：
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
+```
+
+只想修 skill symlink 时：
+
+```bash
+python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
+```
+
+## 本地 Claude Code / Codex
+
+本地 CLI 仍然支持，但它是次级路径，不是 OpenClaw 首装主路径：
+
+```bash
 git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat
 export CLAWSEAT_ROOT="$HOME/.clawseat"
-
-# 2. 安装入口 skill
 python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"
-
-# 3. 在 Claude Code 里输入
-/cs
 ```
 
----
+之后在本地 runtime 中使用 `/cs` 即可。
 
-## 安装流程详解（OpenClaw 路径）
+## 进一步排障
 
-```
-1. install_openclaw_bundle.py
-   └── 创建 10 个 skill symlinks 到 ~/.openclaw/skills/
-   └── 检查 gstack + lark-cli 外部依赖
-   └── exit 0=全部成功, 2=外部依赖缺失
+运行时目录、环境变量语义、dev checkout 与 install checkout 漂移判断，见：
 
-2. init_koder.py --workspace <koder工作区> --project install
-   └── 写入 IDENTITY.md, SOUL.md, TOOLS.md, MEMORY.md, AGENTS.md
-   └── 写入 WORKSPACE_CONTRACT.toml（含 feishu_group_id）
-   └── 创建 koder skill symlinks
+- [Runtime Environment](RUNTIME_ENV.md)
+- [Install Notes](INSTALL.md)
 
-3. preflight.py install
-   └── 检查 Python, tmux, repo integrity, profile, skills
-   └── 自动修复: tmux server, dynamic profile, session dir
+装完之后的日常使用（启动 / 停止 seat、切 provider、看日志），见：
 
-4. bootstrap_harness.py --profile <profile> --project-name install
-   └── 验证 skill registry
-   └── 创建 planner/builder/reviewer/qa/designer workspaces
-   └── 写入 WORKSPACE_CONTRACT.toml, AGENTS.md, TODO.md
-
-5. 用户配置每个 seat 的 tool/auth/provider
-
-6. start_seat.py --seat planner --confirm-start
-   └── 启动 tmux session
-   └── 检测 onboarding 状态
-   └── seed secrets
-
-7. dispatch_task.py 派发任务给 planner
-   └── 写 TODO.md + TASKS.md + handoff receipt
-   └── send-and-verify.sh 通知 planner
-```
-
----
-
-## Profile 路径
-
-Profile 持久化存储在 `~/.agents/profiles/{project}-profile-dynamic.toml`。
-
-首次安装时自动从 `examples/starter/profiles/install.toml` 种子化。
-
-Profile 中支持两种可移植占位符：
-- `{CLAWSEAT_ROOT}` → ClawSeat 仓库根目录
-- `~` → 用户主目录
-
----
-
-## 更新后刷新
-
-`git pull` 后必须刷新所有 seat 的 workspace 文件：
-
-```bash
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
-```
-
-零参数，自动检测 project、profile、koder workspace、feishu group ID。
-
----
-
-## Seat 启动顺序
-
-```
-koder（前台，OpenClaw agent）→ planner → specialist seats
-```
-
-- koder 不创建 tmux session（OpenClaw agent 就是 koder）
-- planner 和 specialist seats 在 tmux 中运行
-- 每个 seat 启动前必须由用户确认 tool/auth/provider
-
----
-
-## 飞书桥接
-
-1. 安装 lark-cli：`brew install larksuite/cli/lark-cli`
-2. 配置认证：`lark-cli config init --new`（按提示完成）
-3. 用户登录：`lark-cli auth login`
-4. 安装时提供飞书群 ID（`oc_xxx` 格式）
-5. planner 通过 `OC_DELEGATION_REPORT_V1` 协议以用户身份向群发送消息
-
----
-
-## 常用命令
-
-```bash
-# 环境预检
-python3 "$CLAWSEAT_ROOT/core/preflight.py" install
-
-# Skill 验证
-python3 "$CLAWSEAT_ROOT/core/scripts/skill_manager.py" check
-
-# 查看团队状态
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/render_console.py" \
-  --profile ~/.agents/profiles/install-profile-dynamic.toml
-
-# 分发任务
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
-  --profile ~/.agents/profiles/install-profile-dynamic.toml \
-  --source koder --target planner --task-id TASK-001 \
-  --title "任务标题" --objective "任务目标"
-
-# 刷新 workspace（git pull 后）
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py"
-
-# 运行测试
-python3 -m pytest tests/ -v
-python3 core/skills/gstack-harness/scripts/selftest.py
-python3 core/scripts/iterm_tmux_selftest.py
-```
-
----
-
-## Starter Profiles
-
-| Profile | 用途 |
-|---------|------|
-| `examples/starter/profiles/install.toml` | canonical 安装项目（koder + planner + builder + reviewer） |
-| `examples/starter/profiles/starter.toml` | 仅 koder 入口 |
-| `examples/starter/profiles/full-team.toml` | 完整六人团队 |
+- [Post-Install](POST_INSTALL.md)

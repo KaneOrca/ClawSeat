@@ -91,14 +91,14 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     run_engineer = sub.add_parser("run-engineer")
     run_engineer.add_argument("engineer")
     run_engineer.add_argument("--project")
-    run_engineer.add_argument("cmd", nargs=argparse.REMAINDER)
+    run_engineer.add_argument("cmd", nargs="*")
     run_engineer.set_defaults(func=hooks.cmd_run_engineer)
 
     start = sub.add_parser("start")
     start.add_argument("engineer")
     start.add_argument("tool", choices=["codex", "claude", "gemini"])
     start.add_argument("--project")
-    start.add_argument("cmd", nargs=argparse.REMAINDER)
+    start.add_argument("cmd", nargs="*")
     start.set_defaults(func=hooks.cmd_start)
 
     start_identity = sub.add_parser("start-identity")
@@ -200,7 +200,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_effective_launch = session_sub.add_parser("effective-launch")
     session_effective_launch.add_argument("engineer")
     session_effective_launch.add_argument("--project")
-    session_effective_launch.add_argument("cmd", nargs=argparse.REMAINDER)
+    session_effective_launch.add_argument("cmd", nargs="*")
     session_effective_launch.set_defaults(func=hooks.cmd_session_effective_launch)
 
     switch_harness = session_sub.add_parser("switch-harness")

@@ -21,11 +21,13 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[3]
-_core = str(REPO_ROOT / "core")
-if _core not in sys.path:
-    sys.path.insert(0, _core)
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-_harness_scripts = str(REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts")
+from core._bootstrap import CLAWSEAT_ROOT
+from core.resolve import dynamic_profile_path
+
+_harness_scripts = str(CLAWSEAT_ROOT / "core" / "skills" / "gstack-harness" / "scripts")
 if _harness_scripts not in sys.path:
     sys.path.insert(0, _harness_scripts)
 
@@ -79,7 +81,6 @@ def _detect_feishu_group_id(koder_ws: str | None) -> str:
 
 def _detect_profile(project: str) -> str | None:
     """Find profile TOML for the project."""
-    from resolve import dynamic_profile_path
     p = dynamic_profile_path(project)
     if p.exists():
         return str(p)

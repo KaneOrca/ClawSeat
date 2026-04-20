@@ -17,8 +17,33 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore
+
 from core.resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root
 from core.resolve import dynamic_profile_path as _dynamic_profile_path
+
+
+DEFAULT_OPENCLAW_HOME = Path.home() / ".openclaw"
+CANONICAL_OPENCLAW_REPO = Path.home() / ".clawseat"
+REQUIRED_OPENCLAW_GLOBAL_SKILLS = (
+    "gstack-harness",
+    "clawseat",
+    "clawseat-install",
+    "clawseat-koder-frontstage",
+)
+REQUIRED_OPENCLAW_KODER_SKILLS = (
+    "gstack-harness",
+    "clawseat-install",
+    "clawseat-koder-frontstage",
+)
+BACKEND_CLI_OPTIONS = (
+    ("claude", "npm install -g @anthropic-ai/claude-code"),
+    ("codex", "npm install -g @openai/codex"),
+    ("gemini", "npm install -g @google/gemini-cli"),
+)
 
 
 class PreflightStatus(Enum):
@@ -58,9 +83,19 @@ class PreflightResult:
 # ---------------------------------------------------------------------------
 
 
-def _check_clawseat_root() -> PreflightItem:
+def _resolve_openclaw_home() -> Path:
+    return Path(os.environ.get("OPENCLAW_HOME", str(DEFAULT_OPENCLAW_HOME))).expanduser()
+
+
+def _load_toml_file(path: Path) -> dict[str, Any]:
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def _check_clawseat_root(*, runtime: str = "local") -> PreflightItem:
     """Check CLAWSEAT_ROOT env var and its inferred fallback."""
     env_val = os.environ.get("CLAWSEAT_ROOT", "").strip()
+    canonical_root = CANONICAL_OPENCLAW_REPO.expanduser()
     if env_val:
         path = Path(env_val).expanduser()
         if path.exists():
@@ -70,6 +105,19 @@ def _check_clawseat_root() -> PreflightItem:
                 Path("core/harness_adapter.py"),
             )
             if all((path / m).exists() for m in markers):
+                if runtime == "openclaw" and path.resolve() != canonical_root.resolve():
+                    return PreflightItem(
+                        name="CLAWSEAT_ROOT",
+                        status=PreflightStatus.HARD_BLOCKED,
+                        message=(
+                            f"OpenClaw 首装要求 canonical checkout 位于 {canonical_root}; "
+                            f"当前 env 指向 {path}"
+                        ),
+                        fix_command=(
+                            "git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat\n"
+                            "export CLAWSEAT_ROOT=\"$HOME/.clawseat\""
+                        ),
+                    )
                 return PreflightItem(
                     name="CLAWSEAT_ROOT",
                     status=PreflightStatus.PASS,
@@ -115,6 +163,25 @@ def _check_clawseat_root() -> PreflightItem:
             continue
         seen.add(candidate)
         if all((candidate / m).exists() for m in helpers):
+            if runtime == "openclaw":
+                if candidate.resolve() != canonical_root.resolve():
+                    return PreflightItem(
+                        name="CLAWSEAT_ROOT",
+                        status=PreflightStatus.HARD_BLOCKED,
+                        message=(
+                            f"OpenClaw 首装要求 canonical checkout 位于 {canonical_root}; "
+                            f"当前推断到的是 {candidate}"
+                        ),
+                        fix_command=(
+                            "git clone https://github.com/KaneOrca/ClawSeat.git ~/.clawseat\n"
+                            "export CLAWSEAT_ROOT=\"$HOME/.clawseat\""
+                        ),
+                    )
+                return PreflightItem(
+                    name="CLAWSEAT_ROOT",
+                    status=PreflightStatus.PASS,
+                    message=f"canonical OpenClaw checkout at {candidate}",
+                )
             return PreflightItem(
                 name="CLAWSEAT_ROOT",
                 status=PreflightStatus.WARNING,
@@ -127,6 +194,173 @@ def _check_clawseat_root() -> PreflightItem:
         status=PreflightStatus.HARD_BLOCKED,
         message="cannot infer CLAWSEAT_ROOT; no env var set and no repository found",
         fix_command="export CLAWSEAT_ROOT=/path/to/ClawSeat",
+    )
+
+
+def _check_openclaw_host() -> list[PreflightItem]:
+    items: list[PreflightItem] = []
+    node = shutil.which("node")
+    if node:
+        items.append(
+            PreflightItem(
+                name="node",
+                status=PreflightStatus.PASS,
+                message=f"node at {node}",
+            )
+        )
+    else:
+        items.append(
+            PreflightItem(
+                name="node",
+                status=PreflightStatus.HARD_BLOCKED,
+                message="Node.js not found — OpenClaw runtime requires node",
+                fix_command="brew install node",
+            )
+        )
+
+    openclaw = shutil.which("openclaw")
+    if openclaw:
+        items.append(
+            PreflightItem(
+                name="openclaw",
+                status=PreflightStatus.PASS,
+                message=f"openclaw at {openclaw}",
+            )
+        )
+    else:
+        items.append(
+            PreflightItem(
+                name="openclaw",
+                status=PreflightStatus.HARD_BLOCKED,
+                message="OpenClaw CLI not found in PATH",
+                fix_command="npm install -g openclaw",
+            )
+        )
+    return items
+
+
+def _check_backend_cli() -> PreflightItem:
+    available: list[str] = []
+    for binary, _install in BACKEND_CLI_OPTIONS:
+        path = shutil.which(binary)
+        if path:
+            available.append(f"{binary} ({path})")
+    if available:
+        return PreflightItem(
+            name="backend_cli",
+            status=PreflightStatus.PASS,
+            message="at least one backend CLI available: " + ", ".join(available),
+        )
+    return PreflightItem(
+        name="backend_cli",
+        status=PreflightStatus.HARD_BLOCKED,
+        message="no backend CLI found — install at least one of claude, codex, or gemini before first seat launch",
+        fix_command="\n".join(install for _, install in BACKEND_CLI_OPTIONS),
+    )
+
+
+def _check_openclaw_skill_bundle(clawseat_root: Path) -> PreflightItem:
+    openclaw_home = _resolve_openclaw_home()
+    if not openclaw_home.exists():
+        return PreflightItem(
+            name="openclaw_skill_bundle",
+            status=PreflightStatus.RETRYABLE,
+            message=f"OpenClaw home not found at {openclaw_home}",
+            fix_command='python3 "${CLAWSEAT_ROOT}/shells/openclaw-plugin/install_openclaw_bundle.py"',
+        )
+
+    drift: list[str] = []
+    for skill_name in REQUIRED_OPENCLAW_GLOBAL_SKILLS:
+        dest = openclaw_home / "skills" / skill_name
+        source = clawseat_root / "core" / "skills" / skill_name
+        if not dest.is_symlink():
+            drift.append(f"{dest} missing")
+            continue
+        if dest.resolve() != source.resolve():
+            drift.append(f"{dest} -> {dest.resolve()} (expected {source})")
+    for skill_name in REQUIRED_OPENCLAW_KODER_SKILLS:
+        dest = openclaw_home / "workspace-koder" / "skills" / skill_name
+        source = clawseat_root / "core" / "skills" / skill_name
+        if not dest.is_symlink():
+            drift.append(f"{dest} missing")
+            continue
+        if dest.resolve() != source.resolve():
+            drift.append(f"{dest} -> {dest.resolve()} (expected {source})")
+
+    if drift:
+        return PreflightItem(
+            name="openclaw_skill_bundle",
+            status=PreflightStatus.RETRYABLE,
+            message="skill symlink drift detected: " + "; ".join(drift[:4]),
+            fix_command='python3 "${CLAWSEAT_ROOT}/shells/openclaw-plugin/install_openclaw_bundle.py"',
+        )
+    return PreflightItem(
+        name="openclaw_skill_bundle",
+        status=PreflightStatus.PASS,
+        message=f"OpenClaw skill bundle points at {clawseat_root}",
+    )
+
+
+def _check_koder_workspace(project: str) -> PreflightItem:
+    workspace = _resolve_openclaw_home() / "workspace-koder"
+    required_files = (
+        "IDENTITY.md",
+        "SOUL.md",
+        "AGENTS.md",
+        "TOOLS.md",
+        "MEMORY.md",
+        "WORKSPACE_CONTRACT.toml",
+    )
+    if not workspace.exists():
+        return PreflightItem(
+            name="workspace_koder",
+            status=PreflightStatus.RETRYABLE,
+            message=f"workspace-koder missing at {workspace}",
+            fix_command='python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/openclaw_first_install.py"',
+        )
+    missing = [name for name in required_files if not (workspace / name).exists()]
+    if missing:
+        return PreflightItem(
+            name="workspace_koder",
+            status=PreflightStatus.RETRYABLE,
+            message=f"workspace-koder incomplete: missing {', '.join(missing)}",
+            fix_command='python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/refresh_workspaces.py"',
+        )
+    try:
+        contract = _load_toml_file(workspace / "WORKSPACE_CONTRACT.toml")
+    except (OSError, tomllib.TOMLDecodeError):
+        return PreflightItem(
+            name="workspace_koder",
+            status=PreflightStatus.RETRYABLE,
+            message="workspace-koder contract unreadable",
+            fix_command='python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/refresh_workspaces.py"',
+        )
+    required_contract_keys = ("seat_id", "project", "profile", "backend_seats", "default_backend_start_seats")
+    missing_keys = [key for key in required_contract_keys if key not in contract]
+    if missing_keys or str(contract.get("project", "")).strip() != project:
+        detail = (
+            f"missing keys: {', '.join(missing_keys)}"
+            if missing_keys
+            else f"project mismatch: {contract.get('project')!r}"
+        )
+        return PreflightItem(
+            name="workspace_koder",
+            status=PreflightStatus.RETRYABLE,
+            message=f"workspace-koder contract stale ({detail})",
+            fix_command='python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/refresh_workspaces.py"',
+        )
+    profile_path = Path(str(contract.get("profile", ""))).expanduser()
+    if not profile_path.exists():
+        return PreflightItem(
+            name="workspace_koder",
+            status=PreflightStatus.RETRYABLE,
+            message=f"workspace-koder profile missing: {profile_path}",
+            fix_command='python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/refresh_workspaces.py"',
+        )
+    return PreflightItem(
+        name="workspace_koder",
+        status=PreflightStatus.PASS,
+        message=f"workspace-koder ready at {workspace}",
     )
 
 
@@ -286,14 +520,65 @@ def _check_repo_integrity(clawseat_root: Path) -> PreflightItem:
     )
 
 
-def _check_dynamic_profile(project: str) -> PreflightItem:
+def _check_dynamic_profile(project: str, *, runtime: str = "local") -> PreflightItem:
     """Check dynamic profile exists for the project."""
-    candidates = [
-        _dynamic_profile_path(project),
-        Path(f"/tmp/{project}-profile.toml"),
-    ]
+    dynamic_path = _dynamic_profile_path(project)
+    candidates = [dynamic_path]
+    if runtime != "openclaw":
+        candidates.append(Path(f"/tmp/{project}-profile.toml"))
     for candidate in candidates:
         if candidate.exists():
+            try:
+                payload = _load_toml_file(candidate)
+            except (OSError, tomllib.TOMLDecodeError) as exc:
+                return PreflightItem(
+                    name="dynamic_profile",
+                    status=PreflightStatus.RETRYABLE,
+                    message=f"profile exists but is unreadable: {candidate} ({exc})",
+                    fix_command=(
+                        'python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/cs_init.py" '
+                        "--refresh-profile"
+                        if project == "install"
+                        else (
+                            f'python3 "${{CLAWSEAT_ROOT}}/core/skills/gstack-harness/scripts/migrate_profile.py" '
+                            f"--source-profile /tmp/{project}-profile.toml "
+                            f"--output-profile {dynamic_path} "
+                            f"--project-name {project}"
+                        )
+                    ),
+                )
+
+            if project == "install":
+                dynamic = payload.get("dynamic_roster", {})
+                missing_keys = [
+                    key
+                    for key in ("materialized_seats", "bootstrap_seats", "default_start_seats")
+                    if key not in dynamic
+                ]
+                project_name = str(payload.get("project_name", "")).strip()
+                if project_name and project_name != project:
+                    return PreflightItem(
+                        name="dynamic_profile",
+                        status=PreflightStatus.RETRYABLE,
+                        message=f"profile project mismatch: expected {project!r}, found {project_name!r}",
+                        fix_command=(
+                            'python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/cs_init.py" '
+                            "--refresh-profile"
+                        ),
+                    )
+                if missing_keys:
+                    return PreflightItem(
+                        name="dynamic_profile",
+                        status=PreflightStatus.RETRYABLE,
+                        message=(
+                            f"profile found at {candidate} but dynamic_roster is missing "
+                            f"{', '.join(missing_keys)}"
+                        ),
+                        fix_command=(
+                            'python3 "${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/cs_init.py" '
+                            "--refresh-profile"
+                        ),
+                    )
             return PreflightItem(
                 name="dynamic_profile",
                 status=PreflightStatus.PASS,
@@ -370,7 +655,7 @@ def _check_session_binding_dir(project: str) -> PreflightItem:
 # ---------------------------------------------------------------------------
 
 
-def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
+def auto_fix(item: PreflightItem, project: str = "", *, runtime: str = "local") -> PreflightItem:
     """
     Attempt to auto-fix a RETRYABLE item.
 
@@ -413,10 +698,10 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
     if item.name == "dynamic_profile":
         try:
             if project == "install":
-                clawseat_root = os.environ.get("CLAWSEAT_ROOT", "").strip()
-                if clawseat_root:
-                    template_root = Path(clawseat_root).expanduser()
-                else:
+                template_root = _resolve_clawseat_root_from_env()
+                if template_root is None and runtime == "openclaw":
+                    template_root = CANONICAL_OPENCLAW_REPO
+                if template_root is None:
                     template_root = Path.home() / "coding" / "ClawSeat"
                 template_path = template_root / "examples" / "starter" / "profiles" / "install.toml"
                 output_profile = _dynamic_profile_path(project)
@@ -427,6 +712,7 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                         message=f"install profile template not found at {template_path}",
                         fix_command=item.fix_command,
                     )
+                output_profile.parent.mkdir(parents=True, exist_ok=True)
                 output_profile.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
                 return PreflightItem(
                     name=item.name,
@@ -436,11 +722,10 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                 )
 
             # Find migrate_profile.py — prefer CLAWSEAT_ROOT, then filesystem inference
-            clawseat_root = os.environ.get("CLAWSEAT_ROOT", "").strip()
-            if clawseat_root:
-                migrate_script = Path(clawseat_root) / "core" / "skills" / "gstack-harness" / "scripts" / "migrate_profile.py"
-            else:
-                migrate_script = Path.home() / "coding" / "ClawSeat" / "core" / "skills" / "gstack-harness" / "scripts" / "migrate_profile.py"
+            clawseat_root = _resolve_clawseat_root_from_env()
+            if clawseat_root is None:
+                clawseat_root = CANONICAL_OPENCLAW_REPO if runtime == "openclaw" else Path.home() / "coding" / "ClawSeat"
+            migrate_script = clawseat_root / "core" / "skills" / "gstack-harness" / "scripts" / "migrate_profile.py"
             if not migrate_script.exists():
                 return PreflightItem(
                     name=item.name,
@@ -513,6 +798,108 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                 fix_command=item.fix_command,
             )
 
+    if item.name == "openclaw_skill_bundle":
+        try:
+            clawseat_root = _resolve_clawseat_root_from_env() or CANONICAL_OPENCLAW_REPO
+            script = clawseat_root / "shells" / "openclaw-plugin" / "install_openclaw_bundle.py"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--openclaw-home",
+                    str(_resolve_openclaw_home()),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+                env={**os.environ, "CLAWSEAT_ROOT": str(clawseat_root)},
+            )
+            if result.returncode == 0:
+                return PreflightItem(
+                    name=item.name,
+                    status=PreflightStatus.PASS,
+                    message="OpenClaw skill bundle repaired",
+                    fix_command="",
+                )
+            detail = (result.stderr or result.stdout).strip() or "install_openclaw_bundle.py failed"
+            return PreflightItem(
+                name=item.name,
+                status=PreflightStatus.RETRYABLE,
+                message=detail,
+                fix_command=item.fix_command,
+            )
+        except Exception as e:
+            return PreflightItem(
+                name=item.name,
+                status=PreflightStatus.RETRYABLE,
+                message=f"skill bundle repair failed: {e}",
+                fix_command=item.fix_command,
+            )
+
+    if item.name == "workspace_koder":
+        try:
+            clawseat_root = _resolve_clawseat_root_from_env() or CANONICAL_OPENCLAW_REPO
+            workspace = _resolve_openclaw_home() / "workspace-koder"
+            profile_path = _dynamic_profile_path(project)
+            env = {**os.environ, "CLAWSEAT_ROOT": str(clawseat_root)}
+            if (workspace / "WORKSPACE_CONTRACT.toml").exists():
+                script = clawseat_root / "core" / "skills" / "clawseat-install" / "scripts" / "refresh_workspaces.py"
+                command = [
+                    sys.executable,
+                    str(script),
+                    "--project",
+                    project,
+                    "--profile",
+                    str(profile_path),
+                    "--koder-workspace",
+                    str(workspace),
+                ]
+            else:
+                workspace.mkdir(parents=True, exist_ok=True)
+                script = clawseat_root / "core" / "skills" / "clawseat-install" / "scripts" / "init_koder.py"
+                command = [
+                    sys.executable,
+                    str(script),
+                    "--workspace",
+                    str(workspace),
+                    "--project",
+                    project,
+                    "--profile",
+                    str(profile_path),
+                    "--feishu-group-id",
+                    "",
+                ]
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=90,
+                env=env,
+            )
+            if result.returncode == 0:
+                return PreflightItem(
+                    name=item.name,
+                    status=PreflightStatus.PASS,
+                    message=f"workspace-koder ready at {workspace}",
+                    fix_command="",
+                )
+            detail = (result.stderr or result.stdout).strip() or "workspace repair failed"
+            return PreflightItem(
+                name=item.name,
+                status=PreflightStatus.RETRYABLE,
+                message=detail,
+                fix_command=item.fix_command,
+            )
+        except Exception as e:
+            return PreflightItem(
+                name=item.name,
+                status=PreflightStatus.RETRYABLE,
+                message=f"workspace repair failed: {e}",
+                fix_command=item.fix_command,
+            )
+
     # Unknown — cannot auto-fix
     return item
 
@@ -578,7 +965,7 @@ def _check_skills() -> list[PreflightItem]:
         )]
 
 
-def preflight_check(project: str) -> PreflightResult:
+def preflight_check(project: str, *, runtime: str = "local") -> PreflightResult:
     """
     Run all preflight checks for the given project.
 
@@ -587,7 +974,7 @@ def preflight_check(project: str) -> PreflightResult:
     items: list[PreflightItem] = []
 
     # CLAWSEAT_ROOT
-    items.append(_check_clawseat_root())
+    items.append(_check_clawseat_root(runtime=runtime))
     clawseat_root = _resolve_clawseat_root_from_env()
 
     # python3
@@ -612,15 +999,30 @@ def preflight_check(project: str) -> PreflightResult:
         ))
 
     # dynamic profile
-    items.append(_check_dynamic_profile(project))
+    items.append(_check_dynamic_profile(project, runtime=runtime))
 
     # session binding dir
     items.append(_check_session_binding_dir(project))
 
-    # optional runtime CLIs (WARNING, not blocking)
-    items.append(_check_optional_cli("claude", "Claude Code CLI", "npm install -g @anthropic-ai/claude-code"))
-    items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
-    items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
+    if runtime == "openclaw":
+        items.extend(_check_openclaw_host())
+        items.append(_check_backend_cli())
+        if clawseat_root and clawseat_root.exists():
+            items.append(_check_openclaw_skill_bundle(clawseat_root))
+        else:
+            items.append(PreflightItem(
+                name="openclaw_skill_bundle",
+                status=PreflightStatus.HARD_BLOCKED,
+                message="cannot validate skill bundle — CLAWSEAT_ROOT not resolved",
+            ))
+        items.append(_check_koder_workspace(project))
+        items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
+    else:
+        # optional runtime CLIs (WARNING, not blocking)
+        items.append(_check_optional_cli("claude", "Claude Code CLI", "npm install -g @anthropic-ai/claude-code"))
+        items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
+        items.append(_check_optional_cli("gemini", "Gemini CLI", "npm install -g @google/gemini-cli"))
+        items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
 
     # gstack skills (WARNING — needed for specialist seats)
     gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
@@ -685,6 +1087,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Attempt to auto-fix retryable items",
     )
+    parser.add_argument(
+        "--runtime",
+        choices=("local", "openclaw"),
+        default="local",
+        help="Preflight mode. 'openclaw' enables canonical checkout and host checks.",
+    )
     return parser
 
 
@@ -692,15 +1100,15 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
 
-    result = preflight_check(args.project)
+    result = preflight_check(args.project, runtime=args.runtime)
 
     if args.auto_fix:
         for item in result.retryable_items:
-            fixed = auto_fix(item, args.project)
+            fixed = auto_fix(item, args.project, runtime=args.runtime)
             idx = result.items.index(item)
             result.items[idx] = fixed
         # Re-run to get updated status
-        result = preflight_check(args.project)
+        result = preflight_check(args.project, runtime=args.runtime)
 
     if args.json:
         import json as _json
@@ -708,6 +1116,7 @@ def main() -> int:
             "all_pass": result.all_pass,
             "has_hard_blocked": result.has_hard_blocked,
             "has_retryable": result.has_retryable,
+            "runtime": args.runtime,
             "items": [
                 {
                     "name": i.name,
@@ -721,7 +1130,7 @@ def main() -> int:
         print(_json.dumps(output, indent=2, ensure_ascii=False))
     else:
         # Human-readable output
-        print(f"preflight_check: {'PASS' if result.all_pass else 'FAIL'} [{args.project}]")
+        print(f"preflight_check: {'PASS' if result.all_pass else 'FAIL'} [{args.project}] ({args.runtime})")
         for item in result.items:
             icon = {
                 PreflightStatus.PASS: "✓",

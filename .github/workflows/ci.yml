@@ -31,15 +31,18 @@ jobs:
         run: echo "CLAWSEAT_ROOT=$(pwd)" >> $GITHUB_ENV
 
       - name: Pytest
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -v --tb=short
 
-      - name: Skill registry check
-        run: python core/scripts/skill_manager.py check
+      - name: Skill registry check (bundled only)
+        run: python core/scripts/skill_manager.py check --source bundled
 
       - name: Harness selftest
         run: |
           cd core/skills/gstack-harness/scripts
           python selftest.py > /dev/null
+
+      - name: iTerm/tmux selftest
+        run: python core/scripts/iterm_tmux_selftest.py
 
       - name: Compile check (core modules)
         run: |

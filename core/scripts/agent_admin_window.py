@@ -438,6 +438,20 @@ def open_project_tabs_window(project: Any, sessions: dict[str, Any], engineers: 
 
     run_iterm_script(build_script)
 
+    # Post-open verification: check that all seats are visible
+    not_visible: list[str] = []
+    for session in resolved_sessions:
+        result = verify_tui_visible(session.session, retries=3, delay=2.0)
+        if not result["visible"] and result["session_exists"]:
+            not_visible.append(session.engineer_id)
+    if not_visible:
+        print(
+            f"tui_verify_warning: {len(not_visible)} seat(s) running but not attached: "
+            f"{', '.join(not_visible)}. iTerm tabs may not have connected. "
+            "Attach manually: tmux attach -t <session>",
+            file=sys.stderr,
+        )
+
 
 def open_dashboard_window(projects: list[Any]) -> None:
     if not projects:
@@ -471,9 +485,92 @@ def open_dashboard_window(projects: list[Any]) -> None:
 
 def open_engineer_window(session: Any, engineer: Any | None) -> None:
     iterm_run_command(shell_attach_command(session), title=display_name_for(engineer, session.engineer_id))
+    # Post-open verification: check that the TUI is actually visible
+    result = verify_tui_visible(session.session, retries=3, delay=2.0)
+    if not result["visible"] and result["session_exists"]:
+        print(
+            f"tui_verify_warning: session '{session.session}' is running but not attached "
+            f"(clients={result['clients']}). The iTerm tab may not have connected. "
+            f"Connect manually: tmux attach -t {shlex.quote(session.session)}",
+            file=sys.stderr,
+        )
 
 
 def display_name_for(engineer: Any | None, fallback: str) -> str:
     if engineer and getattr(engineer, "display_name", ""):
         return engineer.display_name
     return fallback
+
+
+# ---------------------------------------------------------------------------
+# TUI visibility verification
+# ---------------------------------------------------------------------------
+
+
+def verify_tui_visible(
+    session_name: str,
+    *,
+    retries: int = 3,
+    delay: float = 2.0,
+) -> dict[str, Any]:
+    """Check whether a tmux session is attached (visible to the user).
+
+    Returns a dict:
+        session_exists  – tmux session exists
+        clients         – number of attached terminal clients (iTerm tabs count)
+        pane_content    – True if pane has non-blank output (TUI rendered)
+        visible         – True iff session_exists AND clients > 0
+    """
+    result: dict[str, Any] = {
+        "session_exists": False,
+        "clients": 0,
+        "pane_content": False,
+        "visible": False,
+    }
+
+    for attempt in range(1, retries + 1):
+        # 1. session exists?
+        if not tmux_has_session(session_name):
+            result["session_exists"] = False
+            if attempt < retries:
+                time.sleep(delay)
+                continue
+            return result
+        result["session_exists"] = True
+
+        # 2. list clients attached to this session
+        try:
+            clients_proc = tmux_with_retry(
+                ["list-clients", "-t", session_name, "-F", "#{client_name}"],
+                label=f"verify_tui_visible list-clients {session_name}",
+                check=False,
+                retries=1,
+            )
+            client_lines = [
+                line for line in (clients_proc.stdout or "").splitlines() if line.strip()
+            ]
+            result["clients"] = len(client_lines)
+        except AgentAdminWindowError:
+            result["clients"] = 0
+
+        # 3. pane content (non-blank = TUI rendered)
+        try:
+            pane_proc = tmux_with_retry(
+                ["capture-pane", "-t", session_name, "-p"],
+                label=f"verify_tui_visible capture-pane {session_name}",
+                check=False,
+                retries=1,
+            )
+            result["pane_content"] = bool((pane_proc.stdout or "").strip())
+        except AgentAdminWindowError:
+            result["pane_content"] = False
+
+        # 4. visible = session exists + at least one client attached
+        result["visible"] = result["session_exists"] and result["clients"] > 0
+        if result["visible"]:
+            return result
+
+        if attempt < retries:
+            time.sleep(delay)
+
+    return result
