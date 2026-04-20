@@ -112,6 +112,7 @@ require_success = BASE_COMMON.require_success
 notify = BASE_COMMON.notify
 resolve_session_name = BASE_COMMON.resolve_session_name
 build_notify_message = BASE_COMMON.build_notify_message
+build_notify_payload = BASE_COMMON.build_notify_payload
 build_completion_message = BASE_COMMON.build_completion_message
 upsert_tasks_row = BASE_COMMON.upsert_tasks_row
 append_status_note = BASE_COMMON.append_status_note

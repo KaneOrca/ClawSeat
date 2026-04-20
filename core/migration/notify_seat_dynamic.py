@@ -5,6 +5,7 @@ import argparse
 
 from dynamic_common import (
     assert_target_not_memory,
+    build_notify_payload,
     load_profile,
     notify,
     require_success,
@@ -34,23 +35,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_payload(project_name: str, args: argparse.Namespace) -> str:
-    prefix = f"{args.kind} from {args.source} to {args.target}"
-    if args.task_id:
-        prefix = f"{args.task_id} {prefix}"
-    suffix = ""
-    if args.reply_to:
-        suffix = f" Reply to {args.reply_to} if follow-up or completion is required."
-    return f"[{project_name}] {prefix}: {args.message.strip()}{suffix}"
-
-
 def main() -> int:
     args = parse_args()
     # T9: block notify to memory — memory is an oracle; reach it via
     # query_memory.py instead. See _common.py guard docstring for rationale.
     assert_target_not_memory(args.target, "notify_seat_dynamic.py")
     profile = load_profile(args.profile)
-    payload = build_payload(profile.project_name, args)
+    payload = build_notify_payload(
+        source=args.source,
+        target=args.target,
+        message=args.message,
+        kind=args.kind,
+        task_id=args.task_id,
+        reply_to=args.reply_to,
+        project_name=profile.project_name,
+    )
     result = notify(profile, args.target, payload)
     require_success(result, "notify seat")
     if args.task_id and not args.skip_receipt:

@@ -88,6 +88,7 @@ from _task_io import (  # noqa: F401 — re-export
     append_task_to_queue,
     build_completion_message,
     build_notify_message,
+    build_notify_payload,
     complete_task_in_queue,
     extract_canonical_verdict,
     extract_prefixed_value,
