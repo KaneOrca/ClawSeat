@@ -8,6 +8,12 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+# agent_admin_config lives in the same scripts directory.
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from agent_admin_config import _resolve_effective_home as _ws_effective_home  # noqa: E402
+
 
 REPO_ROOT = Path(
     os.environ.get("CLAWSEAT_ROOT", str(Path(__file__).resolve().parents[2]))
@@ -105,7 +111,7 @@ def _resolve_tasks_root(project: Any) -> str:
     (ClawSeat convention). Falls back to repo_root/.tasks for projects
     that keep tasks inside their repo.
     """
-    agents_root = Path(os.environ.get("AGENTS_ROOT", str(Path.home() / ".agents")))
+    agents_root = Path(os.environ.get("AGENTS_ROOT", str(_ws_effective_home() / ".agents")))
     agents_tasks = agents_root / "tasks" / project.name
     # Use the standard agents path if the agents root exists (even if the
     # project tasks dir hasn't been created yet — it will be during bootstrap).

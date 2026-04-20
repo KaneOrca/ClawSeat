@@ -1088,10 +1088,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Pre-parse --real-home before the full subcommand parser so callers can
+    # override effective HOME for diagnostic use (sets CLAWSEAT_REAL_HOME env).
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--real-home", dest="real_home", default=None,
+                     help="Override effective HOME for this invocation (sets CLAWSEAT_REAL_HOME).")
+    pre_args, remaining = pre.parse_known_args(argv)
+    if pre_args.real_home:
+        os.environ["CLAWSEAT_REAL_HOME"] = str(Path(pre_args.real_home).expanduser())
+    else:
+        remaining = list(argv) if argv is not None else None
+
     ensure_root_layout()
     migrate_session_model()
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(remaining)
     try:
         return args.func(args)
     except (AgentAdminError, AgentAdminWindowError) as exc:

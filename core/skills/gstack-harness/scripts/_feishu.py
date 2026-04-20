@@ -81,6 +81,18 @@ def _real_user_home() -> Path:
     return Path.home()
 
 
+def _is_sandbox_home(path: Path) -> bool:
+    """Return True if *path* looks like a ClawSeat seat runtime sandbox HOME."""
+    return "/.agents/runtime/identities/" in str(path)
+
+
+def _resolve_effective_home() -> Path:
+    """Return effective HOME: respects CLAWSEAT_SANDBOX_HOME_STRICT=1 for tests."""
+    if os.environ.get("CLAWSEAT_SANDBOX_HOME_STRICT") == "1":
+        return Path.home()
+    return _real_user_home()
+
+
 # ── Delegation report constants ──────────────────────────────────────
 
 DELEGATION_REPORT_HEADER = "OC_DELEGATION_REPORT_V1"

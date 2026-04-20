@@ -7,10 +7,10 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from agent_admin_config import DEFAULT_PATH
+from agent_admin_config import DEFAULT_PATH, _resolve_effective_home
 
 
-HOME = Path.home()
+HOME = _resolve_effective_home()
 REPO_ROOT = Path(os.environ.get("CODE_REPO_ROOT", str(HOME / "coding"))).expanduser()
 RUNTIME_ROOT = HOME / ".agents" / "runtime" / "identities"
 SECRETS_ROOT = HOME / ".agents" / "secrets"

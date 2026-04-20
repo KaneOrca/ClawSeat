@@ -6,6 +6,56 @@ import sys
 from pathlib import Path
 
 
+# ── Sandbox HOME resolution ───────────────────────────────────────────────────
+#
+# Claude Code seats run inside a sandbox HOME at
+#   ~/.agents/runtime/identities/<tool>/<auth>/<identity>/home/
+# so Path.home() inside a seat returns THAT, not the operator's real HOME.
+# All agent_admin path resolution must use the effective home to avoid
+# pointing at sandbox-local artifacts that don't exist there.
+
+
+def _is_sandbox_home(path: Path) -> bool:
+    """Return True if *path* looks like a ClawSeat seat runtime sandbox HOME."""
+    return "/.agents/runtime/identities/" in str(path)
+
+
+def _real_user_home() -> Path:
+    """Return the operator's real HOME, bypassing seat sandbox isolation.
+
+    Resolution priority (most-authoritative first):
+    1. CLAWSEAT_REAL_HOME env override — set explicitly by the harness.
+    2. AGENT_HOME env differing from Path.home() — harness injected real path.
+    3. pwd.getpwuid — the OS's authoritative answer, immune to HOME env override.
+    4. Path.home() as last-resort fallback.
+    """
+    if os.environ.get("CLAWSEAT_SANDBOX_HOME_STRICT") == "1":
+        return Path.home()
+    override = os.environ.get("CLAWSEAT_REAL_HOME")
+    if override:
+        return Path(override).expanduser()
+    agent_home = os.environ.get("AGENT_HOME", "")
+    if agent_home and agent_home != str(Path.home()):
+        return Path(agent_home).expanduser()
+    try:
+        import pwd
+        pw = pwd.getpwuid(os.getuid())
+        if pw and pw.pw_dir:
+            return Path(pw.pw_dir)
+    except (ImportError, KeyError):
+        pass
+    return Path.home()
+
+
+def _resolve_effective_home() -> Path:
+    """Return the effective HOME for agent_admin path resolution.
+
+    Respects CLAWSEAT_SANDBOX_HOME_STRICT=1 (force sandbox, for tests)
+    and delegates to _real_user_home() otherwise.
+    """
+    return _real_user_home()
+
+
 def _resolve_tool_bin(name: str) -> str:
     resolved = shutil.which(name)
     if resolved:
@@ -27,7 +77,7 @@ def _default_path() -> str:
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-HOME = Path.home()
+HOME = _resolve_effective_home()
 AGENTS_ROOT = HOME / ".agents"
 PROJECTS_ROOT = AGENTS_ROOT / "projects"
 ENGINEERS_ROOT = AGENTS_ROOT / "engineers"
