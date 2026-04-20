@@ -27,7 +27,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _INSTALL_FLOW = _REPO_ROOT / "core" / "skills" / "clawseat-install" / "references" / "install-flow.md"
 
 CRITICAL = {"G1", "G2", "G6", "G8", "G11", "G14"}
-CRITICAL_SMOKE = {"G_SMOKE_RECEIPT", "G_SMOKE_AUTH"}
+# G_SMOKE_AUTH is advisory: auth can expire between installs and requires user action to renew
+CRITICAL_SMOKE = {"G_SMOKE_RECEIPT"}
 
 _AGENT_FIELD_RE = re.compile(r'^\s*(?:koder_)?agent\s*=\s*["\']?(\w[\w\-]*)["\']?', re.MULTILINE)
 
@@ -114,11 +115,13 @@ def _check_feishu_smoke(
             auth_evidence = result.stdout.strip()[:120] if result.stdout else result.stderr.strip()[:120]
         except (OSError, subprocess.TimeoutExpired) as exc:
             auth_evidence = f"check-auth failed: {exc}"
+    # G_SMOKE_AUTH is warn-only: auth can expire between installs; receipt is the durable proof
     results.append(_check(
         "G_SMOKE_AUTH",
         "Phase 5 lark-cli auth valid (send_delegation_report --check-auth)",
         auth_pass,
         auth_evidence,
+        warn_only=True,
     ))
 
     return results

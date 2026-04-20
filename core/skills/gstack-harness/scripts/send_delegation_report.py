@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# Bot-identity limitation: this script always sends as the USER identity via lark-cli OAuth.
+# Bot-identity transport (Feishu app bot) is intentionally NOT supported here because:
+#   1. lark-cli only exposes the user OAuth flow; bot tokens require a separate Feishu app credential.
+#   2. OC_DELEGATION_REPORT_V1 envelopes are signed by user identity so koder can verify
+#      the report came from a trusted human-controlled session, not an automated bot.
+#   3. For koder seats running as OpenClaw agents (e.g. "mor"), the user identity is the
+#      human operator's Feishu account — changing to bot identity would require separate
+#      credential management and bypass the scope validation gate.
+# If you need bot-identity transport (e.g. to bypass im:message.group_msg:receive scope
+# for a group where the user account is not a member), implement a separate script using
+# the Feishu server-side API with an app_access_token, not via this file.
 from __future__ import annotations
 
 import argparse
@@ -14,7 +25,7 @@ from _common import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Send an OC_DELEGATION_REPORT_V1 message to Feishu as the user."
+        description="Send an OC_DELEGATION_REPORT_V1 message to Feishu as the user (user identity only; see bot-identity note at top of file)."
     )
     parser.add_argument("--project", required=False, help="Project name.")
     parser.add_argument(

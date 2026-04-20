@@ -1,5 +1,9 @@
 # Feishu Bridge Setup & Smoke Test
 
+> **Canonical SOP**: This file is the reference guide for the 7-step Feishu bridge setup.
+> The install flow entry point is [install-flow.md Phase 5](install-flow.md#phase-5-feishu-bridge-smoke-test).
+> For the step-by-step ancestor runbook, see [ancestor-runbook.md Phase 5](ancestor-runbook.md).
+
 ## Prerequisites
 
 - `lark-cli` installed and in PATH (`brew install larksuite/cli/lark-cli` or check `which lark-cli`)
@@ -148,6 +152,10 @@ Koder should receive the `OC_DELEGATION_REPORT_V1` envelope in the group and ver
 - `report_status=done` + `next_action=consume_closeout` → auto-advance
 
 ## Troubleshooting
+
+### lark-cli `---WAIT---` during auth
+
+If you see `---WAIT---` in lark-cli output during `lark-cli auth login`, this is **normal device flow polling** — lark-cli is waiting for the user to approve in a browser. Do NOT kill the process. Wait for the browser approval, or press Ctrl-C and retry with a browser-accessible terminal.
 
 ### Quick diagnosis
 
