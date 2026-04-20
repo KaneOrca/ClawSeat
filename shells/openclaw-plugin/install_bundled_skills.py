@@ -67,6 +67,10 @@ LARK_SKILLS_REPO = "https://github.com/larksuite/cli.git"
 def _resolve_gstack_skills_root() -> Path:
     """Return the gstack skills root. Honors GSTACK_SKILLS_ROOT env.
 
+    Refuses relative paths — they silently resolve against cwd and produce
+    mystery "skill not found" errors. Warns on stderr and falls back to
+    the canonical default when env is non-absolute.
+
     Keep in sync with core/skill_registry.py::_resolve_gstack_skills_root
     and core/skills/gstack-harness/scripts/dispatch_task.py. Operators who
     cloned gstack outside the canonical `~/.gstack/repos/gstack` can export
@@ -75,7 +79,16 @@ def _resolve_gstack_skills_root() -> Path:
     """
     env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
     if env:
-        return Path(env).expanduser()
+        expanded = Path(env).expanduser()
+        if not expanded.is_absolute():
+            sys.stderr.write(
+                f"warning: GSTACK_SKILLS_ROOT={env!r} is not absolute; "
+                f"ignoring and falling back to ~/.gstack/repos/gstack/.agents/skills.\n"
+                f"         Set it to an absolute path like "
+                f"{expanded.resolve()} to take effect.\n"
+            )
+        else:
+            return expanded
     return _USER_HOME / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
 
 

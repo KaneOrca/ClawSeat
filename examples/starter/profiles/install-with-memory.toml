@@ -1,3 +1,7 @@
+# Requires gstack skills: YES — declares builder / reviewer roles; preflight HARD_BLOCKs if gstack skills are missing.
+# Install gstack: git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup
+# Or if gstack is already at a non-canonical path: export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills
+# This is the canonical overlay-flow profile — memory seat declared first so the rest of install can query it.
 version = 1
 profile_name = "install-with-memory"
 description = "Install profile with Memory CC as the first backend seat. Memory CC scans the machine once on startup and serves as knowledge oracle for the rest of install (ancestor Claude Code queries it to avoid asking the user for values that already live on disk: API keys, Feishu group IDs, OpenClaw agent list, etc)."

@@ -139,3 +139,32 @@ def test_gstack_fix_command_includes_both_paths(monkeypatch, tmp_path):
     assert "git clone" in fix and "garrytan/gstack" in fix, "missing canonical clone hint"
     assert "GSTACK_SKILLS_ROOT" in fix, "missing env-var fallback hint"
     assert "Path checked" in fix, "operator needs to see exact path examined"
+
+
+def test_relative_gstack_env_hardblocks_regardless_of_profile(monkeypatch, tmp_path):
+    """Non-absolute GSTACK_SKILLS_ROOT must HARD_BLOCK preflight *before*
+    the existence check, so the operator learns their env var was junk
+    instead of debugging a mystery 'skills not found at ./skills' error.
+
+    Applies even to koder-only profiles — the operator's expressed intent
+    was to override, and we should surface that the override is broken.
+    """
+    profile = _write_profile(tmp_path, "t6", {"koder": "frontstage-supervisor"})
+    monkeypatch.setenv("GSTACK_SKILLS_ROOT", "./nope-relative")
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    mod = _load_preflight()
+    monkeypatch.setattr(mod, "_dynamic_profile_path", lambda project: profile)
+
+    result = mod.preflight_check("t6")
+    gstack_items = [i for i in result.items if i.name == "gstack"]
+    # Should have TWO items: the HARD_BLOCK for non-absolute env, and the
+    # fallthrough WARN/HARD for canonical missing. We only assert that at
+    # least one is HARD_BLOCKED and its message names the bad env value.
+    hard = [i for i in gstack_items if i.status == mod.PreflightStatus.HARD_BLOCKED]
+    assert hard, (
+        f"expected HARD_BLOCKED from non-absolute env, got {[i.status for i in gstack_items]}"
+    )
+    assert any("not an absolute path" in i.message for i in hard), (
+        f"HARD_BLOCK message must explain the env was non-absolute: "
+        f"{[i.message for i in hard]}"
+    )

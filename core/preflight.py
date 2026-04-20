@@ -678,8 +678,31 @@ def preflight_check(project: str) -> PreflightResult:
     _GSTACK_NEEDED_ROLES = {"builder", "reviewer", "qa", "designer"}
     gstack_env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
     if gstack_env:
-        gstack_root = Path(gstack_env).expanduser()
-        gstack_source = "GSTACK_SKILLS_ROOT"
+        gstack_expanded = Path(gstack_env).expanduser()
+        if gstack_expanded.is_absolute():
+            gstack_root = gstack_expanded
+            gstack_source = "GSTACK_SKILLS_ROOT"
+        else:
+            # Non-absolute env var would silently resolve against cwd.
+            # Surface it as a preflight HARD_BLOCKED because the operator's
+            # intent is clearly "redirect gstack" and falling back silently
+            # to the canonical path would cause more confusion than halting.
+            items.append(PreflightItem(
+                name="gstack",
+                status=PreflightStatus.HARD_BLOCKED,
+                message=(
+                    f"GSTACK_SKILLS_ROOT={gstack_env!r} is not an absolute path. "
+                    f"Relative paths silently resolve against the shell's cwd and "
+                    f"produce mystery 'skill not found' errors downstream."
+                ),
+                fix_command=(
+                    "export GSTACK_SKILLS_ROOT=" + str(gstack_expanded.resolve()) + "\n"
+                    "# or any other absolute path to your gstack .agents/skills/ dir"
+                ),
+            ))
+            # Continue with canonical default so later checks still fire.
+            gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+            gstack_source = "canonical (env var ignored because non-absolute)"
     else:
         gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
         gstack_source = "canonical ~/.gstack/repos/gstack/.agents/skills"

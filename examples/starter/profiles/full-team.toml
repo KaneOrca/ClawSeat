@@ -1,3 +1,6 @@
+# Requires gstack skills: YES — declares builder / reviewer / qa / designer roles; preflight HARD_BLOCKs if gstack skills are missing.
+# Install gstack: git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup
+# Or if gstack is already at a non-canonical path: export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills
 version = 1
 profile_name = "full-team"
 description = "Generic ClawSeat full-team starter profile — koder + planner + builder + reviewer + qa + designer. Use install.toml for the canonical /cs install chain."

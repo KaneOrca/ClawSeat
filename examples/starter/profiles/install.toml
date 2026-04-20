@@ -1,6 +1,7 @@
-# Requires gstack skills installed (builder/reviewer roles depend on gstack-investigate/review).
-# Before using this profile, run: git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup
-# If you do not want gstack, use ./starter.toml (koder-only) instead.
+# Requires gstack skills: YES — declares builder / reviewer roles; preflight HARD_BLOCKs if gstack skills are missing.
+# Install gstack: git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack && cd ~/.gstack/repos/gstack && ./setup
+# Or if gstack is already at a non-canonical path: export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills
+# Note: install-with-memory.toml is the canonical overlay-flow profile (this one is the legacy memory-less variant). Prefer that unless you explicitly don't want memory.
 version = 1
 profile_name = "install"
 description = "Canonical /cs install profile — koder frontstage + planner-first install chain with builder/reviewer workspaces precreated."

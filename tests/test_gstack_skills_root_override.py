@@ -148,3 +148,98 @@ def test_preflight_gstack_check_reports_env_path(monkeypatch, tmp_path):
         f"preflight.py --help regressed under GSTACK_SKILLS_ROOT:\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
+
+
+# ── Absolute-path validation ────────────────────────────────────────
+
+def test_relative_env_falls_back_to_canonical_in_skill_registry(monkeypatch, capsys):
+    """`GSTACK_SKILLS_ROOT=./skills` (relative) must NOT be used — it
+    silently resolves against cwd. skill_registry's resolver should warn
+    to stderr and return None (which falls back to canonical in
+    expand_skill_path). Locks the guard agreed in the UX audit."""
+    monkeypatch.setenv("GSTACK_SKILLS_ROOT", "./relative-skills")
+    mod = _load_skill_registry()
+    result = mod._resolve_gstack_skills_root()
+    assert result is None, (
+        f"relative env var should not take effect; got {result!r}"
+    )
+    captured = capsys.readouterr()
+    assert "not absolute" in captured.err, (
+        f"expected stderr warning about non-absolute path, got: {captured.err!r}"
+    )
+
+
+def test_relative_env_does_not_rewrite_expand_skill_path(monkeypatch):
+    """With a relative override, expand_skill_path falls back to canonical
+    `~` expansion — same behavior as if env were unset."""
+    monkeypatch.setenv("GSTACK_SKILLS_ROOT", "./nope")
+    mod = _load_skill_registry()
+    raw = "~/.gstack/repos/gstack/.agents/skills/gstack-review/SKILL.md"
+    result = mod.expand_skill_path(raw)
+    assert str(result).startswith(str(Path.home())), (
+        f"relative override should not redirect; got {result}"
+    )
+    assert "nope" not in str(result)
+
+
+def test_absolute_env_still_wins(monkeypatch, tmp_path):
+    """Regression: after adding the relative-path guard, absolute env
+    values must still redirect. Prevents the guard from accidentally
+    rejecting every override."""
+    monkeypatch.setenv("GSTACK_SKILLS_ROOT", str(tmp_path / "abs-root"))
+    mod = _load_skill_registry()
+    result = mod._resolve_gstack_skills_root()
+    assert result == str(tmp_path / "abs-root")
+
+
+def test_dispatch_task_resolver_rejects_relative(monkeypatch, tmp_path):
+    """dispatch_task.py's inline resolver must match skill_registry's
+    behavior for relative paths — they drift otherwise (three modules
+    maintain functionally-identical copies)."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, %r); "
+            "from dispatch_task import _resolve_gstack_skills_root as r; "
+            "print(r())"
+            % str(_REPO / "core" / "skills" / "gstack-harness" / "scripts"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env={**os.environ, "GSTACK_SKILLS_ROOT": "./relative"},
+    )
+    assert result.returncode == 0, result.stderr
+    # Output should be canonical home-rooted, NOT anything with "relative"
+    assert "relative" not in result.stdout, (
+        f"dispatch_task resolver wrongly accepted relative path: {result.stdout}"
+    )
+    assert ".gstack/repos/gstack/.agents/skills" in result.stdout, (
+        f"expected canonical fallback, got {result.stdout}"
+    )
+    # Warning should have landed on stderr
+    assert "not absolute" in result.stderr
+
+
+def test_install_bundled_skills_resolver_rejects_relative(monkeypatch, tmp_path):
+    """install_bundled_skills.py's module-level GSTACK_SKILLS_ROOT must
+    not reflect a relative env value."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, %r); "
+            "import install_bundled_skills as m; print(m.GSTACK_SKILLS_ROOT)"
+            % str(_REPO / "shells" / "openclaw-plugin"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env={**os.environ, "GSTACK_SKILLS_ROOT": "./skills"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "skills" in result.stdout  # canonical path ends in "skills"
+    # But NOT the relative "./skills" — canonical should win
+    assert ".gstack/repos/gstack/.agents/skills" in result.stdout
+    assert "not absolute" in result.stderr

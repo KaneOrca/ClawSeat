@@ -30,11 +30,28 @@ _CANONICAL_GSTACK_PREFIX = "~/.gstack/repos/gstack/.agents/skills"
 def _resolve_gstack_skills_root() -> str | None:
     """Return the operator-provided GSTACK_SKILLS_ROOT override, or None.
 
+    Refuses relative paths — they silently resolve against cwd and produce
+    mystery "skill not found" errors at bootstrap / start_seat time. Emits
+    a stderr warning and falls back to the canonical default when the env
+    var is non-absolute.
+
     Shared with core/skills/gstack-harness/scripts/dispatch_task.py's
     identical resolver — keep the two in sync if either changes.
     """
+    import sys as _sys
     env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
-    return env or None
+    if not env:
+        return None
+    expanded = Path(env).expanduser()
+    if not expanded.is_absolute():
+        _sys.stderr.write(
+            f"warning: GSTACK_SKILLS_ROOT={env!r} is not absolute; "
+            f"ignoring and falling back to ~/.gstack/repos/gstack/.agents/skills.\n"
+            f"         Set it to an absolute path like "
+            f"{expanded.resolve()} to take effect.\n"
+        )
+        return None
+    return str(expanded)
 
 
 # Source-specific install hints shown when a skill is missing.

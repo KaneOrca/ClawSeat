@@ -96,9 +96,21 @@ def _try_announce_planner_event(*, project: str, source: str, target: str, task_
 # All four MUST move together — the SKILL.md text is the source of truth.
 
 def _resolve_gstack_skills_root() -> str:
-    env = os.environ.get("GSTACK_SKILLS_ROOT")
+    env = (os.environ.get("GSTACK_SKILLS_ROOT") or "").strip()
     if env:
-        return env
+        expanded = Path(env).expanduser()
+        if not expanded.is_absolute():
+            # Refuse relative paths — they silently resolve against cwd,
+            # which produces mystery "not found" errors at dispatch time.
+            # Keep the pattern identical to skill_registry._resolve_gstack_skills_root.
+            sys.stderr.write(
+                f"warning: GSTACK_SKILLS_ROOT={env!r} is not absolute; "
+                f"ignoring and falling back to ~/.gstack/repos/gstack/.agents/skills.\n"
+                f"         Set it to an absolute path like "
+                f"{Path(env).expanduser().resolve()} to take effect.\n"
+            )
+        else:
+            return str(expanded)
     return str(Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills")
 
 
