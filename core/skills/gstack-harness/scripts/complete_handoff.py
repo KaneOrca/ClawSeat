@@ -9,6 +9,12 @@ import tempfile
 import time
 from pathlib import Path
 
+# Add core/lib to path so seat_resolver can be imported
+_scripts_dir = Path(__file__).parent.resolve()
+_core_lib = _scripts_dir.parent.parent.parent / "lib"
+if str(_core_lib) not in sys.path:
+    sys.path.insert(0, str(_core_lib))
+
 from _common import (
     append_consumed_ack,
     append_task_to_queue,
@@ -21,7 +27,6 @@ from _common import (
     legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
-    resolve_primary_feishu_group_id,
     send_feishu_user_message,
     stable_dispatch_nonce,
     utc_now_iso,
@@ -29,6 +34,8 @@ from _common import (
     write_json,
     write_todo,
 )
+
+from seat_resolver import resolve_seat_from_profile
 
 
 def _do_prune(text: str, task_id: str) -> str:
@@ -514,10 +521,9 @@ def main() -> int:
             target=args.target,
             user_summary=args.user_summary,
         )
-        # Determine koder type once: OpenClaw koder has a Feishu group configured.
-        # In OpenClaw mode koder is NOT a tmux session — Feishu is the only notify channel.
-        # In local CLI mode (no Feishu group) koder runs as a tmux session.
-        openclaw_koder = planner_to_frontstage and bool(resolve_primary_feishu_group_id(project=profile.project_name))
+        # Resolve target kind via seat_resolver — determines Feishu vs tmux path.
+        resolution = resolve_seat_from_profile(args.target, profile)
+        openclaw_koder = planner_to_frontstage and resolution.kind == "openclaw"
         if openclaw_koder:
             # ── OpenClaw koder path ────────────────────────────────────────────
             # Send OC_DELEGATION_REPORT_V1 directly. Never attempt tmux for this case.

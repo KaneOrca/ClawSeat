@@ -159,16 +159,6 @@ def _invoke_main_with_argv(module, argv: list[str]) -> int:
             ],
         ),
         (
-            "notify_legacy",
-            [
-                "notify_seat.py",
-                "--profile", "/nonexistent/profile.toml",
-                "--source", "planner",
-                "--target", "memory",
-                "--message", "ping",
-            ],
-        ),
-        (
             "dispatch_dynamic",
             [
                 "dispatch_task_dynamic.py",
@@ -179,22 +169,10 @@ def _invoke_main_with_argv(module, argv: list[str]) -> int:
                 "--objective", "body",
             ],
         ),
-        (
-            "notify_dynamic",
-            [
-                "notify_seat_dynamic.py",
-                "--profile", "/nonexistent/profile.toml",
-                "--source", "planner",
-                "--target", "memory",
-                "--message", "ping",
-            ],
-        ),
     ],
     ids=[
         "legacy.dispatch",
-        "legacy.notify",
         "dynamic.dispatch",
-        "dynamic.notify",
     ],
 )
 def test_entrypoints_block_memory_target_before_profile_load(
@@ -215,3 +193,26 @@ def test_dynamic_common_reexports_guard(dispatch_dynamic):
     # dynamic_common; make sure the re-export path is live.
     assert callable(dispatch_dynamic.assert_target_not_memory)
     assert dispatch_dynamic.assert_target_not_memory("planner", "x") is None
+
+
+# ---------------------------------------------------------------------------
+# T22 fold-in: notify_seat.py → memory now allowed (T7 compliance)
+# ---------------------------------------------------------------------------
+
+
+def test_notify_seat_to_memory_is_allowed_after_T22(common):
+    # notify_seat.py may now target memory — T7 memory-query-protocol
+    # Missing-Key Escalation requires memory to receive notifications.
+    # The guard is a no-op for this caller.
+    assert common.assert_target_not_memory("memory", "notify_seat.py") is None
+
+
+def test_dispatch_task_to_memory_still_blocked(common, capsys):
+    # dispatch_task.py (and all its variants) remain blocked from targeting
+    # memory — memory doesn't read TODO.md so dispatching tasks to it is useless.
+    with pytest.raises(SystemExit) as excinfo:
+        common.assert_target_not_memory("memory", "dispatch_task.py")
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "does not support --target memory" in err
+    assert "dispatch_task.py" in err

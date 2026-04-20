@@ -7,6 +7,12 @@ import re
 import sys
 from pathlib import Path
 
+# Add core/lib to path so seat_resolver can be imported
+_scripts_dir = Path(__file__).parent.resolve()
+_core_lib = _scripts_dir.parent.parent.parent / "lib"
+if str(_core_lib) not in sys.path:
+    sys.path.insert(0, str(_core_lib))
+
 from _common import (
     append_status_note,
     append_task_to_queue,
@@ -17,13 +23,14 @@ from _common import (
     legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
-    resolve_primary_feishu_group_id,
     stable_dispatch_nonce,
     upsert_tasks_row,
     utc_now_iso,
     write_json,
     write_todo,
 )
+
+from seat_resolver import resolve_seat_from_profile
 
 
 # ── Planner event announce helpers ─────────────────────────────────────
@@ -352,11 +359,8 @@ def main() -> int:
             source=args.source,
             reply_to=reply_to,
         )
-        is_openclaw_frontstage = (
-            args.target == profile.heartbeat_owner
-            and bool(resolve_primary_feishu_group_id(project=profile.project_name))
-        )
-        if not is_openclaw_frontstage:
+        resolution = resolve_seat_from_profile(args.target, profile)
+        if resolution.kind == "tmux":
             result = notify(profile, args.target, message)
             require_success(result, "dispatch notify")
             receipt["notified_at"] = utc_now_iso()
@@ -403,15 +407,17 @@ def main() -> int:
                     "reason": "legacy_group_broadcast_disabled",
                 }
         else:
+            # kind=openclaw or kind=file-only: tmux notify not applicable
+            # For openclaw targets, use complete_handoff.py for the koder closeout path.
             print(
-                f"warn: dispatch target {args.target!r} is the OpenClaw frontstage — "
+                f"warn: dispatch target {args.target!r} resolves to kind={resolution.kind} — "
                 "tmux notify skipped. Use complete_handoff.py for the koder closeout path.",
                 file=sys.stderr,
             )
             receipt["notify_message"] = message
             receipt["feishu_group_broadcast"] = {
                 "status": "skipped",
-                "reason": "openclaw_frontstage_target_no_tmux",
+                "reason": f"target_kind_{resolution.kind}",
             }
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     write_json(receipt_path, receipt)

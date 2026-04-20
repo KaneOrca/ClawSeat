@@ -2,15 +2,27 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
+
+# Add core/lib to path so seat_resolver can be imported
+_scripts_dir = Path(__file__).parent.resolve()
+_core_lib = _scripts_dir.parent.parent.parent / "lib"
+if str(_core_lib) not in sys.path:
+    sys.path.insert(0, str(_core_lib))
 
 from _common import (
     assert_target_not_memory,
     load_profile,
     notify,
     require_success,
+    send_feishu_user_message,
+    stable_dispatch_nonce,
     utc_now_iso,
     write_json,
 )
+
+from seat_resolver import resolve_seat_from_profile
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,9 +64,26 @@ def main() -> int:
     assert_target_not_memory(args.target, "notify_seat.py")
     profile = load_profile(args.profile)
     payload = build_payload(args)
-    result = notify(profile, args.target, payload)
-    # silent-ok audit: require_success raises on non-sent status; failure is not silent
-    require_success(result, "notify seat")
+    resolution = resolve_seat_from_profile(args.target, profile)
+
+    if resolution.kind == "tmux":
+        result = notify(profile, args.target, payload)
+        # silent-ok audit: require_success raises on non-sent status; failure is not silent
+        require_success(result, "notify seat")
+    elif resolution.kind == "openclaw":
+        # OpenClaw target: send via Feishu as a plain-text notice.
+        # The Feishu group is resolved from the target's workspace contract.
+        broadcast = send_feishu_user_message(payload, project=profile.project_name)
+        if broadcast.get("status") == "failed":
+            detail = broadcast.get("stderr") or broadcast.get("stdout") or broadcast.get("reason", "unknown")
+            raise SystemExit(f"notify seat (feishu) failed for {args.target}: {detail}")
+    else:
+        # kind=file-only: no known transport — write receipt only with a warning.
+        print(
+            f"warn: notify target {args.target!r} resolves to kind=file-only — "
+            "no transport available. Receipt written but seat not notified.",
+            file=sys.stderr,
+        )
 
     if args.task_id and not args.skip_receipt:
         receipt = {
@@ -65,6 +94,7 @@ def main() -> int:
             "reply_to": args.reply_to,
             "message": payload,
             "notified_at": utc_now_iso(),
+            "transport": resolution.transport,
         }
         receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
         write_json(receipt_path, receipt)

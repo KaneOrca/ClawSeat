@@ -931,10 +931,16 @@ def assert_target_not_memory(target: str, caller_tool: str) -> None:
     before writing any TODO / receipt / tmux notification. The exit code
     mirrors argparse's own exit code for bad invocations so scripted
     callers can treat "bad target" and "bad flag" uniformly.
+
+    T22 (folded into T19 PR-2 for merge convenience):
+    notify_seat.py is allowed to target memory because T7 memory-query-protocol
+    Missing-Key Escalation requires it — memory needs to receive notification
+    when a key it asked for is missing. dispatch_task.py + dynamic variants
+    remain blocked because memory doesn't read TODO.md entries.
     """
     import sys as _sys
 
-    if target == MEMORY_SEAT_NAME:
+    if target == MEMORY_SEAT_NAME and caller_tool != "notify_seat.py":
         print(
             f"error: {caller_tool} does not support --target memory.\n"
             "       Memory is a synchronous oracle; dispatching writes TODO\n"
