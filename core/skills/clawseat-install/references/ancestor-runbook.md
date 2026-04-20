@@ -31,7 +31,7 @@ Before running Phase 0:
    (`~/.openclaw/workspace-<name>/`) that you want to promote to koder.
 
 3. A Claude-compatible API key (MiniMax recommended for cost) OR an
-   Anthropic OAuth session. The ancestor's Phase 0.6 will auto-discover
+   Anthropic OAuth session. The ancestor's Phase 0.3 will auto-discover
    candidates.
 
 **Halt condition**: if `CLAWSEAT_ROOT` is unset or no OpenClaw install is
@@ -40,10 +40,16 @@ to create OpenClaw from scratch — that's outside ClawSeat's scope.
 
 ---
 
-## Phase 0 — Preflight + Bootstrap + credential seed
+## Phase 0 — Preflight + Credentials + Bootstrap
 
-Prepare all workspace scaffolding and seed memory's auth so Phase 1 can
-start cleanly.
+Scan for memory's auth credentials first, then build the workspace
+scaffolding. Credential-first ordering is deliberate: `bootstrap_harness`
+(P0.5) runs `seed_empty_secret_from_peer`, which reads
+`~/.agents/.env.global` to populate per-seat secret files. Writing
+`.env.global` before bootstrap lets a single bootstrap pass produce a
+complete `memory.env`. Run bootstrap first and you get an empty
+`memory.env`, memory's TUI lands in OAuth-prompt mode at P1.2, and you
+have to re-seed and restart.
 
 ### Step 0.0 — Preflight check (mandatory, halt on failure)
 
@@ -94,67 +100,12 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skill
 Makes `/clawseat` and `/cs` invocable from any local Claude or Codex on
 this host.
 
-### Step 0.3 — Generate project profile (B2)
-
-```bash
-PROJECT=install
-cp "$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml" \
-   "/tmp/${PROJECT}-profile-dynamic.toml"
-
-python3 - <<PY
-from pathlib import Path
-import re
-p = Path(f"/tmp/{'${PROJECT}'}-profile-dynamic.toml")
-txt = p.read_text()
-txt = txt.replace('project_name = "install"', 'project_name = "${PROJECT}"')
-txt = re.sub(
-    r'(tasks_root\s*=\s*["\']?)~/.agents/tasks/install',
-    rf'\g<1>~/.agents/tasks/{"${PROJECT}"}',
-    txt,
-)
-p.write_text(txt)
-PY
-```
-
-**B2 caution**: `tasks_root = "~/.agents/tasks/install"` is quoted; a
-naive `sed 's/install/<new>/'` misses the quote boundary. Use the Python
-snippet above.
-
-**Verify**: `grep "project_name" /tmp/${PROJECT}-profile-dynamic.toml`
-shows the correct name.
-
-### Step 0.4 — Bootstrap workspace (no `--start`)
-
-```bash
-python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
-  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
-  --project-name "$PROJECT"
-```
-
-**Do NOT pass `--start` in overlay mode.** `--start` auto-launches the
-profile's `heartbeat_owner` (koder) as a tmux seat, which is incorrect
-when koder will be an OpenClaw agent (Phase 3). You'll get a zombie
-`install-koder-claude` tmux session that has to be killed.
-
-**Verify** (hard precondition for P1):
-
-```bash
-test -f "$HOME/.agents/sessions/${PROJECT}/memory/session.toml" && echo "bootstrap_ok"
-```
-
-### Step 0.5 — Refresh workspaces (G11)
-
-```bash
-python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
-  --profile "/tmp/${PROJECT}-profile-dynamic.toml"
-```
-
-Syncs ClawSeat templates into each seat workspace.
-
-### Step 0.6 — Discover credentials + seed memory.env
+### Step 0.3 — Discover credentials + seed .env.global / memory.env
 
 Ancestor runs a **narrow** scan to locate the Claude-compatible API key
-needed for memory to authenticate:
+needed for memory to authenticate, and seeds the operator-real-HOME
+secret files **before** bootstrap runs (so `seed_empty_secret_from_peer`
+has something to propagate):
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py" \
@@ -163,7 +114,7 @@ cat /tmp/ancestor-precheck/machine/credentials.json | head -40
 ```
 
 **This does NOT populate `~/.agents/memory/machine/`** — that KB is
-memory's output, not ancestor's. P0.6 is just ancestor finding its own
+memory's output, not ancestor's. P0.3 is just ancestor finding its own
 bootstrap credential.
 
 Present the candidates to the operator. **Recommend MiniMax API** (cheap
@@ -180,8 +131,8 @@ MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
 EOF
 chmod 600 ~/.agents/.env.global
 
-# seed_empty_secret_from_peer will read .env.global on the next seat
-# start. For robustness also write memory.env directly:
+# Defensive direct write of memory.env so bootstrap's seed logic is
+# not the single point of failure:
 mkdir -p ~/.agents/secrets/claude/minimax
 cat > ~/.agents/secrets/claude/minimax/memory.env <<EOF
 ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
@@ -220,6 +171,63 @@ print("oauth_sources:", d.get("oauth_sources", []))
 
 Do not fabricate credentials in any case.
 
+### Step 0.4 — Generate project profile (B2)
+
+```bash
+PROJECT=install
+cp "$CLAWSEAT_ROOT/examples/starter/profiles/install-with-memory.toml" \
+   "/tmp/${PROJECT}-profile-dynamic.toml"
+
+python3 - <<PY
+from pathlib import Path
+import re
+p = Path(f"/tmp/{'${PROJECT}'}-profile-dynamic.toml")
+txt = p.read_text()
+txt = txt.replace('project_name = "install"', 'project_name = "${PROJECT}"')
+txt = re.sub(
+    r'(tasks_root\s*=\s*["\']?)~/.agents/tasks/install',
+    rf'\g<1>~/.agents/tasks/{"${PROJECT}"}',
+    txt,
+)
+p.write_text(txt)
+PY
+```
+
+**B2 caution**: `tasks_root = "~/.agents/tasks/install"` is quoted; a
+naive `sed 's/install/<new>/'` misses the quote boundary. Use the Python
+snippet above.
+
+**Verify**: `grep "project_name" /tmp/${PROJECT}-profile-dynamic.toml`
+shows the correct name.
+
+### Step 0.5 — Bootstrap workspace (no `--start`)
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
+  --project-name "$PROJECT"
+```
+
+**Do NOT pass `--start` in overlay mode.** `--start` auto-launches the
+profile's `heartbeat_owner` (koder) as a tmux seat, which is incorrect
+when koder will be an OpenClaw agent (Phase 3). You'll get a zombie
+`install-koder-claude` tmux session that has to be killed.
+
+**Verify** (hard precondition for P1):
+
+```bash
+test -f "$HOME/.agents/sessions/${PROJECT}/memory/session.toml" && echo "bootstrap_ok"
+```
+
+### Step 0.6 — Refresh workspaces (G11)
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
+  --profile "/tmp/${PROJECT}-profile-dynamic.toml"
+```
+
+Syncs ClawSeat templates into each seat workspace.
+
 ---
 
 ## Phase 1 — Memory seat online + system scan
@@ -256,7 +264,7 @@ Tell the operator:
 > and confirm.
 
 **Halt condition**: TUI shows `Claude account with subscription` (OAuth
-mode) → credentials didn't load. Go back to P0.6.
+mode) → credentials didn't load. Go back to P0.3 and re-run P0.5.
 
 ### Step 1.3 — Dispatch the system-scan LEARNING REQUEST (G2)
 
@@ -596,19 +604,19 @@ Each item maps to a Phase anchor and is checked by `install_complete.py`.
 | G2 | Memory seat started + MEMORY-SCAN-001 notified + machine/ KB populated | Phase 1 | all 5 `~/.agents/memory/machine/*.json` present |
 | G3 | Memory queried for target agent before overlay | Phase 2.1 | memory log contains agent query |
 | G4 | install_entry_skills.py run | Phase 0.2 | `.entry_skills_installed` marker or skill paths |
-| G5 | Canonical phase ordering followed (no `--start` in P0.4) | Phase 0 | advisory check only |
+| G5 | Canonical phase ordering followed (credentials before bootstrap; no `--start` in P0.5) | Phase 0 | advisory check only |
 | G6 | Feishu bridge end-to-end smoke delivered via planner | Phase 4 | `BRIDGE.toml` present + koder receipt |
 | G7 | Project-group binding confirmed with operator | Phase 3.5 | BRIDGE.toml bound_by field |
 | G8 | bind_project_to_group() called → BRIDGE.toml | Phase 4.2 | `BRIDGE.toml` exists |
 | G9 | Planner introduced AFTER koder overlay (not before) | Phase 4 | advisory |
 | G10 | Per-seat operator confirmation (no auto-defaults) | Phase 1.2 / 4.1 | advisory |
-| G11 | refresh_workspaces.py run | Phase 0.5 | `.last_refresh` or WORKSPACE_CONTRACT last_refresh |
+| G11 | refresh_workspaces.py run | Phase 0.6 | `.last_refresh` or WORKSPACE_CONTRACT last_refresh |
 | G12 | AGENT_HOME auto-injected in tmux seats | Phase 4.1 | install-flow.md AGENT_HOME section |
 | G13 | lark-cli auth via canonical device flow | Phase 4.2 | advisory |
 | G14 | Feishu platform scopes verified pre-install | Phase 3.5 | lark-cli permissions list |
 | G15 | Memory query uses correct --memory-dir --key syntax | Phase 2.1 | code check in brief |
 | B1 | init_koder --on-conflict=backup (non-interactive) | Phase 3.2 | default backup in init_koder.py |
-| B2 | Profile tasks_root sed handles quoted strings | Phase 0.3 | Python re.sub pattern |
+| B2 | Profile tasks_root sed handles quoted strings | Phase 0.4 | Python re.sub pattern |
 | B3 | Tool swap = delete + recreate (not rebind) | docs/AGENT_ADMIN.md | advisory |
 | B4 | USER_DECISION_NEEDED halting points explicit | This runbook | each Phase halt condition |
 | B5 | FRICTION_LOG appends to status file | operator preference | advisory |

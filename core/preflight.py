@@ -17,8 +17,20 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from core.resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root
-from core.resolve import dynamic_profile_path as _dynamic_profile_path
+# Bootstrap sys.path so `from core.*` resolves when preflight.py is
+# executed directly (`python3 core/preflight.py`). Python puts the
+# script's own dir (.../core/) on sys.path[0], not the repo root, so
+# the canonical `from core.resolve import …` statements below otherwise
+# raise `ModuleNotFoundError: No module named 'core'` on any host that
+# hasn't done `pip install -e .` (i.e. every fresh clone). Preflight is
+# the very first script a new operator runs, so this must work on a
+# bare checkout with no side installs.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.resolve import try_resolve_clawseat_root as _try_resolve_clawseat_root  # noqa: E402
+from core.resolve import dynamic_profile_path as _dynamic_profile_path  # noqa: E402
 
 
 class PreflightStatus(Enum):

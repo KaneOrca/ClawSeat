@@ -57,10 +57,16 @@ troubleshooting context.
 
 ---
 
-## Phase 0 — Preflight + Bootstrap
+## Phase 0 — Preflight, Credentials, Bootstrap
 
-Prepare the workspace and seat scaffolding, and seed memory's API
-credentials so it can start in Phase 1.
+Scan the host for the credentials memory will authenticate with, seed
+them, and only then build the project workspace scaffolding.
+Credential discovery runs **before** bootstrap on purpose: bootstrap's
+`seed_empty_secret_from_peer` reads `~/.agents/.env.global`, so
+writing `.env.global` first lets a single bootstrap pass produce a
+complete `memory.env`. Running bootstrap on an empty `.env.global`
+produces an empty `memory.env` and memory lands in OAuth-prompt mode
+at P1.2 (see Common Failures: `memory.env is empty`).
 
 ### Step 0.0 — Preflight (halt on failure)
 
@@ -106,7 +112,60 @@ Symlinks `clawseat`, `clawseat-install`, `cs` into `~/.claude/skills/`
 and `~/.codex/skills/` so the ancestor (and any other Claude/Codex on
 this host) can invoke `/clawseat` and `/cs`.
 
-### Step 0.3 — Generate project profile
+### Step 0.3 — Ancestor credential scan + seed (halt if no creds)
+
+Ancestor runs a **narrow** scan for Claude-compatible API credentials
+and writes them to `~/.agents/.env.global` + `memory.env` so memory
+can authenticate in Phase 1. This step **must complete before**
+bootstrap (P0.5) — otherwise `seed_empty_secret_from_peer` finds
+nothing to propagate and memory lands in OAuth prompt mode.
+
+```sh
+# Minimal scan: credentials + oauth evidence only. Ancestor uses this
+# to pre-seed memory's secret file; it does NOT populate machine/ KB
+# here — that's memory's job in Phase 1.
+python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py" \
+  --only credentials --output /tmp/ancestor-precheck
+```
+
+Then ask the operator which provider/auth to bind to the memory seat.
+**Recommend MiniMax API** (cheapest per-turn cost; Anthropic-compatible
+endpoint). Accept: `minimax`, `xcode-best`, `anthropic-oauth`.
+
+Seed `.env.global` + `memory.env` (assuming MiniMax is chosen):
+
+```sh
+mkdir -p ~/.agents
+cat > ~/.agents/.env.global <<EOF
+MINIMAX_API_KEY=<from credentials scan>
+MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
+EOF
+chmod 600 ~/.agents/.env.global
+
+# Defensive: write memory.env directly so bootstrap's seed logic is
+# not the single point of failure.
+mkdir -p ~/.agents/secrets/claude/minimax
+cat > ~/.agents/secrets/claude/minimax/memory.env <<EOF
+ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+ANTHROPIC_AUTH_TOKEN=<from credentials scan>
+ANTHROPIC_MODEL=MiniMax-M2.7-highspeed
+EOF
+chmod 600 ~/.agents/secrets/claude/minimax/memory.env
+```
+
+**Halt conditions** (three cases):
+
+1. **API key found** → seed `.env.global` + `memory.env`, proceed.
+2. **No API key but OAuth evidence** (`credentials.json.oauth.has_any`
+   is `true` → `~/.claude/credentials.json` exists OR
+   `CLAUDE_CODE_OAUTH_TOKEN` in env) → USER_DECISION_NEEDED: present
+   both paths, ask operator to pick MiniMax API or OAuth.
+3. **No API key AND no OAuth** → USER_DECISION_NEEDED: ask operator to
+   supply a MiniMax / Anthropic API key OR run `claude auth login`.
+
+Do not fabricate credentials in any case.
+
+### Step 0.4 — Generate project profile
 
 ```sh
 PROJECT=install
@@ -128,7 +187,7 @@ PY
 `install-with-memory.toml` is required — it declares the `memory` seat.
 `install.toml` (no memory) does not work with this flow.
 
-### Step 0.4 — Bootstrap workspace (**no `--start`**)
+### Step 0.5 — Bootstrap workspace (**no `--start`**)
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" \
@@ -146,7 +205,7 @@ overlay mode — koder will be the chosen OpenClaw agent, not a tmux seat.
 test -f ~/.agents/sessions/${PROJECT}/memory/session.toml && echo "bootstrap_ok"
 ```
 
-### Step 0.5 — Refresh workspaces
+### Step 0.6 — Refresh workspaces
 
 ```sh
 python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.py" \
@@ -154,50 +213,6 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/refresh_workspaces.
 ```
 
 Synchronizes ClawSeat templates into each seat's workspace.
-
-### Step 0.6 — Ancestor credential seed (ancestor-facing scan)
-
-The ancestor runs a narrow scan to locate the MiniMax (or Anthropic /
-xcode-best) API credentials and writes them to `memory.env` so memory
-can authenticate in Phase 1.
-
-```sh
-# Minimal scan: credentials + openclaw apiProvider only. Ancestor uses
-# these to pre-seed memory's secret file; it does NOT populate machine/
-# KB here — that's memory's job in Phase 1.
-python3 "$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/scan_environment.py" \
-  --only credentials --output /tmp/ancestor-precheck
-```
-
-Then ask the operator which provider/auth to bind to the memory seat.
-**Recommend MiniMax API** (cheapest per-turn cost; Anthropic-compatible
-endpoint). Accept: `minimax`, `xcode-best`, `anthropic-oauth`.
-
-Seed `memory.env` (assuming MiniMax is chosen):
-
-```sh
-test -f ~/.agents/.env.global || cat > ~/.agents/.env.global <<EOF
-MINIMAX_API_KEY=<from credentials.json>
-MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic
-EOF
-chmod 600 ~/.agents/.env.global
-
-# bootstrap_harness's seed_empty_secret_from_peer will populate
-# ~/.agents/secrets/claude/minimax/memory.env on next invocation, or you
-# can write it directly here.
-```
-
-**Halt conditions** (three cases):
-
-1. **API key found** → seed `memory.env`, proceed.
-2. **No API key but OAuth evidence** (`credentials.json.oauth.has_any`
-   is `true` → `~/.claude/credentials.json` exists OR
-   `CLAUDE_CODE_OAUTH_TOKEN` in env) → USER_DECISION_NEEDED: present
-   both paths, ask operator to pick MiniMax API or OAuth.
-3. **No API key AND no OAuth** → USER_DECISION_NEEDED: ask operator to
-   supply a MiniMax / Anthropic API key OR run `claude auth login`.
-
-Do not fabricate credentials in any case.
 
 ---
 
@@ -235,7 +250,7 @@ Usage Billing` in the banner.
 
 **Halt condition**: TUI shows `Claude account with subscription` (OAuth
 mode) instead of `API Usage Billing` → `memory.env` credentials did not
-load. Go back to P0.6.
+load. Go back to P0.3.
 
 ### Step 1.3 — Dispatch the system-scan task
 
@@ -484,9 +499,9 @@ No further ancestor action is required unless the operator asks.
 
 ## Interaction Mode Summary
 
-- The ancestor auto-runs deterministic plumbing (P0.1-0.5, P1.1/1.3/1.5,
-  P2.1, P3.1-3.3, P4.1-4.3).
-- The ancestor pauses at **operator-decision gates**: P0.6 provider
+- The ancestor auto-runs deterministic plumbing (P0.1-0.2, P0.4-0.6,
+  P1.1/1.3/1.5, P2.1, P3.1-3.3, P4.1-4.3).
+- The ancestor pauses at **operator-decision gates**: P0.3 provider
   pick, P1.4 memory-scan-complete signal, P2.2 target agent pick, P3.4
   koder identity verification, P3.5 Feishu group creation, P4.4 smoke
   confirmation.
@@ -503,10 +518,10 @@ No further ancestor action is required unless the operator asks.
 | `CLAWSEAT_ROOT` missing | Environment not initialized | Export the repo root and rerun preflight |
 | `dynamic profile not found` | Project profile missing | For `install` project, the profile auto-seeds; otherwise create `/tmp/{project}-profile-dynamic.toml` |
 | `tmux server` absent | tmux not running | Start a tmux server, then rerun preflight |
-| `memory.env is empty` | P0.6 credential seed didn't run | Run P0.6, or manually write `~/.agents/secrets/claude/minimax/memory.env` |
+| `memory.env is empty` | P0.3 credential seed didn't run before bootstrap | Run P0.3, or manually write `~/.agents/secrets/claude/minimax/memory.env` then re-run P0.5 |
 | memory seat never shows `machine/ KB ready` | P1.3 didn't reach memory, or memory crashed | Check `~/.agents/tasks/${PROJECT}/MEMORY-SCAN-001/` and the memory iTerm scrollback |
 | `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or consult memory again for the canonical list |
-| Koder in OpenClaw still old identity after overlay | `refresh_workspaces.py` didn't copy templates | Re-run P0.5 then P3.1-3.3 |
+| Koder in OpenClaw still old identity after overlay | `refresh_workspaces.py` didn't copy templates | Re-run P0.6 then P3.1-3.3 |
 | Feishu smoke sent but koder silent | Platform scope or requireMention wrong | Enable `im:message.group_msg:receive` + publish new app version; set project group `requireMention=false` |
 | `group_not_found` from lark-cli / send_delegation_report | group ID invalid OR bot not in the group | Verify `oc_<alnum>` format; ensure the OpenClaw bot is a member of the target Feishu group |
 | `auth_expired` or `auth_needs_refresh` from send_delegation_report | lark-cli OAuth token stale | Operator: `lark-cli auth login` in a terminal with browser access |

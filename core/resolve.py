@@ -2,20 +2,12 @@
 resolve.py — Single source of truth for CLAWSEAT_ROOT resolution
 and dynamic profile path construction.
 """
-# mypy: disable-error-code="no-any-return"
-#
-# The `fcntl` module ships without type stubs in some runner images
-# (Python 3.11/3.12/3.13 on the GitHub Actions ubuntu-latest image at
-# 2026-04), so `fcntl.flock` is inferred as `Any` and mypy's strict
-# `warn_return_any` lights up on every `return` in the SAME module,
-# even the ones that demonstrably return typed `Path` objects. The
-# file-level disable targets only that specific error code; every
-# other strict check (disallow_untyped_defs etc.) remains active.
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
 # Add core/lib to path so we can import the canonical real-HOME helper.
 # Sandbox seats see Path.home() pointing at
@@ -26,6 +18,13 @@ from pathlib import Path
 _CORE_LIB = str(Path(__file__).resolve().parent / "lib")
 if _CORE_LIB not in sys.path:
     sys.path.insert(0, _CORE_LIB)
+# mypy cannot follow the runtime sys.path.insert above and treats this
+# symbol as Any under --ignore-missing-imports (8 other scripts use the
+# same pattern; converting them all to `from core.lib.real_home import …`
+# is outside the scope of this file). The `cast` on the two call sites
+# below lets mypy's strict warn_return_any stay enabled everywhere else
+# in the module, which the previous file-level disable-error-code pragma
+# silently defeated.
 from real_home import real_user_home  # noqa: E402
 
 # Marker files that confirm a directory is the ClawSeat repo root
@@ -67,7 +66,7 @@ def resolve_clawseat_root(agents_root: Path | None = None) -> Path:
 
     # 4. home fallback (must use real_user_home so sandbox seats still find
     # the operator's checkout under ~/coding/ClawSeat)
-    candidates.append(real_user_home() / "coding" / "ClawSeat")
+    candidates.append(cast(Path, real_user_home()) / "coding" / "ClawSeat")
 
     seen: set[Path] = set()
     for candidate in candidates:
@@ -117,8 +116,9 @@ def dynamic_profile_path(project: str) -> Path:
     """
     # real_user_home (not Path.home) so seats running under sandbox HOME
     # resolve to the operator's persistent ~/.agents/profiles/ instead of
-    # silently falling through to /tmp/ legacy on every read.
-    persistent = real_user_home() / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
+    # silently falling through to /tmp/ legacy on every read. cast to
+    # Path because mypy treats the runtime sys.path import as Any.
+    persistent = cast(Path, real_user_home()) / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
     if persistent.exists():
         return persistent
     legacy = Path("/tmp") / f"{project}-profile-dynamic.toml"

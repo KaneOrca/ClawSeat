@@ -4,7 +4,7 @@
   seat secrets).
 - F8.3: must also detect OAuth evidence (~/.claude/credentials.json and
   CLAUDE_CODE_OAUTH_TOKEN env var) and expose it under `oauth.has_any`,
-  so the install flow's P0.6 halt can differentiate "no credentials at
+  so the install flow's P0.3 halt can differentiate "no credentials at
   all" vs "OAuth available but no API key".
 """
 from __future__ import annotations
@@ -95,7 +95,7 @@ def test_scan_credentials_oauth_token_env(monkeypatch, tmp_path):
 
 
 def test_scan_credentials_no_auth_at_all(monkeypatch, tmp_path):
-    """F8.3: neither API keys nor OAuth → install flow halts at P0.6 case 3."""
+    """F8.3: neither API keys nor OAuth → install flow halts at P0.3 case 3."""
     fake_home = tmp_path / "fake-bare"
     fake_home.mkdir()
 

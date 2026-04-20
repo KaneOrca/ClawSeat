@@ -879,7 +879,7 @@ Canonical 6-phase flow，见
 # P0.1 agent-neutral skill symlinks
 python3 {clawseat_root}/shells/openclaw-plugin/install_bundled_skills.py
 
-# P0.4 bootstrap workspace + session.toml
+# P0.5 bootstrap workspace + session.toml (after P0.3 credential seed)
 python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
 
 # P2 koder overlay (after P1 memory seat + agent confirm)

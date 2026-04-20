@@ -19,7 +19,7 @@ test_dispatch_task.py, etc.) when specific features are hardened.
 """
 from __future__ import annotations
 
-import importlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +36,35 @@ _MIGRATION = _REPO / "core" / "migration"
 for _p in (_ADMIN, _HARNESS, _MIGRATION):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
+
+
+def _import_in_subprocess(module_name: str, extra_path: Path) -> subprocess.CompletedProcess[str]:
+    """Import *module_name* in a fresh subprocess with *extra_path* on PYTHONPATH.
+
+    Required because sibling tests (e.g. test_tool_binaries_resolution,
+    test_openclaw_koder_workspace, test_correlation_id_plumbing) import
+    the same admin / harness modules during collection. An in-process
+    `importlib.import_module` call would then hit the sys.modules cache
+    and silently pass even if the module body had been broken —
+    defeating the smoke's whole purpose. We can't use
+    `sys.modules.pop(...) + importlib.reload` either because
+    test_tool_binaries_resolution.test_runtime_reuses_config_default_path
+    relies on the original module object's identity for `DEFAULT_PATH`.
+    A clean subprocess is the only way to guarantee the module body
+    actually runs while leaving the parent test process state intact.
+    """
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(extra_path)] + ([existing] if existing else [])
+    )
+    return subprocess.run(
+        [sys.executable, "-c", f"import {module_name}"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        env=env,
+    )
 
 
 # ── H5: control-plane module import + help smoke ────────────────────
@@ -67,15 +96,18 @@ def test_admin_module_imports_cleanly(module_name: str) -> None:
     (the whole reason `agent_admin` was split into 15 focused files in
     the first place).
 
-    We do NOT drop the cached copy before importing — doing so would
-    force a reload and give the module a different object identity for
-    its constants (e.g. DEFAULT_PATH), which a sibling test
-    `test_tool_binaries_resolution.test_runtime_reuses_config_default_path`
-    depends on. The smoke value here is "the module body runs without
-    raising", which the first load already proved. Sufficient.
+    Run in a fresh subprocess — see `_import_in_subprocess` docstring
+    for the full rationale. Summary: an in-process
+    `importlib.import_module` would hit the sys.modules cache populated
+    by sibling tests and silently pass even if the module body had been
+    broken.
     """
-    module = importlib.import_module(module_name)
-    assert module is not None
+    result = _import_in_subprocess(module_name, _ADMIN)
+    assert result.returncode == 0, (
+        f"import {module_name} failed:\n"
+        f"STDOUT:\n{result.stdout}\n"
+        f"STDERR:\n{result.stderr}"
+    )
 
 
 def test_agent_admin_cli_help_runs() -> None:
@@ -191,9 +223,17 @@ HARNESS_SHARED_MODULES = [
 
 @pytest.mark.parametrize("module_name", HARNESS_SHARED_MODULES)
 def test_harness_shared_module_imports(module_name: str) -> None:
-    # Same "don't force reload" reasoning as the admin-module smoke above.
-    module = importlib.import_module(module_name)
-    assert module is not None
+    """Fresh-subprocess import — same rationale as
+    test_admin_module_imports_cleanly. Sibling tests in this dir
+    pre-populate sys.modules for these shared helpers, so an
+    in-process import would no-op.
+    """
+    result = _import_in_subprocess(module_name, _HARNESS)
+    assert result.returncode == 0, (
+        f"import {module_name} failed:\n"
+        f"STDOUT:\n{result.stdout}\n"
+        f"STDERR:\n{result.stderr}"
+    )
 
 
 def test_harness_task_io_renders_todo(tmp_path: Path) -> None:
@@ -227,6 +267,40 @@ def test_harness_task_io_appends_consumed_ack_idempotent(tmp_path: Path) -> None
     second = append_consumed_ack(delivery, task_id="T2", source="builder-1")
     assert first == second, "append_consumed_ack must be idempotent for the same (task, source)"
     assert find_consumed_ack(delivery, task_id="T2", source="builder-1") == first
+
+
+# ── direct-entry core scripts (F11 regression) ──────────────────────
+
+def test_preflight_runs_from_bare_checkout() -> None:
+    """`python3 core/preflight.py …` must succeed on a checkout that has
+    NOT been `pip install -e .`-installed. Preflight is the very first
+    script a new operator runs (P0.0), so its import bootstrap cannot
+    depend on the editable-install `.pth` file injecting the repo root
+    into sys.path.
+
+    We run under `python -S` to skip site.py (and therefore the
+    `__editable__.clawseat-*.pth` that would silently make
+    `from core.resolve import …` resolve against an already-installed
+    copy of the repo). Without preflight.py's internal sys.path
+    bootstrap this raises `ModuleNotFoundError: No module named 'core'`
+    — exactly the stranger-reported F11 failure.
+    """
+    preflight = _REPO / "core" / "preflight.py"
+    result = subprocess.run(
+        [sys.executable, "-S", str(preflight), "--help"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        cwd="/",  # arbitrary cwd outside the repo
+    )
+    assert "ModuleNotFoundError: No module named 'core'" not in result.stderr, (
+        f"preflight.py bare-script import regressed:\nSTDERR:\n{result.stderr}"
+    )
+    assert result.returncode == 0, (
+        f"preflight.py --help exit={result.returncode}:\n"
+        f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+    assert "usage: preflight.py" in result.stdout, result.stdout
 
 
 # ── migration/ layer smoke ──────────────────────────────────────────

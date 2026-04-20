@@ -99,7 +99,7 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
 4. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 5. **Install skill symlinks** — this is mandatory, do NOT skip:
    - OpenClaw overlay mode — the canonical 6-phase flow:
-     - **Phase 0** Preflight + Bootstrap: `install_bundled_skills.py` → `install_entry_skills.py` → profile gen (use `install-with-memory.toml`) → `bootstrap_harness.py` (**no `--start`**) → `refresh_workspaces.py` → ancestor scans for credentials and seeds `memory.env`.
+     - **Phase 0** Preflight + Credentials + Bootstrap: `install_bundled_skills.py` → `install_entry_skills.py` → **ancestor scans credentials and seeds `.env.global` + `memory.env`** (P0.3, before bootstrap so `seed_empty_secret_from_peer` can propagate) → profile gen (use `install-with-memory.toml`) → `bootstrap_harness.py` (**no `--start`**) → `refresh_workspaces.py`.
      - **Phase 1** Memory online + scan: `start_seat.py --seat memory` → operator completes memory TUI onboarding → ancestor sends `notify_seat.py --target memory --kind learning` LEARNING REQUEST → operator reports memory finished → ancestor verifies `machine/` KB.
      - **Phase 2** Query memory → operator picks OpenClaw agent: `query_memory.py --search agents` → present candidates → operator selects one.
      - **Phase 3** Koder overlay + external confirmations: `install_koder_overlay.py --agent <chosen>` → `init_koder.py` → **operator verifies koder identity via `/new` in OpenClaw** → **operator creates Feishu group for koder** and gives the `oc_<alnum>` group id.
