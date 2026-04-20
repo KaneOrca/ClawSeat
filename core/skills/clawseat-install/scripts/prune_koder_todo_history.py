@@ -19,7 +19,12 @@ from pathlib import Path
 
 # ── path resolution ───────────────────────────────────────────────────────────
 
-_AGENTS_ROOT = Path(os.environ.get("AGENTS_ROOT", Path.home() / ".agents"))
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(_REPO_ROOT / "core" / "lib") not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT / "core" / "lib"))
+from real_home import real_user_home
+
+_AGENTS_ROOT = Path(os.environ.get("AGENTS_ROOT", str(real_user_home() / ".agents")))
 _IDENTITIES_ROOT = _AGENTS_ROOT / "runtime" / "identities"
 
 _HANDOFFS_GLOB_PATTERN = "patrol/handoffs"

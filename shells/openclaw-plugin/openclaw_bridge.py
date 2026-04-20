@@ -51,6 +51,7 @@ _BRIDGE_BINDING_LOCK = threading.RLock()
 # Add ClawSeat root to sys.path for canonical imports
 if str(_CLAWSEAT_ROOT) not in sys.path:
     sys.path.insert(0, str(_CLAWSEAT_ROOT))
+from core.lib.real_home import real_user_home
 
 # Canonical imports from ClawSeat core/
 from core.adapter.clawseat_adapter import (
@@ -196,7 +197,7 @@ def _check_auth(project_name: str, seat_id: str, template_id: str) -> None:
         import tomli as _tomllib  # type: ignore
 
     session_path = (
-        Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions")))
+        Path(os.environ.get("SESSIONS_ROOT", str(real_user_home() / ".agents" / "sessions")))
         / project_name / seat_id / "session.toml"
     )
 

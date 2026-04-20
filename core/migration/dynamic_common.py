@@ -181,8 +181,8 @@ def normalize_role(role: str) -> str:
     return role or "specialist"
 
 
-def seat_sort_key(seat: str, role: str) -> tuple[int, str]:
-    if seat == "koder":
+def seat_sort_key(seat: str, role: str, *, heartbeat_owner: str = "") -> tuple[int, str]:
+    if (heartbeat_owner and seat == heartbeat_owner) or normalize_role(role) == "frontstage-supervisor":
         return (0, seat)
     normalized = normalize_role(role)
     return (ROLE_PRIORITY.get(role, ROLE_PRIORITY.get(normalized, 50)), seat)
@@ -212,10 +212,10 @@ def discovered_session_data(session_root: Path, project_name: str) -> dict[str, 
     return discovered
 
 
-def infer_role_from_seat_id(seat: str, fallback: str = "") -> str:
+def infer_role_from_seat_id(seat: str, fallback: str = "", *, heartbeat_owner: str = "") -> str:
     if fallback:
         return fallback
-    if seat == "koder":
+    if heartbeat_owner and seat == heartbeat_owner:
         return "frontstage-supervisor"
     if seat == "planner":
         return "planner"
@@ -230,12 +230,17 @@ def resolve_roles(
     top_level_roles: dict[str, str],
     legacy_roles: dict[str, str],
     discovered_sessions: dict[str, dict[str, Any]],
+    heartbeat_owner: str,
 ) -> dict[str, str]:
     resolved = dict(top_level_roles)
     resolved.update(legacy_roles)
     for seat, session in discovered_sessions.items():
         role = str(session.get("role", "")).strip()
-        resolved[seat] = infer_role_from_seat_id(seat, fallback=role or resolved.get(seat, ""))
+        resolved[seat] = infer_role_from_seat_id(
+            seat,
+            fallback=role or resolved.get(seat, ""),
+            heartbeat_owner=heartbeat_owner,
+        )
     return resolved
 
 
@@ -251,7 +256,11 @@ def resolve_dynamic_seats(
 ) -> list[str]:
     discovered = sorted(
         discovered_sessions.keys(),
-        key=lambda seat: seat_sort_key(seat, seat_roles.get(seat, "")),
+        key=lambda seat: seat_sort_key(
+            seat,
+            seat_roles.get(seat, ""),
+            heartbeat_owner=heartbeat_owner,
+        ),
     )
     seats = unique_ordered(
         [heartbeat_owner],
@@ -299,6 +308,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         top_level_roles=top_level_roles,
         legacy_roles=legacy_roles,
         discovered_sessions=discovered,
+        heartbeat_owner=heartbeat_owner,
     )
     seats = (
         resolve_dynamic_seats(

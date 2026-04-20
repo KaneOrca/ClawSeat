@@ -4,11 +4,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(_REPO_ROOT / "core" / "lib") not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT / "core" / "lib"))
+from real_home import real_user_home
 
-OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME", str(Path.home() / ".openclaw"))).expanduser()
+OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME", str(real_user_home() / ".openclaw"))).expanduser()
 OPENCLAW_AGENTS_ROOT = OPENCLAW_HOME / "agents"
 
 

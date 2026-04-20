@@ -196,6 +196,34 @@ def collect_feishu_group_ids_from_sessions() -> list[str]:
     return found
 
 
+def _resolve_project_heartbeat_owner(project: str) -> str:
+    profile_path = _real_user_home() / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
+    if profile_path.exists():
+        profile = load_toml(profile_path) or {}
+        resolved = str(profile.get("heartbeat_owner", "")).strip()
+        if resolved:
+            return resolved
+    return "koder"
+
+
+def _project_contract_paths(project: str) -> list[Path]:
+    real_home = _real_user_home()
+    heartbeat_owner = _resolve_project_heartbeat_owner(project)
+    candidates: list[Path] = [
+        real_home / ".agents" / "workspaces" / project / heartbeat_owner / "WORKSPACE_CONTRACT.toml",
+    ]
+    for contract_path in sorted((real_home / ".openclaw").glob("workspace-*/WORKSPACE_CONTRACT.toml")):
+        contract = load_toml(contract_path) or {}
+        project_field = str(contract.get("project", "")).strip()
+        if project_field and project_field != project:
+            continue
+        seat_id = str(contract.get("seat_id", "")).strip()
+        if seat_id and seat_id != heartbeat_owner:
+            continue
+        candidates.append(contract_path)
+    return candidates
+
+
 def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     """Resolve the feishu group ID for this project.
 
@@ -220,17 +248,10 @@ def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
     # Resolve against the operator's REAL home, not Path.home() — when a
     # seat runs inside a sandbox HOME (ClawSeat runtime identity), Path.home()
     # points at an empty sandbox tree and every project contract path below
-    # would miss, silently routing planner→koder complete_handoff through
+    # would miss, silently routing planner→frontstage complete_handoff through
     # tmux instead of Feishu.
     if project:
-        real_home = _real_user_home()
-        contract_paths = [
-            # OpenClaw koder workspace
-            real_home / ".openclaw" / "workspace-koder" / "WORKSPACE_CONTRACT.toml",
-            # ClawSeat managed workspace
-            real_home / ".agents" / "workspaces" / project / "koder" / "WORKSPACE_CONTRACT.toml",
-        ]
-        for cp in contract_paths:
+        for cp in _project_contract_paths(project):
             if cp.exists():
                 contract = load_toml(cp)
                 if contract:

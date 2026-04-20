@@ -263,7 +263,7 @@ def normalize_role(role: str) -> str:
     return role or "specialist"
 
 
-def role_sort_key(seat: str, role: str) -> tuple[int, str]:
+def role_sort_key(seat: str, role: str, *, heartbeat_owner: str = "") -> tuple[int, str]:
     normalized = normalize_role(role)
     priority = {
         "frontstage-supervisor": 0,
@@ -274,7 +274,7 @@ def role_sort_key(seat: str, role: str) -> tuple[int, str]:
         "designer": 5,
         "specialist": 50,
     }
-    if seat == "koder":
+    if (heartbeat_owner and seat == heartbeat_owner) or normalized == "frontstage-supervisor":
         return (0, seat)
     return (priority.get(normalized, 50), seat)
 
@@ -303,10 +303,10 @@ def discovered_session_data(session_root: Path, project_name: str) -> dict[str, 
     return discovered
 
 
-def infer_role_from_seat_id(seat: str, fallback: str = "") -> str:
+def infer_role_from_seat_id(seat: str, fallback: str = "", *, heartbeat_owner: str = "") -> str:
     if fallback:
         return fallback
-    if seat == "koder":
+    if heartbeat_owner and seat == heartbeat_owner:
         return "frontstage-supervisor"
     if seat == "planner":
         return "planner"
@@ -334,7 +334,11 @@ def resolve_dynamic_seats(
         legacy_seats if compat_legacy_seats else [],
         sorted(
             discovered_sessions.keys(),
-            key=lambda seat: role_sort_key(seat, seat_roles.get(seat, "")),
+            key=lambda seat: role_sort_key(
+                seat,
+                seat_roles.get(seat, ""),
+                heartbeat_owner=heartbeat_owner,
+            ),
         ),
     ]
     for group in groups:
@@ -397,7 +401,11 @@ def load_profile(path: str | Path) -> HarnessProfile:
     seat_roles.update(legacy_seat_roles)
     for seat, session in discovered.items():
         role = str(session.get("role", "")).strip()
-        seat_roles[seat] = infer_role_from_seat_id(seat, fallback=role or seat_roles.get(seat, ""))
+        seat_roles[seat] = infer_role_from_seat_id(
+            seat,
+            fallback=role or seat_roles.get(seat, ""),
+            heartbeat_owner=heartbeat_owner,
+        )
     seats = (
         resolve_dynamic_seats(
             heartbeat_owner=heartbeat_owner,

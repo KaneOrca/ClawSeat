@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,12 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_CORE_LIB = _SCRIPT_DIR.parents[2] / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from real_home import real_user_home
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,8 +55,8 @@ def resolve_clawseat_root() -> Path:
 
 
 def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, bootstrap_only: bool) -> list[str]:
-    tasks_root = str(Path.home() / ".agents" / "tasks" / project_name)
-    workspace_root = str(Path.home() / ".agents" / "workspaces" / project_name)
+    tasks_root = str(real_user_home() / ".agents" / "tasks" / project_name)
+    workspace_root = str(real_user_home() / ".agents" / "workspaces" / project_name)
     heartbeat_owner = str(data.get("heartbeat_owner", "koder"))
     active_loop_owner = str(data.get("active_loop_owner", heartbeat_owner))
     default_notify_target = str(data.get("default_notify_target", active_loop_owner))

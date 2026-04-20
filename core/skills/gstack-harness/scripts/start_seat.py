@@ -41,8 +41,8 @@ def parse_args() -> argparse.Namespace:
 
 def write_frontstage_receipt(profile, seat: str) -> str:
     """
-    Write a durable frontstage binding receipt proving koder has entered frontstage
-    with the correct identity and project binding.
+    Write a durable frontstage binding receipt proving the heartbeat owner has
+    entered frontstage with the correct identity and project binding.
     """
     session_path = session_path_for(profile, seat)
     session_data = load_toml(session_path)
@@ -114,7 +114,7 @@ def _send_frontstage_via_send_and_verify(project: str, seat: str) -> subprocess.
 def send_frontstage_trigger(profile, seat: str) -> None:
     """
     Send a frontstage entry trigger to the seat via tmux.
-    For koder, this triggers automatic entry into the frontstage shell.
+    For the heartbeat owner, this triggers automatic entry into the frontstage shell.
     """
     session_name = session_name_for(profile, seat)
     if not session_name:
@@ -278,7 +278,7 @@ def main() -> int:
             "openclaw_frontstage_self_start_blocked: "
             f"the current OpenClaw agent already owns frontstage seat '{args.seat}' "
             f"via {openclaw_frontstage_contract}. "
-            f"Do not run start_seat.py --seat {args.seat} from the OpenClaw koder workspace."
+            f"Do not run start_seat.py --seat {args.seat} from the active OpenClaw frontstage workspace."
         )
         if profile.default_start_seats:
             backend_defaults = [
@@ -481,12 +481,12 @@ def main() -> int:
             "Ask the user to complete the prompt in the TUI window, then notify the operator to take over."
         )
     else:
-        # No onboarding step detected — koder is ready to enter frontstage
-        if args.seat == "koder":
+        # No onboarding step detected — the heartbeat owner is ready to enter frontstage
+        if args.seat == profile.heartbeat_owner:
             # Write durable frontstage receipt
             receipt_path = write_frontstage_receipt(profile, args.seat)
             print(f"frontstage_receipt_written: {receipt_path}")
-            # Send frontstage entry trigger to koder
+            # Send frontstage entry trigger to the heartbeat owner
             send_frontstage_trigger(profile, args.seat)
             print(
                 "frontstage_auto_entry: "

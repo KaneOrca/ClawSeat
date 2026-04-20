@@ -18,6 +18,7 @@ from core.adapter.clawseat_adapter import (
     PendingFrontstageItem,
     SessionStatus,
 )
+from core.lib.real_home import real_user_home
 
 from _bridge_adapters import init_clawseat_adapter, init_tmux_adapter
 
@@ -282,7 +283,7 @@ def start_seat_via_tmux(
 
     from core.harness_adapter import SeatPlan
 
-    session_path = Path(os.environ.get("SESSIONS_ROOT", str(Path.home() / ".agents" / "sessions"))) / project_name / seat_id / "session.toml"
+    session_path = Path(os.environ.get("SESSIONS_ROOT", str(real_user_home() / ".agents" / "sessions"))) / project_name / seat_id / "session.toml"
     if not session_path.exists():
         raise FileNotFoundError(f"session binding not found: {session_path}")
 

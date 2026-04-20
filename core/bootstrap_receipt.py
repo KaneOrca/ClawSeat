@@ -37,7 +37,17 @@ def _resolve_agents_root() -> Path:
 def _receipt_path(project: str) -> Path:
     """Return the path to BOOTSTRAP_RECEIPT.toml for the project."""
     agents_root = _resolve_agents_root()
-    workspace = agents_root / "workspaces" / project / "koder"
+    heartbeat_owner = "koder"
+    try:
+        from core.resolve import dynamic_profile_path as _dynamic_profile_path
+
+        profile_path = _dynamic_profile_path(project)
+        if profile_path.exists():
+            data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+            heartbeat_owner = str(data.get("heartbeat_owner", "")).strip() or "koder"
+    except Exception:
+        heartbeat_owner = "koder"
+    workspace = agents_root / "workspaces" / project / heartbeat_owner
     workspace.mkdir(parents=True, exist_ok=True)
     return workspace / "BOOTSTRAP_RECEIPT.toml"
 

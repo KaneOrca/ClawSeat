@@ -22,6 +22,11 @@ REPO_ROOT = ROOT.parents[4]
 TEMPLATE_PATH = ROOT.parents[3] / "core" / "templates" / "gstack-harness" / "template.toml"
 
 
+def template_engineers() -> list[dict[str, object]]:
+    data = tomllib.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
+    return [engineer for engineer in data.get("engineers", []) if isinstance(engineer, dict)]
+
+
 def template_engineer_ids() -> list[str]:
     """Enumerate every engineer id declared in the canonical harness template.
 
@@ -30,8 +35,25 @@ def template_engineer_ids() -> list[str]:
     added engineer stanza (e.g. builder-2) never silently falls out of the
     self-test's setup path.
     """
-    data = tomllib.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
-    return [str(engineer["id"]) for engineer in data.get("engineers", [])]
+    return [str(engineer["id"]) for engineer in template_engineers()]
+
+
+def template_seat_roles() -> dict[str, str]:
+    return {
+        str(engineer["id"]): str(engineer.get("role", "specialist"))
+        for engineer in template_engineers()
+        if engineer.get("id")
+    }
+
+
+def template_heartbeat_owner() -> str:
+    for engineer in template_engineers():
+        if str(engineer.get("role", "")).strip() == "frontstage-supervisor":
+            return str(engineer["id"])
+    seats = template_engineer_ids()
+    if not seats:
+        raise RuntimeError(f"template has no engineers: {TEMPLATE_PATH}")
+    return seats[0]
 
 
 def run(*args: str, expect: int = 0, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -63,10 +85,14 @@ def write(path: Path, content: str) -> None:
 def main() -> int:
     temp_root = Path(tempfile.mkdtemp(prefix="gstack-harness-selftest-"))
     try:
+        template_seats = template_engineer_ids()
+        heartbeat_owner = template_heartbeat_owner()
+        seat_roles = template_seat_roles()
+        backend_seats = [seat for seat in template_seats if seat != heartbeat_owner]
         repo_root = temp_root / "repo"
         tasks_root = repo_root / ".tasks"
         handoff_dir = tasks_root / "patrol" / "handoffs"
-        for seat in template_engineer_ids():
+        for seat in template_seats:
             (tasks_root / seat).mkdir(parents=True, exist_ok=True)
         handoff_dir.mkdir(parents=True, exist_ok=True)
 
@@ -89,7 +115,7 @@ def main() -> int:
         patrol_script = temp_root / "patrol.py"
         write(patrol_script, "print('no reminders')\n")
 
-        heartbeat_receipt = temp_root / "workspaces" / "clawseat" / "koder" / "HEARTBEAT_RECEIPT.toml"
+        heartbeat_receipt = temp_root / "workspaces" / "clawseat" / heartbeat_owner / "HEARTBEAT_RECEIPT.toml"
         write(heartbeat_receipt, "installed = true\n")
 
         openclaw_home = temp_root / ".openclaw"
@@ -181,36 +207,34 @@ def main() -> int:
                     f'agent_admin = "{REPO_ROOT / "core" / "scripts" / "agent_admin.py"}"',
                     f'workspace_root = "{temp_root / "workspaces" / "clawseat"}"',
                     f'handoff_dir = "{handoff_dir}"',
-                    'heartbeat_owner = "koder"',
+                    f'heartbeat_owner = "{heartbeat_owner}"',
                     'active_loop_owner = "planner"',
                     'default_notify_target = "planner"',
                     f'heartbeat_receipt = "{heartbeat_receipt}"',
-                    'seats = ["koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"]',
-                    'heartbeat_seats = ["koder"]',
+                    f"seats = {json.dumps(template_seats)}",
+                    f'heartbeat_seats = ["{heartbeat_owner}"]',
                     '',
                     '[seat_roles]',
-                    'koder = "frontstage-supervisor"',
-                    'planner = "planner-dispatcher"',
-                    'builder-1 = "builder"',
-                    'reviewer-1 = "reviewer"',
-                    'qa-1 = "qa"',
-                    'designer-1 = "designer"',
+                    *[
+                        f'{seat} = "{role}"'
+                        for seat, role in seat_roles.items()
+                    ],
                     '',
                 ]
             ),
         )
 
         workspace_root = temp_root / "workspaces" / "clawseat"
-        koder_workspace = workspace_root / "koder"
-        koder_workspace.mkdir(parents=True, exist_ok=True)
+        frontstage_workspace = workspace_root / heartbeat_owner
+        frontstage_workspace.mkdir(parents=True, exist_ok=True)
         write(
-            koder_workspace / "WORKSPACE_CONTRACT.toml",
+            frontstage_workspace / "WORKSPACE_CONTRACT.toml",
             "\n".join(
                 [
                     'version = 1',
-                    'seat_id = "koder"',
+                    f'seat_id = "{heartbeat_owner}"',
                     'project = "clawseat-selftest"',
-                    'role = "frontstage-supervisor"',
+                    f'role = "{seat_roles[heartbeat_owner]}"',
                     'contract_fingerprint = "selftest-contract-fingerprint"',
                     "",
                 ]
@@ -255,7 +279,7 @@ def main() -> int:
             "--profile",
             str(profile),
             "--source",
-            "koder",
+            heartbeat_owner,
             "--target",
             "planner",
             "--task-id",
@@ -263,11 +287,13 @@ def main() -> int:
             "--kind",
             "unblock",
             "--reply-to",
-            "koder",
+            heartbeat_owner,
             "--message",
             "Resume the mainline and consume the repaired chain.",
         )
-        notice_receipt = json.loads((handoff_dir / "FE-NOTICE__koder__planner.json").read_text(encoding="utf-8"))
+        notice_receipt = json.loads(
+            (handoff_dir / f"FE-NOTICE__{heartbeat_owner}__planner.json").read_text(encoding="utf-8")
+        )
         if notice_receipt["kind"] != "unblock":
             raise RuntimeError("notify_seat did not write the expected receipt kind")
 
@@ -276,11 +302,11 @@ def main() -> int:
             "--profile",
             str(profile),
             "--seat",
-            "koder",
+            heartbeat_owner,
             "--ack-source",
             "selftest",
         )
-        contract_receipt = (koder_workspace / "WORKSPACE_CONTRACT_RECEIPT.toml").read_text(encoding="utf-8")
+        contract_receipt = (frontstage_workspace / "WORKSPACE_CONTRACT_RECEIPT.toml").read_text(encoding="utf-8")
         if 'contract_fingerprint = "selftest-contract-fingerprint"' not in contract_receipt:
             raise RuntimeError("ack_contract missing contract fingerprint")
         if 'ack_source = "selftest"' not in contract_receipt:
@@ -371,7 +397,7 @@ def main() -> int:
                 "--source",
                 "planner",
                 "--target",
-                "koder",
+                heartbeat_owner,
                 "--task-id",
                 "FE-CLOSEOUT",
                 "--title",
@@ -393,7 +419,7 @@ def main() -> int:
             "--source",
             "planner",
             "--target",
-            "koder",
+            heartbeat_owner,
             "--task-id",
             "FE-CLOSEOUT",
             "--title",
@@ -411,7 +437,7 @@ def main() -> int:
             raise RuntimeError("planner closeout missing FrontstageDisposition")
         if "UserSummary: Review and QA passed. We can keep moving." not in planner_delivery:
             raise RuntimeError("planner closeout missing UserSummary")
-        frontstage_todo = (tasks_root / "koder" / "TODO.md").read_text(encoding="utf-8")
+        frontstage_todo = (tasks_root / heartbeat_owner / "TODO.md").read_text(encoding="utf-8")
         if "## [pending] FE-CLOSEOUT" not in frontstage_todo:
             raise RuntimeError("planner closeout did not refresh frontstage TODO")
         if "reply_to: planner" not in frontstage_todo:
@@ -419,7 +445,7 @@ def main() -> int:
         if "FrontstageDisposition: AUTO_ADVANCE" not in frontstage_todo:
             raise RuntimeError("frontstage TODO missing disposition summary")
         planner_receipt = json.loads(
-            (handoff_dir / "FE-CLOSEOUT__planner__koder.json").read_text(encoding="utf-8")
+            (handoff_dir / f"FE-CLOSEOUT__planner__{heartbeat_owner}.json").read_text(encoding="utf-8")
         )
         if planner_receipt.get("frontstage_disposition") != "AUTO_ADVANCE":
             raise RuntimeError("planner closeout receipt missing frontstage disposition")
@@ -486,28 +512,15 @@ def main() -> int:
         console_payload = json.loads(console.stdout)
         if console_payload["heartbeat"]["configured"]:
             raise RuntimeError("render_console incorrectly treated an unverified heartbeat receipt as configured")
-        if console_payload.get("seat_sets", {}).get("roster") != [
-            "koder",
-            "planner",
-            "builder-1",
-            "reviewer-1",
-            "qa-1",
-            "designer-1",
-        ]:
+        if console_payload.get("seat_sets", {}).get("roster") != template_seats:
             raise RuntimeError("render_console seat_sets.roster drifted from the expected roster")
-        if console_payload.get("seat_sets", {}).get("backend") != [
-            "planner",
-            "builder-1",
-            "reviewer-1",
-            "qa-1",
-            "designer-1",
-        ]:
+        if console_payload.get("seat_sets", {}).get("backend") != backend_seats:
             raise RuntimeError("render_console seat_sets.backend drifted from the expected backend seats")
         if console_payload.get("seat_sets", {}).get("default_start") != [
-            "koder",
+            heartbeat_owner,
         ]:
             raise RuntimeError("render_console seat_sets.default_start drifted from the expected autostart view")
-        for seat in ("koder", "planner", "builder-1", "reviewer-1", "qa-1", "designer-1"):
+        for seat in template_seats:
             todo_path = tasks_root / seat / "TODO.md"
             if not todo_path.exists():
                 raise RuntimeError(f"materialize_profile_runtime did not seed TODO for {seat}")

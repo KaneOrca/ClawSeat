@@ -32,9 +32,9 @@ def test_env_var_takes_precedence(monkeypatch):
 
 
 def test_home_default_when_env_unset(monkeypatch, tmp_path):
-    """When GSTACK_SKILLS_ROOT is unset, path is constructed from HOME."""
+    """When GSTACK_SKILLS_ROOT is unset, path is constructed from real user HOME."""
     monkeypatch.delenv("GSTACK_SKILLS_ROOT", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     import dispatch_task as dt
     result = dt._resolve_gstack_skills_root()
     expected = str(tmp_path / ".gstack" / "repos" / "gstack" / ".agents" / "skills")
@@ -44,7 +44,7 @@ def test_home_default_when_env_unset(monkeypatch, tmp_path):
 def test_env_var_empty_string_falls_to_default(monkeypatch, tmp_path):
     """An empty GSTACK_SKILLS_ROOT is treated as unset — home default applies."""
     monkeypatch.setenv("GSTACK_SKILLS_ROOT", "")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     import dispatch_task as dt
     result = dt._resolve_gstack_skills_root()
     assert result != ""

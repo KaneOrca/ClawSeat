@@ -18,12 +18,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore
 
 import os as _os
-_REAL_HOME = Path(_os.environ.get("AGENT_HOME", "") or Path.home())
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_LIB = _REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from real_home import real_user_home  # noqa: E402
+
+_REAL_HOME = Path(_os.environ.get("AGENT_HOME", "") or real_user_home())
 _AGENTS_HOME = _REAL_HOME / ".agents"
 _OPENCLAW_HOME = _REAL_HOME / ".openclaw"
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 _INSTALL_FLOW = _REPO_ROOT / "core" / "skills" / "clawseat-install" / "references" / "install-flow.md"
 
 CRITICAL = {"G1", "G2", "G6", "G8", "G11", "G14"}
@@ -75,6 +84,19 @@ def _resolve_koder_agent(
         return "koder"
 
     return None
+
+
+def _resolve_heartbeat_owner(project: str, agents_home: Path) -> str:
+    profile_path = agents_home / "profiles" / f"{project}-profile-dynamic.toml"
+    if profile_path.exists():
+        try:
+            data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
+            resolved = str(data.get("heartbeat_owner", "")).strip()
+            if resolved:
+                return resolved
+        except (OSError, ValueError, TypeError):
+            pass
+    return "koder"
 
 
 def _check_feishu_smoke(
@@ -145,6 +167,7 @@ def run_checks(
 
     results: list[dict] = []
     agent = koder_agent or _resolve_koder_agent(project, agents_home, openclaw_home)
+    heartbeat_owner = _resolve_heartbeat_owner(project, agents_home)
     openclaw_workspace = (openclaw_home / f"workspace-{agent}") if agent else None
 
     # ── G1: per-agent skills symlinks ────────────────────────────────────────
@@ -252,11 +275,11 @@ def run_checks(
     g11_pass = False
     g11_evidence = "marker not found"
 
-    # Primary: per-project koder seat .last_refresh
-    koder_seat_ws = agents_home / "workspaces" / project / "koder"
-    if (koder_seat_ws / ".last_refresh").exists():
+    # Primary: per-project heartbeat-owner workspace .last_refresh
+    heartbeat_workspace = agents_home / "workspaces" / project / heartbeat_owner
+    if (heartbeat_workspace / ".last_refresh").exists():
         g11_pass = True
-        g11_evidence = str(koder_seat_ws / ".last_refresh") + " [exists]"
+        g11_evidence = str(heartbeat_workspace / ".last_refresh") + " [exists]"
 
     # Secondary: per-agent openclaw workspace WORKSPACE_CONTRACT.toml
     if not g11_pass and openclaw_workspace is not None:

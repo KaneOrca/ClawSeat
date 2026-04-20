@@ -20,10 +20,6 @@ from pathlib import Path
 # OpenClaw may inject environment variables for project configuration.
 # Default to the canonical install project rather than a smoke-only placeholder.
 OPENCLAW_PROJECT = os.environ.get("OPENCLAW_PROJECT", "install")
-OPENCLAW_AGENTS_ROOT = os.environ.get("AGENTS_ROOT", str(Path.home() / ".agents"))
-OPENCLAW_SESSIONS_ROOT = os.environ.get("SESSIONS_ROOT", f"{OPENCLAW_AGENTS_ROOT}/sessions")
-OPENCLAW_WORKSPACES_ROOT = os.environ.get("WORKSPACES_ROOT", f"{OPENCLAW_AGENTS_ROOT}/workspaces")
-
 
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parents[2]  # shells/openclaw-plugin/ → shells/ → ClawSeat root
@@ -33,6 +29,11 @@ _core_path = str(REPO_ROOT / "core")
 if _core_path not in sys.path:
     sys.path.insert(0, _core_path)
 from resolve import resolve_clawseat_root as _resolve_clawseat_root
+from lib.real_home import real_user_home
+
+OPENCLAW_AGENTS_ROOT = os.environ.get("AGENTS_ROOT", str(real_user_home() / ".agents"))
+OPENCLAW_SESSIONS_ROOT = os.environ.get("SESSIONS_ROOT", f"{OPENCLAW_AGENTS_ROOT}/sessions")
+OPENCLAW_WORKSPACES_ROOT = os.environ.get("WORKSPACES_ROOT", f"{OPENCLAW_AGENTS_ROOT}/workspaces")
 
 CLAWSEAT_ROOT = _resolve_clawseat_root(Path(OPENCLAW_AGENTS_ROOT))
 

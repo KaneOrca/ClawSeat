@@ -12,6 +12,7 @@ _scripts_dir = Path(__file__).parent.resolve()
 _core_lib = _scripts_dir.parent.parent.parent / "lib"
 if str(_core_lib) not in sys.path:
     sys.path.insert(0, str(_core_lib))
+from real_home import real_user_home
 
 from _common import (
     append_status_note,
@@ -111,7 +112,7 @@ def _resolve_gstack_skills_root() -> str:
             )
         else:
             return str(expanded)
-    return str(Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills")
+    return str(real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills")
 
 
 _GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()

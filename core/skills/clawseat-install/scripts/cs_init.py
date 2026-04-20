@@ -13,6 +13,7 @@ _core_path = str(REPO_ROOT / "core")
 if _core_path not in sys.path:
     sys.path.insert(0, _core_path)
 from resolve import dynamic_profile_path as _dpp
+from lib.real_home import real_user_home
 
 PROJECT = "install"
 # install-with-memory.toml declares the `memory` seat required by the
@@ -25,8 +26,8 @@ PRECHECK = REPO_ROOT / "core" / "preflight.py"
 BOOTSTRAP = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "bootstrap_harness.py"
 START_SEAT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "start_seat.py"
 RENDER_CONSOLE = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "render_console.py"
-TASKS_ROOT = Path.home() / ".agents" / "tasks" / PROJECT
-WORKSPACE_ROOT = Path.home() / ".agents" / "workspaces" / PROJECT
+TASKS_ROOT = real_user_home() / ".agents" / "tasks" / PROJECT
+WORKSPACE_ROOT = real_user_home() / ".agents" / "workspaces" / PROJECT
 
 
 def parse_args() -> argparse.Namespace:

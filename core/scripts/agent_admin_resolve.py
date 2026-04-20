@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import os
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+from core.lib.real_home import real_user_home
 
 
 @dataclass
@@ -35,7 +41,7 @@ class ResolveHandlers:
         mode = session.auth_mode
         binary = session.bin_path
         env = self.hooks.common_env()
-        shared_agent_home = Path(os.environ.get("AGENT_HOME", str(Path.home()))).expanduser()
+        shared_agent_home = Path(os.environ.get("AGENT_HOME", str(real_user_home()))).expanduser()
 
         home = runtime_dir / "home"
         xdg_config = runtime_dir / "xdg" / "config"

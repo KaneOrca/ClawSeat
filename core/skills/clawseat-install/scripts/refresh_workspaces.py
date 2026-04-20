@@ -34,13 +34,15 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore
 
+from lib.real_home import real_user_home
+
 
 # ── Auto-detection helpers ───────────────��───────────────────────────
 
 def _detect_koder_workspace() -> str | None:
     """Find the koder workspace by scanning common locations."""
     candidates = [
-        Path.home() / ".openclaw" / "workspace-koder",
+        real_user_home() / ".openclaw" / "workspace-koder",
         Path(os.environ.get("OPENCLAW_HOME", "")) / "workspace-koder" if os.environ.get("OPENCLAW_HOME") else None,
     ]
     # Also check if we're running inside a workspace that has WORKSPACE_CONTRACT.toml
