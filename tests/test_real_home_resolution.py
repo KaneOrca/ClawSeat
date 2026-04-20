@@ -286,3 +286,43 @@ def test_common_exports_resolve_effective_home(clean_home_env):
     import _common
     assert hasattr(_common, "_resolve_effective_home")
     assert callable(_common._resolve_effective_home)
+
+
+# ── F1 regression: --real-home post-subcommand support ───────────────────────
+
+
+def test_real_home_post_subcommand_no_value(tmp_path, monkeypatch, clean_home_env):
+    """F1 canary: --real-home at post-subcommand position (no value) must not crash."""
+    _SCRIPTS = str(Path(__file__).resolve().parents[1] / "core" / "scripts")
+    result = __import__("subprocess").run(
+        [sys.executable, f"{_SCRIPTS}/agent_admin.py", "list-engineers", "--real-home"],
+        capture_output=True, text=True, cwd=_SCRIPTS,
+    )
+    assert result.returncode == 0, (
+        f"agent_admin list-engineers --real-home crashed (exit {result.returncode}):\n{result.stderr}"
+    )
+
+
+def test_real_home_pre_subcommand_with_path(tmp_path, monkeypatch, clean_home_env):
+    """F1 canary: --real-home /path before subcommand still works."""
+    _SCRIPTS = str(Path(__file__).resolve().parents[1] / "core" / "scripts")
+    result = __import__("subprocess").run(
+        [sys.executable, f"{_SCRIPTS}/agent_admin.py", "--real-home", str(tmp_path),
+         "list-engineers"],
+        capture_output=True, text=True, cwd=_SCRIPTS,
+    )
+    assert result.returncode == 0, (
+        f"agent_admin --real-home /path list-engineers crashed (exit {result.returncode}):\n{result.stderr}"
+    )
+
+
+def test_real_home_post_nested_subcommand(tmp_path, monkeypatch, clean_home_env):
+    """F1 canary: --real-home after nested subcommand (engineer list --real-home) must not crash."""
+    _SCRIPTS = str(Path(__file__).resolve().parents[1] / "core" / "scripts")
+    result = __import__("subprocess").run(
+        [sys.executable, f"{_SCRIPTS}/agent_admin.py", "engineer", "list", "--real-home"],
+        capture_output=True, text=True, cwd=_SCRIPTS,
+    )
+    assert result.returncode == 0, (
+        f"agent_admin engineer list --real-home crashed (exit {result.returncode}):\n{result.stderr}"
+    )

@@ -1087,17 +1087,30 @@ def build_parser() -> argparse.ArgumentParser:
     return build_agent_admin_parser(PARSER_HOOKS)
 
 
+_REAL_HOME_AUTO = ""  # sentinel: --real-home with no value → auto-resolve via _real_user_home()
+
+
 def main(argv: list[str] | None = None) -> int:
-    # Pre-parse --real-home before the full subcommand parser so callers can
-    # override effective HOME for diagnostic use (sets CLAWSEAT_REAL_HOME env).
+    # Pre-parse --real-home using parse_known_args so it is accepted at ANY
+    # position — before or after the subcommand (e.g. "engineer list --real-home").
+    # nargs='?' means: flag alone → const (auto-resolve); flag + path → explicit override.
+    from agent_admin_config import _real_user_home as _get_real_home
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--real-home", dest="real_home", default=None,
-                     help="Override effective HOME for this invocation (sets CLAWSEAT_REAL_HOME).")
+    pre.add_argument(
+        "--real-home",
+        dest="real_home",
+        nargs="?",
+        const=_REAL_HOME_AUTO,
+        default=None,
+        help="Set CLAWSEAT_REAL_HOME for this invocation. "
+             "Alone: auto-resolve via pwd. With path: use that path explicitly.",
+    )
     pre_args, remaining = pre.parse_known_args(argv)
-    if pre_args.real_home:
-        os.environ["CLAWSEAT_REAL_HOME"] = str(Path(pre_args.real_home).expanduser())
-    else:
-        remaining = list(argv) if argv is not None else None
+    if pre_args.real_home is not None:
+        if pre_args.real_home == _REAL_HOME_AUTO:
+            os.environ["CLAWSEAT_REAL_HOME"] = str(_get_real_home())
+        else:
+            os.environ["CLAWSEAT_REAL_HOME"] = str(Path(pre_args.real_home).expanduser())
 
     ensure_root_layout()
     migrate_session_model()
