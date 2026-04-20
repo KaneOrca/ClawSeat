@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -228,3 +229,81 @@ def test_install_complete_hardening_b_fails_with_missing_g1_g4_g11(tmp_path, cap
     failures = [c["id"] for c in checks if c["level"] == "FAIL" and c["id"] in ic.CRITICAL]
     assert "G1" in failures, f"G1 must be in critical failures; got: {failures}"
     assert "G11" in failures, f"G11 must be in critical failures; got: {failures}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Test 7 (T17): --with-feishu-smoke flag — install with receipt passes
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_with_feishu_smoke_install_receipt_passes(tmp_path):
+    """With smoke receipt present, G_SMOKE_RECEIPT must PASS."""
+    oc = tmp_path / ".openclaw"
+    ag = tmp_path / ".agents"
+
+    # Minimal G1/G2/G6/G11 setup for install (auto-resolves to koder)
+    ws_koder = oc / "workspace-koder"
+    (ws_koder / "skills").mkdir(parents=True)
+    for name in ["clawseat", "clawseat-install", "gstack-harness", "memory-oracle"]:
+        (ws_koder / "skills" / name).mkdir()
+    (ag / "memory").mkdir(parents=True)
+    (ag / "memory" / "index.json").write_text(json.dumps({"scanned_at": "2026-04-20"}))
+    proj_dir = ag / "projects" / "install"
+    proj_dir.mkdir(parents=True)
+    (proj_dir / "BRIDGE.toml").write_text('bound_by = "test-user"\ngroup_id = "oc_test"\n')
+    koder_ws = ag / "workspaces" / "install" / "koder"
+    koder_ws.mkdir(parents=True)
+    (koder_ws / ".last_refresh").write_text("2026-04-20T00:00:00Z")
+
+    # Phase 5: create smoke receipt
+    handoffs = ag / "tasks" / "install" / "patrol" / "handoffs"
+    handoffs.mkdir(parents=True)
+    (handoffs / "feishu-bridge-smoke-001__planner__koder.json").write_text('{"status":"done"}')
+
+    # Mock both subprocess.run calls (lark-cli for G14 + send_delegation_report for G_SMOKE_AUTH)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='{"status": "ok", "identity": "user"}\n', stderr=""
+        )
+        checks = ic.run_checks(
+            "install", koder_agent="koder", agents_home=ag, openclaw_home=oc,
+            with_feishu_smoke=True,
+        )
+
+    results = {c["id"]: c for c in checks}
+    assert "G_SMOKE_RECEIPT" in results, "G_SMOKE_RECEIPT check must be present when --with-feishu-smoke"
+    assert results["G_SMOKE_RECEIPT"]["passed"], "G_SMOKE_RECEIPT must pass when receipt file exists"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Test 8 (T17): --with-feishu-smoke flag — hardening-b without receipt fails
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_with_feishu_smoke_hardening_b_no_receipt_fails(tmp_path):
+    """Without smoke receipt, G_SMOKE_RECEIPT must FAIL for hardening-b."""
+    oc = tmp_path / ".openclaw"
+    ag = tmp_path / ".agents"
+
+    # workspace-mor exists but no smoke receipt at all
+    (oc / "workspace-mor").mkdir(parents=True)
+    (ag / "memory").mkdir(parents=True)
+    (ag / "memory" / "index.json").write_text(json.dumps({"scanned_at": "2026-04-20"}))
+    proj_dir = ag / "projects" / "hardening-b"
+    proj_dir.mkdir(parents=True)
+    (proj_dir / "BRIDGE.toml").write_text('bound_by = "test-user"\ngroup_id = "oc_test"\n')
+    # No handoffs dir → no receipt
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='{"status": "ok"}\n', stderr=""
+        )
+        checks = ic.run_checks(
+            "hardening-b", koder_agent="mor", agents_home=ag, openclaw_home=oc,
+            with_feishu_smoke=True,
+        )
+
+    results = {c["id"]: c for c in checks}
+    assert "G_SMOKE_RECEIPT" in results
+    assert not results["G_SMOKE_RECEIPT"]["passed"], "G_SMOKE_RECEIPT must FAIL when no receipt"
+    assert results["G_SMOKE_RECEIPT"]["level"] == "FAIL"

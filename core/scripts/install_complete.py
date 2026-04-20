@@ -1,10 +1,14 @@
 """install_complete.py — post-install validator for ClawSeat G1-G15 gaps.
 
 Usage:
-    python3 install_complete.py --project <name> [--koder-agent <agent>] [--verbose]
+    python3 install_complete.py --project <name> [--koder-agent <agent>]
+        [--with-feishu-smoke] [--verbose]
 
 Checks each canonical gap and prints PASS / FAIL / N/A per check.
 Exit code: non-zero if any critical check (G1/G2/G6/G8/G11/G14) fails.
+
+--with-feishu-smoke: additionally check Phase 5 Feishu bridge smoke evidence
+  (lark-cli auth ok + smoke receipt in patrol/handoffs/); does NOT send messages.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _INSTALL_FLOW = _REPO_ROOT / "core" / "skills" / "clawseat-install" / "references" / "install-flow.md"
 
 CRITICAL = {"G1", "G2", "G6", "G8", "G11", "G14"}
+CRITICAL_SMOKE = {"G_SMOKE_RECEIPT", "G_SMOKE_AUTH"}
 
 _AGENT_FIELD_RE = re.compile(r'^\s*(?:koder_)?agent\s*=\s*["\']?(\w[\w\-]*)["\']?', re.MULTILINE)
 
@@ -71,6 +76,54 @@ def _resolve_koder_agent(
     return None
 
 
+def _check_feishu_smoke(
+    project: str,
+    agents_home: Path,
+    *,
+    send_delegation_script: Path | None = None,
+) -> list[dict]:
+    """Return G_SMOKE_RECEIPT and G_SMOKE_AUTH check results for Phase 5 validation."""
+    results: list[dict] = []
+
+    # G_SMOKE_RECEIPT: look for any *smoke* receipt in patrol/handoffs/
+    handoffs_dir = agents_home / "tasks" / project / "patrol" / "handoffs"
+    smoke_receipts = list(handoffs_dir.glob("*smoke*")) if handoffs_dir.exists() else []
+    receipt_pass = bool(smoke_receipts)
+    results.append(_check(
+        "G_SMOKE_RECEIPT",
+        "Phase 5 smoke receipt in patrol/handoffs/ (*smoke* file present)",
+        receipt_pass,
+        f"found: {[r.name for r in smoke_receipts]}" if receipt_pass else f"no *smoke* receipt in {handoffs_dir}",
+    ))
+
+    # G_SMOKE_AUTH: check lark-cli auth via send_delegation_report.py --check-auth
+    script = send_delegation_script
+    if script is None:
+        repo = Path(__file__).resolve().parents[2]
+        script = repo / "core" / "skills" / "gstack-harness" / "scripts" / "send_delegation_report.py"
+
+    auth_pass = False
+    auth_evidence = "send_delegation_report.py not found"
+    if script.exists():
+        try:
+            result = subprocess.run(
+                [sys.executable, str(script), "--check-auth"],
+                capture_output=True, text=True, check=False, timeout=10.0,
+            )
+            auth_pass = result.returncode == 0
+            auth_evidence = result.stdout.strip()[:120] if result.stdout else result.stderr.strip()[:120]
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            auth_evidence = f"check-auth failed: {exc}"
+    results.append(_check(
+        "G_SMOKE_AUTH",
+        "Phase 5 lark-cli auth valid (send_delegation_report --check-auth)",
+        auth_pass,
+        auth_evidence,
+    ))
+
+    return results
+
+
 def run_checks(
     project: str,
     verbose: bool = False,
@@ -78,6 +131,8 @@ def run_checks(
     *,
     agents_home: Path | None = None,
     openclaw_home: Path | None = None,
+    with_feishu_smoke: bool = False,
+    _send_delegation_script: Path | None = None,
 ) -> list[dict]:
     # Resolve at call time so monkeypatching of module globals works in tests
     if agents_home is None:
@@ -281,6 +336,12 @@ def run_checks(
     # ── G15: advisory (code-side check) ───────────────────────────────────
     results.append(_check("G15", "Memory query uses --memory-dir --key syntax (advisory)", True, "advisory", warn_only=True))
 
+    # ── Phase 5 smoke checks (only when --with-feishu-smoke) ──────────────
+    if with_feishu_smoke:
+        results.extend(_check_feishu_smoke(
+            project, agents_home, send_delegation_script=_send_delegation_script
+        ))
+
     return results
 
 
@@ -289,19 +350,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--project", required=True, help="Project name (e.g. install, hardening-b)")
     p.add_argument("--koder-agent", default=None, dest="koder_agent",
                    help="OpenClaw agent name override (auto-resolved if omitted)")
+    p.add_argument("--with-feishu-smoke", action="store_true", dest="with_feishu_smoke",
+                   help="Also validate Phase 5 Feishu smoke evidence (receipt + auth check); does not send messages")
     p.add_argument("--verbose", action="store_true", help="Print evidence strings")
     args = p.parse_args(argv)
 
-    checks = run_checks(args.project, verbose=args.verbose, koder_agent=args.koder_agent)
+    checks = run_checks(
+        args.project,
+        verbose=args.verbose,
+        koder_agent=args.koder_agent,
+        with_feishu_smoke=args.with_feishu_smoke,
+    )
 
+    all_critical = CRITICAL | (CRITICAL_SMOKE if args.with_feishu_smoke else set())
     failures: list[str] = []
     for c in checks:
         icon = "✓" if c["passed"] else ("~" if c["level"] == "WARN" else "✗")
-        line = f"  [{c['level']:4s}] {c['id']:3s} {icon} {c['desc']}"
+        line = f"  [{c['level']:4s}] {c['id']:16s} {icon} {c['desc']}"
         print(line)
         if args.verbose and c["evidence"]:
             print(f"         evidence: {c['evidence']}")
-        if c["level"] == "FAIL" and c["id"] in CRITICAL:
+        if c["level"] == "FAIL" and c["id"] in all_critical:
             failures.append(c["id"])
 
     print()

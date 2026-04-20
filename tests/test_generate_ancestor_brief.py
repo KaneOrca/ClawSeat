@@ -92,3 +92,24 @@ def test_generated_brief_internal_consistency(tmp_path):
     assert "proj-x" in brief
     assert "agent-y" in brief
     assert "oc_zzz" in brief
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Test 5 (T17): Phase 5 section is non-empty in real runbook output
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_phase5_section_is_nonempty_in_real_runbook_brief():
+    """Phase 5 in the canonical ancestor-runbook.md must produce non-trivial content."""
+    brief = gab.generate("testproj", "koder", "oc_test999")
+    # Phase 5 heading must appear
+    assert "Phase 5" in brief, "Phase 5 must appear in generated brief from real runbook"
+    # Phase 5 must contain Feishu-related content
+    phase5_start = brief.find("Phase 5")
+    phase6_start = brief.find("Phase 6", phase5_start)
+    phase5_content = brief[phase5_start:phase6_start] if phase6_start != -1 else brief[phase5_start:]
+    assert len(phase5_content) > 100, (
+        f"Phase 5 section must be non-trivial (>100 chars); got {len(phase5_content)}"
+    )
+    assert "Feishu" in phase5_content or "lark" in phase5_content.lower(), (
+        "Phase 5 content must mention Feishu or lark"
+    )

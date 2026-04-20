@@ -54,3 +54,31 @@ def test_runbook_alarm_discipline_has_git_log():
     text = _text()
     assert "log -5" in text
     assert "Alarm" in text or "alarm" in text
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Test 5 (T17): TUI decode table has lark-cli ---WAIT--- (device flow polling)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_runbook_tui_decode_has_lark_cli_wait():
+    text = _text()
+    assert "---WAIT---" in text or "WAIT" in text, (
+        "runbook TUI decode must explain lark-cli ---WAIT--- as device flow polling"
+    )
+    assert "device flow" in text.lower() or "polling" in text.lower(), (
+        "runbook must explain ---WAIT--- as device flow polling, not a block"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Test 6 (T17): TUI decode table has auth_needs_refresh (user token expired)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_runbook_tui_decode_has_auth_needs_refresh():
+    text = _text()
+    assert "auth_needs_refresh" in text, (
+        "runbook TUI decode must document auth_needs_refresh as user token expired"
+    )
+    assert "lark-cli auth login" in text, (
+        "runbook must prescribe 'lark-cli auth login' as the fix for auth_needs_refresh"
+    )

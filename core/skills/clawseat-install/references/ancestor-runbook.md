@@ -404,6 +404,13 @@ When observing Claude Code TUI in tmux, decode status bar correctly:
 | `Do you trust this folder? 1/2` | First-launch trust prompt | Ancestor CAN send `1` safely — this is a deterministic response |
 | `Cooked for Xs` / `Thinking...` | Model is thinking | DO NOT send-keys; wait for prompt to return |
 
+**Feishu / lark-cli specific**:
+
+| Status or log text | Meaning | Action |
+|---|---|---|
+| `---WAIT---` in lark-cli output | Device flow polling — lark-cli is waiting for user to approve in browser | Not a block; wait for approval or prompt user. Do NOT kill the process. |
+| `auth_needs_refresh` in send result | User OAuth token expired — must be renewed by a human with browser access | USER_DECISION_NEEDED: user runs `lark-cli auth login` in terminal, then retry |
+
 **Rule**: Never send-keys when the TUI is waiting for user OAuth input or when the model is actively thinking.
 
 ---
