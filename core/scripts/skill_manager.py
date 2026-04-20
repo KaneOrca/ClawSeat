@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,6 +20,21 @@ from skill_registry import (
     load_registry,
     validate_all,
 )
+
+
+def _ci_tolerate_external_skills() -> bool:
+    """True when the running environment is a CI runner or explicitly
+    opts out of hard-failing on missing externally-sourced skills
+    (`source != 'bundled'`). Bundled skills still hard-fail — those are
+    shipped with ClawSeat and MUST be present.
+
+    Triggered by the same env flags as test_scan_project_smoke
+    (see SPEC §5.3.4 escape hatch): `CI=true` or
+    `CLAWSEAT_SKIP_EXTERNAL_SKILL_CHECK=1`."""
+    return (
+        os.environ.get("CI", "").lower() in {"true", "1"}
+        or os.environ.get("CLAWSEAT_SKIP_EXTERNAL_SKILL_CHECK", "") == "1"
+    )
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -48,7 +64,28 @@ def cmd_check(args: argparse.Namespace) -> int:
         for line in result.summary_lines():
             print(line)
 
-    if result.required_missing:
+    # Split the required_missing set into "bundled" (always a hard fail —
+    # shipped with ClawSeat, must be on disk) vs "external" (user-provided
+    # gstack/openclaw skills that CI runners won't have).
+    required_missing = result.required_missing
+    if required_missing and _ci_tolerate_external_skills():
+        bundled_missing = [i for i in required_missing if i.source == "bundled"]
+        external_missing = [i for i in required_missing if i.source != "bundled"]
+        if external_missing and not bundled_missing:
+            print(
+                f"skill_check: CI tolerance — {len(external_missing)} external "
+                f"required skill(s) missing but source != 'bundled'; treating "
+                "as present-enough (bundled skills still hard-fail).",
+                file=sys.stderr,
+            )
+            # Return 0 in CI tolerance mode so the ci.yml step passes.
+            # The warning above is visible in the CI log; if bundled
+            # skills ever go missing on CI the rc=1 path below still fires.
+            return 0
+        # If any bundled required skills are missing, that is still a hard
+        # fail even on CI — those are genuinely ours to ship.
+
+    if required_missing:
         return 1
     if result.optional_missing:
         return 2
