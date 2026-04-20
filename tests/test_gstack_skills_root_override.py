@@ -24,6 +24,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Real home resolver — must match what skill_registry.py uses.
+# In a seat sandbox, Path.home() returns the sandbox path; real_user_home()
+# returns the operator's actual home. Use the same helper as the implementation
+# so assertions agree by construction.
+from core.lib.real_home import real_user_home
 
 _REPO = Path(__file__).resolve().parents[1]
 
@@ -59,7 +64,8 @@ def test_expand_skill_path_rewrites_expanded_form_under_env_override(monkeypatch
     monkeypatch.setenv("GSTACK_SKILLS_ROOT", str(tmp_path / "alt"))
     mod = _load_skill_registry()
 
-    canonical = str(Path("~/.gstack/repos/gstack/.agents/skills").expanduser())
+    # Use real_user_home() to match what the implementation resolves canonical to.
+    canonical = str(real_user_home() / ".gstack/repos/gstack/.agents/skills")
     raw = f"{canonical}/gstack-ship/SKILL.md"
     result = mod.expand_skill_path(raw)
     assert str(result) == str(tmp_path / "alt" / "gstack-ship" / "SKILL.md")
@@ -73,7 +79,7 @@ def test_expand_skill_path_noop_when_env_unset(monkeypatch):
     raw = "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md"
     result = mod.expand_skill_path(raw)
     assert str(result) == str(
-        Path.home() / ".gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md"
+        real_user_home() / ".gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md"
     ), "unexpected rewrite when GSTACK_SKILLS_ROOT is unset"
 
 
@@ -101,7 +107,7 @@ def test_empty_env_is_treated_as_unset(monkeypatch):
     result = mod.expand_skill_path(raw)
     # Should look under real home, not under "" (which would produce an
     # absolute /gstack-careful/... junk path).
-    assert str(result).startswith(str(Path.home())), (
+    assert str(result).startswith(str(real_user_home())), (
         f"empty env should fall back to canonical home, got {result}"
     )
 
@@ -176,7 +182,7 @@ def test_relative_env_does_not_rewrite_expand_skill_path(monkeypatch):
     mod = _load_skill_registry()
     raw = "~/.gstack/repos/gstack/.agents/skills/gstack-review/SKILL.md"
     result = mod.expand_skill_path(raw)
-    assert str(result).startswith(str(Path.home())), (
+    assert str(result).startswith(str(real_user_home())), (
         f"relative override should not redirect; got {result}"
     )
     assert "nope" not in str(result)
