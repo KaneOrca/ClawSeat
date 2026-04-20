@@ -2,6 +2,15 @@
 resolve.py — Single source of truth for CLAWSEAT_ROOT resolution
 and dynamic profile path construction.
 """
+# mypy: disable-error-code="no-any-return"
+#
+# The `fcntl` module ships without type stubs in some runner images
+# (Python 3.11/3.12/3.13 on the GitHub Actions ubuntu-latest image at
+# 2026-04), so `fcntl.flock` is inferred as `Any` and mypy's strict
+# `warn_return_any` lights up on every `return` in the SAME module,
+# even the ones that demonstrably return typed `Path` objects. The
+# file-level disable targets only that specific error code; every
+# other strict check (disallow_untyped_defs etc.) remains active.
 from __future__ import annotations
 
 import os
@@ -130,9 +139,10 @@ def _atomic_migrate_profile(source: Path, destination: Path) -> None:
     import fcntl
     import shutil
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = destination.parent / f".migrating-{destination.name}.lock"
-    tmp_path = destination.with_suffix(destination.suffix + ".tmp")
+    parent: Path = destination.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    lock_path: Path = parent / f".migrating-{destination.name}.lock"
+    tmp_path: Path = destination.with_suffix(destination.suffix + ".tmp")
 
     # Open lock file read/write so flock can take an exclusive hold; keep
     # it open for the whole critical section.
