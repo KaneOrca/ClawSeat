@@ -7,7 +7,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from agent_admin_config import DEFAULT_PATH, _resolve_effective_home
+from agent_admin_config import (
+    DEFAULT_PATH,
+    CodexProviderConfig,
+    _resolve_effective_home,
+    parse_codex_provider_config,
+)
 
 
 HOME = _resolve_effective_home()
@@ -93,6 +98,69 @@ def ensure_empty_env_file(path: Path, ensure_dir_fn: Any, write_text_fn: Any) ->
     write_env_file(path, {}, ensure_dir_fn, write_text_fn)
 
 
+def _render_codex_config_toml(provider: CodexProviderConfig, trust_paths: list[str]) -> str:
+    """Render a validated CodexProviderConfig to TOML.
+
+    Pure function — takes only the typed config + trust paths, returns
+    a string. No I/O. This lets tests round-trip the render without a
+    filesystem.
+    """
+    lines = [
+        f"model_provider = {q(provider.model_provider)}",
+        f"model = {q(provider.model)}",
+    ]
+    if provider.model_reasoning_effort is not None:
+        lines.append(f"model_reasoning_effort = {q(provider.model_reasoning_effort)}")
+    if provider.disable_response_storage is not None:
+        lines.append(
+            f"disable_response_storage = {'true' if provider.disable_response_storage else 'false'}"
+        )
+    if provider.preferred_auth_method is not None:
+        lines.append(f"preferred_auth_method = {q(provider.preferred_auth_method)}")
+    if provider.personality is not None:
+        lines.append(f"personality = {q(provider.personality)}")
+    lines.extend(
+        [
+            "",
+            f"[model_providers.{provider.model_provider}]",
+            f"name = {q(provider.name or provider.model_provider)}",
+            f"base_url = {q(provider.base_url)}",
+            f"wire_api = {q(provider.wire_api)}",
+        ]
+    )
+    if provider.env_key is not None:
+        lines.append(f"env_key = {q(provider.env_key)}")
+    if provider.requires_openai_auth is not None:
+        lines.append(
+            f"requires_openai_auth = {'true' if provider.requires_openai_auth else 'false'}"
+        )
+    if provider.request_max_retries is not None:
+        lines.append(f"request_max_retries = {int(provider.request_max_retries)}")
+    if provider.stream_max_retries is not None:
+        lines.append(f"stream_max_retries = {int(provider.stream_max_retries)}")
+    if provider.stream_idle_timeout_ms is not None:
+        lines.append(f"stream_idle_timeout_ms = {int(provider.stream_idle_timeout_ms)}")
+    lines.append("")
+    if provider.profile_name is not None:
+        lines.extend(
+            [
+                f"[profiles.{provider.profile_name}]",
+                f"model_provider = {q(provider.model_provider)}",
+                f"model = {q(provider.model)}",
+                "",
+            ]
+        )
+    for path in trust_paths:
+        lines.extend(
+            [
+                f"[projects.{q(path)}]",
+                'trust_level = "trusted"',
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def write_codex_api_config(
     session: Any,
     codex_home: Path,
@@ -100,66 +168,17 @@ def write_codex_api_config(
     provider_configs: dict[str, dict[str, Any]],
     write_text_fn: Any,
 ) -> None:
-    provider = provider_configs.get(session.provider)
-    if not provider:
+    raw = provider_configs.get(session.provider)
+    if not raw:
         raise ValueError(f"Unsupported Codex API provider: {session.provider}")
+    provider = parse_codex_provider_config(raw)
 
     trust_paths = [str(HOME), str(REPO_ROOT)]
     for path in (project_repo, project_repo / "openclaw"):
         if path.exists():
             trust_paths.append(str(path))
 
-    lines = [
-        f'model_provider = {q(provider["model_provider"])}',
-        f'model = {q(provider["model"])}',
-    ]
-    if provider.get("model_reasoning_effort"):
-        lines.append(f'model_reasoning_effort = {q(provider["model_reasoning_effort"])}')
-    if "disable_response_storage" in provider:
-        lines.append(
-            f'disable_response_storage = {"true" if provider["disable_response_storage"] else "false"}'
-        )
-    if provider.get("preferred_auth_method"):
-        lines.append(f'preferred_auth_method = {q(provider["preferred_auth_method"])}')
-    if provider.get("personality"):
-        lines.append(f'personality = {q(provider["personality"])}')
-    lines.extend(
-        [
-            "",
-            f'[model_providers.{provider["model_provider"]}]',
-            f'name = {q(provider.get("name", provider["model_provider"]))}',
-            f'base_url = {q(provider["base_url"])}',
-            f'wire_api = {q(provider["wire_api"])}',
-        ]
-    )
-    if provider.get("env_key"):
-        lines.append(f'env_key = {q(provider["env_key"])}')
-    if "requires_openai_auth" in provider:
-        lines.append(
-            f'requires_openai_auth = {"true" if provider["requires_openai_auth"] else "false"}'
-        )
-    for numeric_key in ("request_max_retries", "stream_max_retries", "stream_idle_timeout_ms"):
-        if numeric_key in provider:
-            lines.append(f"{numeric_key} = {int(provider[numeric_key])}")
-    lines.append("")
-    if provider.get("profile_name"):
-        lines.extend(
-            [
-                f'[profiles.{provider["profile_name"]}]',
-                f'model_provider = {q(provider["model_provider"])}',
-                f'model = {q(provider["model"])}',
-                "",
-            ]
-        )
-    for path in trust_paths:
-        lines.extend(
-            [
-                f'[projects.{q(path)}]',
-                'trust_level = "trusted"',
-                "",
-            ]
-        )
-    write_text_fn(codex_home / "config.toml", "\n".join(lines))
+    write_text_fn(codex_home / "config.toml", _render_codex_config_toml(provider, trust_paths))
 
 
 def common_env() -> dict[str, str]:

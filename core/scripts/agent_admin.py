@@ -1137,6 +1137,26 @@ def build_parser() -> argparse.ArgumentParser:
 _REAL_HOME_AUTO = ""  # sentinel: --real-home with no value → auto-resolve via _real_user_home()
 
 
+def _warn_unresolved_tool_bins() -> None:
+    """Emit a one-line stderr warning if any backend CLI (claude/codex/
+    gemini) could not be located at import time and fell back to the
+    bare name. See agent_admin_config._resolve_tool_bin / audit H3."""
+    from agent_admin_config import unresolved_tool_bins
+
+    if os.environ.get("CLAWSEAT_SUPPRESS_TOOL_BIN_WARNING"):
+        return
+    missing = unresolved_tool_bins()
+    if not missing:
+        return
+    print(
+        "agent_admin: WARNING — backend CLI binaries not found on disk: "
+        f"{', '.join(missing)} (will use bare name; execution may fail). "
+        "Install via `npm i -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli` "
+        "or set `CLAWSEAT_SUPPRESS_TOOL_BIN_WARNING=1` to silence.",
+        file=sys.stderr,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     # Pre-parse --real-home using parse_known_args so it is accepted at ANY
     # position — before or after the subcommand (e.g. "engineer list --real-home").
@@ -1161,6 +1181,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ensure_root_layout()
     migrate_session_model()
+    _warn_unresolved_tool_bins()
     parser = build_parser()
     args = parser.parse_args(remaining)
     try:

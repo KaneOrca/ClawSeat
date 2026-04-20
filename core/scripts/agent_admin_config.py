@@ -3,7 +3,12 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Any
+
+
+_TOOL_BIN_SOURCES: dict[str, str] = {}
 
 
 # ── Sandbox HOME resolution ───────────────────────────────────────────────────
@@ -57,13 +62,38 @@ def _resolve_effective_home() -> Path:
 
 
 def _resolve_tool_bin(name: str) -> str:
+    """Resolve a backend CLI binary path.
+
+    Probe order: PATH (via shutil.which) → /opt/homebrew/bin → bare name.
+    The "bare" fallback means `shell exec` will rely on the caller's PATH
+    at runtime; if the CLI is not installed, execution fails with a
+    cryptic "command not found" instead of a clear preflight error.
+    `unresolved_tool_bins()` exposes that state so startup code
+    (preflight, agent_admin main) can surface a visible warning.
+    """
     resolved = shutil.which(name)
     if resolved:
+        _TOOL_BIN_SOURCES[name] = "path"
         return resolved
     homebrew = f"/opt/homebrew/bin/{name}"
     if os.path.exists(homebrew):
+        _TOOL_BIN_SOURCES[name] = "homebrew"
         return homebrew
+    _TOOL_BIN_SOURCES[name] = "bare"
     return name
+
+
+def tool_bin_source(name: str) -> str:
+    """Return how TOOL_BINARIES[name] was resolved: path | homebrew | bare.
+    Empty string if the name was never probed."""
+    return _TOOL_BIN_SOURCES.get(name, "")
+
+
+def unresolved_tool_bins() -> list[str]:
+    """List of tools whose binary fell back to the bare name (i.e. could
+    not be located on disk at import time). These will fail at exec time
+    unless the user's PATH picks them up."""
+    return sorted(name for name, src in _TOOL_BIN_SOURCES.items() if src == "bare")
 
 
 def _default_path() -> str:
@@ -305,6 +335,58 @@ CODEX_API_PROVIDER_CONFIGS = {
         "wire_api": "responses",
     },
 }
+
+# Gemini has no non-Google API providers today; the matrix exposes
+# `api/google-api-key` which is handled via plain env-var injection (no
+# config.toml rendering). This dict is kept empty to preserve structural
+# symmetry with CLAUDE_/CODEX_API_PROVIDER_CONFIGS and to provide a
+# documented place for future providers (e.g. google-vertex). Adding an
+# entry here must be paired with an update to SUPPORTED_RUNTIME_MATRIX
+# and any renderer that consumes it.
+GEMINI_API_PROVIDER_CONFIGS: dict[str, dict[str, object]] = {}
+
+
+# ── Codex provider schema ───────────────────────────────────────────
+#
+# `write_codex_api_config` used to render a raw dict into TOML. A typo in
+# the dict (e.g. `disable_response_storge`) was silently dropped and the
+# codex CLI started without it, which produced confusing runtime
+# failures. The dataclass below pins the accepted field set; any unknown
+# key raises at load time via `parse_codex_provider_config`. Renderers
+# must read from the dataclass, never from a raw dict.
+
+@dataclass(frozen=True)
+class CodexProviderConfig:
+    model_provider: str
+    model: str
+    base_url: str
+    wire_api: str
+    model_reasoning_effort: str | None = None
+    disable_response_storage: bool | None = None
+    preferred_auth_method: str | None = None
+    personality: str | None = None
+    name: str | None = None
+    env_key: str | None = None
+    requires_openai_auth: bool | None = None
+    request_max_retries: int | None = None
+    stream_max_retries: int | None = None
+    stream_idle_timeout_ms: int | None = None
+    profile_name: str | None = None
+
+
+def parse_codex_provider_config(data: dict[str, Any]) -> CodexProviderConfig:
+    """Convert a raw dict entry from CODEX_API_PROVIDER_CONFIGS to the
+    strongly-typed dataclass. Unknown keys raise ValueError instead of
+    being silently dropped — the original reason this function exists
+    (audit M1 — see docs/audit-log)."""
+    allowed = {field.name for field in fields(CodexProviderConfig)}
+    unknown = set(data) - allowed
+    if unknown:
+        raise ValueError(
+            f"unknown codex provider config key(s): {sorted(unknown)}; "
+            f"allowed: {sorted(allowed)}"
+        )
+    return CodexProviderConfig(**data)
 
 
 SUPPORTED_RUNTIME_MATRIX = {
