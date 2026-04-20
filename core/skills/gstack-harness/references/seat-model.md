@@ -53,8 +53,11 @@ For dynamic-roster profiles, keep these fields distinct:
   - the canonical project roster
   - use this for role semantics, dispatch intent, and generated docs
 - `materialized_seats`
-  - the seats whose session/workspace scaffold should be pre-created at bootstrap
+  - the seats whose workspace/task scaffold should be pre-created at bootstrap
   - for starter profiles, this normally matches `seats`
+- `runtime_seats`
+  - the seats that should receive tmux session/runtime records
+  - when `heartbeat_transport = "openclaw"`, this normally excludes `heartbeat_owner`
 - `default_start_seats`
   - the seats frontstage should suggest or autostart first
   - this is a launch-order hint, not the roster definition
@@ -65,9 +68,10 @@ For dynamic-roster profiles, keep these fields distinct:
 Recommended rule:
 
 1. put the full team in `seats`
-2. set `materialized_seats` to the seats that should already have runtime scaffolding after bootstrap
-3. use `default_start_seats` for first-launch suggestions
-4. keep `bootstrap_seats` only for backward-compatible frontstage/bootstrap behavior
+2. set `materialized_seats` to the seats that should already have workspace/task scaffolding after bootstrap
+3. set `runtime_seats` to the seats that should have tmux session/runtime records
+4. use `default_start_seats` for first-launch suggestions
+5. keep `bootstrap_seats` only for backward-compatible frontstage/bootstrap behavior
 
 ## Configuration workflow
 

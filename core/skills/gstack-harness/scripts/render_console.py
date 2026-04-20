@@ -39,12 +39,14 @@ def _unique_ordered(values: list[str]) -> list[str]:
 def seat_sets(profile: HarnessProfile) -> dict[str, list[str]]:
     roster = _unique_ordered(list(profile.seats))
     materialized = _unique_ordered(list(getattr(profile, "materialized_seats", None) or roster))
+    runtime = _unique_ordered(list(getattr(profile, "runtime_seats", None) or materialized))
     bootstrap = _unique_ordered(list(profile.bootstrap_seats or []))
     default_start = _unique_ordered(list(profile.default_start_seats or bootstrap or materialized))
-    backend = [seat for seat in roster if seat != profile.heartbeat_owner]
+    backend = [seat for seat in runtime if seat != profile.heartbeat_owner]
     return {
         "roster": roster,
         "materialized": materialized,
+        "runtime": runtime,
         "bootstrap": bootstrap,
         "default_start": default_start,
         "backend": backend,

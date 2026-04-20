@@ -69,6 +69,7 @@ class HarnessProfile:
     workspace_root: Path
     handoff_dir: Path
     heartbeat_owner: str
+    heartbeat_transport: str
     active_loop_owner: str
     default_notify_target: str
     heartbeat_receipt: Path
@@ -77,6 +78,7 @@ class HarnessProfile:
     seat_roles: dict[str, str]
     seat_overrides: dict[str, dict[str, str]]
     dynamic_roster_enabled: bool
+    runtime_seats: list[str]
     session_root: Path
     materialized_seats: list[str]
     bootstrap_seats: list[str]
@@ -269,8 +271,16 @@ def load_profile(path: str | Path) -> HarnessProfile:
     top_level_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items()}
     session_root = Path(str(dynamic.get("session_root", str(Path.home() / ".agents" / "sessions")))).expanduser()
     heartbeat_owner = str(data["heartbeat_owner"])
+    heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
     declared_seats = [str(item) for item in data.get("seats", [heartbeat_owner])]
     materialized_seats = [str(item) for item in dynamic.get("materialized_seats", declared_seats)]
+    runtime_seats_raw = dynamic.get("runtime_seats")
+    if runtime_seats_raw is None:
+        runtime_seats = list(materialized_seats)
+        if heartbeat_transport == "openclaw":
+            runtime_seats = [seat for seat in runtime_seats if seat != heartbeat_owner]
+    else:
+        runtime_seats = [str(item) for item in runtime_seats_raw]
     bootstrap_seats = [str(item) for item in dynamic.get("bootstrap_seats", [heartbeat_owner])]
     default_start_seats = [str(item) for item in dynamic.get("default_start_seats", bootstrap_seats or materialized_seats)]
     dynamic_enabled = bool(dynamic.get("enabled", False))
@@ -324,6 +334,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         workspace_root=Path(str(data["workspace_root"])).expanduser(),
         handoff_dir=Path(str(data["handoff_dir"])).expanduser(),
         heartbeat_owner=heartbeat_owner,
+        heartbeat_transport=heartbeat_transport,
         active_loop_owner=active_loop_owner,
         default_notify_target=default_notify_target,
         heartbeat_receipt=Path(str(data["heartbeat_receipt"])).expanduser(),
@@ -335,6 +346,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
             for seat_id, values in data.get("seat_overrides", {}).items()
         },
         dynamic_roster_enabled=dynamic_enabled,
+        runtime_seats=runtime_seats,
         session_root=session_root,
         materialized_seats=materialized_seats,
         bootstrap_seats=bootstrap_seats,
@@ -349,13 +361,13 @@ def load_profile(path: str | Path) -> HarnessProfile:
 
 def tracked_runtime_seats(profile: HarnessProfile) -> list[str]:
     bound = []
-    for seat in profile.seats:
+    for seat in profile.runtime_seats:
         session_path = profile.session_root / profile.project_name / seat / "session.toml"
-        if session_path.exists() and seat != profile.heartbeat_owner:
+        if session_path.exists():
             bound.append(seat)
     if bound:
         return bound
-    return [seat for seat in profile.seats if seat != profile.heartbeat_owner]
+    return list(profile.runtime_seats)
 
 
 def preferred_planner_seat(profile: HarnessProfile) -> str:

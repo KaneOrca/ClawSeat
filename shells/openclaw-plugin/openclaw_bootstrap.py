@@ -44,6 +44,8 @@ def main() -> dict[str, str]:
     from shells.openclaw_plugin import openclaw_bridge
 
     os.environ["CLAWSEAT_ROOT"] = str(CLAWSEAT_ROOT)
+    os.environ.setdefault("CLAWSEAT_INSTALL_RUNTIME", "openclaw")
+    os.environ.setdefault("CLAWSEAT_INSTALL_PROFILE_TEMPLATE", "install-openclaw.toml")
     # CLAWSEAT_REFAC_ROOT is inherited from the environment; if unset, _get_migration_root()
     # in clawseat_adapter.py falls back to REPO_ROOT / "refac" / "migration" (production path)
 

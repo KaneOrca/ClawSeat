@@ -192,9 +192,14 @@ def roster_seats(profile: Any) -> list[str]:
     return [str(seat) for seat in profile.seats if str(seat).strip()]
 
 
+def runtime_seats(profile: Any) -> list[str]:
+    values = getattr(profile, "runtime_seats", None) or getattr(profile, "materialized_seats", None) or profile.seats
+    return [str(seat) for seat in values if str(seat).strip()]
+
+
 def backend_seats(profile: Any) -> list[str]:
     heartbeat_owner = str(profile.heartbeat_owner).strip()
-    return [seat for seat in roster_seats(profile) if seat != heartbeat_owner]
+    return [seat for seat in runtime_seats(profile) if seat != heartbeat_owner]
 
 
 def default_backend_start_seats(profile: Any) -> list[str]:
@@ -216,9 +221,11 @@ def build_workspace_files(
     template = load_template()
     spec = koder_spec(template, profile)
     seats = roster_seats(profile)
+    runtime = runtime_seats(profile)
     backend = backend_seats(profile)
     default_backend = default_backend_start_seats(profile)
     heartbeat_owner = str(profile.heartbeat_owner).strip() or "koder"
+    heartbeat_transport = str(getattr(profile, "heartbeat_transport", "openclaw")).strip() or "openclaw"
     active_loop_owner = str(profile.active_loop_owner).strip() or "planner"
     default_notify_target = str(profile.default_notify_target).strip() or active_loop_owner
     return {
@@ -249,7 +256,9 @@ def build_workspace_files(
             project,
             profile_path,
             seats,
+            runtime_seats=runtime,
             heartbeat_owner=heartbeat_owner,
+            heartbeat_transport=heartbeat_transport,
             active_loop_owner=active_loop_owner,
             default_notify_target=default_notify_target,
             backend_seats=backend,
@@ -499,7 +508,8 @@ python3 -c "import pathlib,tomllib; print(tomllib.loads((pathlib.Path.home() / '
    | 模板 | 包含 |
    |------|------|
    | full-team.toml（推荐） | koder + planner + builder-1 + reviewer-1 + qa-1 + designer-1 |
-   | install.toml（轻量） | koder + planner + builder-1 + reviewer-1 |
+   | install-openclaw.toml（OpenClaw 默认） | koder(frontstage) + memory + planner + builder-1 + reviewer-1 |
+   | install.toml（本地 /cs 轻量） | koder + planner + builder-1 + reviewer-1 |
    | starter.toml（起点） | 仅 koder，后续手动加 seat |
 
 **执行步骤：**
@@ -756,7 +766,7 @@ python3 {admin} session batch-start-engineer \\
 - **视觉整齐**：所有 seat tab 排在同一 iTerm window 里
 - **无法遗漏 wait**：等 Phase 1 完成的逻辑写在 Python 里，不靠 shell `wait`
 
-前提（install-with-memory.toml 默认都满足）：
+前提（install-openclaw.toml 默认都满足）：
 - `project.window_mode = "tabs-1up"`
 - 目标 seat 都在 `monitor_engineers` 里
 
@@ -1033,7 +1043,9 @@ def render_contract(
     profile_path: Path,
     seats: list[str],
     *,
+    runtime_seats: list[str],
     heartbeat_owner: str,
+    heartbeat_transport: str,
     active_loop_owner: str,
     default_notify_target: str,
     backend_seats: list[str],
@@ -1042,23 +1054,30 @@ def render_contract(
 ) -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     seat_toml = ", ".join(f'"{s}"' for s in seats)
+    runtime_toml = ", ".join(f'"{s}"' for s in runtime_seats)
     backend_toml = ", ".join(f'"{s}"' for s in backend_seats)
     default_backend_toml = ", ".join(f'"{s}"' for s in default_backend_start_seats)
     # D1: contract fingerprint — a 16-char SHA256 hex of the critical fields,
     # so ack_contract and downstream consumers can detect drift without diff'ing.
-    fingerprint_source = f"{project}|{profile_path}|{'/'.join(seats)}|{feishu_group_id}"
+    fingerprint_source = (
+        f"{project}|{profile_path}|{'/'.join(seats)}|{'/'.join(runtime_seats)}|"
+        f"{heartbeat_transport}|{feishu_group_id}"
+    )
     contract_fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()[:16]
     return f"""version = 1
 seat_id = "{heartbeat_owner}"
 role = "frontstage-supervisor"
+transport = "openclaw"
 project = "{project}"
 profile = "{profile_path}"
 initialized_at = "{now}"
 contract_fingerprint = "{contract_fingerprint}"
 seats = [{seat_toml}]
+runtime_seats = [{runtime_toml}]
 backend_seats = [{backend_toml}]
 default_backend_start_seats = [{default_backend_toml}]
 heartbeat_owner = "{heartbeat_owner}"
+heartbeat_transport = "{heartbeat_transport}"
 active_loop_owner = "{active_loop_owner}"
 default_notify_target = "{default_notify_target}"
 feishu_group_id = "{feishu_group_id}"

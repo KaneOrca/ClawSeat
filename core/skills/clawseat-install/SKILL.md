@@ -24,7 +24,8 @@ post-install convenience command.
   user experience.
 - If the user wants the standard first-run path after installing ClawSeat onto Claude/Codex, install the entry skills and route them to `/cs`.
 - If the user wants this agent runtime to load ClawSeat, use the `shells/codex-bundle/` or `shells/claude-bundle/` entrypoint for that runtime.
-- If the user wants the canonical install workspace, use `install-with-memory.toml` (declares memory seat required by P1; `install.toml` is the legacy memory-less variant kept only for narrow local-CLI cases).
+- For OpenClaw / Feishu overlay mode, use `install-openclaw.toml` (declares `heartbeat_transport=openclaw`, runtime_seats = backend only; koder is the OpenClaw agent, not tmux).
+- For local Claude / Codex mode, use `install-with-memory.toml` (declares memory seat required by P1; `install.toml` is the legacy memory-less variant kept only for narrow local-CLI cases where you explicitly don't want memory).
 - If the user wants a fresh project workspace, use `starter.toml` for a koder-only entrypoint or `full-team.toml` when they explicitly want the full six-seat roster.
 - If the user wants OpenClaw integration, use `shells/openclaw-plugin/openclaw_bootstrap.py` and keep core logic in ClawSeat, not OpenClaw.
 
@@ -118,7 +119,9 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
    - If `planner` is still unconfigured, stop at the printed configuration gate instead of guessing seat config
    - Read the profile fields correctly:
      - `seats` = full roster
-     - `materialized_seats` = seats whose runtime/session scaffold already exists after bootstrap
+     - `materialized_seats` = seats whose workspace/task scaffold already exists after bootstrap
+     - `runtime_seats` = seats that should receive tmux session/runtime records
+     - `heartbeat_transport` = whether `heartbeat_owner` runs as `tmux` or `openclaw`
      - `default_start_seats` = first seats frontstage should offer/start
      - `bootstrap_seats` = compatibility/frontstage-bootstrap field, not the backend roster
    - After bootstrap, **you MUST ask the user** for each backend seat's configuration before starting ANY seat. Do NOT use template defaults without user confirmation. For each seat, ask:
@@ -149,7 +152,12 @@ Seat-to-memory query protocol: see [references/memory-query-protocol.md](referen
    - **Never let planner choose seat configs on its own** — all config decisions come from the user through koder
 7. If the runtime is **local Claude/Codex**, tell the user to run `/cs`; that wrapper delegates to `cs_init.py`, uses `examples/starter/profiles/install-with-memory.toml` (per F6 — `install.toml` is the legacy memory-less variant), and starts `planner`.
 8. For manual project-specific installs, run `python3 "$CLAWSEAT_ROOT/core/preflight.py" [project]`.
-9. If a fresh project is needed, copy `examples/starter/profiles/starter.toml` for a koder-only entrypoint, `examples/starter/profiles/install-with-memory.toml` for the canonical install project (declares memory; required by the 6-phase overlay flow), or `examples/starter/profiles/full-team.toml` for a six-seat roster to `/tmp/{project}-profile-dynamic.toml`. `install.toml` (no memory) is the legacy variant — use only if you deliberately need a memory-less project.
+9. If a fresh project is needed, copy one of these into `/tmp/{project}-profile-dynamic.toml`:
+   - `examples/starter/profiles/starter.toml` — koder-only entrypoint (no gstack)
+   - `examples/starter/profiles/install-with-memory.toml` — canonical local `/cs` install with memory seat (declares specialists; requires gstack)
+   - `examples/starter/profiles/install-openclaw.toml` — canonical OpenClaw overlay install (`heartbeat_transport=openclaw`; koder is not tmux)
+   - `examples/starter/profiles/install.toml` — legacy memory-less variant, kept for narrow local-CLI cases
+   - `examples/starter/profiles/full-team.toml` — six-seat roster (requires gstack)
 10. Bootstrap with `python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/bootstrap_harness.py" --profile /tmp/{project}-profile-dynamic.toml --project-name {project}` (do NOT pass `--start` in OpenClaw mode — koder is already running).
 11. In local CLI mode only: start koder with `start_seat.py --seat koder`. In OpenClaw mode: skip this step — you are koder.
 12. Treat OAuth login, workspace trust, and permission prompts as normal first-launch onboarding for backend seats.

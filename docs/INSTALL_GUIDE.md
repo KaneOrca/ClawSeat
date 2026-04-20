@@ -138,7 +138,9 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skill
 
 Profile 持久化存储在 `~/.agents/profiles/{project}-profile-dynamic.toml`。
 
-首次安装时自动从 `examples/starter/profiles/install.toml` 种子化。
+首次安装时会按 runtime 自动种子化：
+- OpenClaw / Feishu: `examples/starter/profiles/install-openclaw.toml`
+- 本地 Claude/Codex `/cs`: `examples/starter/profiles/install.toml`
 
 Profile 中支持两种可移植占位符：
 - `{CLAWSEAT_ROOT}` → ClawSeat 仓库根目录
@@ -214,6 +216,7 @@ python3 core/scripts/iterm_tmux_selftest.py
 
 | Profile | 用途 |
 |---------|------|
-| `examples/starter/profiles/install.toml` | canonical 安装项目（koder + planner + builder + reviewer） |
+| `examples/starter/profiles/install-openclaw.toml` | canonical OpenClaw 安装项目（koder = 当前 OpenClaw agent；memory/planner/builder/reviewer 为 backend runtime seats） |
+| `examples/starter/profiles/install.toml` | canonical 本地 `/cs` 安装项目（koder + planner + builder + reviewer） |
 | `examples/starter/profiles/starter.toml` | 仅 koder 入口 |
 | `examples/starter/profiles/full-team.toml` | 完整六人团队 |

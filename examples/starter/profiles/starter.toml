@@ -1,8 +1,9 @@
 # Requires gstack skills: NO — koder-only (frontstage-supervisor role); no specialist seats declared.
-# For the canonical install chain (planner + builder + reviewer), switch to install-with-memory.toml — REQUIRES gstack skills.
+# For the full local /cs install chain (planner + builder + reviewer), switch to install-with-memory.toml — REQUIRES gstack skills.
+# For the canonical OpenClaw overlay install, use install-openclaw.toml.
 version = 1
 profile_name = "starter"
-description = "Generic ClawSeat starter profile — koder frontstage only. No cartooner dependency. Use install.toml for the canonical /cs install path or full-team.toml for a ready-made six-seat roster."
+description = "Generic ClawSeat starter profile — koder frontstage only. No cartooner dependency. Use install.toml for the canonical local /cs install path, install-openclaw.toml for the canonical OpenClaw install path, or full-team.toml for a ready-made six-seat roster."
 template_name = "gstack-harness"
 project_name = "my-project"
 repo_root = "{CLAWSEAT_ROOT}"
@@ -37,6 +38,7 @@ compat_legacy_seats = false
 
 # For the canonical /cs install workspace, copy:
 # {CLAWSEAT_ROOT}/examples/starter/profiles/install.toml
+# {CLAWSEAT_ROOT}/examples/starter/profiles/install-openclaw.toml
 #
 # For a ready-made six-seat workspace roster, copy:
 # {CLAWSEAT_ROOT}/examples/starter/profiles/full-team.toml

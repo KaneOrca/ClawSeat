@@ -240,6 +240,38 @@ def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
     materialize_profile_runtime(profile)
+    runtime_seats = list(profile.runtime_seats or profile.materialized_seats or profile.seats)
+    if args.seat == profile.heartbeat_owner and profile.heartbeat_transport == "openclaw":
+        openclaw_frontstage_contract = find_openclaw_frontstage_contract(profile, args.seat)
+        detail = (
+            f" via {openclaw_frontstage_contract}"
+            if openclaw_frontstage_contract is not None
+            else " via profile heartbeat_transport=openclaw"
+        )
+        print(
+            "openclaw_frontstage_start_blocked: "
+            f"seat '{args.seat}' is bound to the OpenClaw frontstage, not a tmux runtime{detail}. "
+            f"Do not run start_seat.py --seat {args.seat}; the current OpenClaw agent already owns frontstage."
+        )
+        if profile.default_start_seats:
+            backend_defaults = [
+                seat_id
+                for seat_id in profile.default_start_seats
+                if seat_id in runtime_seats and seat_id != profile.heartbeat_owner
+            ]
+            if backend_defaults:
+                print(
+                    "next_step: "
+                    f"start a backend seat instead, for example {backend_defaults[0]!r}."
+                )
+        return 1
+    if args.seat not in runtime_seats:
+        print(
+            "seat_not_runtime_startable: "
+            f"seat '{args.seat}' is not declared in profile.runtime_seats={runtime_seats}. "
+            "Only runtime seats can be started via tmux."
+        )
+        return 1
     openclaw_frontstage_contract = find_openclaw_frontstage_contract(profile, args.seat)
     if openclaw_frontstage_contract is not None:
         print(
@@ -252,7 +284,7 @@ def main() -> int:
             backend_defaults = [
                 seat_id
                 for seat_id in profile.default_start_seats
-                if seat_id != profile.heartbeat_owner
+                if seat_id in runtime_seats and seat_id != profile.heartbeat_owner
             ]
             if backend_defaults:
                 print(

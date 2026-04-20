@@ -19,6 +19,7 @@ agent_admin = "{CLAWSEAT_ROOT}/core/scripts/agent_admin.py"
 workspace_root = "~/.agents/workspaces/install"
 handoff_dir = "~/.agents/tasks/install/patrol/handoffs"
 heartbeat_owner = "koder"
+heartbeat_transport = "openclaw"
 active_loop_owner = "planner"
 default_notify_target = "planner"
 heartbeat_receipt = "~/.agents/workspaces/install/koder/HEARTBEAT_RECEIPT.toml"
@@ -37,10 +38,11 @@ reviewer-1 = "reviewer"
 enabled = true
 session_root = "~/.agents/sessions"
 materialized_seats = ["memory", "koder", "planner", "builder-1", "reviewer-1"]
+runtime_seats = ["memory", "planner", "builder-1", "reviewer-1"]
 # bootstrap_seats kept for compatibility and frontstage bootstrap intent.
 bootstrap_seats = ["koder"]
 # memory starts first so subsequent seats can query it during their setup.
-default_start_seats = ["memory", "koder", "planner"]
+default_start_seats = ["memory", "planner"]
 compat_legacy_seats = false
 
 # Memory CC uses claude + api + minimax out of the box (cheap, fast lookup seat).

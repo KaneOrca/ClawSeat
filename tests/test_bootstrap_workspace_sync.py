@@ -57,6 +57,7 @@ def _make_profile(tmp_path: Path, project: str = "testproj", seats: list[str] | 
         workspace_root=workspace_root,
         handoff_dir=dummy / "handoffs",
         heartbeat_owner="koder",
+        heartbeat_transport="tmux",
         active_loop_owner="koder",
         default_notify_target="koder",
         heartbeat_receipt=dummy / "HEARTBEAT_RECEIPT.toml",
@@ -65,6 +66,7 @@ def _make_profile(tmp_path: Path, project: str = "testproj", seats: list[str] | 
         seat_roles={"koder": "builder"},
         seat_overrides={},
         materialized_seats=seats or ["koder"],
+        runtime_seats=seats or ["koder"],
     )
 
 

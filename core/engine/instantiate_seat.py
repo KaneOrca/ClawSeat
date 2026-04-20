@@ -500,6 +500,7 @@ def render_workspace_contract(instance: SeatInstance) -> str:
         "version = 1",
         f"engineer_id = {q(instance.instance_id)}",
         f"seat_id = {q(instance.instance_id)}",
+        'transport = "tmux"',
         f"project = {q(instance.project_name)}",
         f"template_id = {q(instance.template.template_id)}",
         f"tool = {q(instance.template.tool)}",

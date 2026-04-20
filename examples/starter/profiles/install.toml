@@ -19,6 +19,7 @@ agent_admin = "{CLAWSEAT_ROOT}/core/scripts/agent_admin.py"
 workspace_root = "~/.agents/workspaces/install"
 handoff_dir = "~/.agents/tasks/install/patrol/handoffs"
 heartbeat_owner = "koder"
+heartbeat_transport = "tmux"
 active_loop_owner = "planner"
 default_notify_target = "planner"
 heartbeat_receipt = "~/.agents/workspaces/install/koder/HEARTBEAT_RECEIPT.toml"
@@ -35,6 +36,7 @@ reviewer-1 = "reviewer"
 enabled = true
 session_root = "~/.agents/sessions"
 materialized_seats = ["koder", "planner", "builder-1", "reviewer-1"]
+runtime_seats = ["koder", "planner", "builder-1", "reviewer-1"]
 # bootstrap_seats is kept for compatibility and frontstage bootstrap intent.
 bootstrap_seats = ["koder"]
 default_start_seats = ["koder", "planner"]

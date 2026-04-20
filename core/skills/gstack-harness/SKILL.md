@@ -131,10 +131,12 @@ Keep those under:
 - `gstack` specialist skills stay in place; this skill only orchestrates them.
 - Treat dynamic-roster fields as separate concerns:
   - `seats` = canonical roster
-  - `materialized_seats` = seats that get precreated session/runtime scaffolding
+  - `materialized_seats` = seats that get precreated workspace/task scaffolding
+  - `runtime_seats` = seats that should receive tmux session/runtime records
   - `default_start_seats` = first-launch / operator-start hint
   - `bootstrap_seats` = backward-compatible bootstrap/frontstage intent only
-- Starter profiles should normally set `materialized_seats = seats`, so declared seats are still fully materialized before the first task handoff.
+- Starter profiles should normally set `materialized_seats = seats`.
+- Set `runtime_seats = materialized_seats` for local tmux frontstages, but exclude the heartbeat owner when `heartbeat_transport = "openclaw"`.
 - The frontstage-supervisor seat owns seat startup and operator window layout.
   It is responsible for:
   - deciding when a seat should be launched

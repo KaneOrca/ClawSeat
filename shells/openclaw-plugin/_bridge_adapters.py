@@ -83,8 +83,8 @@ def ensure_clawseat_profile(
     Returns the resolved profile path.
 
     Special case: the canonical `install` project auto-seeds its dynamic profile
-    from the shipped `examples/starter/profiles/install.toml` when bootstrapping
-    on a blank machine.
+    from the shipped `examples/starter/profiles/install-openclaw.toml` when
+    bootstrapping on a blank machine.
     """
     if profile_path is not None:
         candidate = Path(profile_path).expanduser()
@@ -103,7 +103,7 @@ def ensure_clawseat_profile(
 
     if project_name == "install":
         template_root = Path(repo_root).expanduser() if repo_root is not None else _CLAWSEAT_ROOT
-        template_path = template_root / "examples" / "starter" / "profiles" / "install.toml"
+        template_path = template_root / "examples" / "starter" / "profiles" / "install-openclaw.toml"
         if template_path.exists():
             dynamic_path.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
             return str(dynamic_path)

@@ -112,7 +112,7 @@ def _update_profile_seat(
     """Update a harness profile TOML with seat metadata.
 
     For create (rebind=False): idempotently appends seat to seats,
-    materialized_seats, seat_roles, and seat_overrides.
+    materialized_seats, runtime_seats, seat_roles, and seat_overrides.
     For rebind (rebind=True): only updates seat_overrides (always overwrites).
     """
     if not re.match(r'^[a-zA-Z0-9_-]+$', seat_id):
@@ -123,6 +123,7 @@ def _update_profile_seat(
     if not rebind:
         text = _toml_inline_list_add(text, "seats", seat_id)
         text = _toml_inline_list_add(text, "materialized_seats", seat_id, section="dynamic_roster")
+        text = _toml_inline_list_add(text, "runtime_seats", seat_id, section="dynamic_roster")
         text = _toml_seat_role_set(text, seat_id, role)
         text = _toml_seat_overrides_set(text, seat_id, tool, auth_mode, provider, model)
     else:

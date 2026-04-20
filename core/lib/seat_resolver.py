@@ -1,9 +1,10 @@
 """Seat resolver: single source of truth for how to reach a target seat.
 
 Detection order (short-circuit priority):
-1. tmux     — target in profile.seats
-2. openclaw — ~/.openclaw/workspace-<target>/WORKSPACE_CONTRACT.toml exists + feishu_group_id
-3. file-only — all other cases (no known transport, write to handoff dir)
+1. explicit OpenClaw frontstage — target == heartbeat_owner and heartbeat_transport=openclaw
+2. tmux runtime seats         — target in profile.runtime_seats (or legacy seats fallback)
+3. named OpenClaw workspace   — ~/.openclaw/workspace-<target>/WORKSPACE_CONTRACT.toml exists + feishu_group_id
+4. file-only                  — all other cases (no known transport, write to handoff dir)
 
 Side effects: NONE from resolve_seat() itself. File writes (handoff JSON) are
 the caller's responsibility.
@@ -62,6 +63,33 @@ def _resolve_session_name_from_session_toml(project_name: str, seat: str) -> Opt
     data = _load_toml(session_toml)
     if data:
         return str(data.get("session", "")).strip() or None
+    return None
+
+
+def _workspace_agent_name(contract_path: Path) -> str:
+    name = contract_path.parent.name
+    if name.startswith("workspace-"):
+        return name[len("workspace-") :]
+    return name
+
+
+def _find_frontstage_openclaw_contract(
+    *,
+    oc_home: Path,
+    heartbeat_owner: str,
+    profile_project_name: str,
+) -> Path | None:
+    for contract_path in sorted(oc_home.glob("workspace-*/WORKSPACE_CONTRACT.toml")):
+        contract_data = _load_toml(contract_path)
+        if not contract_data:
+            continue
+        contract_seat = str(contract_data.get("seat_id", "")).strip()
+        contract_project = str(contract_data.get("project", "")).strip()
+        if contract_seat != heartbeat_owner:
+            continue
+        if contract_project and contract_project != profile_project_name:
+            continue
+        return contract_path
     return None
 
 
@@ -177,6 +205,9 @@ def resolve_seat(
     profile_session_name_resolver: Optional[callable] = None,
     strict: bool = False,
     _openclaw_home: Optional[Path] = None,
+    profile_runtime_seats: Optional[list[str]] = None,
+    profile_heartbeat_owner: Optional[str] = None,
+    profile_heartbeat_transport: str = "tmux",
 ) -> SeatResolution:
     """Resolve a target seat name to a SeatResolution.
 
@@ -203,8 +234,60 @@ def resolve_seat(
         Fully populated resolution. Use .into_error(strict) to convert
         kind="error" to an exception in strict mode.
     """
-    # ── 1. tmux: target is a declared seat in the profile ────────────────────
-    if target in profile_seats:
+    runtime_seats = list(profile_runtime_seats or profile_seats)
+    heartbeat_owner = (profile_heartbeat_owner or "").strip()
+    heartbeat_transport = (profile_heartbeat_transport or "tmux").strip().lower() or "tmux"
+    oc_home = _openclaw_home if _openclaw_home is not None else _openclaw_home_resolved()
+
+    def _openclaw_resolution(contract_path: Path) -> SeatResolution:
+        contract_data = _load_toml(contract_path)
+        group_id: Optional[str] = None
+        if contract_data:
+            raw_gid = str(contract_data.get("feishu_group_id", "")).strip()
+            group_id = raw_gid if raw_gid else None
+        if not group_id:
+            handoff_path = profile_handoff_dir / f"{target}.json"
+            return SeatResolution(
+                kind="file-only",
+                transport="patrol-handoff-dir",
+                target=target,
+                handoff_path=handoff_path,
+                error=f"workspace contract exists at {contract_path} but feishu_group_id is missing",
+            )
+        return SeatResolution(
+            kind="openclaw",
+            transport="feishu-oc-v1",
+            target=target,
+            group_id=group_id,
+            agent_name=_workspace_agent_name(contract_path),
+        )
+
+    # ── 1. explicit OpenClaw frontstage ─────────────────────────────────────
+    if target == heartbeat_owner and heartbeat_transport == "openclaw":
+        contract_path = _find_frontstage_openclaw_contract(
+            oc_home=oc_home,
+            heartbeat_owner=heartbeat_owner,
+            profile_project_name=profile_project_name,
+        )
+        if contract_path is not None:
+            return _openclaw_resolution(contract_path)
+        handoff_path = profile_handoff_dir / f"{target}.json"
+        error_msg = (
+            f"frontstage target {target!r} is configured for OpenClaw transport "
+            f"but no matching OpenClaw workspace contract was found under {oc_home}"
+        )
+        if strict:
+            raise SeatResolutionError(error_msg)
+        return SeatResolution(
+            kind="file-only",
+            transport="patrol-handoff-dir",
+            target=target,
+            handoff_path=handoff_path,
+            error=error_msg,
+        )
+
+    # ── 2. tmux: target is a declared runtime seat in the profile ───────────
+    if target in runtime_seats:
         resolver = profile_session_name_resolver or _resolve_session_name_from_session_toml
         session_name = resolver(profile_project_name, target)
         return SeatResolution(
@@ -214,43 +297,19 @@ def resolve_seat(
             session_name=session_name,
         )
 
-    # ── 2. openclaw: workspace contract exists with feishu_group_id ───────────
-    oc_home = _openclaw_home if _openclaw_home is not None else _openclaw_home_resolved()
+    # ── 3. openclaw: workspace contract exists with feishu_group_id ───────────
     workspace_contract = oc_home / f"workspace-{target}" / "WORKSPACE_CONTRACT.toml"
     if workspace_contract.exists():
-        contract_data = _load_toml(workspace_contract)
-        group_id: Optional[str] = None
-        if contract_data:
-            raw_gid = str(contract_data.get("feishu_group_id", "")).strip()
-            group_id = raw_gid if raw_gid else None
+        return _openclaw_resolution(workspace_contract)
 
-        # Enhancement 3: workspace exists but feishu_group_id missing → file-only
-        if not group_id:
-            handoff_path = profile_handoff_dir / f"{target}.json"
-            return SeatResolution(
-                kind="file-only",
-                transport="patrol-handoff-dir",
-                target=target,
-                handoff_path=handoff_path,
-                error=f"workspace contract exists at {workspace_contract} but feishu_group_id is missing",
-            )
-
-        return SeatResolution(
-            kind="openclaw",
-            transport="feishu-oc-v1",
-            target=target,
-            group_id=group_id,
-            agent_name=target,
-        )
-
-    # ── 3. file-only fallback ─────────────────────────────────────────────────
+    # ── 4. file-only fallback ─────────────────────────────────────────────────
     # Ambiguous: not a known tmux seat and no OpenClaw workspace.
     # In non-strict mode, this is a valid file-only resolution.
     # In strict mode, raise because the target cannot be reliably dispatched.
     handoff_path = profile_handoff_dir / f"{target}.json"
     error_msg = (
         f"target {target!r} is not a declared tmux seat "
-        f"(profile seats: {profile_seats}) and has no OpenClaw workspace contract "
+        f"(runtime seats: {runtime_seats}) and has no OpenClaw workspace contract "
         f"(checked {workspace_contract}); cannot dispatch."
     )
     if strict:
@@ -276,8 +335,11 @@ def resolve_seat_from_profile(
     profile must have: seats, project_name, handoff_dir attributes.
     """
     seats: list[str] = getattr(profile, "seats", [])
+    runtime_seats: list[str] = getattr(profile, "runtime_seats", []) or seats
     project_name: str = getattr(profile, "project_name", "")
     handoff_dir: Path = getattr(profile, "handoff_dir", Path("~/.agents/tasks/hardening-b/patrol/handoffs"))
+    heartbeat_owner: str = getattr(profile, "heartbeat_owner", "")
+    heartbeat_transport: str = getattr(profile, "heartbeat_transport", "tmux")
 
     def session_resolver(proj: str, seat: str) -> Optional[str]:
         return _resolve_session_name_from_session_toml(proj, seat)
@@ -289,6 +351,9 @@ def resolve_seat_from_profile(
         profile_handoff_dir=Path(handoff_dir),
         profile_session_name_resolver=session_resolver,
         strict=strict,
+        profile_runtime_seats=runtime_seats,
+        profile_heartbeat_owner=heartbeat_owner,
+        profile_heartbeat_transport=heartbeat_transport,
     )
 
 
@@ -297,8 +362,11 @@ class HarnessProfileLike:
     """Minimal protocol that resolve_seat_from_profile needs from a profile object."""
 
     seats: list[str]
+    runtime_seats: list[str]
     project_name: str
     handoff_dir: Path
+    heartbeat_owner: str = ""
+    heartbeat_transport: str = "tmux"
     profile_path: Path = Path()
 
     @classmethod
@@ -309,7 +377,12 @@ class HarnessProfileLike:
         obj = cls()
         obj.profile_path = path
         obj.seats = [str(s) for s in data.get("seats", [])]
+        dynamic = data.get("dynamic_roster", {})
+        runtime_raw = dynamic.get("runtime_seats", obj.seats) if isinstance(dynamic, dict) else obj.seats
+        obj.runtime_seats = [str(s) for s in runtime_raw]
         obj.project_name = str(data.get("project_name", ""))
+        obj.heartbeat_owner = str(data.get("heartbeat_owner", ""))
+        obj.heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
         hdir = str(data.get("handoff_dir", ""))
-        obj.handoff_dir = Path(hdir.replace("~", str(_home()))) if hdir else path.parent
+        obj.handoff_dir = Path(hdir).expanduser() if hdir else path.parent
         return obj

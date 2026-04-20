@@ -137,6 +137,51 @@ class TestSeatResolverOpenClaw:
         assert result.kind == "openclaw"
         assert result.group_id == "oc_test"
 
+    def test_openclaw_frontstage_beats_runtime_seat_membership(self, tmp_openclaw_home, tmp_agents_root):
+        """Explicit heartbeat_transport=openclaw must override legacy runtime seat lists."""
+        contract = tmp_openclaw_home / "workspace-cartooner" / "WORKSPACE_CONTRACT.toml"
+        contract.parent.mkdir(parents=True)
+        contract.write_text(
+            'seat_id = "koder"\n'
+            'project = "hardening-b"\n'
+            'feishu_group_id = "oc_frontstage"\n'
+        )
+
+        result = resolve_seat(
+            target="koder",
+            profile_seats=["memory", "koder", "planner"],
+            profile_runtime_seats=["memory", "koder", "planner"],
+            profile_project_name="hardening-b",
+            profile_handoff_dir=tmp_agents_root / "handoffs",
+            profile_heartbeat_owner="koder",
+            profile_heartbeat_transport="openclaw",
+            _openclaw_home=tmp_openclaw_home,
+        )
+
+        assert result.kind == "openclaw"
+        assert result.group_id == "oc_frontstage"
+        assert result.agent_name == "cartooner"
+
+    def test_openclaw_frontstage_missing_contract_does_not_fall_back_to_tmux(
+        self,
+        tmp_openclaw_home,
+        tmp_agents_root,
+    ):
+        """If the profile says frontstage=openclaw, missing contract should not route through tmux."""
+        result = resolve_seat(
+            target="koder",
+            profile_seats=["koder", "planner"],
+            profile_runtime_seats=["koder", "planner"],
+            profile_project_name="hardening-b",
+            profile_handoff_dir=tmp_agents_root / "handoffs",
+            profile_heartbeat_owner="koder",
+            profile_heartbeat_transport="openclaw",
+            _openclaw_home=tmp_openclaw_home,
+        )
+
+        assert result.kind == "file-only"
+        assert "OpenClaw workspace contract" in (result.error or "")
+
 
 # ── Kind: file-only (edge cases) ───────────────────────────────────────────
 

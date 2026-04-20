@@ -133,6 +133,7 @@ class HarnessProfile:
     workspace_root: Path
     handoff_dir: Path
     heartbeat_owner: str
+    heartbeat_transport: str
     active_loop_owner: str
     default_notify_target: str
     heartbeat_receipt: Path
@@ -141,6 +142,7 @@ class HarnessProfile:
     seat_roles: dict[str, str]
     seat_overrides: dict[str, dict[str, str]]
     dynamic_roster_enabled: bool = False
+    runtime_seats: list[str] | None = None
     session_root: Path = Path()
     materialized_seats: list[str] | None = None
     bootstrap_seats: list[str] | None = None
@@ -167,6 +169,17 @@ class HarnessProfile:
 
     def heartbeat_receipt_for(self, seat: str) -> Path:
         return self.workspace_for(seat) / "HEARTBEAT_RECEIPT.toml"
+
+    def declared_runtime_seats(self) -> list[str]:
+        return list(self.runtime_seats or self.materialized_seats or self.seats)
+
+    def seat_runs_in_tmux(self, seat: str) -> bool:
+        if seat == self.heartbeat_owner and self.heartbeat_transport == "openclaw":
+            return False
+        return seat in set(self.declared_runtime_seats())
+
+    def heartbeat_runs_in_openclaw(self) -> bool:
+        return self.heartbeat_transport == "openclaw"
 
 
 # Pane-text patterns that tell us a TUI is waiting on human interaction
@@ -250,6 +263,18 @@ def role_sort_key(seat: str, role: str) -> tuple[int, str]:
     return (priority.get(normalized, 50), seat)
 
 
+def _unique_seats(values: list[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        seat = str(value).strip()
+        if not seat or seat in seen:
+            continue
+        seen.add(seat)
+        ordered.append(seat)
+    return ordered
+
+
 def discovered_session_data(session_root: Path, project_name: str) -> dict[str, dict[str, Any]]:
     project_root = session_root / project_name
     if not project_root.exists():
@@ -319,6 +344,12 @@ def load_profile(path: str | Path) -> HarnessProfile:
     dynamic_enabled = bool(dynamic.get("enabled", False))
     session_root = expand_profile_value(str(dynamic.get("session_root", AGENTS_ROOT / "sessions")))
     heartbeat_owner = str(data["heartbeat_owner"])
+    heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
+    if heartbeat_transport not in {"tmux", "openclaw"}:
+        raise ValueError(
+            f"invalid heartbeat_transport {heartbeat_transport!r} in {profile_path}; "
+            "expected 'tmux' or 'openclaw'"
+        )
     legacy_seat_roles = {
         str(key): str(value)
         for key, value in data.get("legacy_seat_roles", {}).items()
@@ -337,6 +368,13 @@ def load_profile(path: str | Path) -> HarnessProfile:
         str(item)
         for item in dynamic.get("default_start_seats", bootstrap_seats or materialized_seats)
     ]
+    runtime_seats_raw = dynamic.get("runtime_seats")
+    if runtime_seats_raw is None:
+        runtime_seats = list(materialized_seats or declared_seats)
+        if heartbeat_transport == "openclaw":
+            runtime_seats = [seat for seat in runtime_seats if seat != heartbeat_owner]
+    else:
+        runtime_seats = [str(item) for item in runtime_seats_raw]
     compat_legacy_seats = bool(dynamic.get("compat_legacy_seats", False))
     discovered = discovered_session_data(session_root, str(data["project_name"])) if dynamic_enabled else {}
     seat_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items()}
@@ -357,6 +395,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         if dynamic_enabled
         else [str(item) for item in data.get("seats", [])]
     )
+    runtime_seats = _unique_seats(runtime_seats)
     return HarnessProfile(
         profile_path=profile_path,
         profile_name=str(data["profile_name"]),
@@ -374,10 +413,12 @@ def load_profile(path: str | Path) -> HarnessProfile:
         workspace_root=expand_profile_value(str(data["workspace_root"])),
         handoff_dir=expand_profile_value(str(data["handoff_dir"])),
         heartbeat_owner=heartbeat_owner,
+        heartbeat_transport=heartbeat_transport,
         active_loop_owner=str(data["active_loop_owner"]),
         default_notify_target=str(data["default_notify_target"]),
         heartbeat_receipt=expand_profile_value(str(data["heartbeat_receipt"])),
         seats=seats,
+        runtime_seats=runtime_seats,
         heartbeat_seats=[str(item) for item in data.get("heartbeat_seats", [])],
         seat_roles=seat_roles,
         seat_overrides={
@@ -461,7 +502,7 @@ def detect_claude_onboarding_step(pane_text: str) -> str | None:
 # ── Seat/runtime helpers ─────────────────────────────────────────────
 
 def tracked_runtime_seats(profile: HarnessProfile) -> list[str]:
-    return [seat for seat in profile.seats if seat != profile.heartbeat_owner]
+    return list(profile.declared_runtime_seats())
 
 
 def heartbeat_manifest_path(profile: HarnessProfile, seat: str) -> Path:
@@ -482,6 +523,7 @@ def is_managed_runtime_path(profile: HarnessProfile, path: Path) -> bool:
 
 def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
     materialized_seats = list(profile.materialized_seats or profile.seats)
+    runtime_seats = list(profile.runtime_seats or materialized_seats)
     lines = [
         "version = 1",
         "",
@@ -489,8 +531,10 @@ def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root
         f'repo_root = "{repo_root}"',
         f"seat_order = {json.dumps(materialized_seats)}",
         f"materialized_seats = {json.dumps(materialized_seats)}",
+        f"runtime_seats = {json.dumps(runtime_seats)}",
         f"bootstrap_seats = {json.dumps(list(profile.bootstrap_seats or []))}",
         f"default_start_seats = {json.dumps(list(profile.default_start_seats or []))}",
+        f'heartbeat_transport = "{profile.heartbeat_transport}"',
     ]
     for seat_id, override in profile.seat_overrides.items():
         if not override:

@@ -134,6 +134,7 @@ hp = _common.HarnessProfile(
     workspace_root=p("/tmp/workspaces"),
     handoff_dir=p("/tmp/handoffs"),
     heartbeat_owner="koder",
+    heartbeat_transport="tmux",
     active_loop_owner="planner",
     default_notify_target="planner",
     heartbeat_receipt=p("/tmp/receipt.toml"),

@@ -238,6 +238,7 @@ def with_overrides(profile: HarnessProfile, *, project_name: str, repo_root: Pat
         workspace_root=profile.workspace_root.parent / project_name,
         handoff_dir=tasks_root / "patrol" / "handoffs",
         heartbeat_owner=profile.heartbeat_owner,
+        heartbeat_transport=profile.heartbeat_transport,
         active_loop_owner=profile.active_loop_owner,
         default_notify_target=profile.default_notify_target,
         heartbeat_receipt=(profile.workspace_root.parent / project_name / profile.heartbeat_owner / "HEARTBEAT_RECEIPT.toml"),
@@ -246,6 +247,7 @@ def with_overrides(profile: HarnessProfile, *, project_name: str, repo_root: Pat
         seat_roles=dict(profile.seat_roles),
         seat_overrides={seat: dict(values) for seat, values in profile.seat_overrides.items()},
         dynamic_roster_enabled=profile.dynamic_roster_enabled,
+        runtime_seats=list(profile.runtime_seats or []),
         session_root=profile.session_root,
         materialized_seats=list(profile.materialized_seats or []),
         bootstrap_seats=list(profile.bootstrap_seats or []),
@@ -262,11 +264,12 @@ def main() -> int:
     project_name = args.project_name or profile.project_name
     repo_root = Path(args.repo_root).expanduser() if args.repo_root else profile.repo_root
     effective_profile = with_overrides(profile, project_name=project_name, repo_root=repo_root)
+    runtime_seats = list(effective_profile.runtime_seats or effective_profile.materialized_seats or effective_profile.seats)
 
     if args.link_tasks:
         _link_sandbox_tasks_to_real_home(
             effective_profile,
-            list(effective_profile.materialized_seats or effective_profile.seats),
+            runtime_seats,
         )
         return 0
 
@@ -296,68 +299,75 @@ def main() -> int:
     try:
         cmd = [
             sys.executable,
-            str(profile.agent_admin),
+            str(effective_profile.agent_admin),
             "project",
             "bootstrap",
             "--template",
-            profile.template_name,
+            effective_profile.template_name,
             "--local",
             str(local_path),
         ]
-        result = run_command(cmd, cwd=profile.repo_root)
+        result = run_command(cmd, cwd=effective_profile.repo_root)
         require_success(result, "bootstrap_harness")
         materialize_profile_runtime(effective_profile)
         _link_sandbox_tasks_to_real_home(
             effective_profile,
-            list(effective_profile.materialized_seats or effective_profile.seats),
+            runtime_seats,
         )
         if not args.no_workspace_sync:
             _sync_workspaces_host_to_sandbox(
                 effective_profile,
-                list(effective_profile.materialized_seats or effective_profile.seats),
+                runtime_seats,
                 strict=args.strict_workspace_sync,
             )
-        for seat in (effective_profile.materialized_seats or effective_profile.seats):
+        for seat in runtime_seats:
             seed_empty_secret_from_peer(effective_profile, seat)
             # OAuth is user-managed via the TUI; nothing to seed here.
         if args.refresh_existing:
             for seat in (effective_profile.materialized_seats or effective_profile.seats):
                 refresh_cmd = [
-                    sys.executable, str(profile.agent_admin),
+                    sys.executable, str(effective_profile.agent_admin),
                     "engineer", "refresh-workspace", seat,
                     "--project", project_name,
                 ]
-                refresh_result = run_command(refresh_cmd, cwd=profile.repo_root)
+                refresh_result = run_command(refresh_cmd, cwd=effective_profile.repo_root)
                 require_success(refresh_result, f"bootstrap_harness refresh-existing {seat}")
                 if refresh_result.stdout.strip():
                     print(refresh_result.stdout.strip())
         if args.start:
-            start_result = run_command(
-                [
-                    sys.executable,
-                    str(profile.agent_admin),
-                    "session",
-                    "start-engineer",
-                    effective_profile.heartbeat_owner,
-                    "--project",
-                    project_name,
-                ],
-                cwd=profile.repo_root,
-            )
-            require_success(start_result, "bootstrap_harness start frontstage")
-            if start_result.stdout.strip():
-                print(start_result.stdout.strip())
-            open_result = run_command(
-                [
-                    sys.executable,
-                    str(profile.agent_admin),
-                    "window",
-                    "open-monitor",
-                    project_name,
-                ],
-                cwd=profile.repo_root,
-            )
-            require_success(open_result, "bootstrap_harness open-monitor")
+            if effective_profile.heartbeat_transport == "openclaw":
+                print(
+                    "start_skipped: "
+                    f"frontstage {effective_profile.heartbeat_owner!r} uses OpenClaw transport; "
+                    "do not start a tmux session for the heartbeat owner during bootstrap."
+                )
+            else:
+                start_result = run_command(
+                    [
+                        sys.executable,
+                        str(effective_profile.agent_admin),
+                        "session",
+                        "start-engineer",
+                        effective_profile.heartbeat_owner,
+                        "--project",
+                        project_name,
+                    ],
+                    cwd=effective_profile.repo_root,
+                )
+                require_success(start_result, "bootstrap_harness start frontstage")
+                if start_result.stdout.strip():
+                    print(start_result.stdout.strip())
+                open_result = run_command(
+                    [
+                        sys.executable,
+                        str(effective_profile.agent_admin),
+                        "window",
+                        "open-monitor",
+                        project_name,
+                    ],
+                    cwd=effective_profile.repo_root,
+                )
+                require_success(open_result, "bootstrap_harness open-monitor")
         if result.stdout.strip():
             print(result.stdout.strip())
         return 0

@@ -261,6 +261,11 @@ class StoreHandlers:
             for item in local.get("materialized_seats", [])
             if str(item).strip()
         ]
+        runtime_seats_raw = [
+            self.hooks.normalize_name(str(item))
+            for item in local.get("runtime_seats", [])
+            if str(item).strip()
+        ]
         bootstrap_seats_raw = [
             self.hooks.normalize_name(str(item))
             for item in local.get("bootstrap_seats", [])
@@ -279,6 +284,19 @@ class StoreHandlers:
                 raise self.hooks.error_cls(
                     f"materialized_seats references unknown/disabled engineer ids: {', '.join(unknown)}"
                 )
+        if runtime_seats_raw:
+            unknown = [seat_id for seat_id in runtime_seats_raw if seat_id not in available_ids]
+            if unknown:
+                raise self.hooks.error_cls(
+                    f"runtime_seats references unknown/disabled engineer ids: {', '.join(unknown)}"
+                )
+            runtime_set = set(runtime_seats_raw)
+            final_engineers = [
+                engineer
+                for engineer in final_engineers
+                if str(engineer["id"]) in runtime_set
+            ]
+        elif materialized_seats_raw:
             materialized_set = set(materialized_seats_raw)
             final_engineers = [
                 engineer

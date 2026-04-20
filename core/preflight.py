@@ -430,7 +430,11 @@ def auto_fix(item: PreflightItem, project: str = "") -> PreflightItem:
                     template_root = Path(clawseat_root).expanduser()
                 else:
                     template_root = Path.home() / "coding" / "ClawSeat"
-                template_path = template_root / "examples" / "starter" / "profiles" / "install.toml"
+                template_name = os.environ.get("CLAWSEAT_INSTALL_PROFILE_TEMPLATE", "").strip()
+                if not template_name:
+                    runtime = os.environ.get("CLAWSEAT_INSTALL_RUNTIME", "").strip().lower()
+                    template_name = "install-openclaw.toml" if runtime == "openclaw" else "install.toml"
+                template_path = template_root / "examples" / "starter" / "profiles" / template_name
                 output_profile = _dynamic_profile_path(project)
                 if not template_path.exists():
                     return PreflightItem(

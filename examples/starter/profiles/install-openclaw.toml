@@ -1,0 +1,49 @@
+version = 1
+profile_name = "install-openclaw"
+description = "Canonical OpenClaw install profile — memory-first backend chain with koder bound to the current OpenClaw frontstage instead of a tmux session."
+template_name = "gstack-harness"
+project_name = "install"
+repo_root = "{CLAWSEAT_ROOT}"
+tasks_root = "~/.agents/tasks/install"
+project_doc = "~/.agents/tasks/install/PROJECT.md"
+tasks_doc = "~/.agents/tasks/install/TASKS.md"
+status_doc = "~/.agents/tasks/install/STATUS.md"
+send_script = "{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh"
+status_script = "~/.agents/tasks/install/patrol/check-status.sh"
+patrol_script = "~/.agents/tasks/install/patrol/patrol-supervisor.sh"
+agent_admin = "{CLAWSEAT_ROOT}/core/scripts/agent_admin.py"
+workspace_root = "~/.agents/workspaces/install"
+handoff_dir = "~/.agents/tasks/install/patrol/handoffs"
+heartbeat_owner = "koder"
+heartbeat_transport = "openclaw"
+active_loop_owner = "planner"
+default_notify_target = "planner"
+heartbeat_receipt = "~/.agents/workspaces/install/koder/HEARTBEAT_RECEIPT.toml"
+seats = ["memory", "koder", "planner", "builder-1", "reviewer-1"]
+heartbeat_seats = ["koder"]
+
+[seat_roles]
+memory = "memory-oracle"
+koder = "frontstage-supervisor"
+planner = "planner-dispatcher"
+builder-1 = "builder"
+reviewer-1 = "reviewer"
+
+[dynamic_roster]
+enabled = true
+session_root = "~/.agents/sessions"
+materialized_seats = ["memory", "koder", "planner", "builder-1", "reviewer-1"]
+runtime_seats = ["memory", "planner", "builder-1", "reviewer-1"]
+bootstrap_seats = ["koder"]
+default_start_seats = ["memory", "planner"]
+compat_legacy_seats = false
+
+[seat_overrides.memory]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+
+[patrol]
+enabled = false
+planner_brief_path = "~/.agents/tasks/install/planner/PLANNER_BRIEF.md"

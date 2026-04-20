@@ -35,9 +35,13 @@ Shipped starter profiles now come in three tiers:
   - frontstage-only bootstrap
   - creates a minimal `koder` entrypoint first
 - `examples/starter/profiles/install.toml`
-  - canonical `/cs` bootstrap profile
+  - canonical local `/cs` bootstrap profile
   - creates `koder`, `planner`, `builder-1`, and `reviewer-1`
   - intended for the first post-install `install` project
+- `examples/starter/profiles/install-openclaw.toml`
+  - canonical OpenClaw bootstrap profile
+  - binds `koder` to the current OpenClaw agent instead of a tmux session
+  - starts backend runtime seats `memory`, `planner`, `builder-1`, and `reviewer-1`
 - `examples/starter/profiles/full-team.toml`
   - predeclares `koder`, `planner`, `builder-1`, `reviewer-1`, `qa-1`, and `designer-1`
   - creates all six personal workspaces during bootstrap
@@ -48,7 +52,7 @@ Recommended first-run path:
 1. In OpenClaw or Feishu-facing runtimes, load the `clawseat` skill/plugin and
    let it route through the OpenClaw bootstrap path.
    The canonical `install` bootstrap now auto-seeds
-   `~/.agents/profiles/install-profile-dynamic.toml` from the shipped `install.toml`
+   `~/.agents/profiles/install-profile-dynamic.toml` from the shipped `install-openclaw.toml`
    profile when the machine is starting from a blank state.
 2. In Claude Code or Codex local runtimes, install the entry skills with
    `python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/install_entry_skills.py"`
