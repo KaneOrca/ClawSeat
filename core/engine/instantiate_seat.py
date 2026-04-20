@@ -691,11 +691,40 @@ def ensure_runtime_scaffold(instance: SeatInstance) -> None:
 
 
 def create_repo_symlink(instance: SeatInstance) -> None:
+    """Ensure `<workspace>/repos/repo` points at the seat's repo root.
+
+    Previously this short-circuited on any pre-existing entry (symlink or
+    regular file) at the link path, so `instantiate_seat --force` would
+    silently keep a symlink pointing at an old repo when the user pointed
+    the template at a new one (audit H10). Now:
+
+    - if `link` is a correct symlink to `instance.repo_root`, no-op
+    - if it is an incorrect symlink (points somewhere else), replace it
+    - if it is a regular file or directory, refuse to overwrite — the
+      caller must remove it explicitly to avoid losing user data
+    """
     repos_dir = instance.workspace / "repos"
     ensure_dir(repos_dir)
     link = repos_dir / "repo"
-    if link.is_symlink() or link.exists():
+    expected = instance.repo_root.resolve(strict=False)
+
+    if link.is_symlink():
+        try:
+            current = link.resolve(strict=False)
+        except OSError:
+            current = None
+        if current == expected:
+            return
+        link.unlink()
+        link.symlink_to(instance.repo_root)
         return
+
+    if link.exists():
+        raise SystemExit(
+            f"refusing to overwrite non-symlink at {link}; "
+            f"remove it manually before re-running instantiate_seat"
+        )
+
     link.symlink_to(instance.repo_root)
 
 

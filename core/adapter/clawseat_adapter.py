@@ -156,11 +156,25 @@ class ClawseatAdapter:
                         command=[], returncode=1,
                         stdout="", stderr=f"unknown operation kind: {operation.kind}",
                     )
-            except Exception as exc:
-                # Stop draining — remaining ops stay in queue for retry
+            except (KeyError, AttributeError, TypeError) as exc:
+                # Malformed queue entry — record the concrete exception
+                # (with a short traceback) so the failure doesn't vanish
+                # into a generic "failed" string. Audit M14. Stop
+                # draining so the remaining ops stay in the queue for
+                # retry after the bug is fixed.
+                import traceback as _tb
+                tb_snippet = "".join(_tb.format_exception_only(type(exc), exc)).strip()
                 results.append(AdapterResult(
                     command=[], returncode=1,
-                    stdout="", stderr=f"{operation.kind} failed: {exc}",
+                    stdout="",
+                    stderr=f"{operation.kind} failed (malformed payload): {tb_snippet}",
+                ))
+                break
+            except OSError as exc:
+                # Subprocess / IO failure — keep it visible and stop draining.
+                results.append(AdapterResult(
+                    command=[], returncode=1,
+                    stdout="", stderr=f"{operation.kind} failed (os error): {exc}",
                 ))
                 break
             results.append(result)
@@ -514,13 +528,20 @@ class ClawseatAdapter:
         session_name = session_data.get("session", "")
         running = False
         if session_name:
-            probe = subprocess.run(
-                ["tmux", "has-session", "-t", session_name],
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            running = probe.returncode == 0
+            try:
+                probe = subprocess.run(
+                    ["tmux", "has-session", "-t", session_name],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=5,  # Audit M15: tmux has-session can hang if the
+                                # server is wedged; fail fast so the caller
+                                # treats it as not-running rather than blocking
+                                # the whole dispatch pipeline.
+                )
+                running = probe.returncode == 0
+            except subprocess.TimeoutExpired:
+                running = False
         return SessionStatus(
             project_name=project_name,
             seat_id=seat_id,
@@ -629,52 +650,63 @@ class ClawseatAdapter:
             raise RuntimeError(f"expected JSON output from {' '.join(command)}: {exc}") from exc
 
     def _profile_snapshot(self, profile_path: Path) -> dict[str, Any]:
-        # Write profile_path to a temp file to avoid shell injection via special chars
+        # Write profile_path to a temp file to avoid shell injection via special
+        # chars. The file must be removed in finally; previously it was left
+        # behind with delete=False and accumulated under /tmp/ forever
+        # (audit H9). Keep world-unreadable perms since the path may be
+        # sensitive (user home, project dir).
         tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
-        tmp.write(str(profile_path))
-        tmp.close()
-        _tmp_path = tmp.name
-        helper = (
-            "import importlib.util, json, sys\n"
-            "module_path = sys.argv[1]\n"
-            "import pathlib\nprofile_path = pathlib.Path(sys.argv[2]).read_text().strip()\n"
-            "spec = importlib.util.spec_from_file_location('clawseat_dynamic_common_helper', module_path)\n"
-            "module = importlib.util.module_from_spec(spec)\n"
-            "assert spec.loader is not None\n"
-            "sys.modules[spec.name] = module\n"
-            "spec.loader.exec_module(module)\n"
-            "profile = module.load_profile(profile_path)\n"
-            "preferred = getattr(module, 'preferred_planner_seat', None)\n"
-            "planner = preferred(profile) if callable(preferred) else profile.active_loop_owner\n"
-            "planner_brief = getattr(profile, 'planner_brief_path', profile.tasks_root / 'planner' / 'PLANNER_BRIEF.md')\n"
-            "payload = {\n"
-            "  'profile_path': str(profile.profile_path),\n"
-            "  'project_name': profile.project_name,\n"
-            "  'tasks_root': str(profile.tasks_root),\n"
-            "  'planner_brief_path': str(planner_brief),\n"
-            "  'active_loop_owner': profile.active_loop_owner,\n"
-            "  'heartbeat_owner': profile.heartbeat_owner,\n"
-            "  'planner_instance': planner,\n"
-            "  'seats': list(profile.seats),\n"
-            "}\n"
-            "print(json.dumps(payload))\n"
-        )
-        result = self._run(
-            [
-                self.python_bin,
-                "-c",
-                helper,
-                str(_get_migration_root() / "dynamic_common.py"),
-                _tmp_path,
-            ]
-        )
-        if not result.ok:
-            detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
-            raise RuntimeError(f"failed to load profile snapshot for {profile_path}: {detail}")
         try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"invalid profile snapshot output for {profile_path}: {exc}") from exc
+            tmp.write(str(profile_path))
+            tmp.close()
+            _tmp_path = tmp.name
+            os.chmod(_tmp_path, 0o600)
+            helper = (
+                "import importlib.util, json, sys\n"
+                "module_path = sys.argv[1]\n"
+                "import pathlib\nprofile_path = pathlib.Path(sys.argv[2]).read_text().strip()\n"
+                "spec = importlib.util.spec_from_file_location('clawseat_dynamic_common_helper', module_path)\n"
+                "module = importlib.util.module_from_spec(spec)\n"
+                "assert spec.loader is not None\n"
+                "sys.modules[spec.name] = module\n"
+                "spec.loader.exec_module(module)\n"
+                "profile = module.load_profile(profile_path)\n"
+                "preferred = getattr(module, 'preferred_planner_seat', None)\n"
+                "planner = preferred(profile) if callable(preferred) else profile.active_loop_owner\n"
+                "planner_brief = getattr(profile, 'planner_brief_path', profile.tasks_root / 'planner' / 'PLANNER_BRIEF.md')\n"
+                "payload = {\n"
+                "  'profile_path': str(profile.profile_path),\n"
+                "  'project_name': profile.project_name,\n"
+                "  'tasks_root': str(profile.tasks_root),\n"
+                "  'planner_brief_path': str(planner_brief),\n"
+                "  'active_loop_owner': profile.active_loop_owner,\n"
+                "  'heartbeat_owner': profile.heartbeat_owner,\n"
+                "  'planner_instance': planner,\n"
+                "  'seats': list(profile.seats),\n"
+                "}\n"
+                "print(json.dumps(payload))\n"
+            )
+            result = self._run(
+                [
+                    self.python_bin,
+                    "-c",
+                    helper,
+                    str(_get_migration_root() / "dynamic_common.py"),
+                    _tmp_path,
+                ]
+            )
+            if not result.ok:
+                detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+                raise RuntimeError(f"failed to load profile snapshot for {profile_path}: {detail}")
+            try:
+                return json.loads(result.stdout)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"invalid profile snapshot output for {profile_path}: {exc}") from exc
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except FileNotFoundError:
+                pass
 
     def _profile_project_name(self, path: Path) -> str:
         with path.open("rb") as handle:

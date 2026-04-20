@@ -66,7 +66,9 @@ def write_receipt(
     clawseat_root = _resolve_clawseat_root()
     clawseat_root_str = str(clawseat_root) if clawseat_root else ""
 
-    # Resolve python version
+    # Resolve python version (audit M16: cap runtime so a wedged
+    # interpreter cannot stall bootstrap; SubprocessError already covers
+    # TimeoutExpired).
     if python_version is None:
         try:
             result = subprocess.run(
@@ -74,6 +76,7 @@ def write_receipt(
                 text=True,
                 capture_output=True,
                 check=True,
+                timeout=5,
             )
             python_version = result.stdout.strip()
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
@@ -89,6 +92,7 @@ def write_receipt(
                     text=True,
                     capture_output=True,
                     check=True,
+                    timeout=5,
                 )
                 tmux_version = result.stdout.strip()
             except (subprocess.SubprocessError, FileNotFoundError, OSError):
