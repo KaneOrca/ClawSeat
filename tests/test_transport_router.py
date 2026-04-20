@@ -105,12 +105,30 @@ def _load_payload_helpers():
     return legacy_entry, dynamic_entry
 
 
-def test_payload_legacy_and_dynamic_share_callable() -> None:
+def test_payload_legacy_and_dynamic_share_source() -> None:
+    """Anti-drift guard: both notify_seat entrypoints must resolve
+    `build_notify_payload` to the *same underlying function definition*
+    — the one in gstack-harness `_task_io.py`. `dynamic_common.py`
+    deliberately loads a private copy of `_common.py` via importlib
+    (so BASE_COMMON can be namespaced), which means the function
+    objects will NOT be identity-equal across imports. Instead we
+    check that they resolve to the same qualname and live in the
+    same source file, and produce identical output for identical
+    inputs — the behavioural guarantee that matters for drift."""
+    import inspect
+
     legacy_entry, dynamic_entry = _load_payload_helpers()
-    assert legacy_entry is dynamic_entry, (
-        "legacy and dynamic notify_seat must share one build_notify_payload "
-        "callable; if this fails, the two paths can drift silently (audit H2)."
+    # Source-file identity: both must come from the same physical
+    # `_task_io.py` (not two forked copies).
+    assert inspect.getsourcefile(legacy_entry) == inspect.getsourcefile(dynamic_entry), (
+        f"legacy entry from {inspect.getsourcefile(legacy_entry)!r} but dynamic "
+        f"entry from {inspect.getsourcefile(dynamic_entry)!r} — the two paths "
+        "are forking."
     )
+    assert legacy_entry.__qualname__ == dynamic_entry.__qualname__
+    # Behavioural identity: same inputs → same output on both paths.
+    kwargs = dict(source="a", target="b", message="hi", kind="notice", task_id="T", reply_to="a")
+    assert legacy_entry(**kwargs) == dynamic_entry(**kwargs)
 
 
 def test_payload_legacy_format_has_no_project_prefix() -> None:

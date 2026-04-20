@@ -2,7 +2,8 @@
 set -euo pipefail
 # send-and-verify.sh — fire-and-forget: send message + 3 Enter flushes
 # Usage: ./send-and-verify.sh [--project <project>] <session> "<message>"
-# Exit codes: 0=sent, 1=param error/SESSION_NOT_FOUND/SESSION_DEAD/TMUX_MISSING, 2=SKIPPED (reserved)
+# Exit codes: 0=sent, 1=param error/SESSION_NOT_FOUND/SESSION_DEAD/TMUX_MISSING,
+#             2=INPUT_REJECTED (control chars or oversized message, audit H3)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -10,6 +11,38 @@ PROJECT=""; if [ "${1:-}" = "--project" ]; then PROJECT="${2:-}"; shift 2; fi
 SESSION="${1:-}"; MSG="${2:-}"
 if [ -z "$SESSION" ] || [ -z "$MSG" ]; then
   echo "Usage: send-and-verify.sh [--project <project>] <session> \"<message>\""; exit 1
+fi
+
+# — 输入校验 (audit H3) —
+# Session names flow straight into `tmux has-session` / `send-keys -t`, so any
+# control character in $SESSION is rejected outright (LF/CR/VT/FF).
+# Messages are rendered via `tmux send-keys -l`, which presses every byte
+# literally. LF is an intentional multi-line feature (see
+# test_send_notify_simplified::test_newline_message), but CR would act as a
+# bare Return mid-message and VT/FF would produce garbled output in the pane.
+# Bash cannot carry NUL inside a variable (truncated at parse), so no NUL case.
+MAX_MSG_BYTES=8192
+
+case "$SESSION" in
+  *$'\n'*|*$'\r'*|*$'\v'*|*$'\f'*)
+    echo "send-and-verify: INPUT_REJECTED session contains control character (LF/CR/VT/FF)" >&2
+    echo "send-and-verify: HARD_BLOCK caller must strip control chars before retry" >&2
+    exit 2
+    ;;
+esac
+case "$MSG" in
+  *$'\r'*|*$'\v'*|*$'\f'*)
+    echo "send-and-verify: INPUT_REJECTED message contains control character (CR/VT/FF)" >&2
+    echo "send-and-verify: HARD_BLOCK caller must strip control chars before retry" >&2
+    exit 2
+    ;;
+esac
+
+msg_bytes=${#MSG}
+if [ "$msg_bytes" -gt "$MAX_MSG_BYTES" ]; then
+  echo "send-and-verify: INPUT_REJECTED message length ${msg_bytes} exceeds ${MAX_MSG_BYTES} bytes" >&2
+  echo "send-and-verify: HARD_BLOCK caller must shorten message or chunk the send" >&2
+  exit 2
 fi
 
 # Allow TMUX_BIN env override (same injection pattern as AGENTCTL_BIN, used in tests)
