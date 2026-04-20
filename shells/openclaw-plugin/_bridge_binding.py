@@ -62,7 +62,41 @@ def _load_bridge_file(path: Path) -> dict[str, Any] | None:
     }
 
 
+def _assert_parent_is_not_symlink(path: Path) -> None:
+    """Guard against a symlink-race attack on `~/.agents/projects/<proj>/`.
+
+    An attacker who can write under `~/.agents/projects/` before ClawSeat
+    creates a project directory could turn `projects/<proj>` into a
+    symlink pointing outside the expected tree; a subsequent
+    ``parent.mkdir(parents=True)`` would happily follow it and
+    ``os.replace(..., path)`` would then drop the BRIDGE.toml at the
+    symlink target (e.g. ``/etc/BRIDGE.toml`` if ClawSeat runs as root).
+    Audit L10.
+
+    Check the full chain up to `_projects_root()` — any symlinked
+    component means "not mine", reject.
+    """
+    # Only ancestors that already exist matter; unresolved ancestors will
+    # be created by `mkdir(parents=True)` below and can't be symlinks.
+    root = _projects_root().resolve()
+    probe = path.parent
+    while probe != probe.parent:
+        try:
+            if probe.is_symlink():
+                raise RuntimeError(
+                    f"refusing to write through symlinked component {probe}; "
+                    "this would escape ~/.agents/projects/ (audit L10)"
+                )
+        except OSError:
+            # Path doesn't exist yet — nothing to verify up the chain.
+            break
+        if probe.resolve(strict=False) == root:
+            break
+        probe = probe.parent
+
+
 def _write_bridge_file(path: Path, binding: dict[str, Any]) -> None:
+    _assert_parent_is_not_symlink(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "[bridge]",

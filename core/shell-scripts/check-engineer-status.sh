@@ -163,15 +163,15 @@ for s in $SESSIONS; do
   fi
   PANE_CMD="${META%%|*}"
   PANE_TITLE="${META#*|}"
-  RAW_TAIL5=$(echo "$RAW" | tail -5)
-  RAW_TAIL20=$(echo "$RAW" | tail -20)
-  RAW_TAIL40=$(echo "$RAW" | tail -40)
+  RAW_TAIL5=$(printf '%s\n' "$RAW" | tail -5)
+  RAW_TAIL20=$(printf '%s\n' "$RAW" | tail -20)
+  RAW_TAIL40=$(printf '%s\n' "$RAW" | tail -40)
   ACTIVE_TODO_ID=""
   LAST_DELIVERY_ID=""
 
   # 输入框经验位（不换行时更稳定）
-  THIRD_FROM_LAST=$(echo "$RAW" | tail -3 | head -1)
-  SECOND_FROM_LAST=$(echo "$RAW" | tail -2 | head -1)
+  THIRD_FROM_LAST=$(printf '%s\n' "$RAW" | tail -3 | head -1)
+  SECOND_FROM_LAST=$(printf '%s\n' "$RAW" | tail -2 | head -1)
 
   case "$MAILBOX" in
     ACTIVE:*)
@@ -184,7 +184,7 @@ for s in $SESSIONS; do
   esac
 
   # === 1. context 满 ===
-  CTX=$(echo "$RAW" | grep -oE "[0-9]+% until auto-compact" | head -1)
+  CTX=$(printf '%s\n' "$RAW" | grep -oE "[0-9]+% until auto-compact" | head -1)
   if [ -n "$CTX" ]; then
     PCT=$(echo "$CTX" | grep -oE "^[0-9]+")
     if [ "$PCT" -le 1 ]; then
@@ -218,7 +218,7 @@ for s in $SESSIONS; do
   fi
 
   # === 3. plan mode / decision-needed ===
-  if echo "$RAW" | grep -q "plan mode on"; then
+  if printf '%s\n' "$RAW" | grep -q "plan mode on"; then
     CTX_INFO=""
     [ -n "$CTX" ] && CTX_INFO=", $CTX"
     echo "$s: DECISION_NEEDED (plan mode${CTX_INFO})"
@@ -230,7 +230,7 @@ for s in $SESSIONS; do
   # 历史 timer 文本会残留在滚动区，不可信——只在确认 esc to interrupt 存在后才用 timer 提取时间。
   # 检测范围：esc to interrupt 查最后 10 行（Codex 底部有空行/建议会挤开）；timer 只查最后 5 行。
 
-  RAW_TAIL10=$(echo "$RAW" | tail -10)
+  RAW_TAIL10=$(printf '%s\n' "$RAW" | tail -10)
   HAS_ESC=""
   echo "$RAW_TAIL10" | grep -q "esc to interrupt" && HAS_ESC=1
 
@@ -309,7 +309,7 @@ for s in $SESSIONS; do
         ;;
     esac
   fi
-  if echo "$RAW" | grep -qE "zsh: no such file|bash-[0-9]"; then
+  if printf '%s\n' "$RAW" | grep -qE "zsh: no such file|bash-[0-9]"; then
     echo "$s: CRASHED (exited to shell)"
     continue
   fi
@@ -322,7 +322,7 @@ for s in $SESSIONS; do
   fi
 
   # npm / spinner 进度
-  if echo "$RAW" | grep -q "⠋\|⠙\|⠹\|⠸\|⠼\|⠴\|⠦\|⠧"; then
+  if printf '%s\n' "$RAW" | grep -q "⠋\|⠙\|⠹\|⠸\|⠼\|⠴\|⠦\|⠧"; then
     echo "$s: WORKING (spinner)"
     continue
   fi
@@ -359,7 +359,7 @@ for s in $SESSIONS; do
   fi
 
   # === 8.7 Claude Code 空闲：过滤噪音后最后一行是 ❯
-  SNAP=$(echo "$RAW" | grep -v "\[°°\]" | grep -v "Pickle" | grep -v "bypass permissions" | grep -v "accept edits" | grep -v "─────" | grep -v "^[[:space:]]*$" | grep -v "ctrl+t to hide" | grep -v "● high")
+  SNAP=$(printf '%s\n' "$RAW" | grep -v "\[°°\]" | grep -v "Pickle" | grep -v "bypass permissions" | grep -v "accept edits" | grep -v "─────" | grep -v "^[[:space:]]*$" | grep -v "ctrl+t to hide" | grep -v "● high")
   LAST_LINE=$(echo "$SNAP" | tail -1)
   if echo "$LAST_LINE" | grep -qE "^❯"; then
     case "$MAILBOX" in

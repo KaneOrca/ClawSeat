@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import time
@@ -227,6 +228,42 @@ class HeartbeatHandlers:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    # Heartbeat receipts are written with a `verified_at` timestamp but
+    # the check path (receipt_matches_manifest) historically only
+    # compared fingerprints, so a receipt written weeks ago was just as
+    # valid as one from seconds ago (audit M17). We now require the
+    # timestamp be within RECEIPT_VALID_FOR_SECONDS of now. Override via
+    # CLAWSEAT_HEARTBEAT_RECEIPT_TTL_SECONDS for test/sandbox runs.
+    RECEIPT_VALID_FOR_SECONDS = 24 * 3600  # 24 hours — matches the
+                                           # schedule of the heartbeat
+                                           # cron it's supposed to prove.
+
+    def _receipt_ttl_seconds(self) -> int:
+        override = os.environ.get("CLAWSEAT_HEARTBEAT_RECEIPT_TTL_SECONDS", "").strip()
+        if override:
+            try:
+                value = int(override)
+                if value > 0:
+                    return value
+            except ValueError:
+                pass
+        return self.RECEIPT_VALID_FOR_SECONDS
+
+    def _receipt_is_fresh(self, receipt: dict) -> bool:
+        raw = str(receipt.get("verified_at", "")).strip()
+        if not raw:
+            return False
+        try:
+            stamp = datetime.fromisoformat(raw)
+        except ValueError:
+            return False
+        now = datetime.now(stamp.tzinfo) if stamp.tzinfo else datetime.now()
+        try:
+            age = (now - stamp).total_seconds()
+        except (TypeError, ValueError):
+            return False
+        return 0 <= age <= self._receipt_ttl_seconds()
+
     def receipt_matches_manifest(self, receipt: dict | None, manifest: dict, session: Any) -> bool:
         if not receipt:
             return False
@@ -235,6 +272,11 @@ class HeartbeatHandlers:
         if str(receipt.get("seat_id", "")) != session.engineer_id:
             return False
         if str(receipt.get("session", "")) != session.session:
+            return False
+        # Audit M17: a matching fingerprint is necessary but not sufficient;
+        # a stale receipt (older than RECEIPT_VALID_FOR_SECONDS) no longer
+        # counts as "verified" even when its fingerprint still matches.
+        if not self._receipt_is_fresh(receipt):
             return False
         install_fingerprint = self.install_fingerprint(session, manifest)
         if str(receipt.get("install_fingerprint", "")) == install_fingerprint:
