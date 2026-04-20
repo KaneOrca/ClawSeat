@@ -61,9 +61,13 @@ component.
 - Correct: `git clone <url>` in any user-level directory (e.g. home dir, projects dir)
 - Wrong: `git clone <url> ~/.openclaw/workspace-clawseat` or anywhere inside `~/.openclaw/`
 
-Then run `install_openclaw_bundle.py` to create symlinks from `~/.openclaw/skills/`
-into the repo. Do NOT manually copy skill directories — use the script so that
-dependency checks (lark-cli, gstack) run and symlinks stay in sync with the repo.
+Then follow the canonical 6-phase install flow in
+`core/skills/clawseat-install/references/ancestor-runbook.md`. Phase 0.1
+runs `install_bundled_skills.py` to create symlinks in `~/.openclaw/skills/`
+with dependency checks (lark-cli, gstack). Do NOT manually copy skill
+directories. Do NOT run individual scripts out of order — the flow is
+interactive and halts at user-decision points (agent selection, seat
+provider/auth choice, Feishu group ID).
 
 **Critical: koder identity in OpenClaw mode**
 

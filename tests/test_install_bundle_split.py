@@ -175,38 +175,20 @@ def test_install_koder_overlay_idempotent(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# install_openclaw_bundle wrapper
+# install_openclaw_bundle.py wrapper — REMOVED
+#
+# The deprecated shim was deleted: it misled callers into thinking a single
+# script was the whole install, bypassing the canonical 6-phase flow (see
+# core/skills/clawseat-install/references/ancestor-runbook.md). The split
+# (install_bundled_skills.py + install_koder_overlay.py) is now the only
+# supported path. This block exists to document the removal; the
+# wrapper-delegation test that used to live here has been deleted.
 # ---------------------------------------------------------------------------
 
 
-def test_install_openclaw_bundle_wrapper_delegates_and_warns(tmp_path, monkeypatch, capsys):
-    # Re-import fresh so the wrapper's module-level side effects are
-    # exercised deterministically.
-    import importlib
-
-    monkeypatch.setattr(
-        install_bundled_skills, "check_agent_skills", lambda dry_run: []
+def test_install_openclaw_bundle_script_is_gone():
+    """Regression: the deprecated shim stays gone."""
+    assert not (SHELLS_DIR / "install_openclaw_bundle.py").exists(), (
+        "install_openclaw_bundle.py was deleted; do not re-add without "
+        "updating the canonical install flow."
     )
-    monkeypatch.setattr(
-        install_bundled_skills, "check_gstack_skills", lambda dry_run: []
-    )
-
-    openclaw_home = tmp_path / ".openclaw"
-    monkeypatch.setattr(
-        sys, "argv", ["install_openclaw_bundle.py", "--openclaw-home", str(openclaw_home)]
-    )
-
-    import install_openclaw_bundle
-
-    install_openclaw_bundle = importlib.reload(install_openclaw_bundle)
-
-    rc = install_openclaw_bundle.main()
-    assert rc == 0
-
-    captured = capsys.readouterr()
-    assert "deprecated" in captured.err.lower()
-    # Wrapper must NOT have created a workspace-koder/skills dir — that was
-    # the hardcoded behavior the split removed.
-    assert not (openclaw_home / "workspace-koder" / "skills").exists()
-    # But it must have installed the global skills (via delegation).
-    assert (openclaw_home / "skills").is_dir()

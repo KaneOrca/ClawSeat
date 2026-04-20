@@ -22,18 +22,54 @@ cd ~/.gstack/repos/gstack && ./setup
 
 > ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
 
-## Quick Install
+## Install
+
+**ClawSeat install is an interactive 6-phase flow, not a single script.**
+It is driven by an **ancestor agent** (a Claude Code session the user has
+open) that walks the install step-by-step and halts at user-decision points
+(target OpenClaw agent, seat auth/provider, Feishu group ID).
+
+### Step 1 — Clone and set `CLAWSEAT_ROOT`
 
 ```bash
 # Clone to any user-level directory (NOT inside ~/.openclaw/)
 git clone https://github.com/KaneOrca/ClawSeat.git
 export CLAWSEAT_ROOT="$(pwd)/ClawSeat"
-
-# Install skill symlinks into OpenClaw
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_openclaw_bundle.py"
 ```
 
-After install, say "启动 ClawSeat" in OpenClaw/Feishu, or run `/cs` in Claude Code.
+### Step 2 — Ancestor agent reads the runbook and walks the flow
+
+The canonical SOP lives at:
+[`core/skills/clawseat-install/references/ancestor-runbook.md`](core/skills/clawseat-install/references/ancestor-runbook.md)
+
+The flow, at a glance:
+
+| Phase | What happens | User interaction |
+|---|---|---|
+| P0 | `install_bundled_skills.py` (symlinks) + `bootstrap_harness.py` (workspace + `session.toml`) | Confirm project name |
+| P1 | `start_seat.py --seat memory` + `notify_seat.py --target memory --kind learning` → memory builds machine/ KB | Trust-folder + /theme on first memory seat launch |
+| P2 | `query_memory.py --search agents` → **ask user which OpenClaw agent** | **Pick target agent** (do not auto-pick) |
+| P3 | `install_koder_overlay.py --agent <NAME>` + `init_koder.py` | — |
+| P4 | Per-seat config: tool / auth_mode / provider / API key | OAuth login / API key entry |
+| P5 | Feishu bridge 7-step: `send_delegation_report.py --check-auth` → platform scopes → group ID → bind → smoke | `lark-cli auth login` + Feishu platform scope + group ID |
+
+### Do NOT run individual scripts out of order
+
+Running `install_bundled_skills.py` alone gets you Phase 0 only, with no
+memory seat, no agent selection, and no koder overlay. The runbook's halt
+conditions and verification checks exist so partial installs fail loudly
+instead of leaving a half-wired system.
+
+### After install
+
+Say "启动 ClawSeat" in OpenClaw/Feishu, or run `/cs` in a local Claude Code
+session. The `clawseat` skill (loaded via P0.1 symlinks) takes over from
+there.
+
+> **Reminder**: canonical install profiles (`install.toml`,
+> `install-with-memory.toml`, `full-team.toml`) require `gstack` for
+> specialist seats — see the `./setup` command in the Profile Selection
+> block above if you have not installed it yet.
 
 ## Positioning
 

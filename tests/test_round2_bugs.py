@@ -178,9 +178,15 @@ def test_dynamic_profile_path_migration_is_atomic(tmp_path: Path, monkeypatch: p
     legacy_src.write_text(payload, encoding="utf-8")
 
     # Redirect HOME so the destination lands under tmp_path.
+    # dynamic_profile_path now resolves via real_user_home(), which
+    # ignores plain HOME / Path.home() patches — use CLAWSEAT_REAL_HOME
+    # (the supported test override) so the migration target redirects.
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(fake_home))
+    monkeypatch.delenv("CLAWSEAT_SANDBOX_HOME_STRICT", raising=False)
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
     # Ensure destination does not pre-exist.

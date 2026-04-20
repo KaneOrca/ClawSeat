@@ -8,11 +8,17 @@ from pathlib import Path
 
 import pytest
 
+from core.lib import seat_resolver as seat_resolver_mod
 from core.lib.seat_resolver import (
     SeatResolution,
     SeatResolutionError,
     resolve_seat,
     resolve_seat_from_profile,
+)
+
+
+_SANDBOX_HOME_LOOKING = (
+    "/tmp/fake/.agents/runtime/identities/claude/oauth/main/home"
 )
 
 
@@ -27,17 +33,18 @@ def tmp_openclaw_home(tmp_path):
 
 
 @pytest.fixture
-def tmp_agents_root(tmp_path):
-    """Temp HOME / .agents dir for session.toml isolation."""
+def tmp_agents_root(tmp_path, monkeypatch):
+    """Temp HOME / .agents dir for session.toml isolation.
+
+    seat_resolver._home() now delegates to real_user_home(), which ignores
+    plain HOME monkeypatching — set CLAWSEAT_REAL_HOME so the helper's
+    explicit-override branch redirects to tmp_path.
+    """
     agents = tmp_path / ".agents"
     agents.mkdir()
-    old_home = os.environ.get("HOME")
-    os.environ["HOME"] = str(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     yield agents
-    if old_home is not None:
-        os.environ["HOME"] = old_home
-    else:
-        os.environ.pop("HOME", None)
 
 
 @pytest.fixture
@@ -290,3 +297,31 @@ class TestResolveSeatFromProfile:
         assert result.kind == "tmux"
         # Session name comes from session.toml as written
         assert result.session_name == "hardening-b-builder-1"
+
+
+# ── real_user_home migration regression tests ────────────────────────────
+
+
+class TestSeatResolverHomeMigration:
+    def test_home_resolves_via_real_user_home_under_sandbox(
+        self, tmp_path, monkeypatch
+    ):
+        """L24-25 fix: when a seat runs under a sandbox HOME, _home() and
+        _agents_root() must still resolve the operator's real ~/.agents/
+        (via CLAWSEAT_REAL_HOME → real_user_home()), not the sandbox path.
+
+        Without the migration, session.toml lookups, openclaw resolution,
+        and handoff path expansion all silently miss because $HOME inside
+        the seat points at /...sandbox.../identities/.../home/."""
+        real_home = tmp_path / "real-operator-home"
+        real_home.mkdir()
+        monkeypatch.setenv("HOME", _SANDBOX_HOME_LOOKING)
+        monkeypatch.delenv("CLAWSEAT_SANDBOX_HOME_STRICT", raising=False)
+        monkeypatch.delenv("AGENT_HOME", raising=False)
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(real_home))
+
+        assert seat_resolver_mod._home() == real_home
+        assert seat_resolver_mod._agents_root() == real_home / ".agents"
+        # OpenClaw resolution should also pivot off real HOME, not sandbox
+        monkeypatch.delenv("OPENCLAW_HOME", raising=False)
+        assert seat_resolver_mod._openclaw_home_resolved() == real_home / ".openclaw"

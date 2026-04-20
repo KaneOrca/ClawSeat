@@ -872,9 +872,20 @@ bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>
 
 ## 首次安装
 
+Canonical 6-phase flow，见
+`core/skills/clawseat-install/references/ancestor-runbook.md`。关键脚本：
+
 ```bash
-python3 {clawseat_root}/shells/openclaw-plugin/install_openclaw_bundle.py
+# P0.1 agent-neutral skill symlinks
+python3 {clawseat_root}/shells/openclaw-plugin/install_bundled_skills.py
+
+# P0.4 bootstrap workspace + session.toml
 python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
+
+# P2 koder overlay (after P1 memory seat + agent confirm)
+python3 {clawseat_root}/shells/openclaw-plugin/install_koder_overlay.py --agent <AGENT>
+
+# P2.3 finalize koder workspace
 python3 {clawseat_root}/core/skills/clawseat-install/scripts/init_koder.py \\
   --workspace <workspace> --project <project>
 ```

@@ -11,13 +11,16 @@ OpenClaw agent workspace), run install_koder_overlay.py separately.
 
 Rationale for the split
 -----------------------
-Before this change, install_openclaw_bundle.py hardcoded
+The removed ``install_openclaw_bundle.py`` hardcoded
 ``~/.openclaw/workspace-koder/skills/`` as the overlay target. That
 forced every install to use the agent named "koder" and prevented
 users from overlaying ClawSeat onto a different OpenClaw agent
 (cartooner, mor, scout, etc.). Splitting the script keeps Phase 0
 (shared skills) deterministic and defers the "which agent" choice to
-Phase 2 (after the memory seat can enumerate the candidates).
+Phase 2 (after the memory seat can enumerate the candidates). The old
+wrapper was deleted after the split stabilized; see
+``core/skills/clawseat-install/references/ancestor-runbook.md`` for the
+canonical 6-phase flow.
 """
 from __future__ import annotations
 

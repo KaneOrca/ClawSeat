@@ -99,8 +99,6 @@ python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
 - Omitting `--agent` → exit 2; consult [memory-query-protocol.md](../../core/skills/clawseat-install/references/memory-query-protocol.md).
 - Exit 3: target agent workspace does not exist — verify agent was created first.
 
-**Deprecated wrapper** — `install_openclaw_bundle.py` is now a thin compatibility shim that runs Phase 0 only and prints a hint to run Phase 3 manually. It will be removed in a future release (date/version TBD). New installs should use the two-step path above.
-
 After Phase 0 + Phase 3, the user should interact with OpenClaw by saying "安装 ClawSeat" or
 "启动 ClawSeat". OpenClaw should load `clawseat` as the product entry.
 

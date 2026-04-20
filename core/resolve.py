@@ -8,6 +8,17 @@ import os
 import sys
 from pathlib import Path
 
+# Add core/lib to path so we can import the canonical real-HOME helper.
+# Sandbox seats see Path.home() pointing at
+#   ~/.agents/runtime/identities/<tool>/<auth>/<id>/home/
+# so any ~ / Path.home() lookup misses the operator's real artifacts —
+# discovery falls off ~/coding/ClawSeat, persistent profiles miss
+# ~/.agents/profiles/, and we silently land in /tmp/ instead.
+_CORE_LIB = str(Path(__file__).resolve().parent / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
+from real_home import real_user_home  # noqa: E402
+
 # Marker files that confirm a directory is the ClawSeat repo root
 _REPO_MARKERS = (
     Path("core/scripts/agent_admin.py"),
@@ -45,8 +56,9 @@ def resolve_clawseat_root(agents_root: Path | None = None) -> Path:
     if agents_root is not None:
         candidates.append(agents_root.parent / "coding" / "ClawSeat")
 
-    # 4. home fallback
-    candidates.append(Path.home() / "coding" / "ClawSeat")
+    # 4. home fallback (must use real_user_home so sandbox seats still find
+    # the operator's checkout under ~/coding/ClawSeat)
+    candidates.append(real_user_home() / "coding" / "ClawSeat")
 
     seen: set[Path] = set()
     for candidate in candidates:
@@ -94,7 +106,10 @@ def dynamic_profile_path(project: str) -> Path:
     at the same moment) could interleave writes and produce a truncated
     or mixed TOML (audit H11).
     """
-    persistent = Path.home() / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
+    # real_user_home (not Path.home) so seats running under sandbox HOME
+    # resolve to the operator's persistent ~/.agents/profiles/ instead of
+    # silently falling through to /tmp/ legacy on every read.
+    persistent = real_user_home() / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
     if persistent.exists():
         return persistent
     legacy = Path("/tmp") / f"{project}-profile-dynamic.toml"

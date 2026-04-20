@@ -20,9 +20,23 @@ from pathlib import Path
 from typing import Optional
 
 # ── Paths (duplicated from _common to keep resolver standalone) ───────────────
+#
+# Resolver helpers (notify_seat / dispatch_task / complete_handoff) call into
+# this module from inside tmux seats whose HOME points at the sandbox
+#   ~/.agents/runtime/identities/<tool>/<auth>/<id>/home/
+# Reading $HOME directly there sends _agents_root() and _openclaw_home_resolved()
+# at sandbox-local paths that don't contain session.toml or workspace contracts.
+# Delegate to the canonical helper instead — start_seat.py exports AGENT_HOME
+# pointing at the real HOME, and real_user_home() also falls through to
+# pwd.getpwuid as a last resort.
+_THIS_DIR = str(Path(__file__).resolve().parent)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+from real_home import real_user_home  # noqa: E402
+
 
 def _home() -> Path:
-    return Path(os.environ.get("HOME", str(Path.home()))).expanduser()
+    return real_user_home()
 
 
 def _agents_root() -> Path:
@@ -297,5 +311,5 @@ class HarnessProfileLike:
         obj.seats = [str(s) for s in data.get("seats", [])]
         obj.project_name = str(data.get("project_name", ""))
         hdir = str(data.get("handoff_dir", ""))
-        obj.handoff_dir = Path(hdir.replace("~", str(HOME))) if hdir else path.parent
+        obj.handoff_dir = Path(hdir.replace("~", str(_home()))) if hdir else path.parent
         return obj
