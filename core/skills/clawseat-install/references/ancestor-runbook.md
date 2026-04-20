@@ -326,7 +326,22 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" \
 Generates `TOOLS/` and `WORKSPACE_CONTRACT.toml` in the agent's
 workspace. Existing non-ClawSeat files moved to `.backup-<ts>/`.
 
-### Step 3.3 — Verify koder identity via /new (USER ACTION)
+### Step 3.3 — Auto-configure Feishu no-mention (F10)
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
+  --agent <CHOSEN_AGENT>
+```
+
+Sets `channels.feishu.accounts.<agent>.requireMention=false` in
+`~/.openclaw/openclaw.json` (account-level; per-group override added at P4.2).
+After the change, restart gateway so it picks up the new config:
+`exec "pnpm --dir ~/.openclaw/apps/gateway openclaw gateway restart"`.
+
+### Step 3.4 — Verify koder identity via /new (USER ACTION)
+
+> **Note**: `requireMention` has already been set to `false` — operator can
+> chat with `<CHOSEN_AGENT>` directly without @mentioning the bot.
 
 Tell the operator:
 
@@ -339,7 +354,7 @@ Tell the operator:
 agent → re-run `refresh_workspaces.py` and P3.1-3.2; escalate if still
 wrong.
 
-### Step 3.4 — Create Feishu group for koder (USER ACTION)
+### Step 3.5 — Create Feishu group for koder (USER ACTION)
 
 Tell the operator:
 
@@ -391,7 +406,7 @@ import sys; sys.path.insert(0, "$CLAWSEAT_ROOT")
 from core.skills.clawseat_install.scripts.bind_project import bind_project_to_group
 bind_project_to_group(
     project="$PROJECT",
-    group_id="<GROUP_ID from P3.4>",
+    group_id="<GROUP_ID from P3.5>",
     bound_by="operator",
     authorized=True,
 )
@@ -399,6 +414,13 @@ PY
 ```
 
 Writes `~/.agents/projects/$PROJECT/BRIDGE.toml`.
+
+Apply group-level `requireMention=false` (F10):
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
+  --agent <CHOSEN_AGENT> --group-id "<GROUP_ID from P3.5>"
+```
 
 ### Step 4.3 — Dispatch Feishu smoke to planner (not ancestor direct)
 
@@ -524,14 +546,14 @@ Each item maps to a Phase anchor and is checked by `install_complete.py`.
 | G4 | install_entry_skills.py run | Phase 0.2 | `.entry_skills_installed` marker or skill paths |
 | G5 | Canonical phase ordering followed (no `--start` in P0.4) | Phase 0 | advisory check only |
 | G6 | Feishu bridge end-to-end smoke delivered via planner | Phase 4 | `BRIDGE.toml` present + koder receipt |
-| G7 | Project-group binding confirmed with operator | Phase 3.4 | BRIDGE.toml bound_by field |
+| G7 | Project-group binding confirmed with operator | Phase 3.5 | BRIDGE.toml bound_by field |
 | G8 | bind_project_to_group() called → BRIDGE.toml | Phase 4.2 | `BRIDGE.toml` exists |
 | G9 | Planner introduced AFTER koder overlay (not before) | Phase 4 | advisory |
 | G10 | Per-seat operator confirmation (no auto-defaults) | Phase 1.2 / 4.1 | advisory |
 | G11 | refresh_workspaces.py run | Phase 0.5 | `.last_refresh` or WORKSPACE_CONTRACT last_refresh |
 | G12 | AGENT_HOME auto-injected in tmux seats | Phase 4.1 | install-flow.md AGENT_HOME section |
 | G13 | lark-cli auth via canonical device flow | Phase 4.2 | advisory |
-| G14 | Feishu platform scopes verified pre-install | Phase 3.4 | lark-cli permissions list |
+| G14 | Feishu platform scopes verified pre-install | Phase 3.5 | lark-cli permissions list |
 | G15 | Memory query uses correct --memory-dir --key syntax | Phase 2.1 | code check in brief |
 | B1 | init_koder --on-conflict=backup (non-interactive) | Phase 3.2 | default backup in init_koder.py |
 | B2 | Profile tasks_root sed handles quoted strings | Phase 0.3 | Python re.sub pattern |

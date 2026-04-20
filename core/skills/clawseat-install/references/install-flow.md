@@ -328,7 +328,21 @@ python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/init_koder.py" \
 Generates `TOOLS/` and `WORKSPACE_CONTRACT.toml` inside the agent's
 workspace. Existing non-ClawSeat files are moved to `.backup-<ts>/`.
 
-### Step 3.3 — (USER ACTION) Verify koder identity in OpenClaw
+### Step 3.3 — Auto-configure Feishu no-mention (F10)
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
+  --agent <CHOSEN_AGENT>
+```
+
+Sets `channels.feishu.accounts.<agent>.requireMention=false` in
+`~/.openclaw/openclaw.json`. After changing, restart the gateway:
+`exec "pnpm --dir ~/.openclaw/apps/gateway openclaw gateway restart"`.
+
+### Step 3.4 — (USER ACTION) Verify koder identity in OpenClaw
+
+> **Note**: `requireMention=false` is already set — operator can chat
+> with `<CHOSEN_AGENT>` directly without @mention.
 
 Tell the operator:
 
@@ -338,9 +352,9 @@ Tell the operator:
 
 **Halt condition**: operator reports `<CHOSEN_AGENT>` still behaves as
 the pre-overlay agent → overlay did not take effect. Re-run
-`refresh_workspaces.py` and P3.1-3.2.
+`refresh_workspaces.py` and P3.1-3.3.
 
-### Step 3.4 — (USER ACTION) Create Feishu group for koder
+### Step 3.5 — (USER ACTION) Create Feishu group for koder
 
 Tell the operator:
 
@@ -376,7 +390,7 @@ import sys; sys.path.insert(0, "$CLAWSEAT_ROOT")
 from core.skills.clawseat_install.scripts.bind_project import bind_project_to_group
 bind_project_to_group(
     project="$PROJECT",
-    group_id="<GROUP_ID from P3.4>",
+    group_id="<GROUP_ID from P3.5>",
     bound_by="operator",
     authorized=True,
 )
@@ -384,6 +398,13 @@ PY
 ```
 
 Writes `~/.agents/projects/$PROJECT/BRIDGE.toml`.
+
+Apply group-level `requireMention=false` (F10):
+
+```sh
+python3 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/configure_koder_feishu.py" \
+  --agent <CHOSEN_AGENT> --group-id "<GROUP_ID from P3.5>"
+```
 
 ### Step 4.3 — Dispatch smoke task to planner
 
@@ -439,10 +460,10 @@ No further ancestor action is required unless the operator asks.
 ## Interaction Mode Summary
 
 - The ancestor auto-runs deterministic plumbing (P0.1-0.5, P1.1/1.3/1.5,
-  P2.1, P3.1-3.2, P4.1-4.3).
+  P2.1, P3.1-3.3, P4.1-4.3).
 - The ancestor pauses at **operator-decision gates**: P0.6 provider
-  pick, P1.4 memory-scan-complete signal, P2.2 target agent pick, P3.3
-  koder identity verification, P3.4 Feishu group creation, P4.4 smoke
+  pick, P1.4 memory-scan-complete signal, P2.2 target agent pick, P3.4
+  koder identity verification, P3.5 Feishu group creation, P4.4 smoke
   confirmation.
 - The ancestor keeps the operator informed of which phase is live and
   which seats are running.
@@ -460,7 +481,7 @@ No further ancestor action is required unless the operator asks.
 | `memory.env is empty` | P0.6 credential seed didn't run | Run P0.6, or manually write `~/.agents/secrets/claude/minimax/memory.env` |
 | memory seat never shows `machine/ KB ready` | P1.3 didn't reach memory, or memory crashed | Check `~/.agents/tasks/${PROJECT}/MEMORY-SCAN-001/` and the memory iTerm scrollback |
 | `install_koder_overlay` exit 3 | Target agent workspace does not exist | Verify the OpenClaw agent was created first, or consult memory again for the canonical list |
-| Koder in OpenClaw still old identity after overlay | `refresh_workspaces.py` didn't copy templates | Re-run P0.5 then P3.1-3.2 |
+| Koder in OpenClaw still old identity after overlay | `refresh_workspaces.py` didn't copy templates | Re-run P0.5 then P3.1-3.3 |
 | Feishu smoke sent but koder silent | Platform scope or requireMention wrong | Enable `im:message.group_msg:receive` + publish new app version; set project group `requireMention=false` |
 | `group_not_found` from lark-cli / send_delegation_report | group ID invalid OR bot not in the group | Verify `oc_<alnum>` format; ensure the OpenClaw bot is a member of the target Feishu group |
 | `auth_expired` or `auth_needs_refresh` from send_delegation_report | lark-cli OAuth token stale | Operator: `lark-cli auth login` in a terminal with browser access |
