@@ -13,24 +13,22 @@ Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core s
 | `install.toml` | koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical `/cs` install flow |
 | `full-team.toml` | 6 seats | **Yes** | Full-roster projects |
 
-All profiles live in `examples/starter/profiles/`. To install gstack (required for `install.toml` and `full-team.toml`):
+All profiles live in `examples/starter/profiles/`. To install gstack (required for `install.toml`, `install-with-memory.toml`, and `full-team.toml` — **skip this block entirely if you only need `starter.toml`**):
 
 ```bash
+# Default install location. ClawSeat preflight looks here unless you override below.
 git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
 cd ~/.gstack/repos/gstack && ./setup
+
+# Already have gstack cloned elsewhere? Skip the clone above and just export:
+#   export GSTACK_SKILLS_ROOT=/absolute/path/to/your/gstack/.agents/skills
+# ClawSeat's preflight, install_bundled_skills, skill_registry, and dispatch_task
+# all honor that env var — no re-clone needed. Must be an absolute path.
 ```
 
 > ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
-
-### Gstack at a non-canonical location
-
-If you already have gstack cloned somewhere other than `~/.gstack/repos/gstack/`, export:
-
-```bash
-export GSTACK_SKILLS_ROOT=/absolute/path/to/your/gstack/.agents/skills
-```
-
-ClawSeat's preflight, `install_bundled_skills.py`, `skill_registry`, and `dispatch_task.py` all honor this env var — you do not need to re-clone.
+>
+> ℹ️  `starter.toml` is koder-only and does NOT need gstack — you can skip the block above entirely if that's your profile. `install.toml` / `install-with-memory.toml` / `full-team.toml` declare specialist seats (builder / reviewer / qa / designer) that require gstack; ClawSeat's `preflight install` will **HARD_BLOCK** if you try to run those profiles without gstack.
 
 ## Install
 

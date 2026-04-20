@@ -657,36 +657,70 @@ def preflight_check(project: str) -> PreflightResult:
     items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
     items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
 
-    # gstack skills (WARNING — needed for specialist seats)
+    # Load the profile's active roles FIRST — the gstack check below uses
+    # them to decide severity (HARD_BLOCKED when a specialist role that
+    # actually needs gstack is declared, WARNING otherwise).
+    active_roles = _load_active_roles(project)
+
+    # gstack skills — HARD_BLOCKED when this profile declares a role that
+    # genuinely needs gstack (builder / reviewer / qa / designer); WARNING
+    # otherwise (koder-only profiles like starter.toml can legitimately
+    # ship without gstack). Previously this was always WARNING, which
+    # gave a misleading green-light when install_bundled_skills.py and
+    # bootstrap_harness.py would then hard-fail on the same missing
+    # dependency — a textbook "ladder of mysterious failures".
+    #
     # GSTACK_SKILLS_ROOT env lets operators who cloned gstack at a
     # non-canonical path opt out of the default `~/.gstack/repos/gstack/`
     # lookup. Keep the resolver pattern in sync with
     # core/skill_registry.py::_resolve_gstack_skills_root and
     # core/skills/gstack-harness/scripts/dispatch_task.py.
+    _GSTACK_NEEDED_ROLES = {"builder", "reviewer", "qa", "designer"}
     gstack_env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
     if gstack_env:
         gstack_root = Path(gstack_env).expanduser()
+        gstack_source = "GSTACK_SKILLS_ROOT"
     else:
         gstack_root = Path.home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+        gstack_source = "canonical ~/.gstack/repos/gstack/.agents/skills"
     if not gstack_root.exists():
+        profile_needs_gstack = bool(active_roles and (active_roles & _GSTACK_NEEDED_ROLES))
+        status = (
+            PreflightStatus.HARD_BLOCKED if profile_needs_gstack else PreflightStatus.WARNING
+        )
+        role_hit = ", ".join(sorted((active_roles or set()) & _GSTACK_NEEDED_ROLES)) or "none"
+        message = (
+            f"gstack skills not found at {gstack_root} "
+            f"(source: {gstack_source}). "
+        )
+        if profile_needs_gstack:
+            message += (
+                f"Profile declares specialist role(s) {{{role_hit}}} that require "
+                f"gstack — install cannot proceed."
+            )
+        else:
+            message += (
+                "No specialist roles in this profile — gstack is optional for this "
+                "project, but any downstream switch to install.toml / install-with-memory.toml / "
+                "full-team.toml will require it."
+            )
         items.append(PreflightItem(
             name="gstack",
-            status=PreflightStatus.WARNING,
-            message=(
-                f"gstack skills not found at {gstack_root} — specialist seats "
-                "(builder, reviewer, qa, designer) will lack key capabilities"
-            ),
+            status=status,
+            message=message,
             fix_command=(
-                "git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack\n"
-                "cd ~/.gstack/repos/gstack && ./setup\n"
-                "# If gstack is already installed elsewhere, export instead:\n"
-                "#   export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills"
+                "# Path checked: " + str(gstack_root) + "\n"
+                "# If gstack is not installed yet:\n"
+                "  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack\n"
+                "  cd ~/.gstack/repos/gstack && ./setup\n"
+                "# If gstack is already installed at a non-canonical path:\n"
+                "  export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills\n"
+                "# Then re-run: python3.11 $CLAWSEAT_ROOT/core/preflight.py " + str(project)
             ),
         ))
 
     # skill registry validation (profile-aware: downgrade role-specific required skills
     # to optional when those roles are absent from this profile's seat_roles)
-    active_roles = _load_active_roles(project)
     items.extend(_check_skills(active_roles=active_roles))
 
     # Categorize

@@ -192,18 +192,36 @@ def install_bundled_skills(openclaw_home: Path, *, dry_run: bool) -> int:
         if dry_run:
             print(f"gstack_skills_missing: {', '.join(missing_gstack)}")
         else:
+            gstack_exists = GSTACK_SKILLS_ROOT.exists()
+            gstack_env_set = bool(os.environ.get("GSTACK_SKILLS_ROOT", "").strip())
             print()
-            print(f"gstack_skills_required: {', '.join(missing_gstack)}")
-            print(f"  Looked under: {GSTACK_SKILLS_ROOT}")
-            print("  Specialist seats need gstack skills for implementation, review, QA, and design.")
-            print("  Install gstack at the canonical path:")
-            print("    git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack")
-            print("    cd ~/.gstack/repos/gstack && ./setup")
-            print("  Or, if gstack is already installed elsewhere:")
-            print("    export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills")
-            print("    # then re-run this install_bundled_skills.py")
+            print(f"gstack_skills_missing: {len(missing_gstack)} required skill(s) not found")
+            print(f"  Missing: {', '.join(missing_gstack)}")
+            print(f"  Path checked: {GSTACK_SKILLS_ROOT}")
+            print(f"  Path source: {'GSTACK_SKILLS_ROOT env' if gstack_env_set else 'canonical default (~/.gstack/repos/gstack/.agents/skills)'}")
+            print(f"  Path exists: {'yes (partial/empty install?)' if gstack_exists else 'no'}")
+            print()
+            print("  Specialist seats (builder, reviewer, qa, designer) need gstack for their work.")
+            print()
+            if not gstack_exists:
+                # Path not found — steer operator toward clone OR env-var redirect
+                print("  Install gstack at the canonical path:")
+                print("    git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack")
+                print("    cd ~/.gstack/repos/gstack && ./setup")
+                print("  Or if gstack is already cloned elsewhere, point us there:")
+                print("    export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills")
+            else:
+                # Path exists but incomplete — likely ./setup never ran, or wrong dir
+                print("  The path exists but is missing required skill folders.")
+                print("  Most likely cause: `./setup` never ran, or GSTACK_SKILLS_ROOT points at the wrong subdirectory.")
+                print("  Try:")
+                print(f"    cd $(dirname $(dirname {GSTACK_SKILLS_ROOT})) && ./setup")
+                print("  Or recheck that GSTACK_SKILLS_ROOT points at the `.agents/skills/` dir, not the repo root.")
+            print()
+            print("  Then resume:")
+            print("    python3 $CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py")
     elif not dry_run:
-        print(f"gstack_skills: all {len(REQUIRED_GSTACK_SKILLS)} required skills present")
+        print(f"gstack_skills: all {len(REQUIRED_GSTACK_SKILLS)} required skills present at {GSTACK_SKILLS_ROOT}")
 
     return len(missing_agent_skills) + len(missing_gstack)
 

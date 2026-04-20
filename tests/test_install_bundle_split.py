@@ -85,7 +85,13 @@ def test_install_bundled_skills_reports_missing_external_skills(tmp_path, monkey
     assert rc == 2
     out = capsys.readouterr().out
     assert "lark_skills_required" in out
-    assert "gstack_skills_required" in out
+    # Message shape was expanded in the UX audit: header switched from the
+    # vague "gstack_skills_required" to the more-actionable
+    # "gstack_skills_missing: N required skill(s) not found" with a
+    # Path-checked line and an explicit recovery command.
+    assert "gstack_skills_missing" in out
+    assert "Path checked" in out
+    assert "Then resume" in out, "diagnostic must include an explicit resume command"
 
 
 # ---------------------------------------------------------------------------
