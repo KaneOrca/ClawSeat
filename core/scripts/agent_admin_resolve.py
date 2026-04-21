@@ -139,6 +139,59 @@ class ResolveHandlers:
                 )
                 env.pop("OPENAI_API_KEY", None)
 
+        # C5: CLAUDE_CODE_OAUTH_TOKEN long-lived token (bypasses Keychain).
+        # Secret file must contain `CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...`
+        # (obtained via `claude setup-token`). Works only for tool=claude.
+        if mode == "oauth_token":
+            if tool != "claude":
+                raise self.hooks.error_cls(
+                    f"auth_mode=oauth_token is only supported for tool=claude "
+                    f"(got tool={tool!r}). Use tool=claude with `claude setup-token` "
+                    "to obtain the 1-year token."
+                )
+            if not session.secret_file:
+                raise self.hooks.error_cls(
+                    f"{session.engineer_id} is missing 'secret_file' in session.toml "
+                    "(auth_mode=oauth_token requires it). The file must contain "
+                    "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-... (from `claude setup-token`)."
+                )
+            secret_env = self.hooks.parse_env_file(Path(session.secret_file))
+            token = secret_env.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip()
+            if not token:
+                raise self.hooks.error_cls(
+                    f"{session.engineer_id} secret_file={session.secret_file} "
+                    "is missing CLAUDE_CODE_OAUTH_TOKEN. Run `claude setup-token` "
+                    "on the operator host and paste the token into that file."
+                )
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+            # Defensive: drop any ambient ANTHROPIC_API_KEY / AUTH_TOKEN /
+            # BASE_URL so they don't shadow the oauth-token codepath.
+            for stale in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"):
+                env.pop(stale, None)
+
+        # C5: Claude Code Router (CCR) — point Claude Code at a local
+        # proxy that multiplexes providers. Needs no secret file (CCR
+        # holds all upstream keys in ~/.claude-code-router/config.json).
+        if mode == "ccr":
+            if tool != "claude":
+                raise self.hooks.error_cls(
+                    f"auth_mode=ccr is only supported for tool=claude "
+                    f"(got tool={tool!r}). Start `ccr start` and point "
+                    "this seat at it."
+                )
+            from agent_admin_config import DEFAULT_CCR_BASE_URL
+            ccr_base_url = (
+                os.environ.get("CLAWSEAT_CCR_BASE_URL")
+                or DEFAULT_CCR_BASE_URL
+            )
+            env["ANTHROPIC_BASE_URL"] = ccr_base_url
+            # CCR accepts any non-empty token; keep the value obviously
+            # fake so a leaked log is not mistaken for a real key.
+            env["ANTHROPIC_AUTH_TOKEN"] = "ccr-local-dummy"
+            # Clear any stale OAuth credentials path to ensure CC uses the env.
+            for stale in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+                env.pop(stale, None)
+
         return binary, env
 
     def default_launch_args(self, session: Any) -> list[str]:

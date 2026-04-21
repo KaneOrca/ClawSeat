@@ -374,6 +374,16 @@ SUPPORTED_RUNTIME_MATRIX = {
     "claude": {
         "oauth": ("anthropic",),
         "api": ("xcode-best", "minimax"),
+        # C5: long-lived token from `claude setup-token` (valid ~1 year).
+        # Skips macOS Keychain entirely — avoids the per-seat popup storm
+        # caused by each seat having a different HOME (upstream
+        # anthropics/claude-code#43000).
+        "oauth_token": ("anthropic",),
+        # C5: Claude Code Router (CCR) — local proxy that multiplexes
+        # Anthropic-compatible providers (Kimi / MiniMax / GLM / DeepSeek
+        # / OpenRouter) behind one ANTHROPIC_BASE_URL. Keeps backend
+        # seats off the user's OAuth quota and switchable per-request.
+        "ccr": ("ccr-local",),
     },
     "codex": {
         "oauth": ("openai",),
@@ -384,6 +394,19 @@ SUPPORTED_RUNTIME_MATRIX = {
         "api": ("google-api-key",),
     },
 }
+
+
+# C5 auth mode families. Used by validators and by build_runtime to decide
+# which env-injection branch runs. Keeping this explicit makes it easy to
+# answer "does this auth mode need a secret file?" without reading the
+# matrix carefully.
+AUTH_MODES_REQUIRING_SECRET_FILE = frozenset({"api", "oauth_token"})
+AUTH_MODES_WITHOUT_SECRET_FILE = frozenset({"oauth", "ccr"})
+ALL_AUTH_MODES = AUTH_MODES_REQUIRING_SECRET_FILE | AUTH_MODES_WITHOUT_SECRET_FILE
+
+
+# Default endpoint for the local CCR proxy (override with CLAWSEAT_CCR_BASE_URL).
+DEFAULT_CCR_BASE_URL = "http://127.0.0.1:3456"
 
 
 def supported_providers(tool: str, auth_mode: str) -> tuple[str, ...]:
@@ -398,7 +421,7 @@ def supported_runtime_summary_lines() -> list[str]:
     lines: list[str] = []
     for tool in ("claude", "codex", "gemini"):
         tool_map = SUPPORTED_RUNTIME_MATRIX.get(tool, {})
-        for auth_mode in ("oauth", "api"):
+        for auth_mode in ("oauth", "api", "oauth_token", "ccr"):
             providers = tool_map.get(auth_mode)
             if not providers:
                 continue
