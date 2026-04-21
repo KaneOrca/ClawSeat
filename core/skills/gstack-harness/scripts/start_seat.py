@@ -36,7 +36,56 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tool", help="Override tool (claude, codex, gemini). Updates session before start.")
     parser.add_argument("--auth-mode", help="Override auth mode (oauth, api). Updates session before start.")
     parser.add_argument("--provider", help="Override provider. Updates session before start.")
+    parser.add_argument(
+        "--skip-bridge-preflight",
+        action="store_true",
+        help=(
+            "Do not run the Feishu bridge preflight (group/auth/envelope). "
+            "Default: run for bridge-aware seats. Use this only when the "
+            "project is not yet bound and you accept tmux-only operation."
+        ),
+    )
     return parser.parse_args()
+
+
+def _load_bridge_preflight():
+    """Lazy-load core/lib/bridge_preflight.py — keeps test environments
+    that don't touch the bridge free of subprocess side effects."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "bridge_preflight", str(REPO_ROOT / "core" / "lib" / "bridge_preflight.py")
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_bridge_preflight_or_exit(profile, seat: str, *, skip: bool) -> None:
+    """For bridge-aware seats, run the preflight and abort if anything is
+    red. No-op for non-bridge seats or when --skip-bridge-preflight is set."""
+    if skip:
+        return
+    role = (profile.seat_roles or {}).get(seat, "")
+    bp = _load_bridge_preflight()
+    if not bp.seat_participates_in_bridge(
+        seat=seat,
+        role=role,
+        heartbeat_owner=profile.heartbeat_owner,
+        active_loop_owner=profile.active_loop_owner,
+        heartbeat_transport=profile.heartbeat_transport,
+    ):
+        return
+    result = bp.run_bridge_preflight(project=profile.project_name, seat=seat)
+    print(result.render())
+    if not result.ok:
+        print(
+            "\nseat launch aborted by bridge preflight. Fix the failing "
+            "check(s) above, or re-run with --skip-bridge-preflight to "
+            "start the seat without a functional Feishu bridge.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
 
 def write_frontstage_receipt(profile, seat: str) -> str:
@@ -316,6 +365,13 @@ def main() -> int:
                     print(f"skill_warning: {_si.name} ({_si.source}) — {_si.expanded_path}")
     except Exception as _exc:
         print(f"skill_check_skipped: {_exc}")
+
+    # C3 bridge preflight — for bridge-aware seats (planner / koder-openclaw),
+    # fail fast here if the project has no binding, lark-cli auth is stale,
+    # or the delegation envelope can't render. Avoids discovering drift
+    # mid-task. No-op for non-bridge seats and when the user explicitly
+    # opts out with --skip-bridge-preflight.
+    run_bridge_preflight_or_exit(profile, args.seat, skip=args.skip_bridge_preflight)
 
     has_overrides = args.tool or args.auth_mode or args.provider
     if has_overrides:
