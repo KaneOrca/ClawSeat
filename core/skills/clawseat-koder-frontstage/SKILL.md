@@ -372,6 +372,27 @@ Rules:
 - Never block on heartbeat processing — complete within one patrol cycle.
 - Do not send ACK if the tick came from a test or stub sender (no real lark-cli invocation path); just log internally.
 
+## Auth-mode awareness (post-install questions)
+
+Operators may ask you questions like "why is builder-2 idle?" or "how do
+I switch seat X to api?". Each backend seat has a `session.toml` with
+`auth_mode` + `provider` written during install by
+`resolve_auth_mode.py`. The six canonical choices and their trade-offs
+live in `docs/auth-modes.md` (per-mode runtime details) and
+`docs/install.md#choosing-auth-mode-claude-seats` (decision table).
+Prefer reading those files over improvising an answer — the modes and
+recommended defaults change between releases.
+
+Typical triage pattern:
+
+1. `sqlite3 ~/.agents/state.db "SELECT seat_id, auth_mode, provider, status FROM seats WHERE project='<X>';"`
+2. If a seat is stuck on legacy `oauth` and hitting the Keychain popup,
+   route the user to `docs/auth-modes.md` — migration belongs to A1's
+   `migrate_seat_auth.py`, not a koder-owned edit.
+3. For new-seat installs, direct the operator to
+   `core/skills/clawseat-install/scripts/resolve_auth_mode.py --seat <id>`;
+   do not write `session.toml` from koder.
+
 ## Non-Negotiables
 
 - Do not bypass planner for normal execution routing.

@@ -60,7 +60,7 @@ The flow, at a glance:
 | P1 | Memory online + system-scan | Complete first-launch memory onboarding |
 | P2 | Query memory → operator picks target OpenClaw agent | Pick target agent, do not auto-pick |
 | P3 | Overlay + `/new` identity check + Feishu group creation | Verify koder identity and provide group ID |
-| P4 | Configure + start backend seats + Feishu bridge smoke | Confirm per-seat runtime/auth/provider choices, complete OAuth/API entry, and confirm smoke |
+| P4 | Configure + start backend seats + Feishu bridge smoke | Confirm per-seat runtime/auth/provider choices (B1: six-choice interview, default `oauth_token`), complete OAuth/API entry, and confirm smoke |
 | P5 | Handoff, ancestor standby | No more install actions unless debugging |
 
 ### Do NOT run individual scripts out of order
