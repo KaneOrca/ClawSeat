@@ -35,9 +35,11 @@ def fake_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".agents" / "profiles").mkdir(parents=True)
     (home / ".agents" / "tasks").mkdir(parents=True)
+    (home / ".agents" / "engineers").mkdir(parents=True)
     clawseat = home / ".clawseat"
     (clawseat / "core" / "launchers").mkdir(parents=True)
     (clawseat / "core" / "scripts").mkdir(parents=True)
+    (clawseat / "core" / "templates").mkdir(parents=True)
     (clawseat / "core" / "tui").mkdir(parents=True)
     (clawseat / "core" / "skills" / "clawseat-install" / "scripts").mkdir(parents=True)
     launcher = clawseat / "core" / "launchers" / "agent-launcher.sh"
@@ -49,6 +51,11 @@ def fake_home(tmp_path, monkeypatch):
     entry_skills = clawseat / "core" / "skills" / "clawseat-install" / "scripts" / "install_entry_skills.py"
     entry_skills.write_text("#!/usr/bin/env python3\nprint('ok')\n")
     entry_skills.chmod(0o755)
+    ancestor_template = clawseat / "core" / "templates" / "ancestor-engineer.toml"
+    ancestor_template.write_text(
+        'skills = ["{CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md"]\n',
+        encoding="utf-8",
+    )
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("CLAWSEAT_ROOT", str(clawseat))
     # Point module globals at the fake layout.
@@ -56,8 +63,10 @@ def fake_home(tmp_path, monkeypatch):
     monkeypatch.setattr(ie, "LAUNCHER", launcher)
     monkeypatch.setattr(ie, "ITERM_DRIVER", iterm_driver)
     monkeypatch.setattr(ie, "INSTALL_ENTRY_SKILLS", entry_skills)
+    monkeypatch.setattr(ie, "ANCESTOR_ENGINEER_TEMPLATE", ancestor_template)
     monkeypatch.setattr(ie, "PROFILE_DIR", home / ".agents" / "profiles")
     monkeypatch.setattr(ie, "TASKS_DIR", home / ".agents" / "tasks")
+    monkeypatch.setattr(ie, "ENGINEERS_DIR", home / ".agents" / "engineers")
     return home
 
 
@@ -300,6 +309,24 @@ class TestEntrySkills:
         assert calls == [[sys.executable, str(ie.INSTALL_ENTRY_SKILLS)]]
 
 
+class TestAncestorEngineer:
+
+    def test_ensure_ancestor_engineer_renders_template(self, fake_home):
+        target = ie.ensure_ancestor_engineer(dry_run=False)
+        assert target == fake_home / ".agents" / "engineers" / "ancestor" / "engineer.toml"
+        rendered = target.read_text(encoding="utf-8")
+        assert "{CLAWSEAT_ROOT}" not in rendered
+        assert str(ie.CLAWSEAT_ROOT / "core" / "skills" / "clawseat-ancestor" / "SKILL.md") in rendered
+
+    def test_ensure_ancestor_engineer_is_idempotent(self, fake_home):
+        target = ie.ensure_ancestor_engineer(dry_run=False)
+        first = target.read_text(encoding="utf-8")
+        target.write_text(first, encoding="utf-8")
+        second_target = ie.ensure_ancestor_engineer(dry_run=False)
+        assert second_target == target
+        assert second_target.read_text(encoding="utf-8") == first
+
+
 class TestAncestorLaunchFlow:
 
     def test_launch_ancestor_sets_brief_env_and_returns_created(self, fake_home, monkeypatch):
@@ -370,3 +397,53 @@ class TestAncestorLaunchFlow:
         assert str(brief) in calls[0][5]
         assert "clawseat-ancestor/SKILL.md" in calls[0][5]
         assert calls[1] == ["tmux", "send-keys", "-t", "install-ancestor-claude", "Enter"]
+
+
+class TestMainFlow:
+
+    def test_main_renders_ancestor_engineer_before_launch(self, fake_home, monkeypatch):
+        _write_v2_profile(fake_home, "install")
+        _write_binding(fake_home, "install", "oc_demo")
+        profile = ie.load_profile_if_v2("install")
+        brief = fake_home / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+        brief.parent.mkdir(parents=True, exist_ok=True)
+        brief.write_text("brief", encoding="utf-8")
+        calls = []
+
+        monkeypatch.setattr(ie.shutil, "which", lambda _: "/usr/bin/tmux")
+        monkeypatch.setattr(ie, "ensure_profile", lambda project, clone_from=None: profile)
+        monkeypatch.setattr(ie, "verify_binding", lambda project: "oc_demo")
+        monkeypatch.setattr(ie, "ensure_entry_skills", lambda: calls.append("skills"))
+        monkeypatch.setattr(
+            ie,
+            "ensure_ancestor_engineer",
+            lambda *, dry_run: calls.append(("engineer", dry_run)) or (fake_home / ".agents" / "engineers" / "ancestor" / "engineer.toml"),
+        )
+        monkeypatch.setattr(ie, "preflight_seats", lambda profile: [])
+        monkeypatch.setattr(ie, "render_brief", lambda project: brief)
+        monkeypatch.setattr(
+            ie,
+            "launch_ancestor",
+            lambda project, profile, **kwargs: calls.append(("launch", kwargs["brief"])) or ("install-ancestor-claude", True),
+        )
+        monkeypatch.setattr(
+            ie,
+            "open_ancestor_window",
+            lambda project, session, *, dry_run: calls.append(("window", session, dry_run)),
+        )
+        monkeypatch.setattr(
+            ie,
+            "prime_ancestor",
+            lambda session, brief_path, *, dry_run: calls.append(("prime", session, dry_run)),
+        )
+
+        rc = ie.main(["--project", "install"])
+
+        assert rc == 0
+        assert calls == [
+            "skills",
+            ("engineer", False),
+            ("launch", brief),
+            ("window", "install-ancestor-claude", False),
+            ("prime", "install-ancestor-claude", False),
+        ]

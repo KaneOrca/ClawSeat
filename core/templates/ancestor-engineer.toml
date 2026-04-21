@@ -1,10 +1,9 @@
-# Ancestor engineer template (v0.1, provisional)
+# Ancestor engineer template (v0.2, architect-reviewed)
 #
-# Status: TUI engineer draft, architect review pending.
-# Spec: docs/design/ancestor-responsibilities.md (v0.1)
+# Status: aligned with clawseat-ancestor v0.2 and ancestor-bootstrap brief.
+# Spec: docs/design/ancestor-responsibilities.md / docs/schemas/ancestor-bootstrap-brief.md
 #
-# When install_entrypoint adds ancestor to a project, it substitutes:
-#   {PROJECT}        → the project name (e.g. "install")
+# install_entrypoint substitutes:
 #   {CLAWSEAT_ROOT}  → absolute path to the clawseat install
 # then writes the result to ~/.agents/engineers/ancestor/engineer.toml.
 #
@@ -38,9 +37,9 @@ role_details = [
     # Bootstrap phase (one-shot, B1..B7 from brief; B8 operator-ack gate removed in v0.2)
     "On first boot I read ancestor-bootstrap.md and execute its Phase-A checklist in order.",
     "B4-launch-pending-seats uses `core/launchers/agent-launcher.sh --headless` per seat in profile.seats.",
-    "B5-bind-feishu-group prompts the operator (via me) and writes PROJECT_BINDING.toml.",
+    "B5 verifies PROJECT_BINDING.toml.feishu_group_id already exists; launcher/wizard owns writing it before I spawn.",
     "B6-smoke-dispatch verifies planner↔Feishu wiring by sending one OC_DELEGATION_REPORT_V1 report_type=smoke.",
-    "After B7 I wait for operator ack (ANCESTOR_RESUME file) before entering Phase B. Never auto-transition.",
+    "After B7 I immediately enter Phase B. There is no operator-ack gate or ANCESTOR_RESUME file.",
 
     # Steady-state patrol (Phase B)
     "Each patrol tick: liveness-check seats, scan new handoffs, forward whitelisted events to Feishu, summarize STATUS.md.",

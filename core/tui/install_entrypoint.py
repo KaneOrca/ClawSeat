@@ -11,7 +11,8 @@ Replaces the v0.3 ``/cs`` flow. Given a project name, this script:
      (the launcher's own ancestor-preflight will install the Phase-B
      launchd plist)
   7. Opens one visible iTerm pane attached to ancestor
-  8. Primes the fresh ancestor session with ``/clawseat-ancestor``
+  8. Primes the fresh ancestor session with a bootstrap prompt pointing at
+     the ancestor skill + brief
 
 Design: this is a thin Python orchestrator on top of the bash launcher.
 The launcher remains the runtime (it owns tmux + iTerm + env isolation);
@@ -47,8 +48,10 @@ CLAWSEAT_ROOT = Path(os.environ.get("CLAWSEAT_ROOT", str(Path.home() / ".clawsea
 LAUNCHER = CLAWSEAT_ROOT / "core" / "launchers" / "agent-launcher.sh"
 ITERM_DRIVER = CLAWSEAT_ROOT / "core" / "scripts" / "iterm_panes_driver.py"
 INSTALL_ENTRY_SKILLS = CLAWSEAT_ROOT / "core" / "skills" / "clawseat-install" / "scripts" / "install_entry_skills.py"
+ANCESTOR_ENGINEER_TEMPLATE = CLAWSEAT_ROOT / "core" / "templates" / "ancestor-engineer.toml"
 PROFILE_DIR = Path.home() / ".agents" / "profiles"
 TASKS_DIR = Path.home() / ".agents" / "tasks"
+ENGINEERS_DIR = Path.home() / ".agents" / "engineers"
 
 
 # ── colour helpers ────────────────────────────────────────────────────
@@ -241,6 +244,29 @@ def ensure_entry_skills() -> None:
     print(_green("✓ entry skills installed"))
 
 
+def ensure_ancestor_engineer(*, dry_run: bool) -> Path:
+    if not ANCESTOR_ENGINEER_TEMPLATE.is_file():
+        raise SystemExit(
+            _red(f"✗ ancestor engineer template not found at {ANCESTOR_ENGINEER_TEMPLATE}")
+        )
+    target = ENGINEERS_DIR / "ancestor" / "engineer.toml"
+    rendered = ANCESTOR_ENGINEER_TEMPLATE.read_text(encoding="utf-8").replace(
+        "{CLAWSEAT_ROOT}",
+        str(CLAWSEAT_ROOT),
+    )
+    if dry_run:
+        print(_yellow(f"→ dry-run: would render ancestor engineer → {target}"))
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    current = target.read_text(encoding="utf-8") if target.is_file() else None
+    if current == rendered:
+        print(_green(f"✓ ancestor engineer already current: {target}"))
+        return target
+    target.write_text(rendered, encoding="utf-8")
+    print(_green(f"✓ ancestor engineer → {target}"))
+    return target
+
+
 # ── brief rendering ───────────────────────────────────────────────────
 
 def render_brief(project: str) -> Path:
@@ -408,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     verify_binding(project)
 
     ensure_entry_skills()
+    ensure_ancestor_engineer(dry_run=args.dry_run)
 
     preflight = preflight_seats(profile)
     ok_seats = [s for s, _, ok in preflight if ok]
