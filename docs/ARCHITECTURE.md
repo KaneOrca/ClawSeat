@@ -637,6 +637,65 @@ field in the receipt JSON is the observable indicator.
 
 ---
 
+## §3i — Seat context-usage watermark (C16)
+
+### Problem
+
+When a seat accumulates ~478k tokens mid-task (as happened with builder-2
+during C10), the session becomes too full to process further tasks, but no
+patrol alert fires and no Feishu ping is sent. The operator only notices when
+manually checking why a task chain has stalled.
+
+### Design
+
+C16 embeds a **token_usage_pct** measurement in every HEARTBEAT_RECEIPT.toml.
+When the patrol supervisor reads a receipt with `pct >= 0.80`, it emits a
+`seat.context_near_limit` event into state.db. feishu_announcer picks it up
+and sends a Feishu alert.
+
+**Receipt schema v2:**
+```toml
+version = 2                          # bumped from v1
+token_usage_pct = 0.37               # 0..1; absent = unknown
+token_usage_source = "session_jsonl_size"  # cc_env | session_jsonl_size | unknown
+token_usage_measured_at = "..."      # ISO8601
+```
+
+Pre-C16 receipts (version=1) missing these fields are read as
+`token_usage_pct = None` → no alert fired. Backwards-compatible.
+
+### Measurement heuristic
+
+Sources tried in order:
+1. **`CC_CONTEXT_USAGE_PCT` env var** — forward-compat hook for if CC ever
+   exposes context usage natively.
+2. **session.jsonl file size** — Claude Code logs each turn to a `.jsonl`
+   file under `<runtime_dir>/home/.claude/projects/-hash-/session.jsonl`.
+   `approx_tokens = size_bytes / 8` (1 token ≈ 8 bytes including JSON
+   overhead; safe upper bound). `pct = min(1.0, approx_tokens / max_tokens)`.
+   `max_tokens` defaults to 200k (sonnet/opus); 1M for Opus 1M variants.
+3. **Fallback** — `(None, "unknown")` if no file found or any error occurs.
+
+~30% error bar. Intended to catch egregious cases (75%+), not pixel-accurate.
+
+### Escalation chain
+
+```
+patrol_supervisor.py reads receipt
+  → pct >= 0.80
+  → state.record_event("seat.context_near_limit", ...)
+  → events_watcher.py ingests
+  → feishu_announcer.py relays to Feishu group
+```
+
+### Threshold
+
+Hardcoded at `0.80` in `patrol_supervisor._CONTEXT_THRESHOLD`. Not
+configurable in C16 — a follow-up (C19 candidate) can add per-seat overrides
+and an auto-clear path at 0.95.
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.

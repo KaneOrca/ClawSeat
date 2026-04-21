@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- C16: `HEARTBEAT_RECEIPT.toml` schema bumped v1 → v2. New fields:
+  `token_usage_pct` (0..1), `token_usage_source`, `token_usage_measured_at`.
+  Pre-v2 receipts missing these fields are treated as "unknown" — no alert
+  fired, fully backwards compatible.
+  `patrol_supervisor.py` emits `seat.context_near_limit` event when
+  `token_usage_pct >= 0.80`. feishu_announcer routes it to Feishu.
+  Heuristic: session.jsonl size ÷ (model_max_tokens × 8 bytes). ~30% error bar.
+
 - C15: `dispatch_task.py` and `complete_handoff.py` now notify by default.
   Use `--no-notify` to opt out. `--skip-notify` is a deprecated alias that
   still works but prints a warning to stderr.
