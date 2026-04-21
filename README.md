@@ -246,3 +246,23 @@ The heartbeat cron wakes koder via Feishu on a launchd schedule.
    ```
 
 To disable without unloading: `cs heartbeat config set --project install --enabled false`.
+
+## Activating modal detector
+
+The modal detector watches tmux panes for Claude Code numbered-choice
+modals and emits `seat.blocked_on_modal` events (picked up by the Feishu
+announcer).
+
+```bash
+# Install the launchd agent (writes plist, does NOT load it):
+python3 core/scripts/modal_detector.py --install-launchd
+
+# Load it:
+launchctl load ~/Library/LaunchAgents/com.clawseat.modal-detector.plist
+
+# Verify:
+tail -f ~/.agents/logs/modal-detector.log
+
+# One-shot test (dry-run, no DB writes):
+python3 core/scripts/modal_detector.py --once --dry-run
+```

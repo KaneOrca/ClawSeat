@@ -546,6 +546,60 @@ this is an accepted trade-off since the runtime behavior is unchanged.
 
 ---
 
+## §3g — Modal detector: closing the seat-observability gap (C10.5)
+
+### The problem
+
+The C8–C14 event bus knew when tasks were dispatched, completed, or had
+Feishu closeouts. What it couldn't see: a seat silently frozen on a
+Claude Code numbered-choice modal. No heartbeat divergence. No event row.
+Just a frozen pane the operator had to manually discover.
+
+### Design
+
+```
+modal_detector (launchd timer, every 60 s)
+  └── tmux capture-pane for every live session
+        └── _detect_modal() — regex on "Do you want to proceed?" + numbered list
+              └── record_event_if_new('seat.blocked_on_modal', fingerprint=…)
+                    └── feishu_announcer picks it up on next cycle
+                          └── Feishu ping: "install/builder-2 blocked on modal"
+```
+
+`modal_detector.py` is a read-only observer. It never clicks, never sends
+key input to the pane. Auto-click is deferred to C18 with a strict
+allow-list.
+
+### Pattern
+
+The CC v2.x modal looks like:
+
+```
+Do you want to proceed?
+❯ 1. Yes
+  2. Yes, and allow hooks/ access
+  3. No
+```
+
+`MODAL_PATTERN` matches: `"Do you want to proceed?" line` followed by
+`2+ lines of the form [❯] <N>. <text>`. The `❯` marker (cursor position)
+is optional — CC sometimes omits it.
+
+### Fingerprint dedup
+
+`_fingerprint(session, question, options)` → `sha1[:16]`. The same stuck
+modal scanned every 60 s produces the same fingerprint, so
+`record_event_if_new` inserts exactly one `seat.blocked_on_modal` event
+per unique modal instance. When the operator resolves it and a new modal
+appears, the new text generates a new fingerprint → new event.
+
+### feishu_announcer integration
+
+`_DEFAULT_EVENT_TYPES` in `feishu_announcer.py` was extended to include
+`"seat.blocked_on_modal"`. No other changes to the announcer or state.py.
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.
