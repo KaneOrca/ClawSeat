@@ -459,43 +459,54 @@ PY
 
 ### Step 4.1 — Configure + start planner (detailed template; repeated for every backend seat)
 
-**Present this structured prompt to the operator** (substitute memory
-recommendations into the bracketed hints):
+**Present this structured prompt to the operator** for the harness
+selection (substitute memory recommendations into the bracketed hints):
 
 > `planner` seat — please confirm or override:
 >
 > 1. **Harness (tool)**: `claude` / `codex` / `gemini` — memory recommends `<tool>` because `<reason>`
-> 2. **Login method (auth_mode)**: `oauth` / `api` — memory recommends `<auth>` (OAuth available: `<bool>`; API key available: `<bool>`)
-> 3. **Provider** (only if auth_mode=api): `anthropic` / `minimax` / `xcode-best` / … — memory found usable key for `<provider>`
-> 4. **API key**: memory has `<MASKED_PREVIEW>` from `<source-path>` — reuse or paste a new one
-> 5. **Base URL**: memory has `<url>` — reuse or override
+> 2. **Base URL** (codex/gemini with custom endpoint only): memory has `<url>` — reuse or override
 
-Once operator has answered:
-
-**Write the seat secret env file** (anchors on `<tool>`/`<provider>`
-answers; mirror the `memory.env` pattern from P0.3):
+**Auth-mode interview (tool=claude only).** Delegate to
+`resolve_auth_mode.py`, which owns the six-choice prompt, batch-config
+lookup, secret-file writing with 0o600, and shape validation for
+oauth_token / anthropic-console keys. B1 replaced the free-form
+`oauth`/`api` prompt with these six canonical choices:
 
 ```sh
-mkdir -p ~/.agents/secrets/<tool>/<provider>
-cat > ~/.agents/secrets/<tool>/<provider>/planner.env <<EOF
-ANTHROPIC_BASE_URL=<base_url>
-ANTHROPIC_AUTH_TOKEN=<api_key>
-ANTHROPIC_MODEL=<model>
-EOF
-chmod 600 ~/.agents/secrets/<tool>/<provider>/planner.env
+# Interactive (ancestor-CC renders the operator prompt via the script):
+eval "$(python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/resolve_auth_mode.py" \
+  --seat planner)"
+# → exports AUTH_MODE, PROVIDER, SECRET_FILE, SECRET_ACTION
 ```
 
-(For OAuth auth_mode, skip the secret file — the seat's TUI handles
-login at first launch.)
+If `~/.agents/install-config.toml` declares `[seats.planner]`, the same
+call resolves non-interactively; ancestor must still surface the
+resolution to the operator for confirmation. To force a specific mode
+without prompt:
+
+```sh
+eval "$(python3.11 "$CLAWSEAT_ROOT/core/skills/clawseat-install/scripts/resolve_auth_mode.py" \
+  --seat planner --auth-mode oauth_token --non-interactive)"
+```
+
+`SECRET_ACTION` values: `existing` (file found and shape-valid) |
+`written` (operator pasted; script wrote 0o600) | `warned` (ccr not
+listening, or legacy oauth picked) | `skipped` (non-interactive with
+missing secret).
+
+(For `oauth` legacy and `ccr`, no secret file is created — the seat's
+TUI handles login at first launch, or ccr proxies the credentials.)
 
 **Start the seat** with CLI overrides so `start_seat.py` writes the
-session.toml with the operator-confirmed config:
+session.toml with the operator-confirmed config. Use the `AUTH_MODE` /
+`PROVIDER` that `resolve_auth_mode.py` just exported:
 
 ```sh
 python3.11 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/start_seat.py" \
   --profile "/tmp/${PROJECT}-profile-dynamic.toml" \
   --seat planner \
-  --tool <tool> --auth-mode <auth> --provider <provider> \
+  --tool <tool> --auth-mode "$AUTH_MODE" --provider "$PROVIDER" \
   --confirm-start
 ```
 
