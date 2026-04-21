@@ -273,9 +273,67 @@ path in `open_db()` — used by all tests for isolation.
 ### Forward roadmap
 
 - **C10** — events table gains a watcher that materialises closeouts and
-  notifications from events rather than ad-hoc writes.
+  notifications from events rather than ad-hoc writes. ✅ see §3c.
 - **C11** — `feishu-announcer` subscribes to events, replaces manual
   `send_delegation_report.py` calls.
+
+---
+
+## §3c — Events Watcher: Subscription Seed (C10)
+
+C8 built the events table. C9 wired `dispatch_task.py` and
+`complete_handoff.py` to write events directly from their own code paths.
+C10 adds a **passive watcher** (`core/scripts/events_watcher.py`) that
+re-derives events from the handoff JSONs on disk — decoupling event
+emission from the scripts that write handoffs.
+
+### Why redundant coverage matters
+
+- Legacy code paths (`notify_seat.py`, shell-based dispatches, third-party
+  scripts) don't know about state.db — but they all still write handoff
+  JSONs under `~/.agents/tasks/<project>/patrol/handoffs/`. Without a
+  watcher, their activity is invisible in the events table.
+- Defensive retries: if state.db was unavailable when dispatch_task.py
+  ran (C9's try/except fallback), the event was lost. The watcher picks
+  it up on the next cycle.
+- C11 foundation: `feishu-announcer` subscribes to the events stream; a
+  richer stream (including legacy tools) makes the subscriber more useful.
+
+### Fingerprint-based deduplication
+
+Each handoff JSON produces a 16-char sha1 fingerprint from
+`project|task_id|kind|source|target`. The watcher uses
+`record_event_if_new(fingerprint=…)` — a new helper in `state.py` — which
+only inserts if no existing row carries that fingerprint. The events
+table gains a `fingerprint TEXT` column + index for the lookup; rows
+written by C9's direct `record_event()` calls leave fingerprint NULL and
+never collide (they're distinct rows by design).
+
+Schema migration for pre-C10 installs: `open_db()` runs
+`ALTER TABLE events ADD COLUMN fingerprint TEXT` wrapped in try/except
+so re-open is still a no-op.
+
+### Operator mental model
+
+- `--once` — one-shot sweep, suitable for cron or manual use.
+- `--watch --interval 30` — daemon mode, SIGINT-clean, polling (no
+  inotify/launchd in v1).
+- `--dry-run` — preview plan without DB writes.
+- `--project install` — scope to a single project directory.
+
+Direct `record_event()` calls in dispatch/completion remain in place —
+watcher is **redundant coverage, not replacement**. Deprecation of the
+direct writes is a C11 follow-up.
+
+### Event derivation rules
+
+| handoff `kind`               | event `type`        |
+| ---------------------------- | ------------------- |
+| `dispatch`                   | `task.dispatched`   |
+| `completion`                 | `task.completed`    |
+| `learning`                   | `patrol.learning`   |
+| `notice`/`reminder`/`unblock` | `seat.notified`    |
+| anything else                 | `handoff.unknown` (+ stderr warning) |
 
 ---
 
