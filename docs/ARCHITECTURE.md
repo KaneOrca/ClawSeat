@@ -248,17 +248,34 @@ state-admin pick --project X --role builder
 state-admin recent-events [--limit 20]
 ```
 
+### C9: dispatcher wired to state.db (landed)
+
+`dispatch_task.py` (and its dynamic variant `dispatch_task_dynamic.py`) now
+accept a `--target-role ROLE` flag as a mutually-exclusive alternative to
+`--target SEAT_ID`. When `--target-role` is used:
+
+1. The profile is loaded to get `project_name`.
+2. `pick_least_busy_seat(conn, project, role)` is called against state.db.
+3. If no live seat matches, the process exits with **rc=3** (`seat_needed`).
+4. Otherwise, the resolved `seat_id` is used for the rest of the dispatch.
+
+Both dispatch and completion write to state.db in a **defensive try/except**:
+DB failures emit a `warn:` to stderr but never fail the primary dispatch or
+handoff. The ledger is still supplementary in C9.
+
+`complete_handoff.py` (and `complete_handoff_dynamic.py`) call
+`mark_task_completed` + record a `task.completed` event on every successful
+completion, same defensive posture.
+
+The `CLAWSEAT_STATE_DB` env var overrides the default `~/.agents/state.db`
+path in `open_db()` — used by all tests for isolation.
+
 ### Forward roadmap
 
-- **C9** — dispatcher adds `--target-role` mode, uses `pick_least_busy_seat`
-  to route to the least-loaded live builder instead of hardcoding `builder-1`.
 - **C10** — events table gains a watcher that materialises closeouts and
   notifications from events rather than ad-hoc writes.
 - **C11** — `feishu-announcer` subscribes to events, replaces manual
   `send_delegation_report.py` calls.
-
-`pick_least_busy_seat` is already in the C8 API and covered by tests so that
-C9 can integrate it on day one with full test coverage in place.
 
 ---
 
