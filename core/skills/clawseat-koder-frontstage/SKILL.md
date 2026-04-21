@@ -357,6 +357,21 @@ Patrol behavior:
   `requested_operation`
 - if `AUTO_CONTINUE`, do not create user-visible noise
 
+## Heartbeat reception
+
+When an incoming message starts with `[HEARTBEAT_TICK project=<X> ts=<T>]`:
+
+1. Parse the header, confirm project matches this workspace.
+2. Read state.db recent events: `sqlite3 ~/.agents/state.db "SELECT type, COUNT(*) FROM events WHERE project='<X>' AND ts > datetime('now','-1 hour') GROUP BY type;"` (or use `python3 ~/.clawseat/core/scripts/state_admin.py recent-events --limit 20 --project <X>`).
+3. Run drift scan: check STATUS.md mtime, patrol/handoffs/ recent files, any stuck in-flight tasks.
+4. If no drift: post a short `[HEARTBEAT_ACK project=<X> ts=<T2>] clean` reply to the Feishu group.
+5. If drift: post `[HEARTBEAT_ACK project=<X> ts=<T2>] DRIFT: <summary>` + surface to user, AND create a handoff for planner: `dispatch_task.py --source koder --target planner --task-id PATROL-DRIFT-<ts> ...`.
+
+Rules:
+- If `project` in the tick header does not match the current workspace project, ignore the tick.
+- Never block on heartbeat processing — complete within one patrol cycle.
+- Do not send ACK if the tick came from a test or stub sender (no real lark-cli invocation path); just log internally.
+
 ## Non-Negotiables
 
 - Do not bypass planner for normal execution routing.
