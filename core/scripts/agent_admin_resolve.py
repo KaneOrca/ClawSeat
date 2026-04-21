@@ -11,6 +11,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from core.lib.real_home import real_user_home
+from core.lib.runtime_home_links import ensure_runtime_home_links
 
 
 @dataclass
@@ -50,6 +51,22 @@ class ResolveHandlers:
         xdg_state = runtime_dir / "xdg" / "state"
         for path in (home, xdg_config, xdg_data, xdg_cache, xdg_state):
             self.hooks.ensure_dir(path)
+        # C4: auto-provision runtime HOME symlinks so the seat sees
+        # ~/.lark-cli and ~/.openclaw without manual post-boot fixup.
+        # Idempotent; skips silently when a real dir already occupies
+        # the sandbox target.
+        link_result = ensure_runtime_home_links(home, shared_agent_home)
+        for action in link_result.actions:
+            if action.status in ("created", "fixed"):
+                print(
+                    f"runtime_home_link {action.status}: {action.sandbox_path} -> {action.target}",
+                    file=sys.stderr,
+                )
+            elif action.status == "error":
+                print(
+                    f"runtime_home_link error: {action.name} — {action.detail}",
+                    file=sys.stderr,
+                )
         env.update(
             {
                 "AGENT_HOME": str(shared_agent_home),
