@@ -696,6 +696,61 @@ and an auto-clear path at 0.95.
 
 ---
 
+## §3j — Auth-mode operational migration (A1)
+
+Six Claude seats inherited `auth_mode=oauth` from the initial install.
+The per-seat sandbox HOME means each seat has its own Keychain slot; an
+expired Anthropic OAuth session blocks that seat with an interactive popup
+that automation cannot dismiss (upstream issue
+[anthropics/claude-code#8938](https://github.com/anthropics/claude-code/issues/8938)).
+
+### Target mapping
+
+| Project | Seat | auth_mode | provider |
+|---------|------|-----------|----------|
+| install | koder | oauth_token | anthropic |
+| install | planner | oauth_token | anthropic |
+| install | builder-1 | oauth_token | anthropic |
+| install | builder-2 | api | anthropic-console |
+| cartooner | planner | oauth_token | anthropic |
+| audit | builder-1 | api | anthropic-console |
+
+`oauth_token` uses a 1-year Keychain-free token from `claude setup-token`
+(set via `CLAUDE_CODE_OAUTH_TOKEN`). `api/anthropic-console` uses a
+Claude Code scoped `ANTHROPIC_API_KEY` from Anthropic Console (no
+browser popup, no expiry).
+
+### New provider: `anthropic-console`
+
+Added to `SUPPORTED_RUNTIME_MATRIX["claude"]["api"]` in
+`agent_admin_config.py`. Wired in `agent_admin_resolve.build_runtime`:
+reads `ANTHROPIC_API_KEY` from the seat's secret file, sets it in the
+env, and defensively unsets `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+`CLAUDE_CODE_OAUTH_TOKEN`. Uses default `api.anthropic.com` endpoint
+(no base-URL override).
+
+### Migration script
+
+`core/scripts/migrate_seat_auth.py` — operator-run one-shot script:
+
+```
+migrate-seat-auth plan               # print current → proposed mapping
+migrate-seat-auth apply --dry-run    # show agent-admin commands, no changes
+migrate-seat-auth apply              # execute migration
+```
+
+Preflight checks:
+- `CLAUDE_CODE_OAUTH_TOKEN` present in `~/.agents/.env.global` (or `koder.env`)
+- `ANTHROPIC_API_KEY` present in `~/.agents/secrets/claude/anthropic-console.env`
+
+Both missing → exit 2 with operator-facing instructions.
+
+Apply is idempotent: seats already at target state are skipped.
+After apply, operator restarts affected tmux sessions; the new env takes
+effect on the next seat launch.
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.

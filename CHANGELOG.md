@@ -6,6 +6,20 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- A1: Operational migration of 6 Claude seats from `auth_mode=oauth` to
+  `oauth_token` or `api/anthropic-console`, eliminating the per-seat
+  Keychain popup risk surface.
+  New provider `"anthropic-console"` added to
+  `SUPPORTED_RUNTIME_MATRIX["claude"]["api"]`; `build_runtime` injects
+  `ANTHROPIC_API_KEY` and clears `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_BASE_URL`
+  / `CLAUDE_CODE_OAUTH_TOKEN` defensively.
+  `core/scripts/migrate_seat_auth.py` — one-shot operator script with
+  `plan` / `apply --dry-run` / `apply` modes, preflight checks, and
+  idempotent post-verify.
+  `docs/auth-modes.md` — new reference page for all 4 auth modes + decision
+  guide + migration walkthrough.
+  `docs/ARCHITECTURE.md §3j`.
+
 - C16: `HEARTBEAT_RECEIPT.toml` schema bumped v1 → v2. New fields:
   `token_usage_pct` (0..1), `token_usage_source`, `token_usage_measured_at`.
   Pre-v2 receipts missing these fields are treated as "unknown" — no alert
