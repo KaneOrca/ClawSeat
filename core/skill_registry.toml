@@ -54,6 +54,14 @@ roles = ["frontstage-supervisor", "planner-dispatcher"]
 description = "Structured requirement clarification via Socratic questioning before implementation"
 
 [[skills]]
+name = "workflow-architect"
+source = "bundled"
+path = "{CLAWSEAT_ROOT}/core/skills/workflow-architect/SKILL.md"
+required = false
+roles = ["planner-dispatcher"]
+description = "Planner-only workflow skeleton design: map structured briefs to reusable step specs and dispatch"
+
+[[skills]]
 name = "agent-monitor"
 source = "bundled"
 path = "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md"

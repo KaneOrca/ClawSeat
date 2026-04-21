@@ -78,7 +78,7 @@ def ensure_profile(*, refresh: bool) -> Path:
 
 def parse_session_states() -> dict[str, str]:
     result = subprocess.run(
-        ["python3", str(AGENT_ADMIN), "session", "status", "--project", PROJECT],
+        [sys.executable, str(AGENT_ADMIN), "session", "status", "--project", PROJECT],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,
@@ -105,7 +105,7 @@ def seat_running(states: dict[str, str], seat: str) -> bool:
 def main() -> int:
     args = parse_args()
     profile_path = ensure_profile(refresh=args.refresh_profile)
-    run_command(["python3", str(PRECHECK), PROJECT])
+    run_command([sys.executable, str(PRECHECK), PROJECT])
 
     planner_workspace = WORKSPACE_ROOT / "planner"
     koder_workspace = WORKSPACE_ROOT / "koder"
@@ -116,7 +116,7 @@ def main() -> int:
         print("bootstrap_mode: fresh_or_repair")
         run_command(
             [
-                "python3",
+                sys.executable,
                 str(BOOTSTRAP),
                 "--profile",
                 str(profile_path),
@@ -133,7 +133,7 @@ def main() -> int:
         print("koder_state: starting")
         run_command(
             [
-                "python3",
+                sys.executable,
                 str(START_SEAT),
                 "--profile",
                 str(profile_path),
@@ -153,7 +153,7 @@ def main() -> int:
         print("planner_state: starting")
         run_command(
             [
-                "python3",
+                sys.executable,
                 str(START_SEAT),
                 "--profile",
                 str(profile_path),
@@ -165,7 +165,7 @@ def main() -> int:
 
     run_command(
         [
-            "python3",
+            sys.executable,
             str(RENDER_CONSOLE),
             "--profile",
             str(profile_path),

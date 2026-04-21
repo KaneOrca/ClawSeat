@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
+"""End-to-end smoke test for the gstack-harness dispatch + closeout flow.
+
+Renders a synthetic profile in a throwaway tmpdir, then exercises dispatch
+→ completion → ACK, canonical review-verdict enforcement, console rendering,
+and the heartbeat-seat gate. Fails loudly on any shape drift so regressions
+in the harness transport surface surface here before they hit a live project.
+Run with no arguments to execute the full suite.
+"""
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -545,5 +554,23 @@ def main() -> int:
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
+def parse_args() -> argparse.Namespace:
+    """Minimal argparse layer so `--help` / `-h` short-circuit before main().
+
+    The selftest itself takes no flags today; this parser exists only to
+    surface usage text and avoid tripping the full harness smoke run (which
+    depends on lark-cli auth + Feishu binding) just to read docs.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Self-test the gstack-harness dispatch + closeout flow against a "
+            "synthetic profile. No flags — running with no arguments executes "
+            "the full suite."
+        ),
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    parse_args()  # consumes --help / -h before main() can crash on env deps
     raise SystemExit(main())
