@@ -50,7 +50,7 @@ __all__ = [
     "get_task", "open_tasks_for_seat", "pick_least_busy_seat",
     "upsert_project", "upsert_seat",
     "record_task_dispatched", "mark_task_completed",
-    "record_event",
+    "record_event", "record_event_if_new",
     "seed_from_filesystem",
 ]
 
@@ -157,7 +157,8 @@ CREATE TABLE IF NOT EXISTS events (
   ts           TEXT NOT NULL,
   type         TEXT NOT NULL,
   project      TEXT,
-  payload_json TEXT NOT NULL
+  payload_json TEXT NOT NULL,
+  fingerprint  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_seats_status ON seats(project, role, status);
@@ -192,6 +193,15 @@ def open_db(db_path: Path | None = None) -> sqlite3.Connection:
         stmt = stmt.strip()
         if stmt:
             conn.execute(stmt)
+    # Migration: older installs predate the fingerprint column. ALTER is idempotent
+    # via try/except — SQLite raises OperationalError if the column already exists.
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN fingerprint TEXT")
+    except sqlite3.OperationalError:
+        pass
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_fingerprint ON events(fingerprint)"
+    )
     conn.commit()
     return conn
 
@@ -395,6 +405,39 @@ def record_event(
         (_utcnow(), type, project, json.dumps(payload, ensure_ascii=False)),
     )
     conn.commit()
+
+
+def record_event_if_new(
+    conn: sqlite3.Connection,
+    type: str,
+    project: str | None,
+    fingerprint: str,
+    **payload: Any,
+) -> bool:
+    """Insert an event only if ``fingerprint`` is not already in the table.
+
+    Returns True on insert, False if an identical fingerprint was already
+    recorded. Used by the C10 events watcher to re-derive events from
+    handoff JSONs idempotently.
+    """
+    if not fingerprint:
+        raise ValueError("fingerprint must be a non-empty string")
+    existing = conn.execute(
+        "SELECT 1 FROM events WHERE fingerprint = ? LIMIT 1", (fingerprint,)
+    ).fetchone()
+    if existing is not None:
+        return False
+    conn.execute(
+        "INSERT INTO events (ts, type, project, payload_json, fingerprint) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            _utcnow(), type, project,
+            json.dumps(payload, ensure_ascii=False),
+            fingerprint,
+        ),
+    )
+    conn.commit()
+    return True
 
 
 # ---------------------------------------------------------------------------
