@@ -373,7 +373,7 @@ def parse_codex_provider_config(data: dict[str, Any]) -> CodexProviderConfig:
 SUPPORTED_RUNTIME_MATRIX = {
     "claude": {
         "oauth": ("anthropic",),
-        "api": ("xcode-best", "minimax"),
+        "api": ("xcode-best", "minimax", "anthropic-console"),
         # C5: long-lived token from `claude setup-token` (valid ~1 year).
         # Skips macOS Keychain entirely — avoids the per-seat popup storm
         # caused by each seat having a different HOME (upstream

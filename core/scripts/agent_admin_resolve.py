@@ -106,7 +106,20 @@ class ResolveHandlers:
                 )
             secret_env = self.hooks.parse_env_file(Path(session.secret_file))
             env.update(secret_env)
-            if tool == "codex":
+            if tool == "claude" and session.provider == "anthropic-console":
+                # A1: Direct Anthropic Console API key (scoped-role=Claude Code).
+                # Does not override base_url — uses default api.anthropic.com.
+                api_key = secret_env.get("ANTHROPIC_API_KEY", "").strip()
+                if not api_key:
+                    raise self.hooks.error_cls(
+                        f"{session.engineer_id} anthropic-console requires "
+                        f"ANTHROPIC_API_KEY in {session.secret_file}. "
+                        "Create a Claude Code scoped API key in Anthropic Console."
+                    )
+                env["ANTHROPIC_API_KEY"] = api_key
+                for stale in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN"):
+                    env.pop(stale, None)
+            elif tool == "codex":
                 api_key = secret_env.get("OPENAI_API_KEY", "")
                 if not api_key:
                     raise self.hooks.error_cls(
