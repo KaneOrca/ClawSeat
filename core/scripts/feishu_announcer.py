@@ -47,7 +47,7 @@ send_feishu_user_message = _feishu.send_feishu_user_message
 
 log = logging.getLogger("feishu_announcer")
 
-_DEFAULT_EVENT_TYPES = ("task.completed", "chain.closeout", "seat.blocked_on_modal")
+_DEFAULT_EVENT_TYPES = ("task.completed", "chain.closeout", "seat.blocked_on_modal", "seat.context_near_limit")
 
 
 # ---------------------------------------------------------------------------

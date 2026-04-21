@@ -1071,3 +1071,180 @@ def resolve_notify(args: "argparse.Namespace") -> bool:
     if getattr(args, "skip_notify", False):
         print("warn: --skip-notify is deprecated; use --no-notify", file=_sys.stderr)
     return do_notify
+
+
+# ── C16: token-usage watermark helpers ──────────────────────────────────────
+
+_TOKEN_MAX_MODELS: dict[str, int] = {
+    "opus-4-7": 200_000,
+    "claude-opus-4-7": 200_000,
+    "sonnet-4-6": 200_000,
+    "claude-sonnet-4-6": 200_000,
+    "haiku-4-5": 200_000,
+    "claude-haiku-4-5": 200_000,
+    # Opus 1M variant
+    "claude-opus-4-7-1m": 1_000_000,
+}
+_TOKEN_MAX_DEFAULT = 200_000
+_BYTES_PER_TOKEN = 8  # safe upper bound: 1 token ≈ 4 bytes prose + JSON overhead
+
+
+def _infer_max_tokens(model: str) -> int:
+    """Hardcoded context-window size per model. ~30% error bar heuristic."""
+    m = model.lower().strip()
+    # Generic 1M detection (check before exact-key loop so "1m" in model name wins)
+    if "1m" in m and "opus" in m:
+        return 1_000_000
+    # Longest key first to ensure more-specific variants win
+    for key, tokens in sorted(_TOKEN_MAX_MODELS.items(), key=lambda kv: -len(kv[0])):
+        if key in m:
+            return tokens
+    return _TOKEN_MAX_DEFAULT
+
+
+def _find_session_jsonls(runtime_dir: str | None, workspace: "Path") -> list["Path"]:
+    """Locate session.jsonl files for the seat's active CC session.
+
+    Searches (in order):
+    1. runtime_dir/home/.claude/projects/-*/*.jsonl
+    2. workspace/.claude/projects/-*/*.jsonl
+    """
+    candidates: list[Path] = []
+    for base in [
+        Path(runtime_dir) / "home" / ".claude" / "projects" if runtime_dir else None,
+        workspace / ".claude" / "projects",
+    ]:
+        if base is None or not base.exists():
+            continue
+        candidates.extend(base.glob("-*/*.jsonl"))
+    return candidates
+
+
+def _compute_pct_from_jsonl(jsonl_path: "Path", model: str = "") -> tuple[float, str]:
+    """Compute token usage pct from a session.jsonl file size.
+
+    Heuristic: 1 token ≈ 8 bytes. ~30% error bar.
+    Intended to catch egregious cases (75%+), not pixel-accurate.
+    """
+    size_bytes = jsonl_path.stat().st_size
+    max_tokens = _infer_max_tokens(model)
+    approx_tokens = size_bytes / _BYTES_PER_TOKEN
+    pct = min(1.0, approx_tokens / max_tokens)
+    return pct, "session_jsonl_size"
+
+
+def measure_token_usage_pct(
+    profile: "HarnessProfile",
+    seat: str,
+    *,
+    _session_jsonl_override: "Path | None" = None,
+    _model_override: str = "",
+) -> tuple[float | None, str]:
+    """Best-effort token usage for a seat's active CC session.
+
+    Sources tried in order:
+    1. CC_CONTEXT_USAGE_PCT env var (future CC feature)
+    2. session.jsonl size / (max_tokens * _BYTES_PER_TOKEN)
+    3. Fallback: (None, 'unknown')
+
+    Heuristic: 1 token ≈ 8 bytes (JSON overhead makes this a safe upper bound).
+    ~30% error bar — intended for egregious cases, not pixel-accurate accounting.
+
+    Args:
+        _session_jsonl_override: For testing only — skip path discovery, use this file.
+        _model_override: For testing only — override model for max_token inference.
+    """
+    import os as _os
+
+    # Source 1: env var (forward-compat: CC may expose this natively one day)
+    env_pct = _os.environ.get("CC_CONTEXT_USAGE_PCT", "").strip()
+    if env_pct:
+        try:
+            return (min(1.0, max(0.0, float(env_pct))), "cc_env")
+        except ValueError:  # silent-ok: malformed env var → fall through to next source
+            pass
+
+    # Source 2: session.jsonl size
+    try:
+        if _session_jsonl_override is not None:
+            jsonl = _session_jsonl_override
+            model = _model_override
+        else:
+            # Locate runtime_dir via session.toml
+            agents_root = Path(_os.environ.get("AGENTS_ROOT", str(_real_user_home() / ".agents")))
+            sessions_root = agents_root / "sessions"
+            session_toml_path = sessions_root / profile.project_name / seat / "session.toml"
+            runtime_dir = None
+            model = _model_override
+            if session_toml_path.exists():
+                session_data = load_toml(session_toml_path)
+                if session_data:
+                    runtime_dir = str(session_data.get("runtime_dir", "")).strip() or None
+                    if not model:
+                        model = str(session_data.get("model", "")).strip()
+
+            workspace = profile.workspace_for(seat)
+            candidates = _find_session_jsonls(runtime_dir, workspace)
+            if not candidates:
+                return (None, "unknown")
+            # Use the largest file (most active session)
+            jsonl = max(candidates, key=lambda p: p.stat().st_size)
+
+        pct, source = _compute_pct_from_jsonl(jsonl, model)
+        return (pct, source)
+    except Exception:
+        return (None, "unknown")
+
+
+def write_gstack_heartbeat_receipt(
+    profile: "HarnessProfile",
+    seat: str,
+    *,
+    status: str = "verified",
+    install_fingerprint: str = "",
+    manifest_fingerprint: str = "",
+    verification_method: str = "gstack-harness",
+    evidence: str = "",
+    verified_at: str | None = None,
+    _session_jsonl_override: "Path | None" = None,
+    _model_override: str = "",
+) -> None:
+    """Write HEARTBEAT_RECEIPT.toml v2 for *seat* with token-usage measurement.
+
+    Measurement failure never blocks the write — receipt is written with
+    token_usage_source='unknown' and token_usage_pct absent when None.
+    """
+    try:
+        pct, source = measure_token_usage_pct(
+            profile, seat,
+            _session_jsonl_override=_session_jsonl_override,
+            _model_override=_model_override,
+        )
+    except Exception:
+        pct, source = None, "unknown"
+    now = utc_now_iso()
+    receipt_path = profile.heartbeat_receipt_for(seat)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "version = 2",
+        f'seat_id = "{seat}"',
+        f'project = "{profile.project_name}"',
+        f'status = "{status}"',
+        f'verified_at = "{verified_at or now}"',
+    ]
+    if install_fingerprint:
+        lines.append(f'install_fingerprint = "{install_fingerprint}"')
+    if manifest_fingerprint:
+        lines.append(f'manifest_fingerprint = "{manifest_fingerprint}"')
+    if verification_method:
+        lines.append(f'verification_method = "{verification_method}"')
+    if evidence:
+        lines.append(f'evidence = "{evidence}"')
+    # Token fields — pct absent when unknown (readers default to None = no alert)
+    if pct is not None:
+        lines.append(f"token_usage_pct = {pct:.6f}")
+    lines.append(f'token_usage_source = "{source}"')
+    lines.append(f'token_usage_measured_at = "{now}"')
+    lines.append("")
+    receipt_path.write_text("\n".join(lines), encoding="utf-8")

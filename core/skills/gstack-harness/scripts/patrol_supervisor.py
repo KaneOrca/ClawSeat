@@ -13,6 +13,7 @@ from pathlib import Path
 from _common import (
     HarnessProfile,
     load_profile,
+    load_toml,
     notify,
     read_text,
     run_command,
@@ -389,6 +390,59 @@ def record_payload(profile: HarnessProfile, payload: str) -> None:
     path.write_text(f"{time.time()}\n{payload}\n", encoding="utf-8")
 
 
+_CONTEXT_THRESHOLD = 0.80
+
+
+def check_context_near_limit(profile: HarnessProfile) -> list[str]:
+    """Scan heartbeat receipts for seats approaching context limit.
+
+    Emits seat.context_near_limit events via state.db when pct >= 0.80.
+    Returns warning lines for the patrol payload (never raises).
+    """
+    warnings: list[str] = []
+    for seat in profile.seats:
+        receipt_path = profile.heartbeat_receipt_for(seat)
+        if not receipt_path.exists():
+            continue
+        receipt = load_toml(receipt_path)
+        if not receipt:
+            continue
+        raw_pct = receipt.get("token_usage_pct")
+        if raw_pct is None:
+            continue
+        try:
+            pct = float(raw_pct)
+        except (TypeError, ValueError):
+            continue
+        if pct < _CONTEXT_THRESHOLD:
+            continue
+        source = str(receipt.get("token_usage_source", "unknown"))
+        measured_at = str(receipt.get("token_usage_measured_at", ""))
+        try:
+            from core.lib.state import open_db, record_event  # noqa: PLC0415
+            with open_db() as conn:
+                record_event(
+                    conn,
+                    "seat.context_near_limit",
+                    profile.project_name,
+                    seat=seat,
+                    pct=pct,
+                    source=source,
+                    measured_at=measured_at,
+                    receipt_path=str(receipt_path),
+                )
+        except Exception as exc:
+            print(
+                f"warn: state.db unavailable for seat.context_near_limit event: {exc}",
+                file=sys.stderr,
+            )
+        pct_pct = int(pct * 100)
+        warnings.append(
+            f"- {seat} context 使用率约 {pct_pct}%（来源：{source}），接近上限。建议检查是否需要 /clear 或 swap session。"
+        )
+    return warnings
+
+
 def main() -> int:
     args = parse_args()
     profile = load_profile(args.profile)
@@ -396,6 +450,7 @@ def main() -> int:
     snapshots = parse_status(profile, lines)
     task_statuses = load_task_statuses(profile)
     learning_notes = collect_learning_notes(profile, snapshots, task_statuses)
+    context_warnings = check_context_near_limit(profile)
     reminders, notes = build_reminders(
         profile,
         snapshots,
@@ -404,6 +459,7 @@ def main() -> int:
         stalled_threshold=args.stalled_threshold_minutes,
     )
     notes = learning_notes + notes
+    reminders = context_warnings + reminders
     if not reminders:
         if notes:
             print("\n".join(notes))

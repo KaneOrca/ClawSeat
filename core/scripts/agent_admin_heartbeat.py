@@ -295,8 +295,9 @@ class HeartbeatHandlers:
         schedule: str = "",
     ) -> None:
         receipt_path = self.receipt_path(session)
+        now = datetime.now().isoformat(timespec="seconds")
         lines = [
-            "version = 1",
+            "version = 2",
             f"seat_id = {self.hooks.q(session.engineer_id)}",
             f"project = {self.hooks.q(session.project)}",
             f"session = {self.hooks.q(session.session)}",
@@ -304,7 +305,7 @@ class HeartbeatHandlers:
             f"manifest_path = {self.hooks.q(str(self.manifest_path(session)))}",
             f"install_fingerprint = {self.hooks.q(self.install_fingerprint(session, manifest))}",
             f"manifest_fingerprint = {self.hooks.q(self.manifest_fingerprint(manifest))}",
-            f"verified_at = {self.hooks.q(datetime.now().isoformat(timespec='seconds'))}",
+            f"verified_at = {self.hooks.q(now)}",
             f"verification_method = {self.hooks.q(verification_method)}",
         ]
         if job_id:
@@ -313,8 +314,41 @@ class HeartbeatHandlers:
             lines.append(f"schedule = {self.hooks.q(schedule)}")
         if evidence:
             lines.append(f"evidence = {self.hooks.q(evidence)}")
+        # C16: token usage measurement (best-effort; never fails the write)
+        pct, source = self._measure_token_usage(session)
+        if pct is not None:
+            lines.append(f"token_usage_pct = {pct:.6f}")
+        lines.append(f"token_usage_source = {self.hooks.q(source)}")
+        lines.append(f"token_usage_measured_at = {self.hooks.q(now)}")
         lines.append("")
         self.hooks.write_text(receipt_path, "\n".join(lines))
+
+    def _measure_token_usage(self, session: Any) -> tuple[float | None, str]:
+        """Best-effort token usage heuristic. Never raises."""
+        import os as _os
+        env_pct = _os.environ.get("CC_CONTEXT_USAGE_PCT", "").strip()
+        if env_pct:
+            try:
+                return (min(1.0, max(0.0, float(env_pct))), "cc_env")
+            except ValueError:
+                pass
+        try:
+            workspace = Path(getattr(session, "workspace", ""))
+            candidates: list[Path] = []
+            for base in [workspace / ".claude" / "projects"]:
+                if base.exists():
+                    candidates.extend(base.glob("-*/*.jsonl"))
+            if not candidates:
+                return (None, "unknown")
+            largest = max(candidates, key=lambda p: p.stat().st_size)
+            model = str(getattr(session, "model", "")).strip()
+            max_tok = 200_000
+            if "1m" in model.lower() and "opus" in model.lower():
+                max_tok = 1_000_000
+            pct = min(1.0, largest.stat().st_size / (max_tok * 8))
+            return (pct, "session_jsonl_size")
+        except Exception:
+            return (None, "unknown")
 
     def render_heartbeat_text(self, session: Any, project: Any, engineer: Any) -> str | None:
         # Heartbeat text rendering is project-adapter-specific.
