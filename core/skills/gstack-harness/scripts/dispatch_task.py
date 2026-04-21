@@ -15,6 +15,7 @@ if str(_core_lib) not in sys.path:
 from real_home import real_user_home
 
 from _common import (
+    add_notify_args,
     append_status_note,
     append_task_to_queue,
     assert_target_not_memory,
@@ -24,6 +25,7 @@ from _common import (
     legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
+    resolve_notify,
     stable_dispatch_nonce,
     upsert_tasks_row,
     utc_now_iso,
@@ -297,7 +299,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reply-to", help="Seat that should receive completion back from the target.")
     parser.add_argument("--notes", default="dispatched via gstack-harness", help="TASKS.md note.")
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
-    parser.add_argument("--skip-notify", action="store_true", help="Write docs but skip tmux notification.")
+    add_notify_args(parser)
     parser.add_argument(
         "--task-type",
         default="unspecified",
@@ -336,6 +338,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    do_notify = resolve_notify(args)
     role_hint: str | None = getattr(args, "target_role", None)
 
     # Load profile early when --target-role is used (need project_name for lookup).
@@ -428,7 +431,7 @@ def main() -> int:
         "notified_at": None,
         "notify_message": None,
     }
-    if not args.skip_notify:
+    if do_notify:
         message = build_notify_message(
             args.target,
             todo_path,

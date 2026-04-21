@@ -11,6 +11,7 @@ if str(_REPO_ROOT_DYN) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT_DYN))
 
 from dynamic_common import (
+    add_notify_args,
     append_status_note,
     assert_target_not_memory,
     build_notify_message,
@@ -18,6 +19,7 @@ from dynamic_common import (
     notify,
     preferred_planner_seat,
     require_success,
+    resolve_notify,
     utc_now_iso,
     write_json,
     write_todo,
@@ -75,12 +77,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reply-to", help="Seat that should receive completion back from the target.")
     parser.add_argument("--notes", default="dispatched via dynamic-roster harness", help="TASKS.md note.")
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
-    parser.add_argument("--skip-notify", action="store_true", help="Write docs but skip tmux notification.")
+    add_notify_args(parser)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    do_notify = resolve_notify(args)
     role_hint: str | None = getattr(args, "target_role", None)
 
     # Resolve --target-role via state.db (requires project_name from profile).
@@ -149,7 +152,7 @@ def main() -> int:
         "notified_at": None,
         "notify_message": None,
     }
-    if not args.skip_notify:
+    if do_notify:
         message = build_notify_message(
             profile.project_name,
             args.target,

@@ -11,6 +11,7 @@ if str(_REPO_ROOT_DYN) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT_DYN))
 
 from dynamic_common import (
+    add_notify_args,
     append_consumed_ack,
     build_completion_message,
     load_json,
@@ -18,6 +19,7 @@ from dynamic_common import (
     notify,
     preferred_planner_seat,
     require_success,
+    resolve_notify,
     utc_now_iso,
     write_delivery,
     write_json,
@@ -197,12 +199,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--user-summary", help="Short user-facing summary.")
     parser.add_argument("--next-action", help="Short frontstage instruction.")
     parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
-    parser.add_argument("--skip-notify", action="store_true", help="Write delivery but skip tmux notification.")
+    add_notify_args(parser)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    do_notify = resolve_notify(args)
     profile = load_profile(args.profile)
     target = args.target or preferred_planner_seat(profile)
     receipt_path = profile.handoff_path(args.task_id, args.source, target)
@@ -293,7 +296,7 @@ def main() -> int:
         )
         receipt["todo_path"] = str(frontstage_todo)
         receipt["assigned_at"] = utc_now_iso()
-    if not args.skip_notify:
+    if do_notify:
         message = build_completion_message(
             profile.project_name,
             args.task_id,

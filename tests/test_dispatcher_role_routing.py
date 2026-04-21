@@ -120,7 +120,7 @@ def _dispatch_cmd(profile: Path, target: str | None = None, target_role: str | N
         "--title", title,
         "--objective", "test objective",
         "--reply-to", "planner",
-        "--skip-notify",
+        "--no-notify",
     ]
     if target:
         cmd += ["--target", target]
@@ -140,7 +140,7 @@ def _complete_cmd(profile: Path, source: str, task_id: str,
         "--target", "planner",
         "--task-id", task_id,
         "--summary", "done",
-        "--skip-notify",
+        "--no-notify",
     ]
     merged_env = {**os.environ, **(env or {})}
     return subprocess.run(cmd, capture_output=True, text=True, env=merged_env)
@@ -473,7 +473,7 @@ def _dispatch_dynamic_cmd(profile: Path, target: str | None = None,
         "--task-id", task_id,
         "--title", "dynamic test task",
         "--objective", "test objective",
-        "--skip-notify",
+        "--no-notify",
     ]
     if target:
         cmd += ["--target", target]
@@ -493,7 +493,7 @@ def _complete_dynamic_cmd(profile: Path, source: str, task_id: str,
         "--target", "planner",
         "--task-id", task_id,
         "--summary", "done",
-        "--skip-notify",
+        "--no-notify",
     ]
     merged_env = {**os.environ, **(env or {})}
     return subprocess.run(cmd, capture_output=True, text=True, env=merged_env)

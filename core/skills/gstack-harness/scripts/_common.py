@@ -1031,3 +1031,43 @@ def assert_target_not_memory(target: str, caller_tool: str) -> None:
             file=_sys.stderr,
         )
         raise SystemExit(2)
+
+
+def add_notify_args(parser: "argparse.ArgumentParser") -> None:
+    """Add --notify / --no-notify / --skip-notify (deprecated) to *parser*.
+
+    C15: notify is default-ON. --no-notify opts out. --skip-notify is the
+    legacy alias kept for backwards compatibility (logs a deprecation warning).
+    Call this helper from both static and dynamic dispatch/handoff scripts so
+    the semantics stay in sync via BASE_COMMON re-export.
+    """
+    import argparse as _argparse  # noqa: F401 — only needed for the type hint above
+    notify_group = parser.add_mutually_exclusive_group()
+    notify_group.add_argument(
+        "--notify", action="store_true", default=None,
+        help="Send tmux notify to target after dispatch/completion (default).",
+    )
+    notify_group.add_argument(
+        "--no-notify", action="store_true",
+        help="Suppress tmux notify. Target must discover the task by reading its queue/DELIVERY.md.",
+    )
+    # Legacy alias — accepted but logs deprecation warning to stderr.
+    parser.add_argument(
+        "--skip-notify", action="store_true",
+        help="[deprecated] Use --no-notify. Kept for backwards compatibility.",
+    )
+
+
+def resolve_notify(args: "argparse.Namespace") -> bool:
+    """Resolve the effective notify flag from parsed args.
+
+    Returns True (notify) by default; False when --no-notify or --skip-notify given.
+    Prints a deprecation warning to stderr when --skip-notify is used.
+    """
+    import sys as _sys
+    do_notify = True
+    if getattr(args, "no_notify", False) or getattr(args, "skip_notify", False):
+        do_notify = False
+    if getattr(args, "skip_notify", False):
+        print("warn: --skip-notify is deprecated; use --no-notify", file=_sys.stderr)
+    return do_notify

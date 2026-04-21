@@ -16,6 +16,7 @@ if str(_core_lib) not in sys.path:
     sys.path.insert(0, str(_core_lib))
 
 from _common import (
+    add_notify_args,
     append_consumed_ack,
     append_task_to_queue,
     broadcast_feishu_group_message,
@@ -27,6 +28,7 @@ from _common import (
     legacy_feishu_group_broadcast_enabled,
     notify,
     require_success,
+    resolve_notify,
     send_feishu_user_message,
     stable_dispatch_nonce,
     utc_now_iso,
@@ -367,12 +369,13 @@ def parse_args() -> argparse.Namespace:
         help="Short frontstage instruction, especially when a user decision is needed.",
     )
     parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
-    parser.add_argument("--skip-notify", action="store_true", help="Write delivery but skip tmux notification.")
+    add_notify_args(parser)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    do_notify = resolve_notify(args)
     profile = load_profile(args.profile)
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
@@ -521,7 +524,7 @@ def main() -> int:
     # not real tmux seats — trying to notify them via send-and-verify.sh
     # fails with a bogus tmux session name.
     target_is_known_seat = args.target in (getattr(profile, "seats", None) or [])
-    if not target_is_known_seat and not args.skip_notify:
+    if not target_is_known_seat and do_notify:
         receipt["notify_skipped"] = "target_not_registered_seat"
         # Auditable: we KNOW we skipped; caller can inspect receipt JSON.
         print(
@@ -529,9 +532,9 @@ def main() -> int:
             "completion receipt written but no tmux/Feishu notification sent.",
             file=sys.stderr,
         )
-        args.skip_notify = True  # force-skip the branches below
+        do_notify = False
 
-    if not args.skip_notify:
+    if do_notify:
         message = build_completion_message(
             args.task_id,
             delivery_path,
@@ -652,7 +655,7 @@ def main() -> int:
                     "status": "skipped",
                     "reason": "legacy_group_broadcast_disabled",
                 }
-    if not args.skip_notify:
+    if do_notify:
         assert (
             receipt.get("notified_at")
             or receipt.get("notify_skipped")

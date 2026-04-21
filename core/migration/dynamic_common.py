@@ -118,6 +118,8 @@ class HarnessProfile:
 
 
 assert_target_not_memory = BASE_COMMON.assert_target_not_memory
+add_notify_args = BASE_COMMON.add_notify_args
+resolve_notify = BASE_COMMON.resolve_notify
 MEMORY_SEAT_NAME = BASE_COMMON.MEMORY_SEAT_NAME
 MEMORY_QUERY_POINTER = BASE_COMMON.MEMORY_QUERY_POINTER
 sanitize_name = BASE_COMMON.sanitize_name
