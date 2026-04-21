@@ -24,6 +24,7 @@ ENTRY_SKILLS = {
     "clawseat": REPO_ROOT / "core" / "skills" / "clawseat",
     "cs": REPO_ROOT / "core" / "skills" / "cs",
     "clawseat-install": REPO_ROOT / "core" / "skills" / "clawseat-install",
+    "clawseat-ancestor": REPO_ROOT / "core" / "skills" / "clawseat-ancestor",
 }
 
 

@@ -35,7 +35,7 @@ spec_documents:
 | Token | 成功判据 | 失败策略 |
 |-------|---------|---------|
 | `B1-read-brief` | YAML 解析成功 | 直接退出并通过其他通道告警 operator |
-| `B2-verify-or-launch-memory` | `tmux has-session -t =machine-memory-claude` rc=0（或我刚刚启动它后再次 rc=0） | 不存在时：从 `machine.toml.services.memory` 读 tool/auth/provider → `agent-launcher.sh --headless --session machine-memory-claude --tool <t> --auth <a>` → 30s 内再验；仍失败 → Feishu 告警，继续（见 6.3），**不阻塞 Phase-A** |
+| `B2-verify-or-launch-memory` | 使用 `tmux has-session -t 'machine-memory-claude'`，或 exact target `tmux has-session -t '=machine-memory-claude'`（注意要带引号），要求 rc=0（或我刚刚启动它后再次 rc=0） | 不存在时：从 `machine.toml.services.memory` 读 tool/auth/provider → `agent-launcher.sh --headless --session machine-memory-claude --tool <t> --auth <a>` → 30s 内再验；仍失败 → Feishu 告警，继续（见 6.3），**不阻塞 Phase-A** |
 | `B3-verify-openclaw-binding` | 租户 WORKSPACE_CONTRACT.toml 的 `project` 等于 brief 里的 project | Feishu 告警，**停止 Phase A** |
 | `B4-launch-pending-seats` | 对每个 seat：按 `sessions[]` 展开（fan-out 为 `parallel_instances` 个），每个 session 跑 `$CLAWSEAT_ROOT/core/launchers/agent-launcher.sh --headless --session <session> --tool <tool> --auth <auth_mode>`；30s 内通过 `tmux has-session` 检查变 alive | 每个 session 重试一次，仍失败标 `state=dead`，在 STATUS.md 记录，继续 |
 | `B5-verify-feishu-group-binding` | 读到 `~/.agents/tasks/<project>/PROJECT_BINDING.toml.feishu_group_id` 非空 | **halt Phase-A** + stderr 报错"launcher 应在启动 ancestor 前写入此字段；请重跑安装流程"。**不**向 operator prompt（违反 N1）|
@@ -51,8 +51,8 @@ spec_documents:
 
 **触发机制**：external launchd plist（模板 `core/templates/ancestor-patrol.plist.in`，由 launcher 在安装时落下），每 `checklist_phase_b_cadence_minutes` 分钟跑：
 
-```
-tmux send-keys -t =<project>-ancestor-<tool> "/patrol-tick" Enter
+```bash
+tmux send-keys -t '=<project>-ancestor-<tool>' "/patrol-tick" Enter
 ```
 
 我不跑 in-process `sleep`-loop；看到 `/patrol-tick` 标记时**在当前回合**执行一次 P1..P7，然后回到等待状态（由操作系统调度下一次）。每次巡检跑：
@@ -83,13 +83,13 @@ planner → ancestor** 链路到达我这里（我不直接接 operator）。收
 ### 4.2 Remove seat
 
 1. 校验 role 不是 ancestor（我自己不能移除）、不是 planner（最低可运行要求）
-2. `tmux kill-session -t =<session>` 干净关闭
+2. `tmux kill-session -t '<session>'` 干净关闭；若要 exact target，用 `tmux kill-session -t '=<session>'`
 3. `write_validated` 更新 profile：从 `seats` 删除
 4. 广播 `seat.removed`
 
 ### 4.3 Reconfigure seat（tool/auth/provider 变）
 
-1. `tmux kill-session -t =<session>`
+1. `tmux kill-session -t '<session>'`（或 exact target `tmux kill-session -t '=<session>'`）
 2. `write_validated` 写新 `seat_overrides.<role>`
 3. `agent-launcher.sh --headless --session <same>` 按新配置起
 4. 广播 `seat.reconfigured`

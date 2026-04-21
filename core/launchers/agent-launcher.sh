@@ -44,6 +44,7 @@ DRY_RUN="0"
 CLONE_FROM=""
 SKIP_ANCESTOR_PREFLIGHT="0"
 PROMPT_AUTH_TOOL=""        # set by --prompt-auth <tool>; triggers early dispatch
+CHECK_SECRETS_TOOL=""      # set by --check-secrets <tool> (needs --auth too)
 
 print_help() {
   cat <<'EOF'
@@ -84,6 +85,9 @@ while [[ $# -gt 0 ]]; do
     # picker for <tool> and print the user's chosen auth value to stdout.
     # Exits 0 on selection, 1 on cancel, 2 on bad tool name.
     --prompt-auth) PROMPT_AUTH_TOOL="$2"; shift 2 ;;
+    # Preflight hook: agent-launcher.sh --check-secrets <tool> --auth <mode>
+    # prints one JSON line saying whether the auth's secret file/key is ready.
+    --check-secrets) CHECK_SECRETS_TOOL="$2"; shift 2 ;;
     --help|-h) print_help; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -189,6 +193,7 @@ if [[ -n "$PROMPT_AUTH_TOOL" ]]; then
       ;;
   esac
 fi
+
 
 format_custom_choice_label() {
   local kind="$1"
@@ -570,6 +575,93 @@ for line in lines:
 raise SystemExit(1)
 PY
 }
+
+# ── --check-secrets dispatch ───────────────────────────────────────────
+# install_entrypoint preflight hook: given --check-secrets <tool> + --auth <mode>,
+# resolve the expected secret file and report its state as one JSON line on
+# stdout so Python callers can parse without shelling out to jq.
+#   exit 0 = secret file present + required key found (or inherently not needed)
+#   exit 1 = missing file or missing key (hint in payload)
+#   exit 2 = bad (tool, auth) combination or --auth missing
+if [[ -n "$CHECK_SECRETS_TOOL" ]]; then
+  if [[ -z "$AUTH_MODE" ]]; then
+    echo '{"status":"error","reason":"--check-secrets requires --auth <mode>"}' >&2
+    exit 2
+  fi
+  _cs_file=""
+  _cs_key=""
+  case "$CHECK_SECRETS_TOOL" in
+    claude)
+      case "$AUTH_MODE" in
+        oauth)
+          printf '{"status":"ok","note":"legacy keychain oauth; no secret file"}\n'
+          exit 0 ;;
+        oauth_token)
+          _cs_file="$REAL_HOME/.agents/.env.global"
+          _cs_key="CLAUDE_CODE_OAUTH_TOKEN" ;;
+        anthropic-console)
+          _cs_file="$REAL_HOME/.agents/secrets/claude/anthropic-console.env"
+          _cs_key="ANTHROPIC_API_KEY" ;;
+        minimax)
+          _cs_file="$REAL_HOME/.agent-runtime/secrets/claude/minimax.env"
+          _cs_key="ANTHROPIC_AUTH_TOKEN" ;;
+        xcode)
+          _cs_file="$REAL_HOME/.agent-runtime/secrets/claude/xcode.env"
+          _cs_key="ANTHROPIC_AUTH_TOKEN" ;;
+        custom)
+          printf '{"status":"ok","note":"custom auth — secret via --custom-env-file"}\n'
+          exit 0 ;;
+        *) echo "{\"status\":\"error\",\"reason\":\"unknown claude auth '$AUTH_MODE'\"}" >&2 ; exit 2 ;;
+      esac ;;
+    codex)
+      case "$AUTH_MODE" in
+        chatgpt)
+          printf '{"status":"ok","note":"codex chatgpt login uses ~/.codex (keychain); no file needed"}\n'
+          exit 0 ;;
+        xcode)
+          _cs_file="$REAL_HOME/.agent-runtime/secrets/codex/xcode.env"
+          _cs_key="OPENAI_API_KEY" ;;
+        custom)
+          printf '{"status":"ok","note":"custom auth — secret via --custom-env-file"}\n'
+          exit 0 ;;
+        *) echo "{\"status\":\"error\",\"reason\":\"unknown codex auth '$AUTH_MODE'\"}" >&2 ; exit 2 ;;
+      esac ;;
+    gemini)
+      case "$AUTH_MODE" in
+        oauth)
+          printf '{"status":"ok","note":"gemini google oauth uses ~/.gemini (keychain); no file needed"}\n'
+          exit 0 ;;
+        primary)
+          _cs_file="$REAL_HOME/.agent-runtime/secrets/gemini/primary.env"
+          _cs_key="GEMINI_API_KEY" ;;
+        custom)
+          printf '{"status":"ok","note":"custom auth — secret via --custom-env-file"}\n'
+          exit 0 ;;
+        *) echo "{\"status\":\"error\",\"reason\":\"unknown gemini auth '$AUTH_MODE'\"}" >&2 ; exit 2 ;;
+      esac ;;
+    *)
+      echo "{\"status\":\"error\",\"reason\":\"--check-secrets tool must be claude|codex|gemini, got '$CHECK_SECRETS_TOOL'\"}" >&2
+      exit 2 ;;
+  esac
+  if [[ ! -f "$_cs_file" ]]; then
+    if [[ "$CHECK_SECRETS_TOOL" = "claude" ]] && [[ "$AUTH_MODE" = "oauth_token" ]]; then
+      _hint="run: claude setup-token    # paste result into $_cs_file"
+    else
+      _hint="obtain the $_cs_key for $CHECK_SECRETS_TOOL/$AUTH_MODE and write it into $_cs_file"
+    fi
+    printf '{"status":"missing-file","file":"%s","key":"%s","hint":"%s"}\n' \
+      "$_cs_file" "$_cs_key" "$_hint"
+    exit 1
+  fi
+  if ! env_file_has_key "$_cs_file" "$_cs_key"; then
+    printf '{"status":"missing-key","file":"%s","key":"%s","hint":"add %s=... to %s"}\n' \
+      "$_cs_file" "$_cs_key" "$_cs_key" "$_cs_file"
+    exit 1
+  fi
+  printf '{"status":"ok","file":"%s","key":"%s"}\n' "$_cs_file" "$_cs_key"
+  exit 0
+fi
+
 
 prompt_custom_api_env() {
   local tool="$1"

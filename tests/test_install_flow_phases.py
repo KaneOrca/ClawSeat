@@ -191,7 +191,7 @@ def test_p0_3_scan_environment_credentials_exits_zero(tmp_path):
 def test_p0_4_install_with_memory_toml_is_valid_toml():
     """install-with-memory.toml must be parseable TOML."""
     import tomllib
-    profile_path = REPO / "examples" / "starter" / "profiles" / "install-with-memory.toml"
+    profile_path = REPO / "examples" / "starter" / "profiles" / "legacy" / "install-with-memory.toml"
     with profile_path.open("rb") as f:
         data = tomllib.load(f)
     assert data.get("heartbeat_transport") == "tmux"
@@ -202,7 +202,7 @@ def test_p0_4_install_with_memory_toml_is_valid_toml():
 def test_p0_4_install_openclaw_toml_is_valid_toml():
     """install-openclaw.toml must be parseable TOML."""
     import tomllib
-    profile_path = REPO / "examples" / "starter" / "profiles" / "install-openclaw.toml"
+    profile_path = REPO / "examples" / "starter" / "profiles" / "legacy" / "install-openclaw.toml"
     with profile_path.open("rb") as f:
         data = tomllib.load(f)
     assert data.get("heartbeat_transport") == "openclaw"
@@ -243,7 +243,7 @@ def test_p0_6_refresh_workspaces_help_exits_zero():
 def test_p0_6_refresh_workspaces_dry_run_exits_zero():
     """refresh_workspaces.py --dry-run on a fresh profile must exit 0."""
     import tomllib
-    profile_path = REPO / "examples" / "starter" / "profiles" / "install-with-memory.toml"
+    profile_path = REPO / "examples" / "starter" / "profiles" / "legacy" / "install-with-memory.toml"
     with profile_path.open("rb") as f:
         profile_data = tomllib.load(f)
     project_name = profile_data["project_name"]
@@ -269,27 +269,40 @@ def test_cs_init_help_exits_zero():
     assert r.returncode == 0, f"cs_init --help failed:\nSTDERR:{r.stderr}"
 
 
-def test_cs_init_refresh_profile_writes_toml(tmp_path):
-    """cs_init.py --refresh-profile writes install-with-memory.toml to DYNAMIC_PROFILE.
+def test_cs_init_v04_rejects_missing_or_v1_profile(tmp_path):
+    """v0.4: cs_init no longer writes profiles or spawns koder/memory tmux.
+    It only resumes existing v2 profiles; missing/v1 → exit 2 with a
+    pointer to install_entrypoint.py / migrate_profile_to_v2.py.
+    """
+    env = {
+        **_clean_env(),
+        "HOME": str(tmp_path),
+        "CLAWSEAT_REAL_HOME": str(tmp_path),
+    }
+    r = _run([
+        sys.executable,
+        str(REPO / "core" / "skills" / "clawseat-install" / "scripts" / "cs_init.py"),
+    ], env=env)
+    assert r.returncode == 2, (
+        f"expected exit 2 from v0.4 refusal, got {r.returncode}\n"
+        f"stdout:{r.stdout}\nstderr:{r.stderr}"
+    )
+    full = (r.stdout + r.stderr).lower()
+    assert "cs_init refuses" in full, f"missing refusal message; stderr was: {r.stderr}"
+    assert "install_entrypoint" in full or "migrate_profile_to_v2" in full
 
-    Note: cs_init.py hardcodes 'python3' in run_command calls (not sys.executable),
-    so preflight fails on systems where python3 is < 3.11. This test documents that
-    the profile IS written before preflight runs (ensure_profile is called first),
-    and that the preflight failure is surfaced as a clean RuntimeError exit, not a crash.
 
-    The python3 hardcoding is a known issue to address separately.
+def test_cs_init_v04_has_no_refresh_profile_flag():
+    """v0.4 removed the --refresh-profile flag (it was the v1 regenerator).
+    argparse must reject it loudly — not silently re-generate.
     """
     r = _run([
         sys.executable,
         str(REPO / "core" / "skills" / "clawseat-install" / "scripts" / "cs_init.py"),
         "--refresh-profile",
-    ], env={**_clean_env(), "HOME": str(tmp_path)})
-    # Profile is written to real home (via real_user_home()), not tmp HOME.
-    # Verify ensure_profile() at least produced the expected output message.
-    assert "profile_ready:" in r.stdout or "profile_reused:" in r.stdout, (
-        f"ensure_profile did not log profile_ready/reused:\nstdout:{r.stdout}\nstderr:{r.stderr}"
+    ])
+    assert r.returncode != 0
+    assert (
+        "unrecognized arguments" in r.stderr
+        or "unrecognized arguments" in r.stdout
     )
-    # preflight failure (python3 vs python3.11) is expected and surfaced cleanly.
-    # cs_init exits 1 but does NOT crash with an uncaught exception.
-    assert r.returncode == 1, f"expected exit 1 from preflight failure, got {r.returncode}"
-    assert "error: command failed" in r.stdout.lower() or "error:" in r.stderr.lower()

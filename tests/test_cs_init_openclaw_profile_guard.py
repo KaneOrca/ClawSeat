@@ -36,8 +36,8 @@ def _load_profile(profile_path: Path):
 
 
 # Canonical profile paths
-_INSTALL_WITH_MEMORY = _REPO / "examples" / "starter" / "profiles" / "install-with-memory.toml"
-_INSTALL_OPENCLAW = _REPO / "examples" / "starter" / "profiles" / "install-openclaw.toml"
+_INSTALL_WITH_MEMORY = _REPO / "examples" / "starter" / "profiles" / "legacy" / "install-with-memory.toml"
+_INSTALL_OPENCLAW = _REPO / "examples" / "starter" / "profiles" / "legacy" / "install-openclaw.toml"
 
 
 # ── install-with-memory.toml — pure tmux mode ─────────────────────────────────

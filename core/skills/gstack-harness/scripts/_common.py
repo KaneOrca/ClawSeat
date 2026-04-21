@@ -365,7 +365,11 @@ def load_profile(path: str | Path) -> HarnessProfile:
         dynamic = {}
     dynamic_enabled = bool(dynamic.get("enabled", False))
     session_root = expand_profile_value(str(dynamic.get("session_root", AGENTS_ROOT / "sessions")))
-    heartbeat_owner = str(data["heartbeat_owner"])
+    # v0.4 profiles drop heartbeat_* (migrate_profile_to_v2 §7). Default
+    # to "koder" / "planner" so legacy-guard logic in complete_handoff
+    # keeps working under v0.4 semantics (koder = frontstage,
+    # planner = active loop owner).
+    heartbeat_owner = str(data.get("heartbeat_owner", "koder"))
     heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
     if heartbeat_transport not in {"tmux", "openclaw"}:
         raise ValueError(
@@ -433,16 +437,21 @@ def load_profile(path: str | Path) -> HarnessProfile:
         tasks_doc=expand_profile_value(str(data["tasks_doc"])),
         status_doc=expand_profile_value(str(data["status_doc"])),
         send_script=expand_profile_value(str(data["send_script"])),
-        status_script=expand_profile_value(str(data["status_script"])),
-        patrol_script=expand_profile_value(str(data["patrol_script"])),
+        # v0.4 migration stripped these fields (see schema §7). Provide
+        # sane defaults so v2 profiles load cleanly:
+        #   active_loop_owner → "planner" (the only active seat in v0.4)
+        #   default_notify_target → "planner"
+        #   status_script / patrol_script / heartbeat_receipt → empty
+        status_script=expand_profile_value(str(data.get("status_script", ""))),
+        patrol_script=expand_profile_value(str(data.get("patrol_script", ""))),
         agent_admin=expand_profile_value(str(data["agent_admin"])),
         workspace_root=expand_profile_value(str(data["workspace_root"])),
         handoff_dir=expand_profile_value(str(data["handoff_dir"])),
         heartbeat_owner=heartbeat_owner,
         heartbeat_transport=heartbeat_transport,
-        active_loop_owner=str(data["active_loop_owner"]),
-        default_notify_target=str(data["default_notify_target"]),
-        heartbeat_receipt=expand_profile_value(str(data["heartbeat_receipt"])),
+        active_loop_owner=str(data.get("active_loop_owner", "planner")),
+        default_notify_target=str(data.get("default_notify_target", "planner")),
+        heartbeat_receipt=expand_profile_value(str(data.get("heartbeat_receipt", ""))),
         seats=seats,
         runtime_seats=runtime_seats,
         heartbeat_seats=[str(item) for item in data.get("heartbeat_seats", [])],

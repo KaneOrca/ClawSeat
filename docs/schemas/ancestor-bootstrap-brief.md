@@ -147,7 +147,7 @@ Each token has a fixed contract.
 | Token | Meaning | Success signal | Failure handling |
 |-------|---------|----------------|------------------|
 | `B1-read-brief` | Parse this file | YAML block parses cleanly | Abort with operator alert |
-| `B2-verify-or-launch-memory` | `tmux has-session -t =machine-memory-claude`; if absent, call `agent-launcher.sh --headless --session machine-memory-claude` using `machine.toml.services.memory` overrides; re-verify | rc=0 after (up to) one launch attempt | Feishu alert, continue (see 6.3 in responsibilities); do **not** halt Phase-A |
+| `B2-verify-or-launch-memory` | `tmux has-session -t 'machine-memory-claude'`; if you need exact-target syntax use `tmux has-session -t '=machine-memory-claude'` (quoted). If absent, call `agent-launcher.sh --headless --session machine-memory-claude` using `machine.toml.services.memory` overrides; re-verify | rc=0 after (up to) one launch attempt | Feishu alert, continue (see 6.3 in responsibilities); do **not** halt Phase-A |
 | `B3-verify-openclaw-binding` | Read tenant WORKSPACE_CONTRACT.toml, assert `.project == <project>` | match | Feishu alert, halt Phase A |
 | `B4-launch-pending-seats` | For each seat with `state=pending`, iterate `sessions[]` and call `agent-launcher.sh --headless --session <session>` per instance | every session transitions to alive within 30s | Retry once per session; then mark that instance `state=dead`, include in status |
 | `B5-verify-feishu-group-binding` | Read `~/.agents/tasks/<project>/PROJECT_BINDING.toml.feishu_group_id`; confirm non-empty | file exists + group id present | Halt Phase-A; stderr + Feishu (if any earlier binding) alert: "launcher must have written PROJECT_BINDING.toml.feishu_group_id before spawning ancestor; rerun installer" |
@@ -161,7 +161,7 @@ Each token has a fixed contract.
 Phase B is triggered by **external `launchd` plist** (template at
 `core/templates/ancestor-patrol.plist.in`, installed by the launcher).
 Every `checklist_phase_b_cadence_minutes` minutes, the plist runs
-`tmux send-keys -t =<project>-ancestor-claude "/patrol-tick" Enter` —
+`tmux send-keys -t '=<project>-ancestor-claude' "/patrol-tick" Enter` —
 ancestor skill recognizes the `/patrol-tick` marker and executes
 P1..P7 from the responsibility matrix §3.2 in that one turn. Phase B
 runs until the project is archived (ancestor never retires on its own).

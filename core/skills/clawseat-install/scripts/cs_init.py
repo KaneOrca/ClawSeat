@@ -1,4 +1,28 @@
 #!/usr/bin/env python3
+"""cs_init.py — v0.4 convenience resumer for the canonical `install` project.
+
+Historically this script bootstrapped install from a v1 profile template,
+writing memory/koder/planner/builder-1/reviewer-1 as tmux seats and
+explicitly starting koder before planner.
+
+Under v0.4 (docs/schemas/v0.4-layered-model.md) the ancestor seat owns
+project lifecycle (see docs/design/ancestor-responsibilities.md). `/cs`
+is now a thin resumer that only:
+
+  1. verifies the project has a v2 profile (refuses v1 + missing),
+  2. ensures the ancestor tmux session is alive, launching it via
+     core/launchers/agent-launcher.sh --headless if not,
+  3. exits — ancestor itself does Phase-A (memory check, seat spawn,
+     Feishu binding) and Phase-B (patrol).
+
+It does NOT:
+  - write any profile (v1 or v2),
+  - start koder / memory as tmux seats (v0.4 forbids both),
+  - start planner directly (ancestor does this in Phase-A B4).
+
+Fresh-install operators should use `install_entrypoint.py` instead.
+See core/skills/cs/SKILL.md for the full flow.
+"""
 from __future__ import annotations
 
 import argparse
@@ -7,214 +31,122 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-_core_path = str(REPO_ROOT / "core")
-_scripts_path = str(REPO_ROOT / "core" / "scripts")
-for _p in (_core_path, _scripts_path):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-from resolve import dynamic_profile_path as _dpp  # noqa: E402
-from lib.real_home import real_user_home  # noqa: E402
-
 try:
     import tomllib  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover
+except ImportError:
     import tomli as tomllib  # type: ignore[no-redef]
 
-from agent_admin_workspace import (  # noqa: E402
-    render_profile_preserving_operator_edits,
-    _serialize_profile_toml,
-)
+REPO_ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(REPO_ROOT / "core"))
+from lib.real_home import real_user_home  # noqa: E402
+from resolve import dynamic_profile_path  # noqa: E402
 
 PROJECT = "install"
-# install-with-memory.toml declares the `memory` seat required by the
-# canonical install flow (Phase 1). install.toml (legacy) omits memory
-# and is incompatible with the 6-phase overlay flow.
-PROFILE_TEMPLATE = REPO_ROOT / "examples" / "starter" / "profiles" / "install-with-memory.toml"
-DYNAMIC_PROFILE = _dpp(PROJECT)
-AGENT_ADMIN = REPO_ROOT / "core" / "scripts" / "agent_admin.py"
-PRECHECK = REPO_ROOT / "core" / "preflight.py"
-BOOTSTRAP = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "bootstrap_harness.py"
-START_SEAT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "start_seat.py"
-RENDER_CONSOLE = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "render_console.py"
-TASKS_ROOT = real_user_home() / ".agents" / "tasks" / PROJECT
-WORKSPACE_ROOT = real_user_home() / ".agents" / "workspaces" / PROJECT
+DYNAMIC_PROFILE = dynamic_profile_path(PROJECT)
+ANCESTOR_SESSION = f"{PROJECT}-ancestor-claude"
+LAUNCHER = REPO_ROOT / "core" / "launchers" / "agent-launcher.sh"
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Bootstrap or resume the canonical ClawSeat install project."
+def _refuse(reason: str, hint: str) -> "None":
+    sys.stderr.write(
+        f"cs_init refuses to resume: {reason}.\n\n"
+        f"cs_init is the v0.4 resumer for an EXISTING install project.\n"
+        f"It never writes profiles or spawns koder/memory as tmux seats.\n\n"
+        f"{hint}\n"
     )
-    parser.add_argument(
-        "--refresh-profile",
-        action="store_true",
-        help="Rewrite /tmp/install-profile-dynamic.toml from the shipped install profile.",
-    )
-    parser.add_argument(
-        "--skip-planner",
-        action="store_true",
-        help="Only prepare the install project and koder without launching planner.",
-    )
-    return parser.parse_args()
+    raise SystemExit(2)
 
 
-def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        env={**os.environ, "CLAWSEAT_ROOT": os.environ.get("CLAWSEAT_ROOT", str(REPO_ROOT))},
-    )
-    if result.returncode != 0:
-        if result.stdout.strip():
-            print(result.stdout.strip())
-        if result.stderr.strip():
-            print(result.stderr.strip(), file=sys.stderr)
-        raise RuntimeError(f"command failed ({result.returncode}): {' '.join(command)}")
-    if result.stdout.strip():
-        print(result.stdout.strip())
-    return result
-
-
-def ensure_profile(*, refresh: bool) -> Path:
-    if refresh or not DYNAMIC_PROFILE.exists():
-        template_text = PROFILE_TEMPLATE.read_text(encoding="utf-8")
-        fresh = tomllib.loads(template_text)
-        merged = render_profile_preserving_operator_edits(DYNAMIC_PROFILE, fresh)
-        DYNAMIC_PROFILE.parent.mkdir(parents=True, exist_ok=True)
-        DYNAMIC_PROFILE.write_text(_serialize_profile_toml(merged), encoding="utf-8")
-        print(f"profile_ready: {DYNAMIC_PROFILE} (source={PROFILE_TEMPLATE})")
-    else:
-        print(f"profile_reused: {DYNAMIC_PROFILE}")
+def _require_v2_profile() -> Path:
+    if not DYNAMIC_PROFILE.exists():
+        _refuse(
+            f"no profile at {DYNAMIC_PROFILE}",
+            "Fresh install → run:\n"
+            "  python3 -m core.tui.install_entrypoint --project install",
+        )
+    try:
+        parsed = tomllib.loads(DYNAMIC_PROFILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        _refuse(
+            f"profile at {DYNAMIC_PROFILE} is unparseable ({exc})",
+            "Repair the TOML manually or re-generate via install_entrypoint.py.",
+        )
+    if int(parsed.get("version", 0)) < 2:
+        _refuse(
+            f"profile at {DYNAMIC_PROFILE} is v{parsed.get('version')!r}, not v2",
+            "Migrate with:\n"
+            "  python3 core/scripts/migrate_profile_to_v2.py apply --project install",
+        )
     return DYNAMIC_PROFILE
 
 
-def parse_session_states() -> dict[str, str]:
-    result = subprocess.run(
-        [sys.executable, str(AGENT_ADMIN), "session", "status", "--project", PROJECT],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
+def _tmux_has_session(name: str) -> bool:
+    r = subprocess.run(
+        ["tmux", "has-session", "-t", f"={name}"],
+        capture_output=True, text=True, check=False,
     )
-    if result.returncode != 0:
-        return {}
-    states: dict[str, str] = {}
-    for raw_line in result.stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        parts = line.split()
-        if len(parts) >= 2:
-            states[parts[0]] = parts[-1]
-    return states
+    return r.returncode == 0
 
 
-def seat_running(states: dict[str, str], seat: str) -> bool:
-    prefix = f"{PROJECT}-{seat}-"
-    return any(name.startswith(prefix) and state == "running" for name, state in states.items())
+def _launch_ancestor(profile: Path) -> None:
+    # Read ancestor's auth_mode from profile so we spawn with the right secret.
+    parsed = tomllib.loads(profile.read_text(encoding="utf-8"))
+    overrides = parsed.get("seat_overrides", {}).get("ancestor", {})
+    tool = overrides.get("tool", "claude")
+    auth = overrides.get("auth_mode", "oauth_token")
+    if not LAUNCHER.is_file():
+        _refuse(
+            f"launcher missing at {LAUNCHER}",
+            "clawseat install looks incomplete — re-install the launchers module.",
+        )
+    cmd = [
+        str(LAUNCHER),
+        "--tool", tool, "--auth", auth,
+        "--session", ANCESTOR_SESSION,
+        "--dir", str(REPO_ROOT),
+        "--headless",
+    ]
+    print(f"launching ancestor: {' '.join(cmd)}")
+    r = subprocess.run(
+        cmd, cwd=str(REPO_ROOT),
+        env={**os.environ, "CLAWSEAT_ROOT": str(REPO_ROOT)},
+        text=True, capture_output=True, check=False,
+    )
+    if r.stdout.strip():
+        print(r.stdout.strip())
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr or "")
+        raise SystemExit(r.returncode)
 
 
 def main() -> int:
-    args = parse_args()
-    profile_path = ensure_profile(refresh=args.refresh_profile)
-    run_command([sys.executable, str(PRECHECK), PROJECT])
+    argparse.ArgumentParser(
+        description="v0.4 resumer for the canonical install project",
+    ).parse_args()
 
-    planner_workspace = WORKSPACE_ROOT / "planner"
-    koder_workspace = WORKSPACE_ROOT / "koder"
-    needs_bootstrap = (
-        not TASKS_ROOT.exists() or not koder_workspace.exists() or not planner_workspace.exists()
-    )
-    if needs_bootstrap:
-        print("bootstrap_mode: fresh_or_repair")
-        run_command(
-            [
-                sys.executable,
-                str(BOOTSTRAP),
-                "--profile",
-                str(profile_path),
-                "--project-name",
-                PROJECT,
-                "--start",
-            ]
-        )
-    else:
-        print("bootstrap_mode: resume_existing")
+    profile = _require_v2_profile()
+    print(f"profile_ok: {profile} (v2)")
 
-    states = parse_session_states()
-    if not seat_running(states, "koder"):
-        print("koder_state: starting")
-        run_command(
-            [
-                sys.executable,
-                str(START_SEAT),
-                "--profile",
-                str(profile_path),
-                "--seat",
-                "koder",
-            ]
-        )
-        states = parse_session_states()
-    else:
-        print("koder_state: already_running")
+    if _tmux_has_session(ANCESTOR_SESSION):
+        print(f"ancestor_state: already_alive ({ANCESTOR_SESSION})")
+        return 0
 
-    if args.skip_planner:
-        print("planner_state: skipped")
-    elif seat_running(states, "planner"):
-        print("planner_state: already_running")
-    else:
-        print("planner_state: starting")
-        run_command(
-            [
-                sys.executable,
-                str(START_SEAT),
-                "--profile",
-                str(profile_path),
-                "--seat",
-                "planner",
-                "--confirm-start",
-            ]
-        )
+    print(f"ancestor_state: absent — launching {ANCESTOR_SESSION}")
+    _launch_ancestor(profile)
 
-    run_command(
-        [
-            sys.executable,
-            str(RENDER_CONSOLE),
-            "--profile",
-            str(profile_path),
-        ]
+    if _tmux_has_session(ANCESTOR_SESSION):
+        print(f"ancestor_state: now_alive ({ANCESTOR_SESSION})")
+        print("\nancestor will run Phase-A checklist: memory verify, seat spawn, "
+              "Feishu binding, smoke dispatch — then enter Phase-B patrol.\n"
+              f"Monitor via: python3 core/scripts/iterm_panes_driver.py")
+        return 0
+
+    sys.stderr.write(
+        f"ancestor_state: still_absent after launch — check launcher logs. "
+        f"Session name expected: {ANCESTOR_SESSION}\n"
     )
-    print("feishu_followup_required:")
-    print(
-        f"- planner live 后，frontstage 应主动让用户把 main agent 拉进飞书群，并回报 group ID（无需 open_id）。"
-    )
-    print(
-        "- main agent 在群里保持 requireMention=true；项目面向前台的 koder 账号在群里默认设置 requireMention=false；只有显式部署的系统 seat（如 warden）才需要额外放开。"
-    )
-    print(
-        f"- 可用 `python3 {REPO_ROOT / 'core' / 'skills' / 'clawseat-install' / 'scripts' / 'find_feishu_group_ids.py'}` 查找已有 group ID。"
-    )
-    print(
-        "- 一旦用户提供 group ID，frontstage 必须先确认这是绑定当前项目、切换到已有项目，还是用于创建新项目。"
-    )
-    print(
-        "- 项目绑定确认后，frontstage 应立刻委派 planner 做群联调测试，提示用户“收到测试消息即可回复希望完成什么任务”，并并行拉起 reviewer。"
-    )
-    print(
-        "- 如果当前链路是测试、验证、smoke 或回归重任务，frontstage 应让 planner 额外拉起 qa-1；qa-1 不属于 /cs 首启固定名单。"
-    )
-    print(
-        "- 之后 planner 的 decision gate 与 closeout 应通过 `send_delegation_report.py` / `OC_DELEGATION_REPORT_V1` 回到同一个群；koder 在看到阶段收尾结果后，要先梳理 delivery trail 再更新项目文档。"
-    )
-    return 0
+    return 1
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except RuntimeError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+    raise SystemExit(main())
