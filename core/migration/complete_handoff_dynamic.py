@@ -5,6 +5,11 @@ import argparse
 from pathlib import Path
 import sys
 
+# Ensure repo root is on sys.path so core.lib.state is importable.
+_REPO_ROOT_DYN = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT_DYN) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_DYN))
+
 from dynamic_common import (
     append_consumed_ack,
     build_completion_message,
@@ -18,6 +23,24 @@ from dynamic_common import (
     write_json,
     write_todo,
 )
+
+
+def _write_completion_to_ledger(
+    *,
+    task_id: str,
+    project: str,
+    source: str,
+    disposition: str,
+) -> None:
+    """Record task completion in state.db. Defensive: never fails handoff."""
+    try:
+        from core.lib.state import open_db, mark_task_completed, record_event
+        with open_db() as conn:
+            mark_task_completed(conn, task_id, disposition=disposition)
+            record_event(conn, "task.completed", project,
+                         task_id=task_id, source=source, disposition=disposition)
+    except Exception as exc:
+        print(f"warn: state.db unavailable, skipping ledger write: {exc}", file=sys.stderr)
 
 
 VALID_VERDICTS = {
@@ -287,6 +310,12 @@ def main() -> int:
         seat=args.source,
         primary=receipt_path,
         payload=receipt,
+    )
+    _write_completion_to_ledger(
+        task_id=args.task_id,
+        project=profile.project_name,
+        source=args.source,
+        disposition=args.frontstage_disposition or "",
     )
     print(f"completed {args.task_id} -> {target}")
     print(f"delivery: {delivery_path}")

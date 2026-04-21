@@ -176,6 +176,24 @@ def _try_announce_planner_event(*, project: str, source: str, target: str, task_
     return result
 
 
+def _write_completion_to_ledger(
+    *,
+    task_id: str,
+    project: str,
+    source: str,
+    disposition: str,
+) -> None:
+    """Record task completion in state.db. Defensive: never fails handoff."""
+    try:
+        from core.lib.state import open_db, mark_task_completed, record_event
+        with open_db() as conn:
+            mark_task_completed(conn, task_id, disposition=disposition)
+            record_event(conn, "task.completed", project,
+                         task_id=task_id, source=source, disposition=disposition)
+    except Exception as exc:
+        print(f"warn: state.db unavailable, skipping ledger write: {exc}", file=sys.stderr)
+
+
 def _seat_fallback_path(profile: object, seat: str, filename: str) -> Path:
     return profile.workspace_for(seat) / filename  # type: ignore[attr-defined]
 
@@ -645,6 +663,12 @@ def main() -> int:
         seat=args.source,
         primary=receipt_path,
         payload=receipt,
+    )
+    _write_completion_to_ledger(
+        task_id=args.task_id,
+        project=profile.project_name,
+        source=args.source,
+        disposition=args.frontstage_disposition or "",
     )
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")
