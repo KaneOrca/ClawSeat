@@ -4,6 +4,7 @@ set -euo pipefail
 # Usage: ./send-and-verify.sh [--project <project>] <session> "<message>"
 # Exit codes: 0=sent, 1=param error/SESSION_NOT_FOUND/SESSION_DEAD/TMUX_MISSING,
 #             2=INPUT_REJECTED (control chars or oversized message, audit H3)
+#             3=PROJECT_REQUIRED (multi-project mode, no project scope given, audit C6)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -11,6 +12,46 @@ PROJECT=""; if [ "${1:-}" = "--project" ]; then PROJECT="${2:-}"; shift 2; fi
 SESSION="${1:-}"; MSG="${2:-}"
 if [ -z "$SESSION" ] || [ -z "$MSG" ]; then
   echo "Usage: send-and-verify.sh [--project <project>] <session> \"<message>\""; exit 1
+fi
+
+# ── C6: multi-project guardrail ──────────────────────────────────────
+# Without --project and without CLAWSEAT_PROJECT, `agentctl session-name`
+# picks *any* session with a matching seat id, so sending a reminder
+# for project install can silently land in cartooner's tmux window.
+# Guardrail: if >1 project has a PROJECT_BINDING.toml under
+# ~/.agents/tasks/*/PROJECT_BINDING.toml, demand an explicit scope.
+# Single-project setups (legacy or greenfield) are unaffected.
+# Escape hatch: CLAWSEAT_SEND_ALLOW_NO_PROJECT=1 restores the old behavior.
+if [ -z "$PROJECT" ] && [ -n "${CLAWSEAT_PROJECT:-}" ]; then
+  PROJECT="$CLAWSEAT_PROJECT"
+fi
+if [ -z "$PROJECT" ] && [ "${CLAWSEAT_SEND_ALLOW_NO_PROJECT:-0}" != "1" ]; then
+  # ${HOME:-} keeps `set -u` from tripping when callers (e.g. tests that
+  # scrub env) don't export HOME. Without a real or fake home, the
+  # guardrail cannot enumerate projects and no-ops.
+  TASKS_DIR="${CLAWSEAT_REAL_HOME:-${HOME:-}}/.agents/tasks"
+  # Enumerate projects that declared themselves via PROJECT_BINDING.toml.
+  # null-glob safe: if the pattern matches nothing, `set -- $pattern` expands
+  # to the literal pattern; guard with a direct file existence check.
+  project_count=0
+  if [ -d "$TASKS_DIR" ]; then
+    for binding in "$TASKS_DIR"/*/PROJECT_BINDING.toml; do
+      [ -f "$binding" ] && project_count=$((project_count + 1))
+    done
+  fi
+  if [ "$project_count" -gt 1 ]; then
+    echo "send-and-verify: PROJECT_REQUIRED" >&2
+    {
+      echo "  reason: multi_project_mode_no_scope"
+      echo "  tasks_dir: $TASKS_DIR"
+      echo "  bindings_found: $project_count"
+      echo "  session_requested: $SESSION"
+      echo "  fix: rerun with --project <name>, set CLAWSEAT_PROJECT=<name>,"
+      echo "       or set CLAWSEAT_SEND_ALLOW_NO_PROJECT=1 if you accept"
+      echo "       cross-project session resolution (discouraged)"
+    } >&2
+    exit 3
+  fi
 fi
 
 # — 输入校验 (audit H3) —

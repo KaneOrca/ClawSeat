@@ -471,8 +471,12 @@ def load_profile(path: str | Path) -> HarnessProfile:
 
 def notify(profile: HarnessProfile, target_seat: str, message: str) -> subprocess.CompletedProcess[str]:
     session_name = resolve_session_name(profile, target_seat)
+    # C6: always thread --project so multi-project installs don't let
+    # send-and-verify.sh fall through to agentctl's unscoped session-name
+    # lookup (which would pick any project with a matching seat id and
+    # silently deliver to the wrong tmux window).
     return run_command_with_env(
-        [str(profile.send_script), session_name, message],
+        [str(profile.send_script), "--project", profile.project_name, session_name, message],
         cwd=profile.repo_root,
         env={"HOME": str(AGENT_HOME)},
     )
