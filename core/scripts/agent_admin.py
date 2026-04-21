@@ -837,6 +837,7 @@ def cmd_project_bind(args: argparse.Namespace) -> int:
     from project_binding import (
         ProjectBindingError,
         bind_project,
+        fetch_chat_metadata,
         load_binding,
     )
 
@@ -844,9 +845,13 @@ def cmd_project_bind(args: argparse.Namespace) -> int:
         # Surface an existing binding before overwriting — helps catch
         # typos where the operator re-runs with the wrong group.
         existing = load_binding(args.project)
+        # Best-effort enrichment from lark-cli chat metadata.
+        group_name, group_external = fetch_chat_metadata(args.feishu_group)
         path = bind_project(
             project=args.project,
             feishu_group_id=args.feishu_group,
+            feishu_group_name=group_name,
+            feishu_external=group_external,
             feishu_bot_account=args.feishu_bot_account,
             require_mention=bool(args.require_mention),
             bound_by=args.bound_by,

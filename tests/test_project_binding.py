@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from pathlib import Path
 from unittest import mock
@@ -175,3 +176,97 @@ def test_feishu_strict_without_binding_still_errors(_isolated_home):
         feishu = _load_feishu()
         with pytest.raises(feishu.FeishuGroupResolutionError):
             feishu.resolve_feishu_group_strict("no-such-project")
+
+
+# ── R6-K2: feishu_group_name + feishu_external enrichment ─────────────
+
+
+_MOCK_CHATS_JSON = json.dumps({
+    "code": 0,
+    "data": {
+        "has_more": False,
+        "items": [
+            {
+                "chat_id": "oc_install99testgrp",
+                "name": "Install Squad",
+                "external": False,
+            },
+            {
+                "chat_id": "oc_othergroup9999",
+                "name": "Other Group",
+                "external": True,
+            },
+        ],
+    },
+})
+
+
+def test_bind_populates_feishu_group_metadata_from_lark_cli(_isolated_home):
+    """fetch_chat_metadata + bind_project write feishu_group_name and
+    feishu_external into PROJECT_BINDING.toml from mocked lark-cli output."""
+    pb = _load_pb()
+    with mock.patch("pwd.getpwuid") as m_pwd, \
+         mock.patch("project_binding.shutil.which", return_value="/usr/bin/lark-cli"), \
+         mock.patch("project_binding.subprocess.run") as m_run:
+        m_pwd.return_value = mock.Mock(pw_dir=str(_isolated_home))
+        m_run.return_value = mock.Mock(returncode=0, stdout=_MOCK_CHATS_JSON, stderr="")
+
+        group_name, group_external = pb.fetch_chat_metadata("oc_install99testgrp")
+        path = pb.bind_project(
+            project="install",
+            feishu_group_id="oc_install99testgrp",
+            feishu_group_name=group_name,
+            feishu_external=group_external,
+        )
+
+    assert group_name == "Install Squad"
+    assert group_external is False
+
+    binding = pb.load_binding("install")
+    assert binding is not None
+    assert binding.feishu_group_name == "Install Squad"
+    assert binding.feishu_external is False
+
+    toml_text = path.read_text()
+    assert 'feishu_group_name = "Install Squad"' in toml_text
+    assert "feishu_external = false" in toml_text
+
+
+def test_fetch_chat_metadata_returns_empty_when_lark_cli_missing(_isolated_home):
+    pb = _load_pb()
+    with mock.patch("project_binding.shutil.which", return_value=None):
+        name, external = pb.fetch_chat_metadata("oc_anythingxyz")
+    assert name == ""
+    assert external is False
+
+
+def test_fetch_chat_metadata_returns_empty_when_group_not_found(_isolated_home):
+    pb = _load_pb()
+    with mock.patch("project_binding.shutil.which", return_value="/usr/bin/lark-cli"), \
+         mock.patch("project_binding.subprocess.run") as m_run:
+        m_run.return_value = mock.Mock(returncode=0, stdout=_MOCK_CHATS_JSON, stderr="")
+        name, external = pb.fetch_chat_metadata("oc_doesnotexist000")
+    assert name == ""
+    assert external is False
+
+
+def test_bind_backward_compat_missing_new_fields(_isolated_home):
+    """Existing PROJECT_BINDING.toml without the new fields loads without error."""
+    pb = _load_pb()
+    target = _isolated_home / ".agents" / "tasks" / "legacy" / "PROJECT_BINDING.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        'version = 1\n'
+        'project = "legacy"\n'
+        'feishu_group_id = "oc_legacygroup1234"\n'
+        'feishu_bot_account = "koder"\n'
+        'require_mention = false\n'
+        'bound_at = "2026-01-01T00:00:00+00:00"\n',
+        encoding="utf-8",
+    )
+    with mock.patch("pwd.getpwuid") as m_pwd:
+        m_pwd.return_value = mock.Mock(pw_dir=str(_isolated_home))
+        binding = pb.load_binding("legacy")
+    assert binding is not None
+    assert binding.feishu_group_name == ""
+    assert binding.feishu_external is False

@@ -25,6 +25,8 @@ Schema (v1):
     version = 1
     project = "install"
     feishu_group_id = "oc_b0386423ec11582696a3079ab2ab89ba"
+    feishu_group_name = "ClawSeat Squad"   # enriched from lark-cli chats list
+    feishu_external = false                # cross-tenant flag from lark-cli
     feishu_bot_account = "koder"
     require_mention = false
     bound_at = "2026-04-21T16:45:16+00:00"
@@ -35,8 +37,11 @@ don't silently drop operator-authored metadata.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,6 +72,8 @@ class ProjectBindingError(ValueError):
 class ProjectBinding:
     project: str
     feishu_group_id: str
+    feishu_group_name: str = ""   # display name from lark-cli chats list
+    feishu_external: bool = False  # whether the chat spans multiple tenants
     feishu_bot_account: str = "koder"
     require_mention: bool = False
     bound_at: str = ""
@@ -80,6 +87,8 @@ class ProjectBinding:
             f"version = {self.version}",
             f'project = "{_escape(self.project)}"',
             f'feishu_group_id = "{_escape(self.feishu_group_id)}"',
+            f'feishu_group_name = "{_escape(self.feishu_group_name)}"',
+            f"feishu_external = {'true' if self.feishu_external else 'false'}",
             f'feishu_bot_account = "{_escape(self.feishu_bot_account)}"',
             f"require_mention = {'true' if self.require_mention else 'false'}",
             f'bound_at = "{_escape(self.bound_at)}"',
@@ -169,13 +178,15 @@ def load_binding(project: str, *, home: Path | None = None) -> ProjectBinding | 
         validate_feishu_group_id(group_id)
 
     known = {
-        "version", "project", "feishu_group_id", "feishu_bot_account",
-        "require_mention", "bound_at", "bound_by",
+        "version", "project", "feishu_group_id", "feishu_group_name", "feishu_external",
+        "feishu_bot_account", "require_mention", "bound_at", "bound_by",
     }
     extras = {k: v for k, v in raw.items() if k not in known}
     return ProjectBinding(
         project=validate_project_name(project),
         feishu_group_id=group_id,
+        feishu_group_name=str(raw.get("feishu_group_name", "")).strip(),
+        feishu_external=bool(raw.get("feishu_external", False)),
         feishu_bot_account=str(raw.get("feishu_bot_account", "koder")).strip() or "koder",
         require_mention=bool(raw.get("require_mention", False)),
         bound_at=str(raw.get("bound_at", "")).strip(),
@@ -216,6 +227,8 @@ def bind_project(
     *,
     project: str,
     feishu_group_id: str,
+    feishu_group_name: str = "",
+    feishu_external: bool = False,
     feishu_bot_account: str = "koder",
     require_mention: bool = False,
     bound_by: str = "",
@@ -225,11 +238,40 @@ def bind_project(
     binding = ProjectBinding(
         project=validate_project_name(project),
         feishu_group_id=validate_feishu_group_id(feishu_group_id),
+        feishu_group_name=feishu_group_name.strip(),
+        feishu_external=feishu_external,
         feishu_bot_account=feishu_bot_account.strip() or "koder",
         require_mention=require_mention,
         bound_by=bound_by.strip(),
     )
     return write_binding(binding, home=home)
+
+
+def fetch_chat_metadata(group_id: str) -> tuple[str, bool]:
+    """Call ``lark-cli im chats list`` and return ``(name, external)`` for group_id.
+
+    Returns ``("", False)`` when lark-cli is unavailable, auth fails, or the
+    group is not found — enrichment is best-effort and must never block bind.
+    """
+    lark_cli = shutil.which("lark-cli")
+    if not lark_cli:
+        return ("", False)
+    try:
+        result = subprocess.run(
+            [lark_cli, "im", "chats", "list", "--as", "user",
+             "--format", "json", "--page-all"],
+            capture_output=True, text=True, timeout=30,
+            env={**os.environ, "HOME": str(real_user_home())},
+        )
+        if result.returncode != 0:
+            return ("", False)
+        data = json.loads(result.stdout)
+        for item in data.get("data", {}).get("items", []):
+            if item.get("chat_id") == group_id:
+                return (str(item.get("name", "")).strip(), bool(item.get("external", False)))
+    except Exception:
+        return ("", False)
+    return ("", False)
 
 
 def list_bindings(*, home: Path | None = None) -> list[ProjectBinding]:
