@@ -483,6 +483,69 @@ lark-cli is sufficient for a one-line message send. The Python tooling
 
 ---
 
+## §3f — Profile regeneration discipline (C14)
+
+### Problem
+
+Bootstrap and reconfigure paths write the profile TOML from a hardcoded
+template. Any field the operator hand-edited is silently overwritten on
+the next regeneration — no warning, no diff, no preserve. This burned us
+twice: `feishu_group_id` (fixed in C2 by moving to `PROJECT_BINDING.toml`)
+and `heartbeat_transport = "openclaw"` (clobbered back to `"tmux"`,
+triggering a phantom tmux session the operator had to manually kill).
+
+### Solution
+
+`render_profile_preserving_operator_edits(target_path, fresh_payload, ...)` in
+`core/scripts/agent_admin_workspace.py` reads the existing profile (if any),
+and for every field in `PRESERVE_FIELDS` that the operator has set, uses the
+existing value instead of the fresh template value. It emits one `stderr`
+warning line per divergent field so the operator can see what was preserved.
+
+All profile write paths now go through this helper instead of a direct
+`write_text(template_text)`.
+
+### Preservation allowlist
+
+```python
+PRESERVE_FIELDS = (
+    "heartbeat_transport",  # "tmux" / "openclaw" — the regression source
+    "heartbeat_owner",
+    "seats",
+    "heartbeat_seats",
+    "default_start_seats",
+    "materialized_seats",
+    "runtime_seats",
+    "bootstrap_seats",
+    "active_loop_owner",
+    "default_notify_target",
+    "feishu_group_id",     # pre-C2 profiles only
+    "seat_roles",          # entire sub-dict
+    "seat_overrides",      # each nested sub-dict
+    "dynamic_roster",
+    "patrol",
+    "observability",
+)
+```
+
+Extra fields in the existing file (not known to the template) are also
+carried forward so future schema extensions don't silently disappear.
+
+### Escape hatch
+
+If an operator truly wants to reset to factory defaults: delete the profile
+file first, then run `cs init --refresh-profile`. With no existing file,
+the fresh template is written verbatim.
+
+### TOML serialization
+
+`_serialize_profile_toml(data)` provides a minimal stdlib-only TOML
+serializer for the profile schema (scalars, lists, nested tables up to two
+levels deep). Comments from the template are not preserved on re-write —
+this is an accepted trade-off since the runtime behavior is unchanged.
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.

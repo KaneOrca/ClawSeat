@@ -194,6 +194,17 @@ Still intentionally external:
 - the `openclaw` product repo
 - the `arena-pretext-ui` sample app repo
 
+## Hand-edited profile fields
+
+If you hand-edit a field in the preservation allowlist (e.g.
+`heartbeat_transport`, `seats`, `seat_overrides`, `seat_roles`,
+`dynamic_roster`), you own it. Bootstrap and reconfigure will preserve
+your value and emit a warning to stderr so you can see what was kept.
+
+Fields in the allowlist are never silently overwritten. If you want to
+fully reset to the factory template, delete the profile file first, then
+run `cs init --refresh-profile`.
+
 ## Path Templates
 
 Profile files in this repo may use two portable path forms:
