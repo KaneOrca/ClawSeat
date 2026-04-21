@@ -337,6 +337,73 @@ direct writes is a C11 follow-up.
 
 ---
 
+## §3d — Feishu Announcer: First Event-Bus Subscriber (C11)
+
+### Closing the C8 → C9 → C10 → C11 loop
+
+C8 built the `events` table. C9 wired `dispatch_task.py` and
+`complete_handoff.py` to write events directly. C10 added a passive watcher
+that re-ingests handoff JSONs via fingerprint deduplication. C11 closes the
+loop: `core/scripts/feishu_announcer.py` is the **first real subscriber** —
+it reads events and sends Feishu delegation-report envelopes automatically.
+
+Before C11, the planner was responsible for remembering to call
+`send_delegation_report.py` on every completion. That obligation caused two
+silent chain stalls (C8 and C9 closeouts were missed). C11 makes the
+notification path **event-driven**: any event of type `task.completed` or
+`chain.closeout` is picked up and announced, regardless of which code path
+wrote it.
+
+### feishu_sent column and retry semantics
+
+The `events` table gains a `feishu_sent TEXT` column (ISO8601 timestamp).
+
+| Value | Meaning |
+|---|---|
+| `NULL` | Pending — not yet sent, or send failed, will be retried |
+| ISO8601 string | Sent successfully at that UTC time |
+
+`open_db()` applies the migration (`ALTER TABLE events ADD COLUMN feishu_sent
+TEXT`) wrapped in `try/except` so re-opening is a no-op. A partial index
+`idx_events_feishu_pending ON events(type, feishu_sent) WHERE feishu_sent IS
+NULL` keeps the `SELECT` fast even as the events table grows.
+
+Key helpers in `core/lib/state.py`:
+- `list_unsent_feishu_events(conn, *, event_types, limit, project)` — returns
+  events ordered by `ts ASC` where `feishu_sent IS NULL` and `type IN (…)`.
+- `mark_feishu_sent(conn, event_id, ts)` — sets `feishu_sent` on success.
+
+### Announcer modes
+
+```
+feishu_announcer.py --once                    # process all pending, exit
+feishu_announcer.py --watch [--interval 60]   # loop until SIGINT
+feishu_announcer.py --dry-run                 # print envelopes, do not send
+feishu_announcer.py --project install         # scope to one project
+feishu_announcer.py --types task.completed,chain.closeout
+```
+
+On each cycle the announcer calls `_feishu.send_feishu_user_message` and:
+- On `status=sent` → calls `mark_feishu_sent`, increments sent count.
+- On `status=failed` or any exception → leaves `feishu_sent=NULL`, logs to
+  stderr, increments retrying count. The event will be retried on the next
+  cycle. The loop never crashes mid-batch.
+
+`SIGINT` is handled cleanly in `--watch` mode: the loop stops after the
+current cycle and prints a final tally.
+
+### Why direct send_delegation_report.py calls are NOT yet removed
+
+`dispatch_task.py` and `complete_handoff.py` still contain
+`_try_announce_planner_event()` helpers that call `send_delegation_report.py`
+directly. These are **not removed in C11** — the announcer needs to prove
+itself in the field first. Once C11 is stable and lark-cli auth is refreshed,
+those helpers will be removed in C11-v2. Until then, the direct calls act as a
+fallback and may produce duplicate Feishu messages (which is preferable to
+silent stalls).
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.
