@@ -824,6 +824,100 @@ def cmd_project_delete(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.project_delete(args)
 
 
+# ── C2: per-project binding SSOT ──────────────────────────────────────
+#
+# `agent_admin project bind --project X --group oc_...` writes
+# ~/.agents/tasks/X/PROJECT_BINDING.toml, the SSOT consumed by every
+# Feishu closeout path via resolve_feishu_group_strict(project). The
+# file is intentionally out-of-band from WORKSPACE_CONTRACT.toml so
+# bootstrap/reconfigure regenerations cannot wipe the binding.
+
+
+def cmd_project_bind(args: argparse.Namespace) -> int:
+    from project_binding import (
+        ProjectBindingError,
+        bind_project,
+        load_binding,
+    )
+
+    try:
+        # Surface an existing binding before overwriting — helps catch
+        # typos where the operator re-runs with the wrong group.
+        existing = load_binding(args.project)
+        path = bind_project(
+            project=args.project,
+            feishu_group_id=args.feishu_group,
+            feishu_bot_account=args.feishu_bot_account,
+            require_mention=bool(args.require_mention),
+            bound_by=args.bound_by,
+        )
+    except ProjectBindingError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    action = "updated" if existing is not None else "created"
+    previous = (
+        f" (was {existing.feishu_group_id})"
+        if existing is not None and existing.feishu_group_id != args.feishu_group
+        else ""
+    )
+    print(
+        f"project bind {action}: {args.project} -> {args.feishu_group}"
+        f"{previous} [{path}]"
+    )
+    return 0
+
+
+def cmd_project_binding_show(args: argparse.Namespace) -> int:
+    from project_binding import (
+        ProjectBindingError,
+        binding_path,
+        load_binding,
+    )
+
+    path = binding_path(args.project)
+    try:
+        binding = load_binding(args.project)
+    except ProjectBindingError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if binding is None:
+        print(f"no binding for project={args.project!r} (expected {path})")
+        return 1
+    print(f"path: {path}")
+    print(binding.as_toml().rstrip())
+    return 0
+
+
+def cmd_project_binding_list(args: argparse.Namespace) -> int:
+    from project_binding import list_bindings
+
+    bindings = list_bindings()
+    if not bindings:
+        print("no project bindings found under ~/.agents/tasks/")
+        return 0
+    width = max(len(b.project) for b in bindings)
+    for binding in bindings:
+        print(
+            f"{binding.project:<{width}}  {binding.feishu_group_id}  "
+            f"account={binding.feishu_bot_account}  "
+            f"require_mention={'true' if binding.require_mention else 'false'}"
+        )
+    return 0
+
+
+def cmd_project_unbind(args: argparse.Namespace) -> int:
+    from project_binding import binding_path
+
+    path = binding_path(args.project)
+    if not path.exists():
+        print(f"no binding to remove for project={args.project!r} (expected {path})")
+        return 1
+    path.unlink()
+    print(f"project unbind: removed {path}")
+    return 0
+
+
 def cmd_session_start_engineer(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_start_engineer(args)
 
@@ -1107,6 +1201,10 @@ PARSER_HOOKS = ParserHooks(
     cmd_project_bootstrap=cmd_project_bootstrap,
     cmd_project_delete=cmd_project_delete,
     cmd_project_layout_set=cmd_project_layout_set,
+    cmd_project_bind=cmd_project_bind,
+    cmd_project_binding_show=cmd_project_binding_show,
+    cmd_project_binding_list=cmd_project_binding_list,
+    cmd_project_unbind=cmd_project_unbind,
     cmd_session_start_engineer=cmd_session_start_engineer,
     cmd_session_batch_start_engineer=cmd_session_batch_start_engineer,
     cmd_session_provision_heartbeat=cmd_session_provision_heartbeat,

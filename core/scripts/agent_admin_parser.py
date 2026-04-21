@@ -27,6 +27,10 @@ class ParserHooks:
     cmd_project_bootstrap: Callable[[Any], int]
     cmd_project_delete: Callable[[Any], int]
     cmd_project_layout_set: Callable[[Any], int]
+    cmd_project_bind: Callable[[Any], int]
+    cmd_project_binding_show: Callable[[Any], int]
+    cmd_project_binding_list: Callable[[Any], int]
+    cmd_project_unbind: Callable[[Any], int]
     cmd_session_start_engineer: Callable[[Any], int]
     cmd_session_batch_start_engineer: Callable[[Any], int]
     cmd_session_provision_heartbeat: Callable[[Any], int]
@@ -166,6 +170,59 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_layout_nested.add_argument("--monitor-engineers")
     project_layout_nested.add_argument("--open-detail-windows", choices=["true", "false"])
     project_layout_nested.set_defaults(func=hooks.cmd_project_layout_set)
+
+    # C2: per-project binding SSOT — writes ~/.agents/tasks/<project>/PROJECT_BINDING.toml
+    project_bind_nested = project_sub.add_parser(
+        "bind",
+        help="Write per-project binding (Feishu group / bot account). See C2 guardrail.",
+    )
+    project_bind_nested.add_argument("--project", required=True)
+    project_bind_nested.add_argument(
+        "--feishu-group",
+        "--group",
+        dest="feishu_group",
+        required=True,
+        help="Feishu group id (must start with 'oc_').",
+    )
+    project_bind_nested.add_argument(
+        "--feishu-bot-account",
+        "--account",
+        dest="feishu_bot_account",
+        default="koder",
+        help="Feishu bot account name (default: koder).",
+    )
+    project_bind_nested.add_argument(
+        "--require-mention",
+        dest="require_mention",
+        action="store_true",
+        help="Gate bot responses on @mention for this group.",
+    )
+    project_bind_nested.add_argument(
+        "--bound-by",
+        default="",
+        help="Optional label of who/what wrote the binding.",
+    )
+    project_bind_nested.set_defaults(func=hooks.cmd_project_bind)
+
+    project_binding_show_nested = project_sub.add_parser(
+        "binding-show",
+        help="Print the binding file path and its contents for <project>.",
+    )
+    project_binding_show_nested.add_argument("project")
+    project_binding_show_nested.set_defaults(func=hooks.cmd_project_binding_show)
+
+    project_binding_list_nested = project_sub.add_parser(
+        "binding-list",
+        help="List every project that has a PROJECT_BINDING.toml.",
+    )
+    project_binding_list_nested.set_defaults(func=hooks.cmd_project_binding_list)
+
+    project_unbind_nested = project_sub.add_parser(
+        "unbind",
+        help="Delete the PROJECT_BINDING.toml for <project>.",
+    )
+    project_unbind_nested.add_argument("project")
+    project_unbind_nested.set_defaults(func=hooks.cmd_project_unbind)
 
     session = sub.add_parser("session")
     session_sub = session.add_subparsers(dest="session_command", required=True)
