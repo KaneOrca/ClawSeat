@@ -176,6 +176,92 @@ Still outside ClawSeat by design:
 - the full `cartooner` product source tree
 - the full `openclaw` product source tree
 
+## §3b — state.db: Single-Source-of-Truth Ledger (C8)
+
+### Why state.db
+
+Prior to C8, answering "where is seat X and what is it doing?" required grepping
+six separate artefacts: `session.toml`, `WORKSPACE_CONTRACT.toml`,
+`PROJECT_BINDING.toml`, `patrol/handoffs/*.json`, `openclaw.json`, and
+`~/.agents/sessions/…`. Four concrete pain points drove the consolidation:
+
+1. **Dispatcher blindness** — `dispatch_task.py` hardcodes `builder-1`; other
+   builder seats idle because no index exists of live seats and their load.
+2. **Silent chain stalls** — Feishu closeouts depend on planner remembering to
+   call `send_delegation_report.py`; a missed call stalls the chain silently.
+3. **Scattered state** — Six files, none authoritative, each requiring custom
+   regex to reconstruct seat status.
+4. **Manual deploy sync** — `~/.clawseat/` is an independent git clone; code
+   changes require a manual `git pull` on both sides to stay in sync.
+
+`state.db` is a single SQLite file at `~/.agents/state.db` that provides a
+derived, queryable view over all six artefacts. In C8 it is **read-only** from
+production paths; existing artefacts remain authoritative.
+
+### Schema (ER summary)
+
+```
+projects ──< seats ─< tasks
+                            \
+                             events (append-only log)
+
+projects  : name (PK), feishu_group_id, feishu_bot_account, repo_root,
+            heartbeat_owner, active_loop_owner, bound_at
+seats     : (project, seat_id) PK, role, tool, auth_mode, provider,
+            status, last_heartbeat, session_name, workspace
+tasks     : id PK, project, source, target, role_hint, status,
+            title, correlation_id, opened_at, closed_at, disposition
+events    : id AUTOINCREMENT, ts, type, project, payload_json
+```
+
+Indexes: `idx_seats_status(project, role, status)`,
+`idx_tasks_open(project, target, status)`, `idx_events_ts(ts)`.
+
+### Read/write flow
+
+```
+operator / C9 dispatcher
+        │
+        ▼
+core/lib/state.py  (stdlib sqlite3 — no ORM, no external deps)
+        │
+        ▼
+~/.agents/state.db  (WAL mode, foreign_keys=ON)
+```
+
+All public API functions accept a `conn: sqlite3.Connection` as their first
+argument for testability. `open_db(db_path=None)` auto-applies the schema on
+first call via `CREATE TABLE IF NOT EXISTS`; re-opening is a no-op.
+
+`seed_from_filesystem(home, *, conn)` reads the six legacy artefacts and
+populates the DB idempotently. It is safe to re-run at any time: `upsert_*`
+uses `INSERT … ON CONFLICT DO UPDATE`; `record_task_dispatched` uses
+`INSERT OR IGNORE` so completed tasks never lose their `disposition`.
+
+The operator CLI is `core/scripts/state_admin.py`:
+
+```bash
+state-admin seed                          # populate from filesystem
+state-admin show-seats [--project X]      # list seats
+state-admin show-tasks [--project X] [--status open]
+state-admin pick --project X --role builder
+state-admin recent-events [--limit 20]
+```
+
+### Forward roadmap
+
+- **C9** — dispatcher adds `--target-role` mode, uses `pick_least_busy_seat`
+  to route to the least-loaded live builder instead of hardcoding `builder-1`.
+- **C10** — events table gains a watcher that materialises closeouts and
+  notifications from events rather than ad-hoc writes.
+- **C11** — `feishu-announcer` subscribes to events, replaces manual
+  `send_delegation_report.py` calls.
+
+`pick_least_busy_seat` is already in the C8 API and covered by tests so that
+C9 can integrate it on day one with full test coverage in place.
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.
