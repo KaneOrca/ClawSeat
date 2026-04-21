@@ -8,6 +8,11 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
+
 # agent_admin_config lives in the same scripts directory.
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
@@ -759,3 +764,131 @@ def render_optional_skills_catalog(optional_skills: list[dict[str, object]]) -> 
             lines.append(f"- Use when: {when_to_use}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+# ---------------------------------------------------------------------------
+# C14 — Profile regeneration preserve logic
+# ---------------------------------------------------------------------------
+
+PRESERVE_FIELDS: tuple[str, ...] = (
+    "heartbeat_transport",
+    "heartbeat_owner",
+    "seats",
+    "heartbeat_seats",
+    "default_start_seats",
+    "materialized_seats",
+    "runtime_seats",
+    "bootstrap_seats",
+    "active_loop_owner",
+    "default_notify_target",
+    "feishu_group_id",
+    "seat_roles",
+    "seat_overrides",
+    "dynamic_roster",
+    "patrol",
+    "observability",
+)
+
+
+def _toml_val(v: Any) -> str:
+    """Serialize a single TOML value (scalar or list of scalars)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, str):
+        escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(v, list):
+        items = ", ".join(_toml_val(item) for item in v)
+        return f"[{items}]"
+    raise ValueError(f"unsupported TOML value type {type(v).__name__} for value {v!r}")
+
+
+def _serialize_profile_toml(data: dict[str, Any]) -> str:
+    """Serialize a profile dict to TOML text.
+
+    Handles: top-level scalars/lists, nested tables ([section]),
+    and doubly-nested tables ([section.subsection]).
+    """
+    lines: list[str] = []
+
+    # Top-level scalars and lists first (in insertion order)
+    for key, val in data.items():
+        if not isinstance(val, dict):
+            lines.append(f"{key} = {_toml_val(val)}")
+
+    # Top-level tables
+    for key, val in data.items():
+        if not isinstance(val, dict):
+            continue
+        lines.append("")
+        lines.append(f"[{key}]")
+        # Scalars / lists within this table
+        for subkey, subval in val.items():
+            if not isinstance(subval, dict):
+                lines.append(f"{subkey} = {_toml_val(subval)}")
+        # Sub-tables (e.g. seat_overrides.planner)
+        for subkey, subval in val.items():
+            if isinstance(subval, dict):
+                lines.append("")
+                lines.append(f"[{key}.{subkey}]")
+                for k2, v2 in subval.items():
+                    lines.append(f"{k2} = {_toml_val(v2)}")
+
+    return "\n".join(lines) + "\n"
+
+
+def render_profile_preserving_operator_edits(
+    target_path: Path,
+    fresh_payload: dict[str, Any],
+    *,
+    preserve_fields: tuple[str, ...] = PRESERVE_FIELDS,
+) -> dict[str, Any]:
+    """Merge fresh_payload with operator-set values from target_path.
+
+    If target_path exists, read it and for every key in preserve_fields
+    that's present in the existing file, use the existing value.
+    Fields not in preserve_fields get fresh_payload's value.
+    Extra fields in the existing file (unknown to the template) are also
+    carried forward so future schema extensions don't silently disappear.
+
+    Emits one stderr warning line per preserved field where the fresh
+    payload differs from the existing value.
+    """
+    merged: dict[str, Any] = dict(fresh_payload)
+
+    if not target_path.exists():
+        return merged
+
+    try:
+        existing_text = target_path.read_text(encoding="utf-8")
+        existing = tomllib.loads(existing_text)
+    except Exception as exc:
+        print(
+            f"WARNING [C14]: could not parse existing profile {target_path}: {exc}; "
+            "using fresh payload without preservation.",
+            file=sys.stderr,
+        )
+        return merged
+
+    # Preserve fields from allowlist (with warning on divergence)
+    for field in preserve_fields:
+        if field not in existing:
+            continue
+        existing_val = existing[field]
+        fresh_val = fresh_payload.get(field)
+        if fresh_val is not None and fresh_val != existing_val:
+            print(
+                f"WARNING [C14]: preserving operator-set '{field}' = {existing_val!r} "
+                f"(fresh payload had {fresh_val!r})",
+                file=sys.stderr,
+            )
+        merged[field] = existing_val
+
+    # Carry forward extra/unknown fields not in the fresh payload at all
+    for field, val in existing.items():
+        if field not in merged:
+            merged[field] = val
+
+    return merged
