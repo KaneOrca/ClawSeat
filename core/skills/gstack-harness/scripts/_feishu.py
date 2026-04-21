@@ -224,58 +224,160 @@ def _project_contract_paths(project: str) -> list[Path]:
     return candidates
 
 
-def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
-    """Resolve the feishu group ID for this project.
+def _project_binding_path(project: str) -> Path:
+    """Location of the per-project Feishu binding SSOT (C2).
 
-    Priority:
-    1. Env var override (CLAWSEAT_FEISHU_GROUP_ID / OPENCLAW_FEISHU_GROUP_ID)
-    2. Project WORKSPACE_CONTRACT.toml feishu_group_id field
-    3. OpenClaw config (fallback, may return wrong group for multi-project setups)
+    `~/.agents/tasks/<project>/PROJECT_BINDING.toml` holds:
+        project = "<name>"
+        feishu_group_id = "oc_..."
+        feishu_bot_account = "koder"
+        bound_at = "<ISO8601>"
+
+    When the file exists, it ranks BELOW the env override and ABOVE the
+    legacy WORKSPACE_CONTRACT.toml field.
     """
-    # 1. Env var override
-    override = (
-        os.environ.get("CLAWSEAT_FEISHU_GROUP_ID")
-        or os.environ.get("OPENCLAW_FEISHU_GROUP_ID")
-    )
-    if override:
-        resolved = override.strip()
-        if resolved and _reject_invalid_feishu_group_id(
-            resolved, source="CLAWSEAT_FEISHU_GROUP_ID / OPENCLAW_FEISHU_GROUP_ID env var"
-        ):
-            return resolved
+    return _real_user_home() / ".agents" / "tasks" / project / "PROJECT_BINDING.toml"
 
-    # 2. Project contract binding (SSOT for per-project group).
-    # Resolve against the operator's REAL home, not Path.home() — when a
-    # seat runs inside a sandbox HOME (ClawSeat runtime identity), Path.home()
-    # points at an empty sandbox tree and every project contract path below
-    # would miss, silently routing planner→frontstage complete_handoff through
-    # tmux instead of Feishu.
-    if project:
-        for cp in _project_contract_paths(project):
-            if cp.exists():
-                contract = load_toml(cp)
-                if contract:
-                    gid = str(contract.get("feishu_group_id", "")).strip()
-                    if gid and _reject_invalid_feishu_group_id(
-                        gid, source=f"WORKSPACE_CONTRACT.toml at {cp}"
-                    ):
-                        return gid
 
-    # 3. OpenClaw config fallback (may return wrong group in multi-project).
-    # OPENCLAW_CONFIG_PATH is derived from OPENCLAW_HOME which respects
-    # CLAWSEAT_REAL_HOME / pwd resolution where relevant. But in a sandbox
-    # HOME the default resolves under the sandbox too — force real home here.
-    config_path = _real_user_home() / ".openclaw" / "openclaw.json"
-    if not config_path.exists():
-        config_path = OPENCLAW_CONFIG_PATH
-    config = load_json(config_path) or {}
-    group_ids = collect_feishu_group_ids_from_config(config)
-    if group_ids:
-        return group_ids[0]
-    group_ids = collect_feishu_group_ids_from_sessions()
-    if group_ids:
-        return group_ids[0]
+# ── Strict resolver (C1): never guess, never silently fall back ──────
+
+
+class FeishuGroupResolutionError(RuntimeError):
+    """Raised when the per-project Feishu group cannot be resolved strictly.
+
+    C1 guardrail: in multi-project mode the single biggest danger is *not*
+    "failed to send" but "guessed the wrong group and sent successfully".
+    Callers that need a group MUST either pass one explicitly or get a
+    hard failure here — never a silent fallback to the first group in
+    openclaw.json or the first seen group in sessions.json.
+    """
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        project: str | None = None,
+        attempted_sources: list[str] | None = None,
+    ) -> None:
+        self.reason = reason
+        self.project = project
+        self.attempted_sources = list(attempted_sources or [])
+        super().__init__(reason)
+
+
+def _env_override_group_id() -> tuple[str, str] | None:
+    """Return (group_id, source) for a well-formed env override, else None."""
+    for env_name in ("CLAWSEAT_FEISHU_GROUP_ID", "OPENCLAW_FEISHU_GROUP_ID"):
+        raw = os.environ.get(env_name)
+        if not raw:
+            continue
+        resolved = raw.strip()
+        if not resolved:
+            continue
+        if _reject_invalid_feishu_group_id(resolved, source=f"{env_name} env var"):
+            return resolved, f"env:{env_name}"
     return None
+
+
+def resolve_feishu_group_strict(project: str) -> tuple[str, str]:
+    """Strictly resolve ``project`` → ``(group_id, source)``.
+
+    Priority (no fallbacks beyond these):
+      1. Env override: CLAWSEAT_FEISHU_GROUP_ID / OPENCLAW_FEISHU_GROUP_ID
+      2. ``~/.agents/tasks/<project>/PROJECT_BINDING.toml`` (C2 SSOT)
+      3. Project WORKSPACE_CONTRACT.toml ``feishu_group_id`` field
+
+    Raises :class:`FeishuGroupResolutionError` when ``project`` is falsy
+    or when no project-scoped source yields a valid group id. This is the
+    P0 contract: **no global openclaw.json[0] / sessions.json[0] fallback**.
+    """
+    attempted: list[str] = []
+
+    if not project or not str(project).strip():
+        raise FeishuGroupResolutionError(
+            "project is required for Feishu group resolution",
+            project=project,
+            attempted_sources=attempted,
+        )
+    project = project.strip()
+
+    env_hit = _env_override_group_id()
+    attempted.append("env:CLAWSEAT_FEISHU_GROUP_ID|OPENCLAW_FEISHU_GROUP_ID")
+    if env_hit is not None:
+        return env_hit
+
+    binding_path = _project_binding_path(project)
+    attempted.append(f"project_binding:{binding_path}")
+    if binding_path.exists():
+        binding = load_toml(binding_path) or {}
+        binding_project = str(binding.get("project", "")).strip()
+        if binding_project and binding_project != project:
+            # Mismatched binding file — refuse rather than pick something.
+            raise FeishuGroupResolutionError(
+                f"PROJECT_BINDING.toml at {binding_path} declares project="
+                f"{binding_project!r} but caller requested {project!r}",
+                project=project,
+                attempted_sources=attempted,
+            )
+        gid = str(binding.get("feishu_group_id", "")).strip()
+        if gid and _reject_invalid_feishu_group_id(
+            gid, source=f"PROJECT_BINDING.toml at {binding_path}"
+        ):
+            return gid, f"project_binding:{binding_path}"
+
+    for cp in _project_contract_paths(project):
+        attempted.append(f"workspace_contract:{cp}")
+        if cp.exists():
+            contract = load_toml(cp) or {}
+            gid = str(contract.get("feishu_group_id", "")).strip()
+            if gid and _reject_invalid_feishu_group_id(
+                gid, source=f"WORKSPACE_CONTRACT.toml at {cp}"
+            ):
+                return gid, f"workspace_contract:{cp}"
+
+    raise FeishuGroupResolutionError(
+        f"no feishu_group_id binding for project={project!r}; "
+        "set CLAWSEAT_FEISHU_GROUP_ID, create "
+        f"{_project_binding_path(project)}, or add feishu_group_id to "
+        "the project's WORKSPACE_CONTRACT.toml. "
+        "No global openclaw.json / sessions.json fallback is consulted "
+        "(C1 guardrail: refuse to guess).",
+        project=project,
+        attempted_sources=attempted,
+    )
+
+
+def resolve_primary_feishu_group_id(project: str | None = None) -> str | None:
+    """Backwards-compatible resolver returning ``None`` on failure.
+
+    Kept so existing call-sites and tests that expected ``None`` for
+    "unresolved" keep working. Internally delegates to
+    :func:`resolve_feishu_group_strict` and swallows
+    :class:`FeishuGroupResolutionError`.
+
+    **Crucially, this function no longer falls back to openclaw.json's
+    first group or sessions.json's first group** — those paths were the
+    source of cross-project group confusion (C1 guardrail).
+    """
+    if project is None or not str(project).strip():
+        # Warn loudly: callers that hit this path would previously have
+        # picked the first group out of global config — a silent guess.
+        env_hit = _env_override_group_id()
+        if env_hit is not None:
+            return env_hit[0]
+        import sys as _sys
+        print(
+            "warn: resolve_primary_feishu_group_id called without a project "
+            "argument; returning None instead of guessing from openclaw.json "
+            "(C1 guardrail). Pass project=... or use resolve_feishu_group_strict().",
+            file=_sys.stderr,
+        )
+        return None
+    try:
+        group_id, _source = resolve_feishu_group_strict(project)
+    except FeishuGroupResolutionError:
+        return None
+    return group_id
 
 
 # ── Nonce & report building ──────────────────────────────────────────
@@ -434,15 +536,27 @@ def send_feishu_user_message(
     project: str | None = None,
     pre_check_auth: bool = False,
 ) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id(project=project) or "").strip()
-    payload: dict[str, str] = {
-        "status": "skipped",
-        "reason": "no_group_id_found",
-        "message": message.strip(),
-    }
+    payload: dict[str, str] = {"message": message.strip()}
+    resolved_source = "explicit:group_id" if group_id else ""
+    resolved_group_id = (group_id or "").strip()
     if not resolved_group_id:
-        return payload
+        # No explicit override — require a project and resolve strictly.
+        try:
+            resolved_group_id, resolved_source = resolve_feishu_group_strict(project or "")
+        except FeishuGroupResolutionError as exc:
+            payload["status"] = "failed"
+            payload["reason"] = "no_project_binding"
+            payload["detail"] = str(exc)
+            payload["project"] = str(project or "")
+            payload["attempted_sources"] = "|".join(exc.attempted_sources)
+            payload["fix"] = (
+                "pass --chat-id, set CLAWSEAT_FEISHU_GROUP_ID, or create "
+                "~/.agents/tasks/<project>/PROJECT_BINDING.toml "
+                "(C1 guardrail — refuse to guess group)"
+            )
+            return payload
     payload["group_id"] = resolved_group_id
+    payload["group_source"] = resolved_source
     lark_cli = shutil.which("lark-cli")
     if not lark_cli:
         payload["reason"] = "lark_cli_missing"
@@ -493,15 +607,26 @@ def broadcast_feishu_group_message(
     group_id: str | None = None,
     project: str | None = None,
 ) -> dict[str, str]:
-    resolved_group_id = (group_id or resolve_primary_feishu_group_id(project=project) or "").strip()
-    payload: dict[str, str] = {
-        "status": "skipped",
-        "reason": "no_group_id_found",
-        "message": message.strip(),
-    }
+    payload: dict[str, str] = {"message": message.strip()}
+    resolved_source = "explicit:group_id" if group_id else ""
+    resolved_group_id = (group_id or "").strip()
     if not resolved_group_id:
-        return payload
+        try:
+            resolved_group_id, resolved_source = resolve_feishu_group_strict(project or "")
+        except FeishuGroupResolutionError as exc:
+            payload["status"] = "failed"
+            payload["reason"] = "no_project_binding"
+            payload["detail"] = str(exc)
+            payload["project"] = str(project or "")
+            payload["attempted_sources"] = "|".join(exc.attempted_sources)
+            payload["fix"] = (
+                "create ~/.agents/tasks/<project>/PROJECT_BINDING.toml or "
+                "add feishu_group_id to WORKSPACE_CONTRACT.toml "
+                "(C1 guardrail — refuse to guess group)"
+            )
+            return payload
     payload["group_id"] = resolved_group_id
+    payload["group_source"] = resolved_source
     if not legacy_feishu_group_broadcast_enabled():
         payload["reason"] = "legacy_group_broadcast_disabled"
         return payload

@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from _common import (
+    FeishuGroupResolutionError,
     build_delegation_report_text,
     check_feishu_auth,
+    resolve_feishu_group_strict,
     send_feishu_user_message,
     stable_dispatch_nonce,
 )
@@ -109,13 +112,34 @@ def main() -> int:
         summary=args.summary,
         human_summary=args.human_summary,
     )
+    # Resolve the target group up-front so dry-run AND real sends agree on
+    # a single visible destination. Without --chat-id we do strict
+    # resolution and refuse to continue on miss (C1 guardrail: never guess).
+    if args.chat_id:
+        resolved_group_id = args.chat_id.strip()
+        resolved_source = "explicit:--chat-id"
+    else:
+        try:
+            resolved_group_id, resolved_source = resolve_feishu_group_strict(args.project)
+        except FeishuGroupResolutionError as exc:
+            print(
+                f"error: cannot resolve Feishu group for project={args.project!r}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+
+    print(
+        f"delegation-report: project={args.project} -> group={resolved_group_id} "
+        f"(source={resolved_source})",
+        file=sys.stderr,
+    )
     if args.dry_run:
         print(message)
         return 0
 
     result = send_feishu_user_message(
         message,
-        group_id=args.chat_id,
+        group_id=resolved_group_id,
         project=args.project,
         pre_check_auth=True,
     )

@@ -258,9 +258,13 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
     # ── Subprocess env ──────────────────────────────────────────────────────────
     env = dict(_os.environ)
     env["PATH"] = f"{tmp_path}:{env.get('PATH', '')}"
-    # CLAWSEAT_FEISHU_GROUP_ID makes resolve_primary_feishu_group_id() return a
-    # known value without reading real ~/.openclaw or WORKSPACE_CONTRACT.toml files.
-    env["CLAWSEAT_FEISHU_GROUP_ID"] = "test-group-e2e-stub"
+    # CLAWSEAT_FEISHU_GROUP_ID makes resolve_feishu_group_strict() return a
+    # known value without reading real ~/.openclaw or WORKSPACE_CONTRACT.toml
+    # files. Must match the canonical `oc_<alphanum>` shape — the pre-C1
+    # test passed "test-group-e2e-stub" and accidentally leaked the real
+    # developer's ~/.openclaw/openclaw.json first group via the now-dead
+    # global-fallback path (audit C1).
+    env["CLAWSEAT_FEISHU_GROUP_ID"] = "oc_e2eteststubid1"
     env["OPENCLAW_HOME"] = str(tmp_path)  # cwd for lark-cli call must exist
     env.pop("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS", None)  # use config gate, not env override
 
