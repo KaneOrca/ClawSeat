@@ -600,6 +600,43 @@ appears, the new text generates a new fingerprint → new event.
 
 ---
 
+## §3h — Dispatch notify: default-ON (C15)
+
+### Problem
+
+`dispatch_task.py` had `--skip-notify` as an opt-out flag, but several
+call paths silently suppressed notification even when the flag was absent
+(driven by `profile.heartbeat_transport` branch conditions and other logic).
+The result: planners routinely dispatched without notifying the target, which
+then sat idle until a human manually nudged it.
+
+### Design
+
+Notify is default-ON. Callers opt **out** with `--no-notify`. A deprecated
+`--skip-notify` alias is kept for backwards compatibility and emits a
+deprecation warning on stderr when used.
+
+```
+--notify         # explicit (same as default)
+--no-notify      # opt-out
+--skip-notify    # [deprecated] use --no-notify
+```
+
+`add_notify_args(parser)` and `resolve_notify(args)` are shared helpers
+in `_common.py` and re-exported via `dynamic_common.py` so both static
+scripts (`dispatch_task.py`, `complete_handoff.py`) and dynamic variants
+(`dispatch_task_dynamic.py`, `complete_handoff_dynamic.py`) share a single
+implementation — preventing the drift that caused the original bug.
+
+### Invariant
+
+When `do_notify=True`, the notify call is **always** made regardless of
+`profile.heartbeat_transport`. The transport affects the delivery mechanism
+(tmux vs OpenClaw), not whether notification happens. The `notified_at`
+field in the receipt JSON is the observable indicator.
+
+---
+
 ## Non-Goals
 
 ClawSeat should not contain the product source trees of its consumers.

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- C15: `dispatch_task.py` and `complete_handoff.py` now notify by default.
+  Use `--no-notify` to opt out. `--skip-notify` is a deprecated alias that
+  still works but prints a warning to stderr.
+  `add_notify_args` / `resolve_notify` shared helpers in `_common.py` keep
+  static and dynamic script variants in sync. See ARCHITECTURE.md §3h.
+
 ## [0.2.0] - 2026-04-21
 
 Ship of the ClawSeat audit-campaign R1 + R2 batch. R1 addressed the audit's
