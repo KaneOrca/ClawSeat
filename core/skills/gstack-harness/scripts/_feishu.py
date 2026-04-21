@@ -1,6 +1,7 @@
 """Feishu / Lark messaging helpers — extracted from _common.py."""
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -459,8 +460,99 @@ def _lark_cli_env() -> dict[str, str]:
     }
 
 
-def check_feishu_auth() -> dict[str, str]:
-    """Check lark-cli availability and auth token status."""
+# ── Token lifetime / keepalive constants ─────────────────────────────
+#
+# Feishu user OAuth:
+#   access_token  lifetime = 2h, auto-refreshed by lark-cli
+#   refresh_token lifetime = 7d  (rotates on each refresh; grantedAt resets)
+#   hard ceiling  = 365d from ORIGINAL user consent (Feishu server-side,
+#                   error 20037 forces a fresh device-flow login).
+#                   We do NOT try to predict this proactively because
+#                   lark-cli's `grantedAt` reflects the current
+#                   refresh_token's grant time, not the original consent
+#                   — any "days-remaining" estimate from that field is
+#                   always ≥ the real remaining, i.e. would warn LATE.
+#                   Reactive handling via _classify_send_failure covers it.
+#
+# To keep a user session alive for long-idle automation we:
+#   1. treat `needs_refresh` as ok (lark-cli auto-refreshes on next call)
+#   2. if grantedAt is older than KEEPALIVE_DAYS, force a refresh via a
+#      cheap UAT-authenticated API call before the 7d idle window closes
+REFRESH_KEEPALIVE_DAYS = 5.0
+
+
+def _parse_iso_ts(ts: str) -> datetime.datetime | None:
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return None
+
+
+def _days_since(ts: datetime.datetime | None) -> float | None:
+    if ts is None:
+        return None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=datetime.timezone.utc)
+    return (now - ts).total_seconds() / 86400.0
+
+
+def _read_lark_auth_status(lark_cli: str) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    """Run `lark-cli auth status` once. Return (auth_info, error_payload)."""
+    result = run_command_with_env(
+        [lark_cli, "auth", "status"],
+        cwd=str(OPENCLAW_HOME),
+        env=_lark_cli_env(),
+    )
+    if result.returncode != 0:
+        return None, {
+            "status": "error",
+            "reason": f"lark-cli auth status failed (rc={result.returncode}): {result.stderr.strip()}",
+            "fix": "lark-cli auth login",
+        }
+    stdout = result.stdout.strip()
+    try:
+        return json.loads(stdout), None
+    except (ValueError, TypeError):
+        return None, {
+            "status": "error",
+            "reason": f"unexpected lark-cli auth output: {stdout[:200]}",
+            "fix": "lark-cli auth login",
+        }
+
+
+def _keepalive_ping(lark_cli: str) -> bool:
+    """Force a token refresh via a cheap UAT-authenticated API call.
+
+    lark-cli's uat_client refreshes the access_token (and rotates the
+    refresh_token, resetting its 7d expiry) whenever a UAT request is
+    made while tokenStatus is needs_refresh. Calling user_info is the
+    cheapest such request — success is best-effort; errors are swallowed.
+    """
+    result = run_command_with_env(
+        [lark_cli, "api", "GET", "/open-apis/authen/v1/user_info"],
+        cwd=str(OPENCLAW_HOME),
+        env=_lark_cli_env(),
+    )
+    return result.returncode == 0
+
+
+def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
+    """Check lark-cli availability and auth token status.
+
+    keepalive=True enables opportunistic token refresh: if grantedAt is
+    older than REFRESH_KEEPALIVE_DAYS but still within the 7d refresh
+    window, a light API call is issued to rotate the refresh_token before
+    idle-expiry kicks in.
+
+    Status values:
+      ok            — safe to send; lark-cli will auto-refresh if needed
+      expired       — refresh_token past 7d window; human re-auth required
+      missing       — lark-cli not installed
+      error         — unexpected (bad output / hard ceiling imminent)
+    """
     lark_cli = shutil.which("lark-cli")
     if not lark_cli:
         return {
@@ -468,30 +560,29 @@ def check_feishu_auth() -> dict[str, str]:
             "reason": "lark-cli not found in PATH",
             "fix": "brew install larksuite/cli/lark-cli",
         }
-    result = run_command_with_env(
-        [lark_cli, "auth", "status"],
-        cwd=str(OPENCLAW_HOME),
-        env=_lark_cli_env(),
-    )
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
+    auth_info, err = _read_lark_auth_status(lark_cli)
+    if err is not None:
+        return err
+    if auth_info is None:
         return {
             "status": "error",
-            "reason": f"lark-cli auth status failed (rc={result.returncode}): {stderr}",
+            "reason": "lark-cli auth status returned no info",
             "fix": "lark-cli auth login",
         }
-    stdout = result.stdout.strip()
-    try:
-        auth_info = json.loads(stdout)
-    except (ValueError, TypeError):
-        return {
-            "status": "error",
-            "reason": f"unexpected lark-cli auth output: {stdout[:200]}",
-            "fix": "lark-cli auth login",
-        }
+
+    if keepalive:
+        granted_at = _parse_iso_ts(auth_info.get("grantedAt", ""))
+        age_days = _days_since(granted_at)
+        if age_days is not None and age_days >= REFRESH_KEEPALIVE_DAYS:
+            if _keepalive_ping(lark_cli):
+                refreshed, err2 = _read_lark_auth_status(lark_cli)
+                if err2 is None and refreshed is not None:
+                    auth_info = refreshed
+
     token_status = auth_info.get("tokenStatus", "unknown")
     identity = auth_info.get("identity", "unknown")
     user_name = auth_info.get("userName", "")
+
     if token_status == "valid":
         payload: dict[str, str] = {
             "status": "ok",
@@ -501,12 +592,30 @@ def check_feishu_auth() -> dict[str, str]:
         if user_name:
             payload["userName"] = user_name
         return payload
-    if token_status in ("expired", "needs_refresh"):
-        return {
-            "status": token_status,
-            "reason": f"lark-cli token is {token_status}",
-            "fix": "lark-cli auth login",
+
+    if token_status == "needs_refresh":
+        # Access token expired but refresh_token still valid — lark-cli will
+        # auto-refresh on the next UAT call, so this is NOT a failure.
+        payload = {
+            "status": "ok",
+            "reason": (
+                "access_token expired; refresh_token still valid "
+                "(lark-cli will auto-refresh on next API call)"
+            ),
+            "identity": identity,
+            "warning": "needs_refresh",
         }
+        if user_name:
+            payload["userName"] = user_name
+        return payload
+
+    if token_status == "expired":
+        return {
+            "status": "expired",
+            "reason": "refresh_token past 7d window (no calls for >7 days)",
+            "fix": "lark-cli auth login  (in a terminal with a browser)",
+        }
+
     return {
         "status": "error",
         "reason": f"unexpected token status: {token_status}",
@@ -563,7 +672,7 @@ def send_feishu_user_message(
         payload["fix"] = "brew install larksuite/cli/lark-cli"
         return payload
     if pre_check_auth:
-        auth = check_feishu_auth()
+        auth = check_feishu_auth(keepalive=True)
         if auth["status"] != "ok":
             payload["status"] = "failed"
             payload["reason"] = f"auth_{auth['status']}"
