@@ -51,6 +51,7 @@ __all__ = [
     "upsert_project", "upsert_seat",
     "record_task_dispatched", "mark_task_completed",
     "record_event", "record_event_if_new",
+    "list_unsent_feishu_events", "mark_feishu_sent",
     "seed_from_filesystem",
 ]
 
@@ -193,14 +194,22 @@ def open_db(db_path: Path | None = None) -> sqlite3.Connection:
         stmt = stmt.strip()
         if stmt:
             conn.execute(stmt)
-    # Migration: older installs predate the fingerprint column. ALTER is idempotent
-    # via try/except — SQLite raises OperationalError if the column already exists.
+    # Migration: older installs predate the fingerprint column.
     try:
         conn.execute("ALTER TABLE events ADD COLUMN fingerprint TEXT")
     except sqlite3.OperationalError:
         pass
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_events_fingerprint ON events(fingerprint)"
+    )
+    # Migration: C11 adds feishu_sent column for Feishu announcer tracking.
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN feishu_sent TEXT")
+    except sqlite3.OperationalError:
+        pass
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_feishu_pending "
+        "ON events(type, feishu_sent) WHERE feishu_sent IS NULL"
     )
     conn.commit()
     return conn
@@ -440,6 +449,42 @@ def record_event_if_new(
     return True
 
 
+def list_unsent_feishu_events(
+    conn: sqlite3.Connection,
+    *,
+    event_types: tuple[str, ...] = ("task.completed", "chain.closeout"),
+    limit: int = 100,
+    project: str | None = None,
+) -> list[Event]:
+    """Return events whose type is in event_types and feishu_sent IS NULL.
+
+    Ordered by ts ascending so the oldest event is sent first.
+    Optionally scoped to a single project via ``project``.
+    """
+    placeholders = ",".join("?" for _ in event_types)
+    params: list[Any] = list(event_types)
+    q = (
+        f"SELECT * FROM events WHERE type IN ({placeholders}) "
+        "AND feishu_sent IS NULL"
+    )
+    if project is not None:
+        q += " AND project = ?"
+        params.append(project)
+    q += " ORDER BY ts ASC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(q, params).fetchall()
+    return [_row_to_event(r) for r in rows]
+
+
+def mark_feishu_sent(conn: sqlite3.Connection, event_id: int, ts: str) -> None:
+    """Record that the Feishu envelope for event_id was sent at ts."""
+    conn.execute(
+        "UPDATE events SET feishu_sent = ? WHERE id = ?",
+        (ts, event_id),
+    )
+    conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # Filesystem seeding
 # ---------------------------------------------------------------------------
@@ -672,4 +717,14 @@ def _row_to_task(row: sqlite3.Row) -> Task:
         opened_at=row["opened_at"],
         closed_at=row["closed_at"],
         disposition=row["disposition"],
+    )
+
+
+def _row_to_event(row: sqlite3.Row) -> Event:
+    return Event(
+        id=row["id"],
+        ts=row["ts"],
+        type=row["type"],
+        project=row["project"],
+        payload_json=row["payload_json"],
     )
