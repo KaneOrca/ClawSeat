@@ -265,7 +265,11 @@ role = "designer"
 tool = "gemini"
 auth_mode = "oauth"
 provider = "google"
-model = "gemini-2.0-flash"
+# No explicit model: defer to Gemini CLI's current default (currently
+# Gemini 3 auto). Pinning a specific model here locks the seat at
+# install time and silently blocks newer models from being used until
+# someone remembers to edit the template. Per-project overrides can
+# still set `model` via seat_overrides in the project profile TOML.
 monitor = true
 optional = true
 human_facing = false
