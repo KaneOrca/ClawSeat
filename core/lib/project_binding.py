@@ -290,3 +290,60 @@ def list_bindings(*, home: Path | None = None) -> list[ProjectBinding]:
         if binding is not None:
             results.append(binding)
     return results
+
+
+# ── Reverse lookup (chat_id → project) ────────────────────────────────
+# Used by koder at message-in time. For each incoming Feishu message the
+# chat_id is known (from the message event); koder must figure out which
+# project this session is bound to. Under the v0.4 A-track (enforced
+# distinct groups per project), the chat_id → project map is injective.
+
+def resolve_project_from_chat_id(
+    chat_id: str,
+    *,
+    home: Path | None = None,
+) -> ProjectBinding | None:
+    """Return the binding whose ``feishu_group_id`` matches ``chat_id``.
+
+    Returns None when no binding matches (koder should treat this as
+    "unknown chat; prompt the operator to run `cs install` or ignore").
+    Raises ProjectBindingError if two or more projects claim the same
+    chat_id — v0.4 A-track forbids that. Repair by updating one of the
+    offending PROJECT_BINDING.toml files.
+    """
+    chat_id = (chat_id or "").strip()
+    if not chat_id:
+        return None
+    hits = [b for b in list_bindings(home=home) if b.feishu_group_id == chat_id]
+    if not hits:
+        return None
+    if len(hits) > 1:
+        names = ", ".join(sorted(h.project for h in hits))
+        raise ProjectBindingError(
+            f"chat_id {chat_id} is bound to multiple projects: {names}. "
+            "v0.4 requires one project per Feishu group; "
+            "edit PROJECT_BINDING.toml for all but one to resolve."
+        )
+    return hits[0]
+
+
+def chat_id_index(*, home: Path | None = None) -> dict[str, str]:
+    """Build `{chat_id: project}` from all bindings. Caller responsible for
+    deciding whether to cache or re-scan per request.
+
+    Raises ProjectBindingError on the same duplicate-chat_id condition as
+    ``resolve_project_from_chat_id``.
+    """
+    index: dict[str, str] = {}
+    for binding in list_bindings(home=home):
+        if not binding.feishu_group_id:
+            continue
+        prior = index.get(binding.feishu_group_id)
+        if prior is not None and prior != binding.project:
+            raise ProjectBindingError(
+                f"chat_id {binding.feishu_group_id} is bound to both "
+                f"{prior!r} and {binding.project!r}; "
+                "v0.4 requires one project per Feishu group"
+            )
+        index[binding.feishu_group_id] = binding.project
+    return index

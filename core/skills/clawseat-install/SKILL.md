@@ -5,6 +5,14 @@ description: Install and bootstrap ClawSeat for Codex or Claude Code, including 
 
 # ClawSeat Install
 
+> **v0.4 canonical install path (2026-04-22)**:
+> 1. Operator runs `~/.clawseat/core/launchers/claude.sh` (or `agent-launcher.sh --tool claude`).
+> 2. Launcher TUI handles tool/auth/workdir/session selection (supports `--clone-from <project>` for fast clone).
+> 3. When the chosen session matches `<project>-ancestor-<tool>` and the project's v2 profile is missing, launcher invokes `core/tui/install_wizard.py` first, then `core/tui/ancestor_brief.py`, then spawns Claude.
+> 4. Inside Claude, the **ancestor skill** (`clawseat-ancestor`) runs Phase-A B1..B7 and launches every other project seat via `agent-launcher.sh --headless`.
+>
+> `start_seat.py`, `start koder`, and the old "koder collects per-seat config then runs start_seat.py" paths are **deprecated**. References below are preserved for historical context and for operators debugging legacy installs; do not copy them into new flows. See `docs/schemas/v0.4-layered-model.md` and `docs/design/ancestor-responsibilities.md` for the authoritative model.
+
 ## Overview
 
 If your chosen profile uses specialist seats (builder/reviewer/qa/designer), gstack is required; see README profile table.

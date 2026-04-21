@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Ancestor Phase-B patrol beacon. Installed by
+  core/tui/install_entrypoint.py / agent-launcher.sh at project setup time.
+
+  Substitutions performed at install time:
+    {PROJECT}          → project name (e.g. install)
+    {TOOL}             → ancestor tool (e.g. claude)
+    {CADENCE_SECONDS}  → patrol cadence, seconds (profile.patrol.cadence_minutes * 60)
+    {CLAWSEAT_ROOT}    → absolute path to ClawSeat (e.g. /Users/ywf/.clawseat)
+    {LOG_DIR}          → directory for stdout/err logs (e.g. ~/.agents/tasks/<project>/patrol/logs)
+
+  Install location:
+    ~/Library/LaunchAgents/com.clawseat.{PROJECT}.ancestor-patrol.plist
+
+  Activation:
+    launchctl bootstrap gui/$(id -u) <plist-path>
+    launchctl kickstart  gui/$(id -u)/com.clawseat.{PROJECT}.ancestor-patrol
+
+  Deactivation (e.g. on `agent-admin project remove`):
+    launchctl bootout    gui/$(id -u)/com.clawseat.{PROJECT}.ancestor-patrol
+
+  Behavior: every CADENCE_SECONDS, this plist runs the one-liner below. The
+  one-liner only sends a `/patrol-tick` marker to the ancestor tmux session
+  if that session currently exists. If the session is gone (user killed it
+  or hasn't started it yet), the send is silently skipped so we don't error-
+  spam the logs.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.clawseat.{PROJECT}.ancestor-patrol</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>tmux has-session -t '={PROJECT}-ancestor-{TOOL}' 2&gt;/dev/null &amp;&amp; tmux send-keys -t '={PROJECT}-ancestor-{TOOL}' '/patrol-tick' Enter</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>{CADENCE_SECONDS}</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>{LOG_DIR}/patrol.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{LOG_DIR}/patrol.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

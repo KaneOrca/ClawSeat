@@ -321,10 +321,15 @@ class SessionService:
             ordered_ids = list(project.engineers)
 
         if ensure_monitor and project.window_mode != "tabs-1up":
+            # Skip frontstage engineers (koder/frontstage) — they are
+            # OpenClaw-managed agents, not tmux seats. Auto-spawning them
+            # creates a ghost tmux session that displaces the real OpenClaw
+            # identity. See agent_admin_window._is_frontstage_engineer.
             visible_ids = [
                 engineer_id
                 for engineer_id in project.monitor_engineers[: max(1, project.monitor_max_panes)]
                 if engineer_id in project.engineers
+                and engineer_id not in {"koder", "frontstage"}
             ]
             if visible_ids:
                 return visible_ids

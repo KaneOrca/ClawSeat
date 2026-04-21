@@ -9,17 +9,49 @@ description: Wrapper skill for the user-facing koder seat in a ClawSeat project.
 not replace project knowledge. It translates ClawSeat frontstage state into
 repeatable user-facing actions.
 
-## Core Boundary
+## Core Boundary (v0.4, 2026-04-22)
 
 - `koder` is the only seat that talks to the user directly.
-- `koder` owns intake, top-level dispatch, seat lifecycle, patrol, unblock, and
-  project switching.
+- `koder` owns **intake, top-level dispatch (through planner), user-facing patrol summaries, and project switching**.
+- `koder` does **NOT** own seat lifecycle. Seat add / remove / reconfigure / restart and machine-service launch all belong to the **project `ancestor` seat**. Lifecycle requests route: **user → koder → planner → ancestor**. koder never runs `agent-launcher.sh`, `start_seat.py`, `session start-engineer`, or `window open-monitor`.
+- `koder` is **session-scoped to one project per Feishu chat_id**. The koder OpenClaw agent is singleton and receives messages from many groups; each incoming message resolves to exactly one project via `core/lib/project_binding.resolve_project_from_chat_id(chat_id)`. koder never mutates any project other than the one bound to the current session.
 - `koder` does not do execution planning, specialist routing, code
   implementation, review, or QA.
 - `koder` does not read specialist `DELIVERY.md` directly. `PLANNER_BRIEF.md` is
   the only planning window.
 - `koder` is disposition-driven. Do not infer behavior from prose when the brief
   already exposes machine-readable state.
+
+## Session → Project Resolution
+
+On every incoming Feishu message:
+
+1. Extract `chat_id` from the message event.
+2. Call `resolve_project_from_chat_id(chat_id)` (from `core/lib/project_binding.py`). The helper scans every `~/.agents/tasks/*/PROJECT_BINDING.toml` and returns the matching `ProjectBinding`, `None`, or raises on duplicate-binding collisions.
+3. If `None`: reply with "this group is not bound to any project; please run `cs install`" and drop the message — do NOT fabricate a project context.
+4. If raises: log the collision and reply "multiple projects claim this group — ops must fix one PROJECT_BINDING.toml"; do NOT proceed.
+5. Otherwise use the returned `ProjectBinding.project` as `CURRENT_PROJECT` for the entire turn. All downstream adapter calls (`check_session`, `dispatch_task`, etc.) take this value; no cross-project reads or writes are permitted.
+
+## New-project intake
+
+When a user in session S (bound to project P) asks to spawn a new project:
+
+1. Use `socratic-requirements` to capture: new project name, purpose, **which Feishu group will host the new project** (v0.4 A-track requires a *distinct* group; same-group is rejected).
+2. Dispatch to P's planner:
+
+   ```
+   OC_DELEGATION_REPORT_V1
+     kind: bootstrap_new_project
+     payload:
+       chat_id: <S>
+       source_project: P
+       new_project: <name>
+       override_feishu_group_id: <new_chat_id>
+       original_user_id: <ou_xxx>
+   ```
+
+3. Planner forwards to P's ancestor; ancestor performs the clone per `clawseat-ancestor §4.6` and replies via Feishu in group S when done.
+4. koder relays ancestor's completion notice to the user; **koder itself never invokes launcher or writes any profile/binding files**.
 
 ## Startup Order
 

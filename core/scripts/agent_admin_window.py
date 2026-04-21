@@ -156,8 +156,33 @@ def project_monitor_shell_command(project: Any) -> str:
     return build_attach_command(session=project.monitor_session, workspace=project.repo_root)
 
 
+_FRONTSTAGE_ENGINEER_IDS = frozenset({"koder", "frontstage"})
+
+
+def _is_frontstage_engineer(engineer_id: str) -> bool:
+    # koder (alias "frontstage", role frontstage-supervisor) is an OpenClaw
+    # agent, NOT a back-end tmux seat. If a project's monitor_engineers list
+    # includes it by mistake, silently skip rather than auto-spawning a
+    # ghost tmux session that clobbers the real OpenClaw identity.
+    return engineer_id in _FRONTSTAGE_ENGINEER_IDS
+
+
 def _monitor_layout_target_sessions(project: Any, sessions: dict[str, Any]) -> list[Any]:
-    target_ids = project.monitor_engineers[: max(1, project.monitor_max_panes)]
+    frontstage_skipped: list[str] = []
+    filtered_ids = []
+    for engineer_id in project.monitor_engineers:
+        if _is_frontstage_engineer(engineer_id):
+            frontstage_skipped.append(engineer_id)
+            continue
+        filtered_ids.append(engineer_id)
+    if frontstage_skipped:
+        print(
+            f"agent_admin_window: monitor layout skipped frontstage engineers "
+            f"for {project.name}: {', '.join(frontstage_skipped)} "
+            "(openclaw-managed, not tmux seats)",
+            file=sys.stderr,
+        )
+    target_ids = filtered_ids[: max(1, project.monitor_max_panes)]
     resolved: list[Any] = []
     missing: list[str] = []
     for engineer_id in target_ids:
@@ -198,75 +223,213 @@ def build_monitor_layout(project: Any, sessions: dict[str, Any]) -> None:
         raise AgentAdminWindowError(f"{project.name} has no monitor engineers configured")
 
     visible_engineer_ids = [session.engineer_id for session in visible_engineer_sessions]
-    try:
+
+    def _label_pane(pane_id: str, engineer_id: str) -> None:
+        # The inner attached tmux session pushes its own pane_title via OSC
+        # escapes which silently overwrites `select-pane -T`. To keep labels
+        # stable we store engineer_id in a per-pane user option (@seat) that
+        # only our code writes, and reference it from pane-border-format.
+        # We still call `select-pane -T` so users running ad-hoc tmux
+        # commands see the friendly label too.
         tmux_with_retry(
-            ["new-session", "-d", "-x", "240", "-y", "80", "-s", monitor, "-c", repo_root],
-            label=f"new monitor session {monitor}",
+            ["select-pane", "-t", pane_id, "-T", engineer_id],
+            label=f"label monitor pane {pane_id}={engineer_id}",
+            check=False,
+        )
+        tmux_with_retry(
+            ["set-option", "-p", "-t", pane_id, "@seat", engineer_id],
+            label=f"set pane @seat={engineer_id} on {pane_id}",
+            check=False,
         )
 
-        first_target = f"{monitor}:0.0"
+    def _split_with_id(
+        *,
+        target: str,
+        direction: str,
+        attach: str,
+        label: str,
+    ) -> str:
+        # `-P -F '#{pane_id}'` prints the new pane id so we can title it
+        # immediately afterwards instead of guessing via list-panes diff.
+        result = tmux_with_retry(
+            [
+                "split-window",
+                direction,
+                "-P",
+                "-F",
+                "#{pane_id}",
+                "-t",
+                target,
+                "-c",
+                repo_root,
+                attach,
+            ],
+            label=label,
+        )
+        return result.stdout.strip()
+
+    try:
+        # Capture the first pane's id from new-session so we can label it.
+        new_session_result = tmux_with_retry(
+            [
+                "new-session",
+                "-P",
+                "-F",
+                "#{pane_id}",
+                "-d",
+                "-x",
+                "240",
+                "-y",
+                "80",
+                "-s",
+                monitor,
+                "-c",
+                repo_root,
+            ],
+            label=f"new monitor session {monitor}",
+        )
+        first_pane_id = new_session_result.stdout.strip() or f"{monitor}:0.0"
         first_engineer = visible_engineer_sessions[0]
         tmux_with_retry(
             [
                 "send-keys",
                 "-t",
-                first_target,
+                first_pane_id,
                 monitor_attach_command(first_engineer.session),
                 "C-m",
             ],
             label=f"seed first monitor pane attach {first_engineer.engineer_id}",
         )
+        _label_pane(first_pane_id, first_engineer.engineer_id)
 
         if len(visible_engineer_sessions) >= 2:
             second = visible_engineer_sessions[1]
-            tmux_with_retry(
-                [
-                    "split-window",
-                    "-h",
-                    "-t",
-                    first_target,
-                    "-c",
-                    repo_root,
-                    monitor_attach_command(second.session),
-                ],
+            new_pane_id = _split_with_id(
+                target=first_pane_id,
+                direction="-h",
+                attach=monitor_attach_command(second.session),
                 label=f"split pane for second monitor seat {second.engineer_id}",
             )
+            _label_pane(new_pane_id, second.engineer_id)
 
         panes = tmux_window_panes(f"{monitor}:0")
         if len(visible_engineer_sessions) >= 3 and panes:
             leftmost = min(panes, key=lambda item: (int(item["left"]), int(item["top"])))
             leftmost_id = str(leftmost["pane_id"])
             third = visible_engineer_sessions[2]
-            tmux_with_retry(
-                [
-                    "split-window",
-                    "-v",
-                    "-t",
-                    leftmost_id,
-                    "-c",
-                    repo_root,
-                    monitor_attach_command(third.session),
-                ],
+            new_pane_id = _split_with_id(
+                target=leftmost_id,
+                direction="-v",
+                attach=monitor_attach_command(third.session),
                 label=f"split pane for third monitor seat {third.engineer_id}",
             )
+            _label_pane(new_pane_id, third.engineer_id)
 
         panes = tmux_window_panes(f"{monitor}:0")
         if len(visible_engineer_sessions) >= 4 and panes:
             rightmost = max(panes, key=lambda item: (int(item["left"]), -int(item["top"])))
             rightmost_id = str(rightmost["pane_id"])
             fourth = visible_engineer_sessions[3]
-            tmux_with_retry(
-                [
-                    "split-window",
-                    "-v",
-                    "-t",
-                    rightmost_id,
-                    "-c",
-                    repo_root,
-                    monitor_attach_command(fourth.session),
-                ],
+            new_pane_id = _split_with_id(
+                target=rightmost_id,
+                direction="-v",
+                attach=monitor_attach_command(fourth.session),
                 label=f"split pane for fourth monitor seat {fourth.engineer_id}",
             )
+            _label_pane(new_pane_id, fourth.engineer_id)
+
+        # 5+ panes: split the largest remaining pane for each extra seat,
+        # alternating axis based on shape so the grid stays roughly uniform.
+        # `select-layout tiled` below rebalances regardless, but starting
+        # from balanced splits avoids transient pane-too-small failures
+        # for TUIs (claude/codex/gemini need ≥ ~80×24).
+        for index in range(4, len(visible_engineer_sessions)):
+            panes = tmux_window_panes(f"{monitor}:0")
+            if not panes:
+                break
+            largest = max(panes, key=lambda item: int(item["width"]) * int(item["height"]))
+            largest_id = str(largest["pane_id"])
+            direction = "-h" if int(largest["width"]) >= int(largest["height"]) * 2 else "-v"
+            engineer = visible_engineer_sessions[index]
+            new_pane_id = _split_with_id(
+                target=largest_id,
+                direction=direction,
+                attach=monitor_attach_command(engineer.session),
+                label=f"split pane for monitor seat #{index + 1} {engineer.engineer_id}",
+            )
+            _label_pane(new_pane_id, engineer.engineer_id)
+
+        # ── Nested-tmux ergonomics ──────────────────────────────────
+        # Monitor session is a thin layout shell wrapping N inner sessions.
+        # Without these knobs the outer prefix (Ctrl+B) clashes with each
+        # inner session's prefix, so users have to press Ctrl+B Ctrl+B to
+        # send a prefix to the inner — fragile and surprising.
+        #
+        # Fix: rebind outer prefix to Ctrl+A (and disable mouse). Outer
+        # becomes essentially invisible; Ctrl+B reaches the inner Claude /
+        # Codex / Gemini TUI directly. Pane navigation: Ctrl+A then arrow.
+        tmux_with_retry(
+            ["set-option", "-t", monitor, "prefix", "C-a"],
+            label=f"set monitor prefix C-a for {monitor}",
+            check=False,
+        )
+        tmux_with_retry(
+            ["set-option", "-t", monitor, "prefix2", "None"],
+            label=f"disable secondary prefix for {monitor}",
+            check=False,
+        )
+        tmux_with_retry(
+            ["set-option", "-t", monitor, "mouse", "off"],
+            label=f"disable mouse on {monitor}",
+            check=False,
+        )
+        # Forward focus events to inner sessions — Claude / Codex / Gemini
+        # TUIs use them to show/hide their cursor and refresh prompts. Off
+        # by default in tmux; with nested clients the inner TUI looks idle.
+        tmux_with_retry(
+            ["set-option", "-t", monitor, "focus-events", "on"],
+            label=f"enable focus-events on {monitor}",
+            check=False,
+        )
+        # Tell tmux this terminal supports xterm-style key encodings so
+        # modifier+key chords (Shift+Tab, Ctrl+Enter) survive the nesting.
+        tmux_with_retry(
+            ["set-window-option", "-t", f"{monitor}:0", "xterm-keys", "on"],
+            label=f"enable xterm-keys for {monitor}",
+            check=False,
+        )
+
+        # Make labels visible: pane border at the top showing the engineer id.
+        # Also disable automatic-rename so the window name stays as the project
+        # (without this, all panes report cmd=tmux and the window name flickers).
+        tmux_with_retry(
+            ["set-option", "-t", monitor, "pane-border-status", "top"],
+            label=f"enable pane-border-status for {monitor}",
+            check=False,
+        )
+        # Prefer @seat (set by _label_pane) since the inner attached session
+        # may rewrite pane_title via terminal OSC escapes.
+        tmux_with_retry(
+            [
+                "set-option",
+                "-t",
+                monitor,
+                "pane-border-format",
+                " #{?@seat,#{@seat},#{pane_title}} ",
+            ],
+            label=f"set pane-border-format for {monitor}",
+            check=False,
+        )
+        tmux_with_retry(
+            ["set-window-option", "-t", f"{monitor}:0", "automatic-rename", "off"],
+            label=f"disable automatic-rename for {monitor}",
+            check=False,
+        )
+        tmux_with_retry(
+            ["rename-window", "-t", f"{monitor}:0", project.name],
+            label=f"rename monitor window to {project.name}",
+            check=False,
+        )
 
         layout = "tiled"
         if project.window_mode == "tabs-1up":
