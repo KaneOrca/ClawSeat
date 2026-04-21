@@ -10,10 +10,22 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 _core_path = str(REPO_ROOT / "core")
-if _core_path not in sys.path:
-    sys.path.insert(0, _core_path)
-from resolve import dynamic_profile_path as _dpp
-from lib.real_home import real_user_home
+_scripts_path = str(REPO_ROOT / "core" / "scripts")
+for _p in (_core_path, _scripts_path):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+from resolve import dynamic_profile_path as _dpp  # noqa: E402
+from lib.real_home import real_user_home  # noqa: E402
+
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
+
+from agent_admin_workspace import (  # noqa: E402
+    render_profile_preserving_operator_edits,
+    _serialize_profile_toml,
+)
 
 PROJECT = "install"
 # install-with-memory.toml declares the `memory` seat required by the
@@ -69,7 +81,11 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 def ensure_profile(*, refresh: bool) -> Path:
     if refresh or not DYNAMIC_PROFILE.exists():
-        DYNAMIC_PROFILE.write_text(PROFILE_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
+        template_text = PROFILE_TEMPLATE.read_text(encoding="utf-8")
+        fresh = tomllib.loads(template_text)
+        merged = render_profile_preserving_operator_edits(DYNAMIC_PROFILE, fresh)
+        DYNAMIC_PROFILE.parent.mkdir(parents=True, exist_ok=True)
+        DYNAMIC_PROFILE.write_text(_serialize_profile_toml(merged), encoding="utf-8")
         print(f"profile_ready: {DYNAMIC_PROFILE} (source={PROFILE_TEMPLATE})")
     else:
         print(f"profile_reused: {DYNAMIC_PROFILE}")
