@@ -51,6 +51,11 @@ class ParserHooks:
     cmd_engineer_refresh_workspace: Callable[[Any], int]
     cmd_engineer_secret_set: Callable[[Any], int]
     cmd_tui: Callable[[Any], int]
+    # P1 layered-model (see docs/schemas/v0.4-layered-model.md):
+    cmd_project_koder_bind: Callable[[Any], int]
+    cmd_machine_memory_show: Callable[[Any], int]
+    cmd_project_seat_list: Callable[[Any], int]
+    cmd_project_validate: Callable[[Any], int]
 
 
 def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
@@ -223,6 +228,54 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     project_unbind_nested.add_argument("project")
     project_unbind_nested.set_defaults(func=hooks.cmd_project_unbind)
+
+    # P1 layered-model: project koder-bind / seat list / validate (§3-§5).
+    project_koder_bind_nested = project_sub.add_parser(
+        "koder-bind",
+        help="Bind an OpenClaw tenant as this project's koder frontstage "
+             "(v0.4 layered model).",
+    )
+    project_koder_bind_nested.add_argument("--project", required=True)
+    project_koder_bind_nested.add_argument(
+        "--tenant", required=True,
+        help="Tenant name as registered in machine.toml [openclaw_tenants.X].",
+    )
+    project_koder_bind_nested.set_defaults(func=hooks.cmd_project_koder_bind)
+
+    project_seat_nested = project_sub.add_parser(
+        "seat",
+        help="Per-project seat operations (list, ...).",
+    )
+    project_seat_sub = project_seat_nested.add_subparsers(
+        dest="project_seat_command", required=True,
+    )
+    project_seat_list_nested = project_seat_sub.add_parser(
+        "list",
+        help="List expanded seats for <project> (respects parallel_instances).",
+    )
+    project_seat_list_nested.add_argument("--project", required=True)
+    project_seat_list_nested.set_defaults(func=hooks.cmd_project_seat_list)
+
+    project_validate_nested = project_sub.add_parser(
+        "validate",
+        help="Validate <project>'s profile against the v0.4 layered schema.",
+    )
+    project_validate_nested.add_argument("--project", required=True)
+    project_validate_nested.set_defaults(func=hooks.cmd_project_validate)
+
+    # P1 layered-model: machine ... (§3).
+    machine = sub.add_parser("machine", help="Machine-layer operations.")
+    machine_sub = machine.add_subparsers(dest="machine_command", required=True)
+    machine_memory = machine_sub.add_parser(
+        "memory", help="Memory singleton service operations.",
+    )
+    machine_memory_sub = machine_memory.add_subparsers(
+        dest="machine_memory_command", required=True,
+    )
+    machine_memory_show = machine_memory_sub.add_parser(
+        "show", help="Print memory service config + runtime status.",
+    )
+    machine_memory_show.set_defaults(func=hooks.cmd_machine_memory_show)
 
     session = sub.add_parser("session")
     session_sub = session.add_subparsers(dest="session_command", required=True)

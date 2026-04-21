@@ -17,6 +17,12 @@ from agent_admin_heartbeat import (
     HeartbeatHooks,
 )
 from agent_admin_commands import CommandHandlers, CommandHooks
+from agent_admin_layered import (
+    cmd_machine_memory_show,
+    cmd_project_koder_bind,
+    cmd_project_seat_list,
+    cmd_project_validate,
+)
 from agent_admin_config import (
     AGENT_ADMIN_SH,
     AGENTCTL_SH,
@@ -1230,6 +1236,10 @@ PARSER_HOOKS = ParserHooks(
     cmd_engineer_refresh_workspace=cmd_engineer_refresh_workspace,
     cmd_engineer_secret_set=cmd_engineer_secret_set,
     cmd_tui=cmd_tui,
+    cmd_project_koder_bind=cmd_project_koder_bind,
+    cmd_machine_memory_show=cmd_machine_memory_show,
+    cmd_project_seat_list=cmd_project_seat_list,
+    cmd_project_validate=cmd_project_validate,
 )
 
 
