@@ -1,15 +1,15 @@
 """Render the ancestor bootstrap brief — ANCESTOR_BOOTSTRAP.md per project.
 
-Spec: docs/schemas/ancestor-bootstrap-brief.md (v0.1, provisional).
-Responsibilities matrix: docs/design/ancestor-responsibilities.md (v0.1).
+Spec: docs/schemas/ancestor-bootstrap-brief.md (v0.1 schema, v0.2 checklist).
+Responsibilities matrix: docs/design/ancestor-responsibilities.md.
 
 The renderer is pure-function shaped: given a resolved project context,
 it emits a Markdown file with a leading YAML front-matter block. No side
 effects beyond the one file write. It does NOT launch ancestor; that's
-install_entrypoint's job.
+the launcher preflight's job.
 
 Called by:
-    core/tui/install_entrypoint.py (Phase 2; not yet landed)
+    core/launchers/agent-launcher.sh  (ancestor-preflight, Phase 2 2026-04-22)
 
 Also callable standalone for debugging:
     python3 -m core.tui.ancestor_brief --project install --out /tmp/brief.md
@@ -44,7 +44,7 @@ BRIEF_GENERATOR = "core/tui/ancestor_brief.py"
 # v0.1.1 (architect edit 2026-04-21): B8 removed (no operator-ack gate;
 # Phase A → B is automatic). B2 widened to "verify-or-launch" (ancestor
 # may auto-spawn memory if missing). B5 narrowed to "verify-binding"
-# (binding came in via wizard / install_entrypoint, not ancestor prompt).
+# (binding came in via wizard during launcher preflight, not ancestor prompt).
 DEFAULT_PHASE_A_CHECKLIST: tuple[str, ...] = (
     "B1-read-brief",
     "B2-verify-or-launch-memory",
@@ -56,7 +56,7 @@ DEFAULT_PHASE_A_CHECKLIST: tuple[str, ...] = (
 )
 
 # Default Feishu event whitelist — mirrored from v0.4 §4 canonical profile.
-# install_entrypoint may pass an override sourced from profile.observability.
+# The launcher's ancestor-preflight may pass an override sourced from profile.observability.
 DEFAULT_FEISHU_EVENTS: tuple[str, ...] = (
     "task.completed",
     "chain.closeout",

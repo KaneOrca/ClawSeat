@@ -119,6 +119,76 @@ def test_rendered_toml_is_parseable(tmp_path):
     assert parsed["seat_overrides"]["builder"]["parallel_instances"] == 1
 
 
+def test_launcher_auth_table_covers_canonical_overrides():
+    """Every (tool, auth_mode, provider) in RECOMMENDED_OVERRIDES must be
+    reachable through at least one launcher auth value — otherwise the
+    'launcher-dialog' option in screen_seats produces a result the
+    canonical default disagrees with."""
+    canonical = {
+        (v["tool"], v["auth_mode"], v["provider"])
+        for v in install_wizard.RECOMMENDED_OVERRIDES.values()
+    }
+    table_outputs = {
+        (tool, auth, prov)
+        for (tool, _), (auth, prov) in install_wizard.LAUNCHER_AUTH_TO_CLAWSEAT.items()
+    }
+    missing = canonical - table_outputs
+    assert not missing, (
+        f"these canonical (tool, auth_mode, provider) tuples have no path "
+        f"through LAUNCHER_AUTH_TO_CLAWSEAT: {missing}"
+    )
+
+
+def test_launcher_auth_translation_known_values():
+    f = install_wizard.launcher_auth_to_clawseat
+    # Claude
+    assert f("claude", "oauth_token") == ("oauth_token", "anthropic")
+    assert f("claude", "minimax") == ("api", "minimax")
+    assert f("claude", "anthropic-console") == ("api", "anthropic-console")
+    # Codex
+    assert f("codex", "chatgpt") == ("oauth", "chatgpt")
+    assert f("codex", "xcode") == ("api", "xcode-best")
+    # Gemini
+    assert f("gemini", "oauth") == ("oauth", "google")
+    assert f("gemini", "primary") == ("api", "google-primary")
+
+
+def test_launcher_auth_translation_unknown_falls_back():
+    """Unknown (tool, auth) returns (auth, auth) so wizard never crashes
+    on a future launcher menu addition."""
+    out = install_wizard.launcher_auth_to_clawseat("claude", "future-auth-mode")
+    assert out == ("future-auth-mode", "future-auth-mode")
+
+
+def test_launcher_prompt_auth_returns_none_on_failure(monkeypatch):
+    """If launcher script missing, returns None and wizard falls through."""
+    import subprocess as _sp
+    monkeypatch.setattr(install_wizard, "_launcher_path",
+                        lambda: Path("/no/such/launcher"))
+    assert install_wizard.launcher_prompt_auth("claude") is None
+
+
+def test_launcher_prompt_auth_returns_none_on_nonzero_rc(monkeypatch):
+    """User cancelled (rc=1) → None (wizard falls back to default)."""
+    from types import SimpleNamespace
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=1, stdout="", stderr="cancel")
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(install_wizard, "_launcher_path",
+                        lambda: Path("/usr/bin/true"))  # exists, but we mock run anyway
+    assert install_wizard.launcher_prompt_auth("claude") is None
+
+
+def test_launcher_prompt_auth_returns_picked_value(monkeypatch):
+    from types import SimpleNamespace
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="minimax\n", stderr="")
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(install_wizard, "_launcher_path",
+                        lambda: Path("/usr/bin/true"))
+    assert install_wizard.launcher_prompt_auth("claude") == "minimax"
+
+
 def test_rendered_toml_matches_spec_fragments():
     """Key exact strings from the §4 example must appear in the wizard output.
 

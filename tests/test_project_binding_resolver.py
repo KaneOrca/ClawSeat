@@ -37,7 +37,14 @@ def fake_home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     tasks = home / ".agents" / "tasks"
     tasks.mkdir(parents=True)
+    # Use the env override recognised by real_home.real_user_home — this
+    # survives cross-module import caching (install_wizard re-imports
+    # project_binding, so a module-level monkeypatch doesn't always reach
+    # it in certain ordering).
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    # Defensive: also patch the bound reference on pb for tests that call
+    # pb.* directly.
     monkeypatch.setattr(pb, "real_user_home", lambda: home)
     return home
 
@@ -125,3 +132,46 @@ class TestChatIdIndex:
         )
         idx = pb.chat_id_index()
         assert idx == {"oc_install0000000000000000000000000": "install"}
+
+
+class TestWizardCollisionGuard:
+    """R-3: install_wizard.screen_feishu_group must reject a chat_id already
+    bound to a different project, preventing writes that koder would later
+    detect as collisions at message-in time.
+
+    We don't call the screen interactively (it would spawn input()). We
+    exercise the pre-scan helper `_load_chat_id_index` that screen uses.
+    """
+
+    def test_load_chat_id_index_via_wizard_helper(self, fake_home, monkeypatch):
+        import importlib
+        root = fake_home / ".agents" / "tasks"
+        _write_binding(root, "install", "oc_install000000000000000000000000a")
+        _write_binding(root, "cartooner", "oc_cartooner0000000000000000000000c")
+
+        import sys as _sys
+        wizard_path = Path(__file__).resolve().parents[1] / "core" / "tui"
+        _sys.path.insert(0, str(wizard_path))
+        try:
+            iw = importlib.import_module("install_wizard")
+            idx = iw._load_chat_id_index()
+        finally:
+            if str(wizard_path) in _sys.path:
+                _sys.path.remove(str(wizard_path))
+
+        assert idx.get("oc_install000000000000000000000000a") == "install"
+        assert idx.get("oc_cartooner0000000000000000000000c") == "cartooner"
+
+    def test_load_chat_id_index_empty_when_no_bindings(self, fake_home):
+        import importlib
+        import sys as _sys
+        wizard_path = Path(__file__).resolve().parents[1] / "core" / "tui"
+        _sys.path.insert(0, str(wizard_path))
+        try:
+            iw = importlib.import_module("install_wizard")
+            idx = iw._load_chat_id_index()
+        finally:
+            if str(wizard_path) in _sys.path:
+                _sys.path.remove(str(wizard_path))
+
+        assert idx == {}

@@ -24,6 +24,7 @@ import argparse
 import dataclasses
 import io
 import json
+import os
 import sys
 import textwrap
 from pathlib import Path
@@ -135,6 +136,37 @@ RECOMMENDED_OVERRIDES: dict[str, dict[str, str]] = {
     "designer": {"tool": "gemini", "auth_mode": "oauth",       "provider": "google"},
 }
 
+# Map (tool, launcher's auth value) → (clawseat auth_mode, clawseat provider).
+# Source of truth for launcher values: agent-launcher.sh prompt_auth_mode.
+# Wizard delegates auth selection to launcher's AppleScript dialog (B option,
+# 2026-04-22) then translates the picked value into v0.4 schema fields.
+LAUNCHER_AUTH_TO_CLAWSEAT: dict[tuple[str, str], tuple[str, str]] = {
+    # claude
+    ("claude", "oauth_token"):       ("oauth_token", "anthropic"),
+    ("claude", "anthropic-console"): ("api",         "anthropic-console"),
+    ("claude", "minimax"):           ("api",         "minimax"),
+    ("claude", "xcode"):             ("api",         "xcode"),
+    ("claude", "custom"):            ("api",         "custom"),
+    ("claude", "oauth"):             ("oauth",       "anthropic"),  # legacy keychain
+    # codex
+    ("codex",  "chatgpt"):           ("oauth",       "chatgpt"),
+    ("codex",  "xcode"):             ("api",         "xcode-best"),
+    ("codex",  "custom"):            ("api",         "custom"),
+    # gemini
+    ("gemini", "oauth"):             ("oauth",       "google"),
+    ("gemini", "primary"):           ("api",         "google-primary"),
+    ("gemini", "custom"):            ("api",         "custom"),
+}
+
+
+def launcher_auth_to_clawseat(tool: str, launcher_auth: str) -> tuple[str, str]:
+    """Translate launcher's auth value to (clawseat auth_mode, provider).
+
+    Falls back to (launcher_auth, launcher_auth) if the (tool, value) pair
+    is not in the table — defensive against future launcher menu additions.
+    """
+    return LAUNCHER_AUTH_TO_CLAWSEAT.get((tool, launcher_auth), (launcher_auth, launcher_auth))
+
 # Canonical role mapping for seat_roles.X (§4).
 CANONICAL_ROLE_NAMES: dict[str, str] = {
     "ancestor": "ancestor",
@@ -163,6 +195,44 @@ class WizardState:
     machine_services: list[str] = dataclasses.field(default_factory=lambda: ["memory"])
     seats: list[SeatChoice] = dataclasses.field(default_factory=list)
     patrol_cadence_minutes: int = 30
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Launcher delegation — when interactive (not --accept-defaults), the
+# wizard pops the launcher's AppleScript auth dialog instead of asking
+# the operator to type cryptic enum values like "oauth_token".
+# ─────────────────────────────────────────────────────────────────────
+
+import subprocess  # noqa: E402 (used by _launcher_prompt_auth)
+
+
+def _launcher_path() -> Path:
+    env = os.environ.get("CLAWSEAT_ROOT")
+    root = Path(env).expanduser() if env else (Path.home() / ".clawseat")
+    return root / "core" / "launchers" / "agent-launcher.sh"
+
+
+def launcher_prompt_auth(tool: str) -> str | None:
+    """Pop launcher's AppleScript auth picker for `tool`. Returns the
+    chosen launcher auth value, or None on cancel / non-macOS / failure.
+
+    Wizard callers should fall through to the recommended default when
+    None is returned — never block.
+    """
+    launcher = _launcher_path()
+    if not launcher.is_file():
+        return None
+    try:
+        r = subprocess.run(
+            [str(launcher), "--prompt-auth", tool],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    if r.returncode != 0:
+        return None
+    val = r.stdout.strip()
+    return val or None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -355,17 +425,45 @@ def screen_seats(state: WizardState, accept_defaults: bool) -> None:
             default=rec["tool"],
             accept_defaults=accept_defaults,
         )
-        auth = _prompt_choice(
-            f"{name} auth_mode",
-            choices=list(LEGAL_AUTH_MODES),
-            default=rec["auth_mode"],
-            accept_defaults=accept_defaults,
-        )
-        provider = _prompt(
-            f"{name} provider",
-            default=rec["provider"],
-            accept_defaults=accept_defaults,
-        )
+
+        # Auth selection: in --accept-defaults mode keep the (auth_mode, provider)
+        # from RECOMMENDED_OVERRIDES (fast path, CI-friendly).
+        # In interactive mode, give the operator three choices:
+        #   1) Accept the recommended default (1 keystroke)
+        #   2) Pop the launcher's AppleScript dialog (B option) — same UX
+        #      as running agent-launcher.sh standalone, with custom presets
+        #   3) Type the auth_mode + provider manually (legacy fallback)
+        if accept_defaults:
+            auth, provider = rec["auth_mode"], rec["provider"]
+            print(f"{name} auth → {auth}  provider → {provider}  (default)")
+        else:
+            print(f"  recommended for {name}: {tool} / {rec['auth_mode']} / {rec['provider']}")
+            mode = _prompt_choice(
+                f"{name} auth selection mode",
+                choices=["default", "launcher-dialog", "manual"],
+                default="default",
+            )
+            if mode == "default":
+                auth, provider = rec["auth_mode"], rec["provider"]
+            elif mode == "launcher-dialog":
+                picked_auth = launcher_prompt_auth(tool)
+                if picked_auth is None:
+                    print(f"  (launcher dialog cancelled / unavailable; using default)")
+                    auth, provider = rec["auth_mode"], rec["provider"]
+                else:
+                    auth, provider = launcher_auth_to_clawseat(tool, picked_auth)
+                    print(f"  launcher returned {picked_auth!r} → auth={auth} provider={provider}")
+            else:  # manual
+                auth = _prompt_choice(
+                    f"{name} auth_mode",
+                    choices=list(LEGAL_AUTH_MODES),
+                    default=rec["auth_mode"],
+                )
+                provider = _prompt(
+                    f"{name} provider",
+                    default=rec["provider"],
+                )
+
         parallel = 1
         if name in PARALLEL_OK:
             parallel = _prompt_int(
@@ -510,6 +608,21 @@ def _render_v2_toml(payload: dict[str, Any]) -> str:
 _FEISHU_GROUP_RE = __import__("re").compile(r"^oc_[A-Za-z0-9_-]+$")
 
 
+def _load_chat_id_index() -> dict[str, str]:
+    """Best-effort load of every project's current chat_id → project map.
+
+    Returns `{}` when `project_binding` is unavailable (e.g., tests running
+    without PYTHONPATH). The uniqueness check is a defence-in-depth step;
+    koder will catch duplicates at message-in time anyway.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+        import project_binding
+        return project_binding.chat_id_index()
+    except ImportError:
+        return {}
+
+
 def screen_feishu_group(
     state: WizardState,
     *,
@@ -520,26 +633,55 @@ def screen_feishu_group(
 
     Written to `~/.agents/tasks/<project>/PROJECT_BINDING.toml` at wizard
     end — ancestor's B5 will verify it at boot. v0.4 A-track requires a
-    distinct group per project; if `distinct_from` is set (clone-from
-    path), reject equal values.
+    distinct group per project; rejects both `distinct_from` (source
+    project when cloning) and any chat_id already bound to a different
+    project on this machine (R-3 defence in depth).
     """
+    # R-5: non-TTY fast-fail. Wizard's Feishu prompt is intentionally
+    # interactive; if stdin is not a TTY we'd loop forever on EOF.
+    if not sys.stdin.isatty():
+        raise SystemExit(
+            "feishu_group_id collection requires an interactive TTY "
+            "(stdin is not a tty). Run the launcher from a real terminal, "
+            "or add a --feishu-group-id CLI flag in a follow-up."
+        )
+
+    existing = _load_chat_id_index()  # R-3
     print("--- Feishu group binding ---")
     print("Each project is bound to exactly one Feishu group chat_id (oc_xxx).")
     if distinct_from:
         print(f"This must differ from the source project's group ({distinct_from}).")
+    if existing:
+        print(f"Already bound: {', '.join(sorted(existing.values()))}")
     print("To find chat_id: lark-cli im +chats-list --as user | grep <group-name>")
     print()
+    empty_ct = 0
     while True:
-        raw = _prompt("feishu chat_id (oc_...)", default="", accept_defaults=False)
+        try:
+            raw = _prompt("feishu chat_id (oc_...)", default="", accept_defaults=False)
+        except EOFError:
+            # _prompt catches EOFError internally and returns "", but be
+            # defensive in case someone changes _prompt.
+            raise SystemExit("feishu_group_id required; got EOF on stdin")
         raw = raw.strip()
         if not raw:
+            empty_ct += 1
+            if empty_ct >= 3:
+                raise SystemExit(
+                    "feishu_group_id required; giving up after 3 empty responses "
+                    "(is this a non-TTY invocation?)"
+                )
             print("  → chat_id is required; ancestor's B5 will halt without it")
             continue
+        empty_ct = 0
         if not _FEISHU_GROUP_RE.match(raw):
             print("  → invalid shape; must match 'oc_<alphanumerics/dash/underscore>'")
             continue
         if distinct_from and raw == distinct_from:
             print(f"  → must differ from source project's group ({distinct_from}); v0.4 A-track enforces distinct groups")
+            continue
+        if raw in existing and existing[raw] != state.project_name:
+            print(f"  → chat_id {raw} is already bound to project '{existing[raw]}'; v0.4 requires distinct groups")
             continue
         return raw
 
@@ -586,29 +728,41 @@ def clone_state_from_source(raw: dict[str, Any], new_project: str) -> WizardStat
 
 def _write_project_binding(project: str, feishu_group_id: str, bound_by: str) -> Path:
     """Write PROJECT_BINDING.toml via the canonical helper when available,
-    else fall back to a minimal writer. Returns the file path."""
+    else fall back to a minimal writer.
+
+    R-4: narrow the except to ImportError so that real bugs in
+    ``bind_project`` (validation failure, disk error) surface instead of
+    silently downgrading to the stub writer.
+    """
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
         from project_binding import bind_project
+    except ImportError:
+        print(
+            "warn: project_binding module unavailable; using stub writer "
+            "(no cross-validation, no lark-cli enrichment)",
+            file=sys.stderr,
+        )
+    else:
         return bind_project(
             project=project,
             feishu_group_id=feishu_group_id,
             bound_by=bound_by,
         )
-    except Exception:
-        # Stub writer (tests or environments without project_binding.py)
-        path = Path(f"~/.agents/tasks/{project}/PROJECT_BINDING.toml").expanduser()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            "version = 1\n"
-            f'project = "{project}"\n'
-            f'feishu_group_id = "{feishu_group_id}"\n'
-            'feishu_bot_account = "koder"\n'
-            "require_mention = false\n"
-            f'bound_by = "{bound_by}"\n',
-            encoding="utf-8",
-        )
-        return path
+
+    # Stub writer path — only reached on ImportError above.
+    path = Path(f"~/.agents/tasks/{project}/PROJECT_BINDING.toml").expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "version = 1\n"
+        f'project = "{project}"\n'
+        f'feishu_group_id = "{feishu_group_id}"\n'
+        'feishu_bot_account = "koder"\n'
+        "require_mention = false\n"
+        f'bound_by = "{bound_by}"\n',
+        encoding="utf-8",
+    )
+    return path
 
 
 def run_wizard(

@@ -3,7 +3,7 @@
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Ancestor Phase-B patrol beacon. Installed by
-  core/tui/install_entrypoint.py / agent-launcher.sh at project setup time.
+  core/launchers/agent-launcher.sh ancestor-preflight at project setup time.
 
   Substitutions performed at install time:
     {PROJECT}          → project name (e.g. install)
