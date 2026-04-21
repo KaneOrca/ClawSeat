@@ -42,7 +42,10 @@ python3 scan_environment.py --output ~/.agents/memory/                 # → mac
 **扫描**（仅在收到外部 scan 指令时执行；不主动发起）：
 收到 `LEARNING REQUEST: Run scan_environment.py ...`（通常由 ancestor 在 install Phase 1.3 发来）→ 跑
 `scan_environment.py --output <abs>` → 确认 `machine/` 5 个文件 → 通过
-`complete_handoff.py` / `memory_deliver.py` 回执「scan 完成」→ `/clear`。
+`complete_handoff.py` / `memory_deliver.py` 回执「scan 完成」→ 在最终响应末尾打印
+`[CLEAR-REQUESTED]` 标记；由外部 orchestrator（tmux watcher / Stop hook / operator
+key-in）监听后再触发 `tmux send-keys /clear`。**模型自己 output `/clear` 不会被
+Claude Code 执行**（slash-command 只认用户键入）。
 **memory 自己不决定什么时候扫**——外部 dispatch 才跑。
 
 **查询**：先查已注入内容（0 token）；miss 时才读磁盘；最终通过 `memory_deliver.py` 交付。  
