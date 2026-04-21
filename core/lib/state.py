@@ -174,11 +174,14 @@ def open_db(db_path: Path | None = None) -> sqlite3.Connection:
     """Open (and auto-schema) the state DB.
 
     Default path: ``~/.agents/state.db`` resolved via real_user_home().
+    Override via ``CLAWSEAT_STATE_DB`` env var (used by tests).
     Re-opening an already-initialised DB is a no-op (all DDL uses
     ``CREATE TABLE IF NOT EXISTS``).
     """
+    import os as _os
     if db_path is None:
-        db_path = real_user_home() / ".agents" / "state.db"
+        env_override = _os.environ.get("CLAWSEAT_STATE_DB", "").strip()
+        db_path = Path(env_override) if env_override else real_user_home() / ".agents" / "state.db"
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)

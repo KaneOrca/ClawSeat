@@ -2,6 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
+
+# Ensure repo root is on sys.path so core.lib.state is importable.
+_REPO_ROOT_DYN = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT_DYN) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_DYN))
 
 from dynamic_common import (
     append_status_note,
@@ -18,11 +25,50 @@ from dynamic_common import (
 )
 
 
+def _write_dispatch_to_ledger(
+    *,
+    task_id: str,
+    project: str,
+    source: str,
+    target: str,
+    role_hint: str | None,
+    title: str,
+    correlation_id: str | None = None,
+) -> None:
+    """Write task + task.dispatched event to state.db. Defensive: never fails dispatch."""
+    try:
+        from datetime import datetime, timezone as _tz
+        from core.lib.state import open_db, record_task_dispatched, record_event, Task
+        task = Task(
+            id=task_id,
+            project=project,
+            source=source,
+            target=target,
+            role_hint=role_hint,
+            status="dispatched",
+            title=title,
+            correlation_id=correlation_id,
+            opened_at=datetime.now(_tz.utc).isoformat(timespec="seconds"),
+        )
+        with open_db() as conn:
+            record_task_dispatched(conn, task)
+            record_event(conn, "task.dispatched", project,
+                         task_id=task_id, source=source, target=target)
+    except Exception as exc:
+        print(f"warn: state.db unavailable, skipping ledger write: {exc}", file=sys.stderr)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dispatch a task to a dynamic-roster seat.")
     parser.add_argument("--profile", required=True, help="Path to the dynamic profile TOML.")
     parser.add_argument("--source", help="Seat dispatching the task. Defaults to the resolved planner seat.")
-    parser.add_argument("--target", required=True, help="Target seat.")
+    _target_group = parser.add_mutually_exclusive_group(required=True)
+    _target_group.add_argument("--target", help="Target seat (explicit seat id).")
+    _target_group.add_argument(
+        "--target-role",
+        metavar="ROLE",
+        help="Pick least-busy live seat with this role from state.db.",
+    )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
@@ -35,10 +81,35 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    role_hint: str | None = getattr(args, "target_role", None)
+
+    # Resolve --target-role via state.db (requires project_name from profile).
+    profile = None
+    if role_hint:
+        profile = load_profile(args.profile)
+        try:
+            from core.lib.state import open_db, pick_least_busy_seat
+            with open_db() as conn:
+                picked = pick_least_busy_seat(conn, profile.project_name, role_hint)
+        except Exception as exc:
+            print(f"warn: state.db unavailable for role resolution: {exc}", file=sys.stderr)
+            picked = None
+        if picked is None:
+            print(
+                f"seat_needed: no live seat with role={role_hint!r} in "
+                f"project={profile.project_name!r}. "
+                "Launch one or specify --target explicitly.",
+                file=sys.stderr,
+            )
+            return 3
+        args.target = picked.seat_id
+        print(f"target-role resolved: {role_hint} -> {args.target}", file=sys.stderr)
+
     # T9: block dispatch to memory before profile load — memory is a
     # synchronous oracle, never a task worker. See _common.py guard docstring.
     assert_target_not_memory(args.target, "dispatch_task_dynamic.py")
-    profile = load_profile(args.profile)
+    if profile is None:
+        profile = load_profile(args.profile)
     source = args.source or preferred_planner_seat(profile)
     todo_path = profile.todo_path(args.target)
     reply_to = args.reply_to or source
@@ -93,6 +164,14 @@ def main() -> int:
         receipt["notify_message"] = message
     receipt_path = profile.handoff_path(args.task_id, source, args.target)
     write_json(receipt_path, receipt)
+    _write_dispatch_to_ledger(
+        task_id=args.task_id,
+        project=profile.project_name,
+        source=source,
+        target=args.target,
+        role_hint=role_hint,
+        title=args.title,
+    )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
     print(f"receipt: {receipt_path}")
