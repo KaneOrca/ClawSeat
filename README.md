@@ -211,3 +211,27 @@ Runtime contract:
 Setup details and examples live in `docs/INSTALL.md`.
 
 Packaging/export details live in [docs/PACKAGING.md](docs/PACKAGING.md).
+
+## Activating heartbeat for a project
+
+The heartbeat cron wakes koder via Feishu on a launchd schedule.
+
+1. Configure the heartbeat:
+   ```bash
+   cs heartbeat config set --project install --cadence 10min
+   ```
+2. Render the launchd plist:
+   ```bash
+   cs heartbeat render-plist --project install \
+     --output ~/Library/LaunchAgents/com.clawseat.heartbeat.install.plist
+   ```
+3. Load the launchd agent:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.clawseat.heartbeat.install.plist
+   ```
+4. Verify:
+   ```bash
+   tail -f ~/.agents/heartbeat/install.log
+   ```
+
+To disable without unloading: `cs heartbeat config set --project install --enabled false`.
