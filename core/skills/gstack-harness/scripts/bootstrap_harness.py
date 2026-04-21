@@ -215,6 +215,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--link-tasks", action="store_true", help="Only create sandbox→real tasks symlinks (skip full bootstrap).")
     parser.add_argument("--no-workspace-sync", action="store_true", help="Skip host→sandbox workspace rsync step.")
     parser.add_argument("--strict-workspace-sync", action="store_true", help="Abort bootstrap if any workspace rsync fails.")
+    parser.add_argument(
+        "--strict-completeness",
+        action="store_true",
+        help=(
+            "Treat bootstrap-completeness warnings (missing PLANNER_BRIEF.md, "
+            "missing PROJECT_BINDING.toml, etc.) as hard failures. Default: "
+            "warnings are logged but do not block the bootstrap."
+        ),
+    )
+    parser.add_argument(
+        "--skip-completeness",
+        action="store_true",
+        help="Skip the post-bootstrap completeness check entirely.",
+    )
     return parser.parse_args()
 
 
@@ -324,6 +338,39 @@ def main() -> int:
         for seat in runtime_seats:
             seed_empty_secret_from_peer(effective_profile, seat)
             # OAuth is user-managed via the TUI; nothing to seed here.
+        # C7: bootstrap completeness — run after seat/secret seeding so the
+        # report sees the post-bootstrap shape. Warnings log to stderr and
+        # allow progress by default; --strict-completeness converts them
+        # into a hard abort. --skip-completeness disables the check.
+        # Access via getattr so tests that pass a SimpleNamespace without
+        # the new flags keep working (backward-compat with pre-C7 callers).
+        _skip_completeness = getattr(args, "skip_completeness", False)
+        _strict_completeness = getattr(args, "strict_completeness", False)
+        if not _skip_completeness:
+            try:
+                import importlib.util as _bc_ilu
+                _bc_spec = _bc_ilu.spec_from_file_location(
+                    "bootstrap_completeness",
+                    str(REPO_ROOT / "core" / "lib" / "bootstrap_completeness.py"),
+                )
+                assert _bc_spec and _bc_spec.loader
+                _bc = _bc_ilu.module_from_spec(_bc_spec)
+                _bc_spec.loader.exec_module(_bc)
+                report = _bc.evaluate_profile(effective_profile)
+                print(report.render(), file=sys.stderr)
+                if report.has_errors or (_strict_completeness and report.has_warnings):
+                    print(
+                        "\nbootstrap aborted: completeness check "
+                        + ("failed with errors" if report.has_errors else "warnings (strict mode)"),
+                        file=sys.stderr,
+                    )
+                    return 1
+            except Exception as _bc_exc:
+                print(
+                    f"bootstrap_completeness check skipped: {_bc_exc!r}",
+                    file=sys.stderr,
+                )
+
         if args.refresh_existing:
             for seat in (effective_profile.materialized_seats or effective_profile.seats):
                 refresh_cmd = [
