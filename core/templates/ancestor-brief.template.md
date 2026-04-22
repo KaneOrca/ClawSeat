@@ -4,6 +4,21 @@
 > 安装脚本已完成 host deps / env_scan / 六宫格 / memory seat。
 > 你的任务：接管剩余 bootstrap，按下面顺序跑 Phase-A。
 
+## Meta-rule（最高优先级）
+
+执行任何 shell 命令前，必须先查 canonical：
+
+1. `grep` `$CLAWSEAT_ANCESTOR_BRIEF` 找场景关键字（如 `重启`、`切换`、`lark-cli`、`window`、`seed`）
+2. 命中 Cookbook → 直接用 cookbook 里的 canonical 命令
+3. 未命中 Cookbook → 再 `grep` `${CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md`
+4. 仍未命中 → 报 operator："Cookbook 没覆盖此场景，请提供命令"
+
+禁止：
+
+- 凭训练数据 / 直觉拼装 CLI 命令
+- `sudo` / `pip install` / `brew install` 改宿主环境，除非 brief 明确指引
+- 试错式跑命令（一个 fail 就换名字再试）
+
 ## 上下文快照
 
 - CLAWSEAT_ROOT: `${CLAWSEAT_ROOT}`
@@ -84,6 +99,19 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
   --since 2026-04-01
 ```
 
+**B3.5.0 — project scope assertion（强制）**：
+
+在进入 B3.5 / B5 / B6 / B7 任何 seat 操作前，先确认当前 ancestor 的运行时身份没有串项目：
+
+```bash
+[ "$(echo "$PROJECT_NAME")" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
+ancestor_session="$(tmux display-message -p '#{session_name}')"
+echo "scope: project=$PROJECT_NAME ancestor_session=$ancestor_session"
+[ "$ancestor_session" = "${PROJECT_NAME}-ancestor" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
+```
+
+scope 不匹配 → halt，并告知 operator 先修正当前 iTerm / tmux 归属，不要继续 spawn seat。
+
 #### B3.5.0 — pre-flight: 确认 project 已 bootstrap
 
 spawn 任何 seat 前必验：
@@ -101,6 +129,8 @@ if ! python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT
   exit 1
 fi
 ```
+
+每个 seat 只调用一次 `agent_admin session start-engineer`。启动后如果 seat 仍在 onboarding，先用 `agent_admin session list` / `tmux has-session` 查状态，不要反复 `start-engineer` 触发 retry。
 
 for seat in [planner, builder, reviewer, qa, designer]:
 1. 向用户交互："`${seat}` 用 bootstrapped default，还是切到 codex / gemini / 自定义 provider？"
@@ -125,6 +155,8 @@ for seat in [planner, builder, reviewer, qa, designer]:
 7. 下一个
 
 ### B5 — Feishu channel + koder overlay bind（5 子步）
+
+在进入 B5 / B6 / B7 前，先复验一次上面的 project scope assertion；scope 对不上就先停，不要继续操作 seat。
 
 #### B5.1 — 选 openclaw agent 做 koder overlay
 
@@ -198,6 +230,16 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bind \
   --require-mention \
   --bound-by ancestor
 ```
+
+#### B5.4.5 — 飞书 Layer 2 UI 配置（operator 手动，一次性）
+
+`apply-koder-overlay.sh` 已打印提示。如 operator 还没完成 / 还不确定：
+- operator 必须 UI 登录 `https://open.feishu.cn/app` 配置 app 事件订阅消息接收模式
+- 未完成时 B5.5 smoke 只能测 @ 路径，非 @ 需要等配置后重测
+- 配置完成后无需重启 OpenClaw，事件订阅会实时生效
+
+ancestor 行动：确认 operator 已完成 Layer 2 → 记录到 `phase-a-decisions.md` → 再继续 B5.5。
+未确认 → 暂停 B5.5，不要自己推进。
 
 #### B5.5 — verify smoke dispatch
 
@@ -309,3 +351,49 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 ## 面对 operator 错误指引
 
 见 clawseat-ancestor SKILL.md §11 "识别 operator 错误指引 + 拒绝模板"。Phase-A 跑过程中常见 red-flag 话术与正确回应已列表化。
+
+## Common Operations Cookbook（任何时点查阅，覆盖 Phase 之外）
+
+### Seat 生命周期
+
+| 场景 | 命令 |
+|------|------|
+| 首次 spawn / 重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 切换 seat harness（claude→codex 等）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer <seat> --tool <claude\|codex\|gemini> --mode <oauth\|oauth_token\|api> --provider <provider>` |
+| 强制 reset 重启（kill+relaunch）| 同上 + `--reset` flag |
+| 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session list --project ${PROJECT_NAME}` |
+| 检查单个 tmux session 是否存活 | `tmux has-session -t '${PROJECT_NAME}-<seat>'` |
+
+### Sandbox HOME / lark-cli
+
+| 场景 | 命令 |
+|------|------|
+| sandbox 复用 lark-cli auth 失败 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session reseed-sandbox --project ${PROJECT_NAME} --all` |
+| 飞书诊断前置核验 real HOME | `python3 -c "from core.lib.real_home import real_user_home; print(real_user_home())"` |
+
+### Window / iTerm
+
+| 场景 | 命令 |
+|------|------|
+| 重开 / 恢复 iTerm 6 宫格 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
+| 同时开 memory 独立窗口 | 加 `--open-memory` flag |
+
+### Brief drift
+
+| 场景 | 命令 |
+|------|------|
+| 检查自己是否过时 | `bash ${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh` |
+
+### 通讯
+
+| 场景 | 命令 |
+|------|------|
+| 给其他 seat 发消息 | `bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh --project ${PROJECT_NAME} <seat> "<text>"` |
+| 派结构化 TODO 任务 | `python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py ...` |
+
+### 飞书
+
+| 场景 | 命令 |
+|------|------|
+| 飞书联调 troubleshooting | 见 SKILL.md §5.z 7 步流程 |
+| 发送任务报告 | `FEISHU_SENDER_MODE=bot python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/send_delegation_report.py ...` |

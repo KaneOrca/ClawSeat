@@ -432,6 +432,7 @@ for name in ("network", "openclaw", "github", "current_context"):
 def test_wait_for_seat_attaches_when_matching_session_appears(tmp_path: Path, matched_session: str) -> None:
     bin_dir = tmp_path / "bin"
     count_file = tmp_path / "count.txt"
+    sleep_count_file = tmp_path / "sleep-count.txt"
     attach_log = tmp_path / "attach.log"
     _write_executable(
         bin_dir / "tmux",
@@ -458,6 +459,23 @@ case "$1" in
 esac
 """,
     )
+    _write_executable(
+        bin_dir / "sleep",
+        """#!/usr/bin/env bash
+set -euo pipefail
+count_file="${SLEEP_COUNT_FILE:?}"
+count=0
+if [[ -f "$count_file" ]]; then
+  count="$(cat "$count_file")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "$count_file"
+if [[ "$count" -ge 2 ]]; then
+  kill -TERM "$PPID"
+fi
+exit 0
+""",
+    )
 
     result = subprocess.run(
         ["bash", str(_WAIT_FOR_SEAT), "spawn49-planner"],
@@ -471,10 +489,14 @@ esac
             "TMUX_COUNT_FILE": str(count_file),
             "TMUX_ATTACH_LOG": str(attach_log),
             "TMUX_MATCH_SESSION": matched_session,
+            "SLEEP_COUNT_FILE": str(sleep_count_file),
         },
         check=False,
     )
 
-    assert result.returncode == 0, result.stderr
-    assert "pane is waiting for spawn49-planner" in result.stdout
-    assert attach_log.read_text(encoding="utf-8").strip() == f"attach -t ={matched_session}"
+    assert result.returncode != 0
+    assert f"DETACHED from {matched_session}" in result.stdout
+    assert "reconnecting in 2s" in result.stdout
+    attach_lines = attach_log.read_text(encoding="utf-8").splitlines()
+    assert attach_lines
+    assert all(line == f"attach -t ={matched_session}" for line in attach_lines)

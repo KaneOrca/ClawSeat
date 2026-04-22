@@ -772,6 +772,15 @@ launcher_custom_env_file_for_session() {
   printf '%s\n' "$env_file"
 }
 
+configure_tmux_session_display() {
+  local session="$1"
+  run tmux set-option -t "=$session" detach-on-destroy off
+  run tmux set-option -t "=$session" status on
+  run tmux set-option -t "=$session" status-left "[#{session_name}] "
+  run tmux set-option -t "=$session" status-right "#{?client_attached,ATTACHED,WAITING} | %H:%M"
+  run tmux set-option -t "=$session" status-style "fg=white,bg=blue,bold"
+}
+
 launch_seat() {
   local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" auth_mode="" custom_env_file=""
   auth_mode="$(launcher_auth_for_provider)"
@@ -792,6 +801,7 @@ launch_seat() {
 
   if [[ "$DRY_RUN" == "1" ]]; then
     run "${cmd[@]}"
+    configure_tmux_session_display "$session"
     return 0
   fi
 
@@ -799,6 +809,7 @@ launch_seat() {
     [[ -n "$custom_env_file" && -f "$custom_env_file" ]] && rm -f "$custom_env_file"
     die 31 TMUX_SESSION_CREATE_FAILED "unable to launch tmux session via agent-launcher: $session"
   fi
+  configure_tmux_session_display "$session"
 }
 
 install_memory_hook() {

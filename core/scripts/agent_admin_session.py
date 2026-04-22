@@ -128,6 +128,12 @@ def seed_user_tool_dirs(runtime_home: Path, real_home: Path | None = None) -> li
     """
     runtime_home = Path(runtime_home)
     real_home = Path(real_home) if real_home is not None else _real_home_for_tool_seeding()
+    try:
+        if runtime_home.resolve() == real_home.resolve():
+            return []
+    except OSError:
+        if str(runtime_home) == str(real_home):
+            return []
     changed: list[str] = []
     backup_base = runtime_home / ".sandbox-pre-seed-backup"
 
@@ -250,11 +256,55 @@ class SessionService:
             return f"session={session_name}, panes={result.stdout.strip()}"
         return f"session={session_name}, panes=empty"
 
+    def _is_session_onboarding(self, session_name: str) -> bool:
+        result = self._run_tmux_with_retry(
+            ["capture-pane", "-t", session_name, "-p", "-S", "-80"],
+            reason=f"capture onboarding markers for {session_name}",
+            check=False,
+        )
+        if result.returncode != 0:
+            return False
+        content = result.stdout or ""
+        markers = (
+            "Do you trust the files in this folder",
+            "Trust folder",
+            "Welcome to Claude Code",
+            "authenticate with your",
+            "https://accounts.google.com",
+            "Paste the code",
+            "Enter your API key",
+        )
+        return any(marker in content for marker in markers)
+
+    def _configure_session_display(self, session_name: str) -> None:
+        target = f"={session_name}"
+        for args in (
+            ["set", "-g", "set-titles", "on"],
+            ["set", "-g", "set-titles-string", "#{session_name}"],
+            ["set-option", "-t", target, "detach-on-destroy", "off"],
+            ["set-option", "-t", target, "status", "on"],
+            ["set-option", "-t", target, "status-left", "[#{session_name}] "],
+            ["set-option", "-t", target, "status-right", "#{?client_attached,ATTACHED,WAITING} | %H:%M"],
+            ["set-option", "-t", target, "status-style", "fg=white,bg=blue,bold"],
+        ):
+            self._run_tmux_with_retry(
+                args,
+                reason=f"configure display for {session_name}",
+                check=False,
+            )
+
     def _assert_session_running(self, session: Any, *, operation: str) -> None:
         if not self.hooks.tmux_has_session(session.session):
             raise SessionStartError(
                 f"{operation} failed for '{session.session}': session missing after startup; state={self._session_window_state(session.session)}"
             )
+        if self._is_session_onboarding(session.session):
+            print(
+                f"{operation}: session={session.session} ONBOARDING_DETECTED "
+                f"(trust prompt / OAuth / welcome) — treating as alive, operator interaction required",
+                file=sys.stderr,
+            )
+            return
         output = self._run_tmux_with_retry(
             [
                 "list-panes",
@@ -501,6 +551,7 @@ class SessionService:
             )
         if self.hooks.tmux_has_session(session.session):
             self._assert_session_running(session, operation=f"start_engineer idempotent check for {session.session}")
+            self._configure_session_display(session.session)
             return
         launcher_auth = self._launcher_auth_for(session)
         runtime_dir = self._launcher_runtime_dir(session, launcher_auth)
@@ -561,6 +612,14 @@ class SessionService:
             except SessionStartError as exc:
                 last_error = exc
                 if self.hooks.tmux_has_session(session.session):
+                    if self._is_session_onboarding(session.session):
+                        print(
+                            f"start_engineer: session={session.session} appears to be onboarding "
+                            f"(operator interaction in progress); trust session and do not retry.",
+                            file=sys.stderr,
+                        )
+                        self._configure_session_display(session.session)
+                        return
                     self._run_tmux_with_retry(
                         ["kill-session", "-t", session.session],
                         reason=f"cleanup partial session {session.session}",
@@ -582,18 +641,9 @@ class SessionService:
             finally:
                 if custom_env_file and os.path.exists(custom_env_file):
                     os.unlink(custom_env_file)
-        # Enable tmux terminal titles so iTerm tabs show session name.
-        # set-titles-string '#{session_name}' uses the session identifier as the tab title.
-        self._run_tmux_with_retry(
-            ["set", "-g", "set-titles", "on"],
-            reason=f"enable titles on {session.session}",
-            check=False,
-        )
-        self._run_tmux_with_retry(
-            ["set", "-g", "set-titles-string", "#{session_name}"],
-            reason=f"set session title on {session.session}",
-            check=False,
-        )
+        # Enable tmux terminal titles and status line so iTerm tabs show
+        # the canonical session name and attachment state.
+        self._configure_session_display(session.session)
 
     def stop_engineer(self, session: Any, *, close_iterm_tab: bool = False) -> None:
         if close_iterm_tab:

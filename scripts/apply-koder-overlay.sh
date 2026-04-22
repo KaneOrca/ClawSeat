@@ -9,6 +9,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 DRY_RUN=0
 PROJECT="install"
 FEISHU_GROUP_ID=""
+REAL_HOME="${CLAWSEAT_REAL_HOME:-$HOME}"
 
 TENANT_NAMES=()
 TENANT_WORKSPACES=()
@@ -40,6 +41,34 @@ print_cmd() {
   printf '[dry-run] '
   printf '%q ' "$@"
   printf '\n'
+}
+
+read_project_binding_field() {
+  local field="$1"
+  local binding_path="$REAL_HOME/.agents/tasks/$PROJECT/PROJECT_BINDING.toml"
+  [[ -f "$binding_path" ]] || return 0
+  "$PYTHON_BIN" - "$binding_path" "$field" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+field = sys.argv[2]
+try:
+    import tomllib
+except Exception:
+    import tomli as tomllib
+
+try:
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+
+value = data.get(field, "")
+if value:
+    print(value)
+PY
 }
 
 run_or_die() {
@@ -247,6 +276,27 @@ run_feishu_config() {
   run_or_die 6 CONFIGURE_KODER_FEISHU_FAILED "configure_koder_feishu.py failed for tenant '$CHOSEN'" "${cmd[@]}"
 }
 
+print_layer2_hint() {
+  local sender_app_id
+  sender_app_id="$(read_project_binding_field feishu_sender_app_id)"
+  sender_app_id="${sender_app_id:-<FEISHU_SENDER_APP_ID>}"
+
+  cat <<EOF
+
+✓ koder overlay applied (OpenClaw Layer 1 ready).
+
+⚠ Feishu Layer 2 配置必需（operator 手动操作）：
+  1. 打开 https://open.feishu.cn/app
+  2. 选 app ${sender_app_id}
+  3. 事件订阅 → 消息接收模式 → 选 "接收群聊所有消息"（非仅 @）
+  4. 如 app 已 release，点击 "刷新 release"
+  5. 完成后回 ancestor 确认 "ok"，再继续 B5.5 / B6
+
+注：此步 lark-cli / Open API 不可编程，必须 UI 操作。
+配置不做 → bot 只响应 @，非 @ 消息到达不了 OpenClaw。
+EOF
+}
+
 main() {
   local profile_path="" openclaw_home=""
 
@@ -267,6 +317,7 @@ main() {
   run_init_koder "$profile_path"
   run_koder_bind
   run_feishu_config "$openclaw_home"
+  print_layer2_hint
 
   printf "OK: '%s' 已改造为 koder，绑定到项目 '%s'\n" "$CHOSEN" "$PROJECT"
 }

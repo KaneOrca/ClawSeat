@@ -92,28 +92,55 @@
 - [tests/test_project_binding_schema_v2.py](/Users/ywf/ClawSeat/tests/test_project_binding_schema_v2.py)
 - [tests/test_send_delegation_report_identity.py](/Users/ywf/ClawSeat/tests/test_send_delegation_report_identity.py)
 
+### R7-R13 增量测试（本轮补充）
+- [tests/test_launcher_gemini_trust_seed.py](/Users/ywf/ClawSeat/tests/test_launcher_gemini_trust_seed.py)
+- [tests/test_wait_for_seat_trust_detection.py](/Users/ywf/ClawSeat/tests/test_wait_for_seat_trust_detection.py)
+- [tests/test_wait_for_seat_persistent_reattach.py](/Users/ywf/ClawSeat/tests/test_wait_for_seat_persistent_reattach.py)
+- [tests/test_install_seat_session_detach_on_destroy.py](/Users/ywf/ClawSeat/tests/test_install_seat_session_detach_on_destroy.py)
+- [tests/test_seat_session_status_line.py](/Users/ywf/ClawSeat/tests/test_seat_session_status_line.py)
+- [tests/test_start_engineer_onboarding_detect.py](/Users/ywf/ClawSeat/tests/test_start_engineer_onboarding_detect.py)
+- [tests/test_start_engineer_no_kill_during_onboard.py](/Users/ywf/ClawSeat/tests/test_start_engineer_no_kill_during_onboard.py)
+- [tests/test_koder_overlay_l2_hint.py](/Users/ywf/ClawSeat/tests/test_koder_overlay_l2_hint.py)
+- [tests/test_ancestor_brief_project_scope_assertion.py](/Users/ywf/ClawSeat/tests/test_ancestor_brief_project_scope_assertion.py)
+- [tests/test_ancestor_skill_window_ops_canonical.py](/Users/ywf/ClawSeat/tests/test_ancestor_skill_window_ops_canonical.py)
+- [tests/test_ancestor_skill_larkcli_diagnostic_gate.py](/Users/ywf/ClawSeat/tests/test_ancestor_skill_larkcli_diagnostic_gate.py)
+- [tests/test_ancestor_skill_no_manual_symlink.py](/Users/ywf/ClawSeat/tests/test_ancestor_skill_no_manual_symlink.py)
+- [tests/test_ancestor_skill_feishu_two_layers.py](/Users/ywf/ClawSeat/tests/test_ancestor_skill_feishu_two_layers.py)
+- [tests/test_ancestor_brief_b5_45_l2.py](/Users/ywf/ClawSeat/tests/test_ancestor_brief_b5_45_l2.py)
+- [tests/test_ancestor_brief_cookbook_section.py](/Users/ywf/ClawSeat/tests/test_ancestor_brief_cookbook_section.py)
+- [tests/test_ancestor_brief_meta_rule.py](/Users/ywf/ClawSeat/tests/test_ancestor_brief_meta_rule.py)
+- [tests/test_ancestor_skill_arch_violation_cli_guess.py](/Users/ywf/ClawSeat/tests/test_ancestor_skill_arch_violation_cli_guess.py)
+
 ## 顺手修了
 - `tests/test_install_isolation.py` 里的 fake `tmux` 原先用 JSON grep 判定 session 存活，和 `send-and-verify.sh` 的先验检查不够稳定，导致 kickoff 发送看起来“没发生”
 - 根因是 wrapper 先做 `has-session`，而 test shim 没有一个明确的 live-session registry；我改成纯文本 session registry，和 launcher 写入的 session 名单对齐
 - 风险 / 影响：仅影响测试桩，不改生产路径；收益是把 `send-and-verify.sh` 的真实行为稳定地纳入回归测试
+- `seed_user_tool_dirs()` 在 Gemini OAuth 分支里会把 `HOME` 指回 real HOME；原逻辑没跳过 `runtime_home == REAL_HOME`，会把 `.gemini` 自己 symlink 到自己，导致 self-loop / `Too many levels of symbolic links`
+- 根因：`seed_user_tool_dirs` 是为 sandbox runtime 设计的，oauth branch 复用了 real HOME 后没有守门；我补了 early return，避免 real HOME 走自我种子
+- 风险 / 影响：仅影响 Gemini OAuth 直连 real HOME 的路径，不改 sandbox HOME 的 seed 语义；回归测试继续覆盖 sandbox 侧 seed 行为
 
 ## 验证
 - `bash -n scripts/install.sh`
 - `bash -n core/launchers/agent-launcher.sh`
+- `bash -n scripts/wait-for-seat.sh`
+- `bash -n scripts/apply-koder-overlay.sh`
 - `python -m py_compile` on all modified / untracked Python files in the worktree
-- `pytest tests/test_install_isolation.py tests/test_install_lazy_panes.py tests/test_install_memory_singleton.py tests/test_install_auto_kickoff.py tests/test_install_tomli_guard.py tests/test_ark_provider_support.py tests/test_launcher_lark_cli_seed.py tests/test_launcher_seed_reseed_existing.py tests/test_launcher_seed_user_tool_dirs.py tests/test_agent_admin_session_reseed.py tests/test_session_start_ancestor_env.py tests/test_switch_harness_ark_cross_tool.py tests/test_window_open_grid.py tests/test_ancestor_brief_memory_query_steps.py tests/test_ancestor_skill_memory_query_column.py tests/test_ancestor_skill_comm_discipline.py tests/test_ancestor_brief_no_bare_send_keys.py tests/test_ancestor_brief_b5_substeps.py tests/test_ancestor_auth_decision_tree.py tests/test_ancestor_brief_spawn49.py tests/test_ancestor_brief_pyramid_rules.py tests/test_ancestor_rejects_arch_violations.py tests/test_ancestor_brief_drift_check.py tests/test_ancestor_skill_brief_drift_rules.py tests/test_project_binding_schema_v2.py tests/test_send_delegation_report_identity.py -q`
-  - result: `68 passed`
+- `pytest tests/test_install_isolation.py tests/test_install_lazy_panes.py tests/test_install_memory_singleton.py tests/test_install_auto_kickoff.py tests/test_install_tomli_guard.py tests/test_ark_provider_support.py tests/test_launcher_lark_cli_seed.py tests/test_launcher_seed_reseed_existing.py tests/test_launcher_seed_user_tool_dirs.py tests/test_launcher_gemini_trust_seed.py tests/test_agent_admin_session_reseed.py tests/test_session_start_ancestor_env.py tests/test_switch_harness_ark_cross_tool.py tests/test_window_open_grid.py tests/test_koder_overlay_l2_hint.py tests/test_start_engineer_onboarding_detect.py tests/test_start_engineer_no_kill_during_onboard.py tests/test_wait_for_seat_trust_detection.py tests/test_wait_for_seat_persistent_reattach.py tests/test_install_seat_session_detach_on_destroy.py tests/test_seat_session_status_line.py tests/test_ancestor_brief_memory_query_steps.py tests/test_ancestor_skill_memory_query_column.py tests/test_ancestor_skill_comm_discipline.py tests/test_ancestor_brief_no_bare_send_keys.py tests/test_ancestor_brief_b5_substeps.py tests/test_ancestor_auth_decision_tree.py tests/test_ancestor_brief_spawn49.py tests/test_ancestor_brief_pyramid_rules.py tests/test_ancestor_rejects_arch_violations.py tests/test_ancestor_brief_drift_check.py tests/test_ancestor_skill_brief_drift_rules.py tests/test_ancestor_brief_project_scope_assertion.py tests/test_ancestor_skill_window_ops_canonical.py tests/test_ancestor_skill_larkcli_diagnostic_gate.py tests/test_ancestor_skill_no_manual_symlink.py tests/test_ancestor_skill_feishu_two_layers.py tests/test_ancestor_brief_b5_45_l2.py tests/test_ancestor_brief_cookbook_section.py tests/test_ancestor_brief_meta_rule.py tests/test_ancestor_skill_arch_violation_cli_guess.py tests/test_project_binding_schema_v2.py tests/test_send_delegation_report_identity.py -q`
+  - result: `94 passed`
 - `markdownlint` not installed in this workspace
 
 ## Patch 历程
 - 1. 先补了 install / launcher / agent_admin / brief / skill 的主链路改动，覆盖 R1-R6。
 - 2. 之后发现 auto-kickoff regression 的测试桩仍按旧的裸 `tmux send-keys` 假设写法，补了 session registry，让 `send-and-verify.sh` 的 liveness check 在测试里可稳定通过。
 - 3. 收口时删掉了临时调试输出，保留最小可观测的测试桩实现。
+- 4. 本轮追加 R12/R13 的 Common Operations Cookbook + meta-rule，并补了 Gemini OAuth 直连 real HOME 的 seed self-loop 防护，收敛了 smoke01 的“重启 planner / 凭直觉拼 CLI”事故链路。
 
 ## Notes
 - 这批改动是建立在前序 `ARK-050`、`MEMORY-IO-051`、`BRIEF-SYNC-052`、`FEISHU-AUTH-053`、`WINDOW-OPS-054` 的基础上，当前交付只记录本 TODO 的增量。
 - `install.sh` 现在更早做 `tomli` fallback，自愈目标是避免 Phase-A B0/B2.5 在 sandbox Python 上因为缺依赖而卡死。
 - `send-and-verify.sh` 已成为跨 seat 文本通讯唯一入口，brief / skill / launchd 都已同步到 canonical 路径。
+- `Common Operations Cookbook` 现在是 phase 之外的 canonical 索引；始祖遇到“重启 / 切换 / lark-cli / window / seed”时先 grep cookbook，再回到 SKILL.md。
+- `Meta-rule` 明确禁止凭直觉拼 CLI、sudo/pip/brew 改宿主环境，以及试旧版 API 名字（start-identity / clawseat init / clawseat-cli）。
 
 ## Followup suggestions
 - 若 planner 想进一步收紧约束，可以把更多裸 `tmux send-keys` 的调用点继续收敛到 `send-and-verify.sh`。

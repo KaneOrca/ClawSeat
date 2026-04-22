@@ -821,6 +821,9 @@ seed_user_tool_dirs() {
   # .sandbox-pre-seed-backup/ and replace it with a symlink so we can
   # retroactively heal old runtimes.
   local runtime_home="$1"
+  if [[ "$runtime_home" == "$REAL_HOME" ]]; then
+    return 0
+  fi
   local seeds=(
     ".lark-cli"
     "Library/Application Support/iTerm2"
@@ -905,6 +908,7 @@ prepare_codex_home() {
 
 prepare_gemini_home() {
   local runtime_home="$1"
+  local workdir="${2:-${WORKDIR:-}}"
   local gemini_home="$runtime_home/.gemini"
   mkdir -p "$gemini_home"
 
@@ -920,6 +924,32 @@ prepare_gemini_home() {
       ln -s "$REAL_HOME/.gemini/$item" "$gemini_home/$item"
     fi
   done
+
+  if [[ -n "$workdir" ]]; then
+    python3 - "$REAL_HOME/.gemini/trustedFolders.json" "$gemini_home/trustedFolders.json" "$workdir" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+workdir = sys.argv[3]
+data: dict[str, str] = {}
+for candidate in (src, dst):
+    if not candidate.exists():
+        continue
+    try:
+        loaded = json.loads(candidate.read_text(encoding="utf-8"))
+    except Exception:
+        loaded = {}
+    if isinstance(loaded, dict):
+        data.update({str(key): str(value) for key, value in loaded.items()})
+data[workdir] = "TRUST_FOLDER"
+dst.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+  fi
 }
 
 prepare_claude_home() {
@@ -1176,6 +1206,7 @@ run_gemini_runtime() {
     unset GEMINI_API_KEY GOOGLE_API_KEY
     export HOME="$REAL_HOME"
     seed_user_tool_dirs "$HOME"
+    prepare_gemini_home "$HOME" "$workdir"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Gemini CLI · OAuth"
@@ -1209,7 +1240,7 @@ run_gemini_runtime() {
   export XDG_CACHE_HOME="$runtime_dir/xdg/cache"
   export XDG_STATE_HOME="$runtime_dir/xdg/state"
   seed_user_tool_dirs "$HOME"
-  prepare_gemini_home "$HOME"
+  prepare_gemini_home "$HOME" "$workdir"
 
   if [[ "$auth_mode" == "custom" ]]; then
     load_custom_env "$CUSTOM_ENV_FILE"

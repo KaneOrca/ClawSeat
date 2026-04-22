@@ -217,10 +217,11 @@ def test_start_engineer_invokes_launcher_and_updates_runtime_dir(
     hooks.write_session.assert_called_once_with(session)
     hooks.apply_template.assert_called_with(session, hooks.load_project.return_value)
     title_cmds = [call.args[0] for call in mock_tmux.call_args_list]
-    assert title_cmds == [
+    assert title_cmds[:2] == [
         ["set", "-g", "set-titles", "on"],
         ["set", "-g", "set-titles-string", "#{session_name}"],
     ]
+    assert any(cmd[:4] == ["set-option", "-t", f"={session.session}", "detach-on-destroy"] for cmd in title_cmds)
 
 
 def test_start_engineer_passes_custom_env_file_and_launcher_removes_it(

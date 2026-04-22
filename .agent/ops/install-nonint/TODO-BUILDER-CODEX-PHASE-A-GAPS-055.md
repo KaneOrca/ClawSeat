@@ -505,6 +505,76 @@ seat 启动后处于 onboarding 时：
   - grep brief 含 "不要反复 start-engineer" 警示
   - grep brief 含 "通过 session list 查状态"
 
+### R11 · Project isolation + 始祖诊断护栏（smoke02 窗口混淆 + smoke01 symlink 错位 事故根治）
+
+**两个独立事件汇总到一个 R**：
+
+**事件 A · 项目身份混淆**：smoke02 始祖在 clawseat-smoke01 iTerm 窗口里对 designer pane 发命令（"designer" pane 名吃掉了 `smoke01-` 前缀，始祖凭直觉选）
+
+**事件 B · 飞书 auth 诊断盲区**：smoke01 始祖反复把 real HOME `/Users/ywf`（余文锋）说成 "sandbox 张根铭"，手动把 planner HOME symlink 到 **ancestor sandbox HOME**（错的源头），反而让 planner 继承张根铭 app 而不是余文锋
+
+**根因共通**：始祖 context 没有 **运行时身份断言机制**；遇到歧义靠直觉。
+
+**修复 R11.1 · brief 硬规则 "project scope 断言"**（`core/templates/ancestor-brief.template.md`）：
+
+每次进入 B3.5 / B5 / B6 / B7 操作 seat 前，强制跑：
+
+```bash
+# project scope assertion（每个 Phase 步骤开始时）
+[ "$(echo $PROJECT_NAME)" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
+echo "scope: project=$PROJECT_NAME ancestor_session=$(tmux display-message -p '#{session_name}')"
+```
+
+输出必须匹配 `ancestor_session=${PROJECT_NAME}-ancestor`；不匹配 → halt 并报告 operator "始祖身份错位"。
+
+**修复 R11.2 · iTerm 窗口操作 canonical 化**（brief + SKILL.md）：
+
+- 禁止始祖用 osascript / `iterm_panes_driver.py` 手拼窗口操作（ARCH_VIOLATION）
+- 唯一入口：`agent_admin window open-grid --project $PROJECT_NAME`（054 已交付）
+- 未来 "window focus" / "window pane-send" 也必须走 `agent_admin window <subcommand> --project <name>`
+
+**修复 R11.3 · 始祖 lark-cli 诊断前置核验**（SKILL.md §5.z troubleshooting 前言）：
+
+任何飞书 / lark-cli auth 诊断**开始前**，始祖必须跑：
+
+```bash
+python3 -c "from core.lib.real_home import real_user_home; print('real_user_home:', real_user_home())"
+echo "shell HOME: $HOME"
+```
+
+- 两值对照，明确 real HOME vs sandbox HOME
+- 未跑即下诊断结论 = ARCH_VIOLATION
+- 特别：始祖**不允许**根据路径前缀直觉判断 HOME 身份，必须信 `real_user_home()` 返回值
+
+**修复 R11.4 · 禁止始祖手动 symlink 调试 auth**（SKILL.md §9 ARCH_VIOLATION 列表）：
+
+- 手动 `ln -s <sandbox>/.lark-cli` → ARCH_VIOLATION
+- 手动 `HOME=<sandbox> lark-cli auth login` → ARCH_VIOLATION（会往 sandbox 写独立 auth，污染跨项目）
+- pre-existing sandbox 复用失败的**唯一**修复入口：
+  ```
+  python3 core/scripts/agent_admin.py session reseed-sandbox --project <name> --all
+  ```
+
+**修复 R11.5 · `send-and-verify.sh` / 所有跨 seat 命令强制 `--project` scope**（brief + SKILL.md）：
+
+现有 `send-and-verify.sh --project` guardrail 已 C6 落地，但 brief 里还有裸 send-keys 示例。R11.5 把所有通讯例子都补 `--project $PROJECT_NAME` 前缀。
+
+**修复 R11.6（长期，可 defer）· sandbox 独立 `TMUX_TMPDIR`**：
+
+launcher 为每个 seat 设 `TMUX_TMPDIR=<sandbox_home>/.tmux/`，tmux server 按 project 隔离：
+- `tmux ls` 在 sandbox 里只看得到自己的 session
+- 消灭 "跨项目看到其他 session" 的架构漏洞
+- 例外：`machine-memory-claude` 单独 expose（singleton 跨项目可见）
+
+R11.6 是架构重构，不卡 R7-R10 + R11.1-5。标记 v0.8 候选，除非 operator 强制要求。
+
+### R11 测试
+
+- `tests/test_ancestor_brief_project_scope_assertion.py`：grep brief 含 `echo "scope: project=$PROJECT_NAME"` pattern
+- `tests/test_ancestor_skill_window_ops_canonical.py`：SKILL.md 明确禁止 osascript / iterm_panes_driver 手拼
+- `tests/test_ancestor_skill_larkcli_diagnostic_gate.py`：§5.z 开头含 `real_user_home()` 前置核验
+- `tests/test_ancestor_skill_no_manual_symlink.py`：§9 ARCH_VIOLATION 列表含 "手动 symlink .lark-cli"
+
 **测试**：
 
 - `tests/test_launcher_gemini_trust_seed.py`：
@@ -515,7 +585,100 @@ seat 启动后处于 onboarding 时：
   - mock tmux capture-pane 返回 "Do you trust" 字样 → wait-for-seat 打印明确错误而非超时
   - mock 返回 READY → 正常 attach
 
-### R5+R6+R7+R8+R9+R10 测试
+### R12 · brief Common Operations cookbook（smoke01 重启 planner 事故）
+
+**问题**（实测）：始祖 restart 后被 operator 要求"重启 planner"，它**没找到 brief 里的对应命令**（B3.5 spawn 流程已结束 phase，始祖不会回查），开始：
+- 试 v0.5 旧 API `agent_admin start-identity claude.oauth.anthropic.smoke01.planner`
+- 试 v0.8 未实现的 `clawseat init`
+- `sudo ln -sf /usr/bin/python3 /usr/local/bin/python3.11`（改宿主环境，严重越界）
+- 始终未 grep brief / SKILL 找 canonical 命令
+
+**根因**：brief 是按 Phase（B0-B7 流程）组织的，**没有 "任意时点都可查的常用操作" 索引**。
+
+**修复 R12.1 · brief 末尾追加 "Common Operations Cookbook"**（`core/templates/ancestor-brief.template.md`）：
+
+```markdown
+## Common Operations Cookbook（任何时点查阅，覆盖 Phase 之外）
+
+### Seat 生命周期
+
+| 场景 | 命令 |
+|------|------|
+| 首次 spawn / 重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 切换 seat harness（claude→codex 等）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer <seat> --tool <claude\|codex\|gemini> --mode <oauth\|oauth_token\|api> --provider <provider>` |
+| 强制 reset 重启（kill+relaunch）| 同上 + `--reset` flag |
+| 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session list --project ${PROJECT_NAME}` |
+| 检查单个 tmux session 是否存活 | `tmux has-session -t '${PROJECT_NAME}-<seat>'` |
+
+### Sandbox HOME / lark-cli
+
+| 场景 | 命令 |
+|------|------|
+| sandbox 复用 lark-cli auth 失败 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session reseed-sandbox --project ${PROJECT_NAME} --all` |
+| 飞书诊断前置核验 real HOME | `python3 -c "from core.lib.real_home import real_user_home; print(real_user_home())"` |
+
+### Window / iTerm
+
+| 场景 | 命令 |
+|------|------|
+| 重开 / 恢复 iTerm 6 宫格 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
+| 同时开 memory 独立窗口 | 加 `--open-memory` flag |
+
+### Brief drift
+
+| 场景 | 命令 |
+|------|------|
+| 检查自己是否过时 | `bash ${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh` |
+
+### 通讯
+
+| 场景 | 命令 |
+|------|------|
+| 给其他 seat 发消息 | `bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh --project ${PROJECT_NAME} <seat> "<text>"` |
+| 派结构化 TODO 任务 | `python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py ...` |
+
+### 飞书
+
+| 场景 | 命令 |
+|------|------|
+| 飞书联调 troubleshooting | 见 SKILL.md §5.z 7 步流程 |
+| 发送任务报告 | `FEISHU_SENDER_MODE=bot python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/send_delegation_report.py ...` |
+```
+
+### R13 · 始祖 meta-rule "执行前先查 canonical"（smoke01 凭直觉拼 CLI 事故）
+
+**修复 R13.1 · SKILL.md §9 ARCH_VIOLATION 列表追加**：
+
+```markdown
+| "我猜命令名是 ..." / 凭训练数据拼 CLI | 必须先 grep brief Cookbook 或 SKILL.md 找 canonical | grep "<场景关键字>" $CLAWSEAT_ANCESTOR_BRIEF SKILL.md |
+| "我先 sudo / pip install / brew install ..." | **禁止**改宿主环境（除 brief 明确指引）| 报 operator："需要装 X，请你来做" |
+| 试旧版 API（start-identity / clawseat init / clawseat-cli ...）| 这些是 v0.5/v0.6/v0.8 名字；canonical 是 agent_admin.py | 见 Common Operations Cookbook |
+```
+
+**修复 R13.2 · brief 开头加 meta-rule**：
+
+```markdown
+## Meta-rule（最高优先级）
+
+执行任何 shell 命令前**必须先**：
+1. grep `$CLAWSEAT_ANCESTOR_BRIEF` 找场景关键字（"重启" / "切换" / "lark-cli" 等）
+2. 命中 Cookbook → 用 canonical 命令
+3. 未命中 → grep `${CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md`
+4. 仍未命中 → 报 operator："Cookbook 没覆盖此场景，请提供命令"
+
+**禁止**：
+- 凭训练数据 / 直觉拼装 CLI 命令
+- sudo / pip install / brew install 改宿主环境（除非 brief 明确指引）
+- 试错式跑命令（一个 fail 就换名字再试）
+```
+
+### R12 + R13 测试
+
+- `tests/test_ancestor_brief_cookbook_section.py`：grep brief 末尾含 "Common Operations Cookbook"，覆盖 5 个场景类别（seat lifecycle / sandbox / window / drift / 通讯）
+- `tests/test_ancestor_brief_meta_rule.py`：grep brief 开头含 "Meta-rule" + "执行前先 grep" + "禁止 sudo / pip install"
+- `tests/test_ancestor_skill_arch_violation_cli_guess.py`：SKILL.md §9 含 "凭训练数据拼 CLI" / "v0.5 旧 API" 等 violation 类别
+
+### R5+R6+R7+R8+R9+R10+R11+R12+R13 测试
 
 - `tests/test_launcher_seed_reseed_existing.py`：mock pre-existing sandbox `.lark-cli` 独立目录 → 验证 R5.1 备份 + 创建 symlink
 - `tests/test_agent_admin_session_reseed.py`：`reseed-sandbox --all` 对多 seat 幂等，已是 symlink 跳过
@@ -564,6 +727,13 @@ seat 启动后处于 onboarding 时：
 - tests/test_start_engineer_onboarding_detect.py (R10.1)
 - tests/test_start_engineer_no_kill_during_onboard.py (R10.2)
 - tests/test_ancestor_brief_no_retry_loop.py (R10.4)
+- tests/test_ancestor_brief_project_scope_assertion.py (R11.1)
+- tests/test_ancestor_skill_window_ops_canonical.py (R11.2)
+- tests/test_ancestor_skill_larkcli_diagnostic_gate.py (R11.3)
+- tests/test_ancestor_skill_no_manual_symlink.py (R11.4)
+- tests/test_ancestor_brief_cookbook_section.py (R12.1)
+- tests/test_ancestor_brief_meta_rule.py (R13.2)
+- tests/test_ancestor_skill_arch_violation_cli_guess.py (R13.1)
 
 ## Verification
 <pytest 输出 + R3 调研结论 + R5 smoke（smoke01 sandbox 真实 reseed 试跑）>
