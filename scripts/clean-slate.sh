@@ -13,10 +13,10 @@
 # WHAT IT DELETES
 #   /tmp/ClawSeat                        — prior ancestor clone
 #   ~/.openclaw/skills/{clawseat*,gstack-harness,lark-im,lark-shared,
-#                       agent-monitor,tmux-basics,socratic-requirements,cs}
+#                       tmux-basics,socratic-requirements,cs}
 #                                         — ClawSeat P0 skill symlinks
 #   ~/.openclaw/workspace-*/skills/{clawseat*,gstack-harness,lark-im,
-#                                   lark-shared,agent-monitor,tmux-basics,
+#                                   lark-shared,tmux-basics,
 #                                   socratic-requirements}
 #                                         — ClawSeat P3 overlay symlinks
 #   ~/.claude/skills/{clawseat,clawseat-install,cs}
@@ -69,13 +69,13 @@ done
 
 HOME_DIR="${HOME:-/Users/$USER}"
 CLAWSEAT_SKILLS=(
-  clawseat clawseat-install clawseat-koder-frontstage
-  gstack-harness lark-im lark-shared agent-monitor
+  clawseat clawseat-install
+  gstack-harness lark-im lark-shared
   tmux-basics socratic-requirements cs
 )
 CLAWSEAT_OVERLAY_SKILLS=(
-  clawseat clawseat-install clawseat-koder-frontstage
-  gstack-harness lark-im lark-shared agent-monitor
+  clawseat clawseat-install
+  gstack-harness lark-im lark-shared
   tmux-basics socratic-requirements
 )
 CLAWSEAT_ENTRY_SKILLS=( clawseat clawseat-install cs )

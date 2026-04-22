@@ -23,7 +23,6 @@ profiles = ["examples/starter/profiles"]
 docs = ["docs/INSTALL.md", "docs/ARCHITECTURE.md"]
 optional = [
   "adapters/projects/openclaw",
-  "examples/arena-pretext-ui",
   "docs",
 ]
 
@@ -32,7 +31,6 @@ openclaw_marketplace = "marketplace.json"
 openclaw_bundle = ".claude-plugin/plugin.json"
 product_skill = "core/skills/clawseat/SKILL.md"
 install_skill = "core/skills/clawseat-install/SKILL.md"
-frontstage_skill = "core/skills/clawseat-koder-frontstage/SKILL.md"
 runtime_core = "core/skills/gstack-harness/SKILL.md"
 bootstrap = "shells/openclaw-plugin/openclaw_bootstrap.py"
 

@@ -2,7 +2,7 @@
 
 Background
 ----------
-Follow-up #22 from `design/followups-after-m1.md`:
+Historic follow-up #22:
   complete_handoff.py --target koder from a non-planner source silently
   falls into the tmux seat path. koder isn't a tmux session (it runs
   inside OpenClaw), so `notify` fails; but the Feishu

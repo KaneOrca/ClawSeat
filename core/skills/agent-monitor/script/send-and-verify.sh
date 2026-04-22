@@ -1,1 +1,0 @@
-../../../shell-scripts/send-and-verify.sh

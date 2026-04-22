@@ -322,12 +322,11 @@ class TestBody:
         assert "Phase-A" in out
         assert "Phase-B" in out
 
-    def test_body_references_responsibility_spec(self, v2_profile, no_tmux):
+    def test_body_references_bootstrap_spec(self, v2_profile, no_tmux):
         ctx = ancestor_brief.load_context_from_profile(
             project="install", profile_path=v2_profile,
         )
         out = ancestor_brief.render_brief(ctx)
-        assert "docs/design/ancestor-responsibilities.md" in out
         assert "docs/schemas/ancestor-bootstrap-brief.md" in out
 
 

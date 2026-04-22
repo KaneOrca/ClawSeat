@@ -6,7 +6,6 @@ status: architect-reviewed
 author: tui-engineer
 review_owner: architect
 spec_documents:
-  - docs/design/ancestor-responsibilities.md
   - docs/schemas/ancestor-bootstrap-brief.md
 ---
 

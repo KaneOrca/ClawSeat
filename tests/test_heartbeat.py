@@ -419,27 +419,3 @@ def test_beacon_concurrency_different_projects(tmp_path, tmp_path_factory):
         assert f"oc_{proj}" in logged
         assert proj in logged
 
-
-# ---------------------------------------------------------------------------
-# koder-frontstage SKILL.md has heartbeat reception section
-# ---------------------------------------------------------------------------
-
-
-def test_skill_md_has_heartbeat_section():
-    skill_md = _REPO / "core" / "skills" / "clawseat-koder-frontstage" / "SKILL.md"
-    assert skill_md.exists()
-    text = skill_md.read_text()
-    assert "## Heartbeat reception" in text
-    assert "[HEARTBEAT_TICK project=" in text
-    assert "HEARTBEAT_ACK" in text
-
-
-def test_skill_md_heartbeat_has_five_steps():
-    skill_md = _REPO / "core" / "skills" / "clawseat-koder-frontstage" / "SKILL.md"
-    text = skill_md.read_text()
-    section_start = text.find("## Heartbeat reception")
-    section_end = text.find("\n## ", section_start + 1)
-    section = text[section_start:section_end] if section_end != -1 else text[section_start:]
-    # Check 5 numbered steps exist
-    for i in range(1, 6):
-        assert f"{i}." in section, f"Step {i} missing from Heartbeat reception section"

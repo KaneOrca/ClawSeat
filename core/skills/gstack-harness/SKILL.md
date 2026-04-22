@@ -49,7 +49,6 @@ Do not load every reference by default. Start from the project profile under
   - [Heartbeat policy](references/heartbeat-policy.md)
 - tmux transport / diagnostics / self-diagnosis
   - loaded automatically via `tmux-basics` skill (all seats)
-  - advanced takeover patterns via `agent-monitor` skill (koder + planner)
 - bootstrap / project setup
   - [Seat model](references/seat-model.md)
   - [Console model](references/console-model.md)

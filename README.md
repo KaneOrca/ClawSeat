@@ -2,7 +2,7 @@
 
 ClawSeat is an independent skill-first multi-agent control plane.
 
-It is not `cartooner`, `openclaw`, or `arena-pretext-ui`.
+It is not `cartooner`, `openclaw`, or any consumer project checkout.
 Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core source tree.
 
 ## Install
@@ -55,12 +55,9 @@ See the script header for the full preserve/delete list.
 
 ### Legacy profiles (pre-v0.5)
 
-The old five-template lineup (`install.toml`, `install-with-memory.toml`,
-`install-openclaw.toml`, `starter.toml`, `full-team.toml`) is archived under
-[`examples/starter/profiles/legacy/`](examples/starter/profiles/legacy/). They
-are migration/reference material only. New installs should follow
-[`docs/INSTALL.md`](docs/INSTALL.md) and write validated v2 profiles instead.
-Read that directory's `README.md` if you need to migrate an existing v1 profile:
+The old v1 profile templates are no longer shipped in-tree. New installs should
+follow [`docs/INSTALL.md`](docs/INSTALL.md) and write validated v2 profiles
+instead. If you need to migrate an existing v1 profile, use:
 
 ```bash
 python3 core/scripts/migrate_profile_to_v2.py apply --project <name>
@@ -132,7 +129,6 @@ Consumer projects stay separate:
 
 - `cartooner`
 - `openclaw`
-- `arena-pretext-ui`
 
 ## Structure
 
@@ -166,7 +162,6 @@ Still intentionally external:
 
 - the `cartooner` product repo
 - the `openclaw` product repo
-- the `arena-pretext-ui` sample app repo
 
 ## Hand-edited profile fields
 
@@ -194,8 +189,6 @@ Runtime contract:
   `core/skills/gstack-harness/scripts/_common.py`
 
 Setup details and examples live in `docs/INSTALL.md`.
-
-Packaging/export details live in [docs/PACKAGING.md](docs/PACKAGING.md).
 
 ## Activating heartbeat for a project
 

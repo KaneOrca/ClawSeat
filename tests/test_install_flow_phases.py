@@ -9,9 +9,8 @@ Scope
 P0.0  preflight --help               → exit 0
 P0.2  install_entry_skills.py --help   → exit 0
 P0.3  scan_environment.py --only credentials → exit 0, writes machine/credentials.json
-P0.4  profile template exists + valid TOML
 P0.5  bootstrap_harness.py --help      → exit 0 (no tomllib crash)
-P0.6  refresh_workspaces.py --help     → exit 0, --dry-run exits 0
+P0.6  refresh_workspaces.py --help     → exit 0
 
 Deferred (require tmux seat or operator action):
 - P1.1 start_seat memory (requires tmux)
@@ -161,32 +160,6 @@ def test_p0_3_scan_environment_credentials_exits_zero(tmp_path):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# P0.4 — Profile template
-# ─────────────────────────────────────────────────────────────────────────────
-
-def test_p0_4_install_with_memory_toml_is_valid_toml():
-    """install-with-memory.toml must be parseable TOML."""
-    import tomllib
-    profile_path = REPO / "examples" / "starter" / "profiles" / "legacy" / "install-with-memory.toml"
-    with profile_path.open("rb") as f:
-        data = tomllib.load(f)
-    assert data.get("heartbeat_transport") == "tmux"
-    assert "koder" in data.get("dynamic_roster", {}).get("runtime_seats", [])
-    assert data.get("heartbeat_owner") == "koder"
-
-
-def test_p0_4_install_openclaw_toml_is_valid_toml():
-    """install-openclaw.toml must be parseable TOML."""
-    import tomllib
-    profile_path = REPO / "examples" / "starter" / "profiles" / "legacy" / "install-openclaw.toml"
-    with profile_path.open("rb") as f:
-        data = tomllib.load(f)
-    assert data.get("heartbeat_transport") == "openclaw"
-    assert "koder" not in data.get("runtime_seats", [])
-    assert data.get("heartbeat_owner") == "koder"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # P0.5 — Bootstrap workspace
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -214,19 +187,3 @@ def test_p0_6_refresh_workspaces_help_exits_zero():
         "--help",
     ])
     assert r.returncode == 0, f"--help failed:\nSTDERR:{r.stderr}"
-
-
-def test_p0_6_refresh_workspaces_dry_run_exits_zero():
-    """refresh_workspaces.py --dry-run on a fresh profile must exit 0."""
-    import tomllib
-    profile_path = REPO / "examples" / "starter" / "profiles" / "legacy" / "install-with-memory.toml"
-    with profile_path.open("rb") as f:
-        profile_data = tomllib.load(f)
-    project_name = profile_data["project_name"]
-    r = _run([
-        sys.executable,
-        str(REPO / "core" / "skills" / "clawseat-install" / "scripts" / "refresh_workspaces.py"),
-        "--profile", str(profile_path),
-        "--dry-run",
-    ])
-    assert r.returncode == 0, f"refresh_workspaces --dry-run failed:\nSTDERR:{r.stderr}"

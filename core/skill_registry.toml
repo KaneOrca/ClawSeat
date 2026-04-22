@@ -20,14 +20,6 @@ roles = ["frontstage-supervisor", "planner-dispatcher"]
 description = "ClawSeat bootstrap and install coordination"
 
 [[skills]]
-name = "clawseat-koder-frontstage"
-source = "bundled"
-path = "{CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md"
-required = false
-roles = ["frontstage-supervisor"]
-description = "Frontstage intake, disposition, and configuration skill for koder"
-
-[[skills]]
 name = "clawseat"
 source = "bundled"
 path = "{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md"
@@ -60,14 +52,6 @@ path = "{CLAWSEAT_ROOT}/core/skills/workflow-architect/SKILL.md"
 required = false
 roles = ["planner-dispatcher"]
 description = "Planner-only workflow skeleton design: map structured briefs to reusable step specs and dispatch"
-
-[[skills]]
-name = "agent-monitor"
-source = "bundled"
-path = "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md"
-required = false
-roles = ["frontstage-supervisor", "planner-dispatcher"]
-description = "Observe, contact, and unblock other ClawSeat seats via tmux and iTerm"
 
 [[skills]]
 name = "lark-shared"

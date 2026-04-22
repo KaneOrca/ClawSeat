@@ -36,9 +36,7 @@ effort = "max"
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/socratic-requirements/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-careful/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-office-hours/SKILL.md",
@@ -84,7 +82,6 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/socratic-requirements/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/lark-shared/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/lark-im/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md",
   "~/.gstack/repos/gstack/.agents/skills/gstack-ship/SKILL.md",

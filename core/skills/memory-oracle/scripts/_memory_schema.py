@@ -7,7 +7,7 @@ Schema (SPEC §4):
     "schema_version": 1,
     "kind": "decision|delivery|issue|finding|reflection|library_knowledge|example|pattern|event",
     "id": "<kind>-<project|shared>-<hash>",
-    "project": "arena-pretext-ui | _shared",
+    "project": "<project-name> | _shared",
     "author": "planner | builder-1 | memory | ...",
     "ts": "2026-04-18T...",
     "title": "short",

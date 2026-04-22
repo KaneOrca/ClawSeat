@@ -78,16 +78,6 @@ def test_migrate_profile_tasks_root_uses_home_not_tmp():
     assert ".agents" in joined or "~" in joined, f"tasks_root doesn't use home convention: {joined}"
 
 
-def test_arena_profile_is_canonical_layout():
-    """arena-pretext-ui.toml tasks_root and workspace_root must use ~/.agents/ prefix."""
-    profile_path = _EXAMPLES / "arena-pretext-ui" / "profiles" / "arena-pretext-ui.toml"
-    data = tomllib.loads(profile_path.read_text(encoding="utf-8"))
-    tasks_root = data.get("tasks_root", "")
-    workspace_root = data.get("workspace_root", "")
-    assert tasks_root.startswith("~/.agents/"), f"tasks_root not canonical: {tasks_root!r}"
-    assert workspace_root.startswith("~/.agents/"), f"workspace_root not canonical: {workspace_root!r}"
-
-
 def test_tool_binaries_dict_has_no_direct_homebrew_literal():
     """TOOL_BINARIES in agent_admin_config.py must not contain literal /opt/homebrew/ strings."""
     source = (_SCRIPTS / "agent_admin_config.py").read_text(encoding="utf-8")
