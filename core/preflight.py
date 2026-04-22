@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -273,6 +274,93 @@ def _check_tmux() -> tuple[PreflightItem, PreflightItem]:
         )
 
     return install_check, server_check
+
+
+def _check_iterm2() -> PreflightItem:
+    """Check iTerm2.app installed (macOS-only)."""
+    if platform.system() != "Darwin":
+        return PreflightItem(
+            name="iterm2",
+            status=PreflightStatus.PASS,
+            message="iTerm2 not required on non-macOS",
+        )
+
+    iterm_paths = [
+        Path("/Applications/iTerm.app"),
+        real_user_home() / "Applications" / "iTerm.app",
+    ]
+    for path in iterm_paths:
+        if path.exists():
+            return PreflightItem(
+                name="iterm2",
+                status=PreflightStatus.PASS,
+                message=f"iTerm2 at {path}",
+            )
+
+    has_brew = shutil.which("brew") is not None
+    fix = (
+        "brew install --cask iterm2"
+        if has_brew
+        else "Install iTerm2 from https://iterm2.com/ or via brew (install Homebrew first)"
+    )
+    return PreflightItem(
+        name="iterm2",
+        status=PreflightStatus.HARD_BLOCKED,
+        message="iTerm2.app not found in /Applications or ~/Applications",
+        fix_command=fix,
+    )
+
+
+def _check_iterm2_python_module() -> PreflightItem:
+    """Check the iterm2 Python module is importable (macOS-only)."""
+    if platform.system() != "Darwin":
+        return PreflightItem(
+            name="iterm2_python",
+            status=PreflightStatus.PASS,
+            message="iterm2 Python module not required on non-macOS",
+        )
+    try:
+        env = os.environ.copy()
+        env["HOME"] = str(real_user_home())
+        result = subprocess.run(
+            [sys.executable, "-c", "import iterm2"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            env=env,
+        )
+        if result.returncode == 0:
+            return PreflightItem(
+                name="iterm2_python",
+                status=PreflightStatus.PASS,
+                message="iterm2 module importable",
+            )
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return PreflightItem(
+        name="iterm2_python",
+        status=PreflightStatus.HARD_BLOCKED,
+        message="iterm2 Python module not installed (needed by iterm_panes_driver.py)",
+        fix_command="pip3 install --user --break-system-packages iterm2",
+    )
+
+
+def _check_claude_required() -> PreflightItem:
+    """Check claude CLI installed — HARD_BLOCKED for install bootstrap."""
+    path = shutil.which("claude")
+    if path:
+        return PreflightItem(
+            name="claude_required",
+            status=PreflightStatus.PASS,
+            message=f"claude at {path}",
+        )
+    return PreflightItem(
+        name="claude_required",
+        status=PreflightStatus.HARD_BLOCKED,
+        message="claude CLI not found — install Claude Code from https://claude.ai/code",
+        fix_command="# Visit https://claude.ai/code to install Claude Code CLI",
+    )
 
 
 def _check_repo_integrity(clawseat_root: Path) -> PreflightItem:
@@ -618,12 +706,14 @@ def _check_skills(active_roles: set[str] | None = None) -> list[PreflightItem]:
         )]
 
 
-def preflight_check(project: str) -> PreflightResult:
+def preflight_check(project: str, phase: str = "runtime") -> PreflightResult:
     """
     Run all preflight checks for the given project.
 
     Returns a PreflightResult with per-item status and categorized lists.
     """
+    if phase not in {"bootstrap", "runtime"}:
+        raise ValueError(f"unsupported preflight phase: {phase}")
     items: list[PreflightItem] = []
 
     # CLAWSEAT_ROOT
@@ -651,105 +741,112 @@ def preflight_check(project: str) -> PreflightResult:
             message="cannot check — CLAWSEAT_ROOT not resolved",
         ))
 
-    # dynamic profile
-    items.append(_check_dynamic_profile(project))
+    if phase == "bootstrap":
+        items.append(_check_iterm2())
+        items.append(_check_iterm2_python_module())
+        items.append(_check_claude_required())
+    else:
+        # dynamic profile
+        items.append(_check_dynamic_profile(project))
 
-    # session binding dir
-    items.append(_check_session_binding_dir(project))
+        # session binding dir
+        items.append(_check_session_binding_dir(project))
 
     # optional runtime CLIs (WARNING, not blocking)
-    items.append(_check_optional_cli("claude", "Claude Code CLI", "npm install -g @anthropic-ai/claude-code"))
+    if phase != "bootstrap":
+        items.append(_check_optional_cli("claude", "Claude Code CLI", "npm install -g @anthropic-ai/claude-code"))
     items.append(_check_optional_cli("codex", "Codex CLI", "npm install -g @openai/codex"))
     items.append(_check_optional_cli("lark-cli", "Feishu/Lark CLI", "brew install larksuite/cli/lark-cli"))
 
-    # Load the profile's active roles FIRST — the gstack check below uses
-    # them to decide severity (HARD_BLOCKED when a specialist role that
-    # actually needs gstack is declared, WARNING otherwise).
-    active_roles = _load_active_roles(project)
+    if phase != "bootstrap":
+        # Load the profile's active roles FIRST — the gstack check below uses
+        # them to decide severity (HARD_BLOCKED when a specialist role that
+        # actually needs gstack is declared, WARNING otherwise).
+        active_roles = _load_active_roles(project)
 
-    # gstack skills — HARD_BLOCKED when this profile declares a role that
-    # genuinely needs gstack (builder / reviewer / qa / designer); WARNING
-    # otherwise (koder-only profiles like starter.toml can legitimately
-    # ship without gstack). Previously this was always WARNING, which
-    # gave a misleading green-light when downstream bootstrap helpers
-    # would then hard-fail on the same missing dependency — a textbook
-    # "ladder of mysterious failures".
-    #
-    # GSTACK_SKILLS_ROOT env lets operators who cloned gstack at a
-    # non-canonical path opt out of the default `~/.gstack/repos/gstack/`
-    # lookup. Keep the resolver pattern in sync with
-    # core/skill_registry.py::_resolve_gstack_skills_root and
-    # core/skills/gstack-harness/scripts/dispatch_task.py.
-    _GSTACK_NEEDED_ROLES = {"builder", "reviewer", "qa", "designer"}
-    gstack_env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
-    if gstack_env:
-        gstack_expanded = Path(gstack_env).expanduser()
-        if gstack_expanded.is_absolute():
-            gstack_root = gstack_expanded
-            gstack_source = "GSTACK_SKILLS_ROOT"
+        # gstack skills — HARD_BLOCKED when this profile declares a role that
+        # genuinely needs gstack (builder / reviewer / qa / designer); WARNING
+        # otherwise (koder-only profiles like starter.toml can legitimately
+        # ship without gstack). Previously this was always WARNING, which
+        # gave a misleading green-light when downstream bootstrap helpers
+        # would then hard-fail on the same missing dependency — a textbook
+        # "ladder of mysterious failures".
+        #
+        # GSTACK_SKILLS_ROOT env lets operators who cloned gstack at a
+        # non-canonical path opt out of the default `~/.gstack/repos/gstack/`
+        # lookup. Keep the resolver pattern in sync with
+        # core/skill_registry.py::_resolve_gstack_skills_root and
+        # core/skills/gstack-harness/scripts/dispatch_task.py.
+        _GSTACK_NEEDED_ROLES = {"builder", "reviewer", "qa", "designer"}
+        gstack_env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
+        if gstack_env:
+            gstack_expanded = Path(gstack_env).expanduser()
+            if gstack_expanded.is_absolute():
+                gstack_root = gstack_expanded
+                gstack_source = "GSTACK_SKILLS_ROOT"
+            else:
+                # Non-absolute env var would silently resolve against cwd.
+                # Surface it as a preflight HARD_BLOCKED because the operator's
+                # intent is clearly "redirect gstack" and falling back silently
+                # to the canonical path would cause more confusion than halting.
+                items.append(PreflightItem(
+                    name="gstack",
+                    status=PreflightStatus.HARD_BLOCKED,
+                    message=(
+                        f"GSTACK_SKILLS_ROOT={gstack_env!r} is not an absolute path. "
+                        f"Relative paths silently resolve against the shell's cwd and "
+                        f"produce mystery 'skill not found' errors downstream."
+                    ),
+                    fix_command=(
+                        "export GSTACK_SKILLS_ROOT=" + str(gstack_expanded.resolve()) + "\n"
+                        "# or any other absolute path to your gstack .agents/skills/ dir"
+                    ),
+                ))
+                # Continue with canonical default so later checks still fire.
+                gstack_root = real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+                gstack_source = "canonical (env var ignored because non-absolute)"
         else:
-            # Non-absolute env var would silently resolve against cwd.
-            # Surface it as a preflight HARD_BLOCKED because the operator's
-            # intent is clearly "redirect gstack" and falling back silently
-            # to the canonical path would cause more confusion than halting.
+            gstack_root = real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
+            gstack_source = "canonical ~/.gstack/repos/gstack/.agents/skills"
+        if not gstack_root.exists():
+            profile_needs_gstack = bool(active_roles and (active_roles & _GSTACK_NEEDED_ROLES))
+            status = (
+                PreflightStatus.HARD_BLOCKED if profile_needs_gstack else PreflightStatus.WARNING
+            )
+            role_hit = ", ".join(sorted((active_roles or set()) & _GSTACK_NEEDED_ROLES)) or "none"
+            message = (
+                f"gstack skills not found at {gstack_root} "
+                f"(source: {gstack_source}). "
+            )
+            if profile_needs_gstack:
+                message += (
+                    f"Profile declares specialist role(s) {{{role_hit}}} that require "
+                    f"gstack — install cannot proceed."
+                )
+            else:
+                message += (
+                    "No specialist roles in this profile — gstack is optional for this "
+                    "project, but any downstream switch to install.toml / install-with-memory.toml / "
+                    "full-team.toml will require it."
+                )
             items.append(PreflightItem(
                 name="gstack",
-                status=PreflightStatus.HARD_BLOCKED,
-                message=(
-                    f"GSTACK_SKILLS_ROOT={gstack_env!r} is not an absolute path. "
-                    f"Relative paths silently resolve against the shell's cwd and "
-                    f"produce mystery 'skill not found' errors downstream."
-                ),
+                status=status,
+                message=message,
                 fix_command=(
-                    "export GSTACK_SKILLS_ROOT=" + str(gstack_expanded.resolve()) + "\n"
-                    "# or any other absolute path to your gstack .agents/skills/ dir"
+                    "# Path checked: " + str(gstack_root) + "\n"
+                    "# If gstack is not installed yet:\n"
+                    "  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack\n"
+                    "  cd ~/.gstack/repos/gstack && ./setup\n"
+                    "# If gstack is already installed at a non-canonical path:\n"
+                    "  export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills\n"
+                    "# Then re-run: python3.11 $CLAWSEAT_ROOT/core/preflight.py " + str(project)
                 ),
             ))
-            # Continue with canonical default so later checks still fire.
-            gstack_root = real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
-            gstack_source = "canonical (env var ignored because non-absolute)"
-    else:
-        gstack_root = real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills"
-        gstack_source = "canonical ~/.gstack/repos/gstack/.agents/skills"
-    if not gstack_root.exists():
-        profile_needs_gstack = bool(active_roles and (active_roles & _GSTACK_NEEDED_ROLES))
-        status = (
-            PreflightStatus.HARD_BLOCKED if profile_needs_gstack else PreflightStatus.WARNING
-        )
-        role_hit = ", ".join(sorted((active_roles or set()) & _GSTACK_NEEDED_ROLES)) or "none"
-        message = (
-            f"gstack skills not found at {gstack_root} "
-            f"(source: {gstack_source}). "
-        )
-        if profile_needs_gstack:
-            message += (
-                f"Profile declares specialist role(s) {{{role_hit}}} that require "
-                f"gstack — install cannot proceed."
-            )
-        else:
-            message += (
-                "No specialist roles in this profile — gstack is optional for this "
-                "project, but any downstream switch to install.toml / install-with-memory.toml / "
-                "full-team.toml will require it."
-            )
-        items.append(PreflightItem(
-            name="gstack",
-            status=status,
-            message=message,
-            fix_command=(
-                "# Path checked: " + str(gstack_root) + "\n"
-                "# If gstack is not installed yet:\n"
-                "  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack\n"
-                "  cd ~/.gstack/repos/gstack && ./setup\n"
-                "# If gstack is already installed at a non-canonical path:\n"
-                "  export GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills\n"
-                "# Then re-run: python3.11 $CLAWSEAT_ROOT/core/preflight.py " + str(project)
-            ),
-        ))
 
-    # skill registry validation (profile-aware: downgrade role-specific required skills
-    # to optional when those roles are absent from this profile's seat_roles)
-    items.extend(_check_skills(active_roles=active_roles))
+        # skill registry validation (profile-aware: downgrade role-specific required skills
+        # to optional when those roles are absent from this profile's seat_roles)
+        items.extend(_check_skills(active_roles=active_roles))
 
     # Categorize
     hard_blocked = [i for i in items if i.status == PreflightStatus.HARD_BLOCKED]
@@ -785,8 +882,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "project",
         nargs="?",
+        default="",
+        help="Project name (positional compatibility form).",
+    )
+    parser.add_argument(
+        "--project",
+        dest="project_flag",
         default=os.environ.get("OPENCLAW_PROJECT", ""),
         help="Project name (default: from OPENCLAW_PROJECT env var, or current project)",
+    )
+    parser.add_argument(
+        "--phase",
+        choices=("bootstrap", "runtime"),
+        default="runtime",
+        help="Preflight mode: bootstrap skips runtime-only checks; runtime is the default.",
     )
     parser.add_argument(
         "--json",
@@ -804,16 +913,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
+    project = args.project_flag or args.project
 
-    result = preflight_check(args.project)
+    result = preflight_check(project, phase=args.phase)
 
     if args.auto_fix:
         for item in result.retryable_items:
-            fixed = auto_fix(item, args.project)
+            fixed = auto_fix(item, project)
             idx = result.items.index(item)
             result.items[idx] = fixed
         # Re-run to get updated status
-        result = preflight_check(args.project)
+        result = preflight_check(project, phase=args.phase)
 
     if args.json:
         import json as _json
@@ -834,7 +944,7 @@ def main() -> int:
         print(_json.dumps(output, indent=2, ensure_ascii=False))
     else:
         # Human-readable output
-        print(f"preflight_check: {'PASS' if result.all_pass else 'FAIL'} [{args.project}]")
+        print(f"preflight_check: {'PASS' if result.all_pass else 'FAIL'} [{project}]")
         for item in result.items:
             icon = {
                 PreflightStatus.PASS: "✓",
@@ -849,8 +959,6 @@ def main() -> int:
                 print(f"      → {item.fix_command}")
 
     if result.has_hard_blocked:
-        return 1
-    if result.has_retryable:
         return 2
     return 0
 

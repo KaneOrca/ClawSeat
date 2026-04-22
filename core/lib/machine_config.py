@@ -22,6 +22,7 @@ try:
 except ImportError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
+from openclaw_home import discover_openclaw_home
 from real_home import real_user_home
 
 
@@ -75,7 +76,13 @@ def default_path() -> Path:
 
 
 def _openclaw_workspace_root() -> Path:
-    return real_user_home() / ".openclaw"
+    # Test/debug isolation: machine_config already respects CLAWSEAT_REAL_HOME
+    # for machine.toml. Keep OpenClaw auto-discovery anchored there too so
+    # local host CLI state does not leak into tmp-home test fixtures.
+    return discover_openclaw_home(
+        home=real_user_home(),
+        allow_cli=not bool(os.environ.get("CLAWSEAT_REAL_HOME")),
+    )
 
 
 # ── TOML serialization ────────────────────────────────────────────────
@@ -163,7 +170,7 @@ def _parse_raw(raw: dict[str, Any], source_path: Path) -> MachineConfig:
 
 
 def _discover_tenants() -> dict[str, OpenClawTenant]:
-    """Scan ~/.openclaw/workspace-*/ and build an OpenClawTenant for each."""
+    """Scan OpenClaw workspaces and build an OpenClawTenant for each."""
     oc_root = _openclaw_workspace_root()
     tenants: dict[str, OpenClawTenant] = {}
     if not oc_root.exists():
@@ -171,9 +178,13 @@ def _discover_tenants() -> dict[str, OpenClawTenant]:
     for child in sorted(oc_root.iterdir()):
         if not child.is_dir():
             continue
-        if not child.name.startswith("workspace-"):
+        contract = child / "WORKSPACE_CONTRACT.toml"
+        if child.name.startswith("workspace-"):
+            name = child.name[len("workspace-"):]
+        elif contract.exists():
+            name = child.name
+        else:
             continue
-        name = child.name[len("workspace-"):]
         if not _TENANT_NAME_RE.match(name):
             continue
         tenants[name] = OpenClawTenant(name=name, workspace=child, description="")

@@ -1,6 +1,16 @@
-# Canonical Flow
+# Canonical Flow (v0.7)
 
-> Shortest明确、最不容误解的 ClawSeat dispatch/completion/ACK 协议说明。
+> Shortest 明确、最不容误解的 ClawSeat dispatch / completion / ACK 协议说明。
+>
+> **v0.7 范式**：operator ↔ ancestor 走 **CLI 直接交互**；飞书通道为**可选 write-only
+> 广播** + 可选的 **koder 反向通道**（见 [INSTALL.md](INSTALL.md) §4）。本文件描述的
+> dispatch / completion / ACK 协议在 CLI-only 和 Feishu-enabled 模式下**均适用**；
+> 差异只在"是否经飞书转发"这一步。
+>
+> Seat lifecycle entry points are documented in
+> [docs/ARCHITECTURE.md §3z](ARCHITECTURE.md#seat-lifecycle-entry-points-v07-pyramid).
+> This file describes the dispatch / completion / ACK protocol *between
+> already-launched seats*; it does not describe how to launch them.
 
 ---
 
@@ -51,9 +61,13 @@ python3 complete_handoff.py \
 
 ---
 
-## 3. OC_DELEGATION_REPORT_V1（唯一 machine-readable control packet）
+## 3. OC_DELEGATION_REPORT_V1（可选的 Feishu-side control packet）
 
- planner → koder 通过 `lark-cli --as user` 发送结构化信封：
+> v0.7 里 OC_DELEGATION_REPORT_V1 **不是**主通道，只在 **koder 反向通道已启用**
+> （operator 从手机发消息，koder 负责解析并转发给 ClawSeat seat）时才会被生成。
+> CLI-only 模式下 seat 之间走 tmux send-keys + handoff receipt，无需此信封。
+
+当飞书通道启用时，planner → koder 通过 `lark-cli --as user` 发送结构化信封：
 
 ```
 [OC_DELEGATION_REPORT_V1]
@@ -112,18 +126,23 @@ planner closeout 回 frontstage 必须同时有：
 
 ---
 
-## 6. 席位通知路径选择
+## 6. 席位通知路径选择（v0.7）
 
-| koder 类型 | 通知路径 |
-|------------|---------|
-| koder = tmux session | `send-and-verify.sh` 直送 tmux session |
-| koder = OpenClaw | 飞书群（`lark-cli --as user` via `send_delegation_report.py`） |
+| 场景 | 通知路径 |
+|------|---------|
+| 默认（CLI-only）| `send-and-verify.sh` → tmux send-keys 直送目标 seat 的 tmux session（`<project>-<seat>`）|
+| Koder overlay 已启用（optional）| 飞书群（`lark-cli --as user` via `send_delegation_report.py`）；operator 从手机发的指令走这条路 |
+| Planner 主动广播 | Planner stop-hook → `lark-cli msg send` 结构化摘要到群（write-only，不解析回复）|
 
-> **旧群广播已废弃**。飞书群通知仅通过 `send_delegation_report.py` + `lark-cli --as user` 发送 OC_DELEGATION_REPORT_V1，默认关闭 opt-in。
+> **旧的"打开飞书群广播必须"已废弃**。v0.7 下 `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST`
+> 默认关闭；planner 的结构化广播是**新路径**，独立于旧的 delegation broadcast 开关。
 
 ---
 
-## 7. Project-Group Bridge Binding
+## 7. Project-Group Bridge Binding（optional — only when Feishu enabled）
+
+> v0.7 下该 bridge 是可选的：CLI-only 模式完全不需要。仅当已跑
+> `scripts/apply-koder-overlay.sh` 并希望 operator 从飞书远程指挥时才需要绑定。
 
 project ↔ Feishu group 的 durable bridge mapping 存储在：
 

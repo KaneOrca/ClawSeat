@@ -1,9 +1,9 @@
 ---
 name: clawseat-install
-description: Install ClawSeat on the current machine. v0.5 agent-driven flow — the invoking Claude Code reads `docs/INSTALL.md` from the cloned repo and executes it as a playbook. Use when a user says "install ClawSeat", "安装 ClawSeat", or asks to bootstrap a fresh project from zero.
+description: Install ClawSeat on the current machine. v0.7 CLI-first flow — the invoking Claude Code reads `docs/INSTALL.md` from the cloned repo and executes it as a playbook. Use when a user says "install ClawSeat", "安装 ClawSeat", or asks to bootstrap a fresh project from zero.
 ---
 
-# ClawSeat Install (v0.5 — agent-driven)
+# ClawSeat Install (v0.7 — CLI-first)
 
 You (the running Claude Code) are the installer.
 
@@ -65,13 +65,14 @@ orchestrator role.
   4. **reviewer**
   5. **qa**
   6. **designer**
-- **Tenant layer (Feishu only)**: `koder` — Feishu-side frontstage,
-  not a tmux seat.
+- **Tenant layer (Feishu optional)**: `koder` — optional OpenClaw-side
+  Feishu reverse channel adapter / async notification sink, not a tmux
+  seat and not the primary frontstage.
 
 Frontstage identity depends on runtime:
-- **Local CLI install** → ancestor is frontstage
-- **Feishu / OpenClaw path** → koder is frontstage (ancestor runs
-  headless behind it)
+- **CLI install** → ancestor is frontstage
+- **Feishu / OpenClaw path** → ancestor remains the CLI frontstage;
+  `koder` is only an optional post-install reverse-channel overlay
 
 ## Subagent mode (encouraged, across all seats)
 
@@ -87,6 +88,10 @@ When you read `docs/INSTALL.md` and it lists a step with independent
 substeps, prefer a subagent-per-substep pattern unless the doc says
 otherwise.
 
+For the five engineer seats, provider clarification must be done
+one-by-one via CLI prompt before any fan-out. Never use a Feishu
+delegate report as the provider-clarification channel.
+
 ## What to NOT do
 
 - Do **not** resurrect the retired TUI/bootstrap commands from older
@@ -95,13 +100,17 @@ otherwise.
   surface.
 - Do **not** invoke `/cs` for fresh installs — `/cs` is a separate
   resumer skill for "ancestor crashed, come back up"; it does not
-  replace the v0.5 playbook.
+  replace the v0.7 playbook.
 - Do **not** describe your work using the retired numbered runbook
-  terminology. v0.5 is: env-scan → seat-infra → launch-ancestor →
+  terminology. v0.7 is: env-scan → seat-infra → launch-ancestor →
   handoff.
 - Do **not** write v1 profiles. v2 schema only (`core/lib/profile_validator.py`).
 - Do **not** edit `openclaw/` source to fix an install problem. Use
   ClawSeat config or the OpenClaw plugin shell only.
+- Do **not** use Feishu delegate report (`OC_DELEGATION_REPORT_V1`) as
+  the primary channel for seat provider clarification.
+- Do **not** use Feishu `chat_id` as the project identifier — use
+  `agent_admin project bootstrap` / `agent_admin project use`.
 
 ## Resume / re-entry
 

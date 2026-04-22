@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# INTERNAL — do not call directly.
+# This is the L3 execution primitive in the v0.7 Seat Lifecycle Pyramid:
+#   L1 (user-facing): scripts/install.sh, scripts/apply-koder-overlay.sh
+#   L2 (CLI ops):     agent_admin session start-engineer, agent_admin project ...
+#   L3 (this file):   agent-launcher.sh — sandbox HOME + secrets + runtime_dir
+# See docs/ARCHITECTURE.md §3z for the full contract.
+# If you find yourself calling this script directly from a TODO or doc,
+# reconsider — L1 or L2 should already cover your case.
 # Unified launcher for Claude Code, Codex, and Gemini CLI with iTerm + tmux.
 #
 # Merged into clawseat from ~/Desktop/agent-launcher.command.
@@ -41,8 +49,6 @@ EXEC_MODE=""
 CUSTOM_ENV_FILE=""
 HEADLESS="0"
 DRY_RUN="0"
-CLONE_FROM=""
-SKIP_ANCESTOR_PREFLIGHT="0"
 PROMPT_AUTH_TOOL=""        # set by --prompt-auth <tool>; triggers early dispatch
 CHECK_SECRETS_TOOL=""      # set by --check-secrets <tool> (needs --auth too)
 
@@ -59,12 +65,6 @@ Options:
   --headless                     Do not open iTerm/Terminal; manage tmux only
   --dry-run                      Print resolved launch config and exit
   --exec-agent                   Internal flag used inside tmux
-  --clone-from <project>         When bootstrapping a new project via an
-                                 ancestor session, clone profile + seats
-                                 from the named existing project (wizard
-                                 only asks for the *new* project's chat_id)
-  --skip-ancestor-preflight      Skip the ancestor-session auto-wizard hook
-                                 (useful for smoke tests / recovery restarts)
   -h, --help                     Show this help
 EOF
 }
@@ -79,8 +79,6 @@ while [[ $# -gt 0 ]]; do
     --headless) HEADLESS="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --exec-agent) EXEC_MODE="1"; shift ;;
-    --clone-from) CLONE_FROM="$2"; shift 2 ;;
-    --skip-ancestor-preflight) SKIP_ANCESTOR_PREFLIGHT="1"; shift ;;
     # Sub-command for ClawSeat install helpers: pop the AppleScript auth
     # picker for <tool> and print the user's chosen auth value to stdout.
     # Exits 0 on selection, 1 on cancel, 2 on bad tool name.
@@ -1218,129 +1216,6 @@ if [[ -z "$EXEC_MODE" ]]; then
   if [[ -z "$SESSION_NAME" ]]; then
     SESSION_NAME="${TOOL_NAME}-${AUTH_MODE}-$(launcher_slugify "$(basename "$WORKDIR")")"
   fi
-
-  # ── Ancestor-session preflight ──────────────────────────────────────
-  # When session name matches "<project>-ancestor-<tool>", ensure the
-  # playbook-generated profile + brief are present before spawning Claude.
-  # This makes profile + brief
-  # ready-to-consume by the time the ancestor skill comes online.
-  if [[ "$SKIP_ANCESTOR_PREFLIGHT" != "1" && "$SESSION_NAME" =~ ^(.+)-ancestor-(claude|codex|gemini)$ ]]; then
-    _preflight_project="${BASH_REMATCH[1]}"
-    _preflight_tool="${BASH_REMATCH[2]}"
-    _profile_path="$REAL_HOME/.agents/profiles/${_preflight_project}-profile-dynamic.toml"
-    _brief_path="$REAL_HOME/.agents/tasks/${_preflight_project}/patrol/handoffs/ancestor-bootstrap.md"
-    _binding_path="$REAL_HOME/.agents/tasks/${_preflight_project}/PROJECT_BINDING.toml"
-    _clawseat_root="${CLAWSEAT_ROOT:-$REAL_HOME/ClawSeat}"
-    _clawseat_core="$_clawseat_root/core"
-
-    if [[ -f "$_profile_path" ]]; then
-      # R-2: verify existing profile is v2 before reusing. Ancestor's brief
-      # loader rejects v1 with a hard raise; better to fail loudly here
-      # with a migration hint than to crash deep inside Phase-A.
-      _profile_ver="$(
-        python3 - "$_profile_path" <<'PY'
-import sys
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
-try:
-    raw = tomllib.loads(open(sys.argv[1], 'rb').read().decode('utf-8'))
-    print(raw.get("version", 0))
-except Exception as exc:
-    print(f"ERR:{exc}")
-PY
-      )"
-      if [[ "$_profile_ver" != "2" ]]; then
-        echo "error: profile at $_profile_path is not v2 (version=$_profile_ver)" >&2
-        echo "       run: python3 $_clawseat_core/scripts/migrate_profile_to_v2.py apply --profile $_profile_path" >&2
-        echo "       or remove the old profile and re-run docs/INSTALL.md" >&2
-        exit 6
-      fi
-      if [[ -n "$CLONE_FROM" ]]; then
-        echo "error: --clone-from given but project '$_preflight_project' already has a v2 profile at $_profile_path" >&2
-        echo "       to re-clone, first remove or rename the existing profile" >&2
-        exit 2
-      fi
-      echo "ancestor-preflight: reusing existing v2 profile for '$_preflight_project'"
-    else
-      echo "error: ancestor-preflight no longer auto-runs the retired TUI installer in v0.5" >&2
-      echo "       materialize the v2 profile and PROJECT_BINDING first via docs/INSTALL.md, then relaunch ancestor" >&2
-      if [[ -n "$CLONE_FROM" ]]; then
-        echo "       requested clone source: $CLONE_FROM" >&2
-      fi
-      exit 3
-    fi
-
-    if [[ ! -f "$_binding_path" ]] || ! grep -q 'feishu_group_id *= *"oc_' "$_binding_path" 2>/dev/null; then
-      echo "error: PROJECT_BINDING.toml for '$_preflight_project' is missing feishu_group_id" >&2
-      echo "       the install playbook should have written it; rerun docs/INSTALL.md step 3 or bind manually" >&2
-      exit 4
-    fi
-
-    if [[ ! -f "$_brief_path" ]]; then
-      echo "ancestor-preflight: generating bootstrap brief for '$_preflight_project'"
-      (
-        cd "$_clawseat_root" &&
-        PYTHONPATH="$_clawseat_core/lib:${PYTHONPATH:-}" \
-          python3 -m core.tui.ancestor_brief --project "$_preflight_project"
-      ) || {
-        echo "error: ancestor_brief generation failed; aborting ancestor launch" >&2
-        exit 5
-      }
-    else
-      echo "ancestor-preflight: brief already present"
-    fi
-
-    # R-1: Install Phase-B launchd plist. Without this, ancestor Phase-A
-    # completes but Phase-B patrol never fires. Idempotent via bootout +
-    # bootstrap cycle.
-    _plist_template="$_clawseat_core/templates/ancestor-patrol.plist.in"
-    _plist_label="com.clawseat.${_preflight_project}.ancestor-patrol"
-    _launchagents_dir="$REAL_HOME/Library/LaunchAgents"
-    _plist_out="$_launchagents_dir/${_plist_label}.plist"
-    _log_dir="$REAL_HOME/.agents/tasks/${_preflight_project}/patrol/logs"
-    if [[ ! -f "$_plist_template" ]]; then
-      echo "warn: Phase-B plist template missing ($_plist_template); ancestor Phase-B patrol will NOT be scheduled" >&2
-    else
-      _cadence_sec="$(
-        python3 - "$_profile_path" <<'PY'
-import sys
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
-try:
-    raw = tomllib.loads(open(sys.argv[1], 'rb').read().decode('utf-8'))
-    print(int(raw.get("patrol", {}).get("cadence_minutes", 30)) * 60)
-except Exception:
-    print(1800)  # safe default 30min
-PY
-      )"
-      mkdir -p "$_launchagents_dir" "$_log_dir"
-      # Render template — use | as sed delimiter since paths contain /.
-      sed \
-        -e "s|{PROJECT}|${_preflight_project}|g" \
-        -e "s|{TOOL}|${_preflight_tool}|g" \
-        -e "s|{CADENCE_SECONDS}|${_cadence_sec}|g" \
-        -e "s|{CLAWSEAT_ROOT}|${_clawseat_root}|g" \
-        -e "s|{LOG_DIR}|${_log_dir}|g" \
-        "$_plist_template" > "$_plist_out"
-      # Idempotent activation: ignore bootout errors (plist may not be loaded).
-      launchctl bootout "gui/$(id -u)/${_plist_label}" 2>/dev/null || true
-      if launchctl bootstrap "gui/$(id -u)" "$_plist_out" 2>/dev/null; then
-        echo "ancestor-preflight: Phase-B plist loaded (${_plist_label}, cadence=${_cadence_sec}s)"
-      else
-        echo "warn: launchctl bootstrap failed for $_plist_out; Phase-B patrol will not run automatically" >&2
-        echo "       manual: launchctl bootstrap gui/$(id -u) $_plist_out" >&2
-      fi
-    fi
-
-    unset _preflight_project _preflight_tool _profile_path _brief_path _binding_path
-    unset _clawseat_root _clawseat_core _wizard_args _profile_ver
-    unset _plist_template _plist_label _launchagents_dir _plist_out _log_dir _cadence_sec
-  fi
-  # ────────────────────────────────────────────────────────────────────
 
   if [[ "$DRY_RUN" == "1" ]]; then
     cat <<EOF

@@ -26,6 +26,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "core" / "lib")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from openclaw_home import discover_openclaw_home
+
 
 def _real_user_home() -> Path:
     """Return the real user's HOME, bypassing sandbox HOME overrides.
@@ -260,21 +267,56 @@ def scan_credentials() -> dict:
     return data
 
 
+def _discover_openclaw_home() -> Path:
+    """Resolve the operator's OpenClaw home."""
+    return discover_openclaw_home(home=HOME, runner=subprocess.run)
+
+
+def _scan_openclaw_agents(openclaw_home: Path) -> list[dict]:
+    """Enumerate OpenClaw workspace dirs as agent candidates."""
+    agents: list[dict] = []
+    try:
+        entries = sorted(openclaw_home.iterdir(), key=lambda p: p.name)
+    except OSError:
+        return agents
+
+    for entry in entries:
+        if not entry.is_dir():
+            continue
+        contract = entry / "WORKSPACE_CONTRACT.toml"
+        if entry.name.startswith("workspace-"):
+            agent_name = entry.name[len("workspace-"):]
+        elif contract.exists():
+            agent_name = entry.name
+        else:
+            continue
+        if not agent_name:
+            continue
+        agents.append({
+            "name": agent_name,
+            "workspace": str(entry),
+            "has_contract": contract.exists(),
+        })
+    return agents
+
+
 def scan_openclaw() -> dict:
     """OpenClaw installation state."""
+    openclaw_home = _discover_openclaw_home()
     data: dict = {
         "scanned_at": now_iso(),
-        "home": str(HOME / ".openclaw"),
-        "exists": (HOME / ".openclaw").exists(),
+        "home": str(openclaw_home),
+        "exists": openclaw_home.exists(),
         "config": None,
         "skills": [],
         "extensions": [],
         "feishu": {},
+        "agents": [],
     }
     if not data["exists"]:
         return data
 
-    config_path = HOME / ".openclaw" / "openclaw.json"
+    config_path = openclaw_home / "openclaw.json"
     config_text = safe_read(config_path)
     if config_text:
         try:
@@ -291,13 +333,15 @@ def scan_openclaw() -> dict:
         except json.JSONDecodeError:  # silent-ok: feishu config JSON may be malformed; skip and leave feishu data absent
             pass
 
-    skills_dir = HOME / ".openclaw" / "skills"
+    skills_dir = openclaw_home / "skills"
     if skills_dir.is_dir():
         data["skills"] = sorted(p.name for p in skills_dir.iterdir() if p.is_dir() or p.is_symlink())
 
-    extensions_dir = HOME / ".openclaw" / "extensions"
+    extensions_dir = openclaw_home / "extensions"
     if extensions_dir.is_dir():
         data["extensions"] = sorted(p.name for p in extensions_dir.iterdir() if p.is_dir() or p.is_symlink())
+
+    data["agents"] = _scan_openclaw_agents(openclaw_home)
 
     return data
 

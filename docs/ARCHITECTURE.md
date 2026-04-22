@@ -7,15 +7,24 @@ project-scoped AI teams with durable task state.
 
 ## Mental Model
 
-The preferred external mental model is:
+The preferred external mental model (v0.7):
 
-- ClawSeat behaves like an installable product skill/plugin that routes the
-  host runtime into the v0.5 install playbook
-- fresh install writes validated state, launches `ancestor`, and then hands
-  project runtime ownership to `ancestor`
-- when a Feishu/OpenClaw tenant is bound, `koder` remains the tenant
-  frontstage; it does not replace `ancestor` as the project runtime owner
-- `/cs` is only the local shorthand for the playbook's `Resume / Re-entry`
+- ClawSeat is CLI-first. `scripts/install.sh` is the canonical entrypoint and
+  drives the [v0.7 install playbook](INSTALL.md)
+- Fresh install writes validated state, launches `ancestor` in the six-pane
+  iTerm grid, and hands project runtime ownership to `ancestor` after the
+  operator pastes the Phase-A prompt
+- `ancestor` is the frontstage. `operator ↔ ancestor` is a direct CLI channel
+  inside the tmux pane — Feishu is **not** in this path
+- `koder` is an optional **reverse channel**: an OpenClaw agent overlaid via
+  `scripts/apply-koder-overlay.sh` that subscribes to Feishu and forwards
+  operator messages back to a ClawSeat seat via `tmux send-keys`. Koder is
+  **not** a ClawSeat seat, is **not** on the six-pane grid, and plays no role
+  during install
+- ClawSeat → Feishu is **write-only async broadcast** (planner stop-hook +
+  ancestor skill-driven), used for phone-side visibility. No ClawSeat seat
+  subscribes to Feishu
+- `/cs` is the local shorthand for the playbook's `Resume / Re-entry`
   contract after install state already exists
 
 The implementation model is:
@@ -85,26 +94,28 @@ Primary home:
 - `core/lib/seat_resolver.py` — tmux vs openclaw vs file-only routing hook used by notify_seat + complete_handoff (upstream T19)
 - `core/engine/instantiate_seat.py` — seat materialization: workspace + symlinks + session records + tmux config
 
-#### Layered runtime model (v0.5 semantics)
+#### Layered runtime model (v0.7 semantics)
 
 The v2 profile validator still enforces the layered split introduced in v0.4,
-but the operational story in v0.5 is the install playbook in
-[`docs/INSTALL.md`](INSTALL.md): write validated state, launch `ancestor`, then
-let `ancestor` finish Phase-A. See
-[`schemas/v0.4-layered-model.md`](schemas/v0.4-layered-model.md) for the schema
-background.
+but the operational story in v0.7 is the install playbook in
+[`docs/INSTALL.md`](INSTALL.md): `scripts/install.sh` writes validated state
+and launches `ancestor`; operator pastes the Phase-A prompt, then `ancestor`
+finishes Phase-A. See
+[`schemas/v0.4-layered-model.md`](schemas/v0.4-layered-model.md) for the
+underlying schema background (note: some `koder-as-frontstage` wording there
+is legacy; v0.7 reframes koder as the Feishu reverse channel — see §Mental Model).
 
 | Layer | Seat(s) | Runtime |
 |---|---|---|
-| Machine | `memory` (one per host) | tmux `machine-memory-<tool>`; verified or launched by ancestor B2; stays off-grid |
-| Tenant | `koder` (one per OpenClaw/Feishu tenant) | tenant frontstage; never a tmux seat; stays off-grid from the six-pane monitor |
-| Project | `ancestor`, `planner`, `builder`, `reviewer`, `qa`, `designer` | tmux `<project>-<seat>-<tool>`; fixed six-pane monitor; ancestor owns lifecycle; numbered/fan-out sessions are optional extensions |
+| Machine | `memory` (one per host) | tmux `machine-memory-<tool>`; launched by `install.sh` in a dedicated iTerm window; verified by ancestor B2; stays off-grid |
+| Tenant (optional) | `koder` (one per OpenClaw/Feishu tenant, overlaid on existing OpenClaw agent) | Feishu reverse channel; lives on the OpenClaw side; never a tmux seat; never part of install |
+| Project | `ancestor`, `planner`, `builder`, `reviewer`, `qa`, `designer` | tmux `<project>-<seat>`; fixed six-pane iTerm window via `iterm_panes_driver.py` (native panes, **not** nested tmux); ancestor owns lifecycle; numbered/fan-out sessions are optional extensions |
 
 Legacy v1 profile templates are no longer shipped in-tree — they depended on
-`heartbeat_*` fields the v2 validator rejects. Current v0.5 install is
-agent-driven: `clawseat-install` plus [`docs/INSTALL.md`](INSTALL.md) write the
-validated v2 profile and bootstrap `ancestor` first. There is no separate
-install wizard or `/cs` bootstrap path.
+`heartbeat_*` fields the v2 validator rejects. Current v0.7 install is
+script-first: `scripts/install.sh` + [`docs/INSTALL.md`](INSTALL.md) write the
+validated v2 profile, open the grid, start memory, and hand off to `ancestor`.
+There is no separate install wizard or `/cs` bootstrap path.
 
 ### 3. Skill Layer
 
@@ -127,11 +138,11 @@ which one to edit, use this table before you touch either:
 
 | Skill | Role | Invoked by | Writes |
 |---|---|---|---|
-| `clawseat` | Product entrypoint. Detects runtime, routes fresh installs to the v0.5 playbook, and keeps frontstage semantics straight. | OpenClaw / Feishu / Claude Code / Codex when the user says "启动 ClawSeat" or "install ClawSeat" | Nothing directly; delegates to `clawseat-install` |
-| `clawseat-install` | v0.5 agent-driven install playbook. The invoking runtime reads `docs/INSTALL.md`, materializes validated state, launches ancestor via `scripts/launch_ancestor.sh`, and stops once ancestor is prompt-ready. | Claude Code / Codex / OpenClaw runtimes when the user asks to install ClawSeat | `~/.agents/profiles/*.toml`, `~/.agents/tasks/<project>/PROJECT_BINDING.toml`, install artifacts under `~/.agents/tasks/<project>/install/`, entry-skill symlinks in `~/.claude/skills/` and `~/.codex/skills/` |
+| `clawseat` | Product entrypoint. Detects runtime, routes fresh installs to the v0.7 playbook (`scripts/install.sh`), and keeps frontstage semantics straight. | OpenClaw / Feishu / Claude Code / Codex when the user says "启动 ClawSeat" or "install ClawSeat" | Nothing directly; delegates to `clawseat-install` |
+| `clawseat-install` | v0.7 install playbook. Calls `scripts/install.sh` which drives host bootstrap + environment scan + iTerm grid + memory window; ancestor then runs Phase-A per `docs/INSTALL.md`. | Claude Code / Codex / OpenClaw runtimes when the user asks to install ClawSeat | `~/.agents/profiles/*.toml`, `~/.agents/tasks/<project>/PROJECT_BINDING.toml`, install artifacts under `~/.agents/tasks/<project>/install/`, entry-skill symlinks in `~/.claude/skills/` and `~/.codex/skills/` |
 | `cs` | Local `/cs` convenience alias (**post-install only**). Re-entry shorthand for the `docs/INSTALL.md` `Resume / Re-entry` section; reuses existing install state and relaunches ancestor if needed. | User in a local Claude Code / Codex session after install state already exists | Minimal — may relaunch ancestor/session state, but must not create project/profile/binding from scratch |
 
-The default v0.5 project-grid story is `ancestor` / `planner` / `builder` /
+The default v0.7 project-grid story is `ancestor` / `planner` / `builder` /
 `reviewer` / `qa` / `designer`. Numbered seats such as `builder-1` belong to
 fan-out or migration examples, not the top-level narrative.
 
@@ -140,6 +151,38 @@ Invariant — do not cross the boundaries:
 - `clawseat` must not write install state (no `~/.agents/*` writes; delegate to `clawseat-install`)
 - `clawseat-install` must not read from `PLANNER_BRIEF` (it runs before seats exist)
 - `cs` must fail fast if the `install` project state is missing or invalid; it may relaunch ancestor, but it must not create the canonical install project, synthesize profile/binding state, or start planner directly
+
+<a id="seat-lifecycle-entry-points-v07-pyramid"></a>
+## §3z — Seat lifecycle entry points (v0.7 Pyramid)
+
+ClawSeat exposes **three layers** for seat lifecycle. Use the highest layer
+that fits your scenario; never call a lower layer directly unless you have
+read the ones above and confirmed they do not cover your case.
+
+| Layer | Component | When to use | Don't use when |
+|---|---|---|---|
+| **L1 — User-facing entry** | `scripts/install.sh` (bootstrap), `scripts/apply-koder-overlay.sh` (post-install Feishu reverse channel) | Operator wants to bootstrap a fresh project, or apply koder overlay after install | You only need to (re)start one seat — use L2 instead |
+| **L2 — CLI operations** | `agent_admin session start-engineer`, `agent_admin project bootstrap`, `agent_admin project use`, `agent_admin project delete` | Restarting one seat, switching project context, killing a project group | Doing one-time install — use L1 |
+| **L3 — Execution primitive** | `core/launchers/agent-launcher.sh` | **INTERNAL only**. Called by L1 / L2 when actually launching a seat process. Handles sandbox HOME, secrets file, runtime_dir under `~/.agent-runtime/identities/<tool>/<auth>/<id>/home/` | You are a user or agent — go through L1 / L2 |
+
+### Sandbox HOME isolation contract
+
+Every seat launched via L1 or L2 inherits a sandbox HOME at
+`~/.agent-runtime/identities/<tool>/<auth>/<auth_mode>-<session_name>/home/`,
+giving per-seat credential / config isolation. Direct `tmux new-session bash`
+from a script bypasses this contract — never do it for a seat that runs
+`claude` / `codex` / `gemini`.
+
+### When to call which `init_*.py`
+
+These are NOT user-facing entry points. They are called from L1 / L2 / Phase-A:
+
+| Script | Called by | Purpose |
+|---|---|---|
+| `init_koder.py` | `apply-koder-overlay.sh` | Destructive overlay onto an OpenClaw agent workspace |
+| `init_specialist.py` | legacy v0.5 / migration paths | Materialize a specialist seat workspace |
+| `install_memory_hook.py` | `install.sh` Step 7.5 | Install Stop hook into memory's workspace |
+| `install_planner_hook.py` | `ancestor` Phase-A B3.5 | Install Stop hook into planner's workspace |
 
 ### 4. Adapter Layer
 
@@ -432,10 +475,15 @@ planner-host (operator's laptop)
               └── reads ~/.agents/heartbeat/<project>.toml
               └── lark-cli im +messages-send --as user --chat-id <group> --text "[HEARTBEAT_TICK ...]"
                     └── OpenClaw Feishu bridge picks up the message
-                          └── pipes into koder's agent input
-                                └── koder-frontstage skill recognizes [HEARTBEAT_TICK] header
+                          └── pipes into koder's agent input (koder = overlaid OpenClaw agent)
+                                └── koder skill recognizes [HEARTBEAT_TICK] header
                                       └── runs patrol: events_watcher, drift scan, STATUS.md refresh
 ```
+
+This C12 path is only active when the optional koder overlay has been applied
+(`scripts/apply-koder-overlay.sh`) and the project has a `feishu_group_id`.
+In pure CLI-only mode (v0.7 default), heartbeat patrol is driven by the
+ancestor's own patrol skill, not via Feishu.
 
 The beacon script is purely bash + lark-cli — it does not call Python or pull
 in any ClawSeat dependencies. It runs in the operator's laptop launchd
@@ -476,14 +524,17 @@ heartbeat_config.py validate --project X
 Generated by `render-plist` from `scripts/launchd/com.clawseat.heartbeat.plist.template`.
 The operator runs `launchctl load` manually — C12 never does this itself.
 
-### koder-frontstage integration
+### koder integration (optional reverse channel)
 
-The `SKILL.md` Heartbeat reception section describes:
+Active only when `scripts/apply-koder-overlay.sh` has been applied. Koder's
+`SKILL.md` Heartbeat reception section describes:
+
 1. Parse `[HEARTBEAT_TICK project=X ts=T]` header.
 2. Read recent state.db events.
 3. Run drift scan (STATUS.md mtime, in-flight tasks).
-4. Post `[HEARTBEAT_ACK ...]` reply.
-5. If drift: surface to user + create planner handoff.
+4. Post `[HEARTBEAT_ACK ...]` reply to the Feishu group.
+5. If drift: surface to user via Feishu + `tmux send-keys` into the
+   `<project>-planner` session to create a planner handoff.
 
 ### Why not a Python subscriber?
 

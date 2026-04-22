@@ -1,412 +1,297 @@
-# ClawSeat v0.5 Install Playbook
-This file is the install SSOT. When a user says "install ClawSeat", the invoking
-agent reads this repo-local file and executes it end-to-end. The invoking agent
-is only the installer; once ancestor is prompt-ready, ancestor owns the runtime.
-Subagent mode: seats are encouraged to spawn subagents for independent subtasks.
-Ancestor may parallelize seat startup and monitor checks; planner may fan out
-reviews or verification work once the grid is up.
-## Layered Runtime
-- `ancestor = CLI frontstage`, `koder = Feishu frontstage`.
-- `memory` is a machine singleton and stays off the project grid.
-- The six-pane monitor is fixed: `ancestor (frontstage), planner, builder, reviewer, qa, designer`.
-- The valid v0.5 primitives are:
-  - [`core/lib/profile_validator.py`](../core/lib/profile_validator.py)
-  - [`core/scripts/agent_admin.py`](../core/scripts/agent_admin.py)
-  - [`core/launchers/agent-launcher.sh`](../core/launchers/agent-launcher.sh)
-  - [`core/shell-scripts/send-and-verify.sh`](../core/shell-scripts/send-and-verify.sh)
-## Prerequisites To Clone
-0. If the repo is not yet on disk, clone it to a user-level directory. Do not put the checkout under `~/.openclaw/`.
+# ClawSeat v0.7 Install Playbook
+
+> Target executor: Claude Code (agent, not human).
+> This file is the install SSOT. `scripts/install.sh` owns host bootstrap and
+> runtime startup; once ancestor is prompt-ready, ancestor owns Phase-A.
+> Post-install extensions (koder overlay, new projects) are covered in §4–§5.
+
+## Overview
+
+| Step | Executor | What happens |
+|------|---------|--------------|
+| 1 Prerequisites | operator | `git clone` + `cd ~/ClawSeat` |
+| 2 `install.sh` | script (auto) | host deps, env scan, provider pick, six-pane grid, memory window, bypass flush |
+| 3 Phase-A | ancestor CLI | B0–B7 interactive bootstrap |
+| 4 (optional) Koder overlay | ancestor or operator | `scripts/apply-koder-overlay.sh` — pick an OpenClaw agent to become the Feishu reverse-channel koder |
+| 5 (optional) Additional projects | operator | `agent_admin project bootstrap <name>` |
+
+> **Why `install.sh` instead of `agent_admin` or `agent-launcher.sh` directly?**
+> `install.sh` is the L1 user-facing entry for fresh-machine bootstrap
+> (host deps + scan + provider pick + 6 sessions + memory window + brief render).
+> For per-seat operations on an existing project, use `agent_admin session
+> start-engineer`. For executing a single seat process with sandbox HOME,
+> the system internally calls `agent-launcher.sh` (you do not). See
+> [docs/ARCHITECTURE.md §3z](ARCHITECTURE.md#seat-lifecycle-entry-points-v07-pyramid)
+> for the full layering.
+
+## Broadcast model (seat-by-seat)
+
+Hook / CLI-first, Feishu is **write-only async notification**. ClawSeat does not subscribe to Feishu.
+
+| Seat | Hook policy | Output channel |
+|------|-------------|----------------|
+| planner | Stop-hook every turn → `lark-cli msg send` | structured summary to Feishu group (≤500 chars; never raw transcript) |
+| ancestor | skill-driven | ancestor decides when to broadcast via a memory-oracle or lark-cli skill |
+| memory | Stop-hook (self `/clear` + auto-deliver) | no Feishu broadcast; writes via `memory_deliver.py` when `[DELIVER:seat=<X>]` marker present |
+| builder / reviewer / qa / designer | none | CLI only, visible in their pane |
+
+The `koder` overlay (§4) is the inbound channel: operator messages on Feishu → OpenClaw-side koder → `tmux send-keys` into a ClawSeat seat.
+
+---
+
+## 1. Prerequisites
+
 ```bash
 git clone <repo-url> "$HOME/ClawSeat"
 cd "$HOME/ClawSeat"
-```
-1. Enter the repo root and export `CLAWSEAT_ROOT`.
-```bash
-cd /path/to/ClawSeat
 export CLAWSEAT_ROOT="$PWD"
+export PROJECT_NAME=install
 ```
+
 Verify:
+
 ```bash
-test -d "$CLAWSEAT_ROOT/core" && test -f "$CLAWSEAT_ROOT/docs/INSTALL.md"
+test -d "$CLAWSEAT_ROOT/.git" && test -f "$CLAWSEAT_ROOT/scripts/install.sh"
 ```
+
 Failure:
+
 ```text
-INSTALL_BROKEN: repository root is wrong; docs/INSTALL.md or core/ missing
+INSTALL_BROKEN: repository missing or scripts/install.sh not found
 ```
-2. Confirm required host tools.
+
+---
+
+## 2. Run `install.sh` (automatic bootstrap)
+
 ```bash
-command -v git
-command -v bash
-command -v python3
-command -v tmux
-python3 - <<'PY'
-import sys, tomllib
-assert sys.version_info >= (3, 11), sys.version
-print(sys.version.split()[0])
-PY
+cd "$CLAWSEAT_ROOT"
+bash scripts/install.sh
 ```
-Verify: all commands resolve and Python prints `3.11+`.
-Failure:
-```text
-PREREQ_MISSING: <tool-or-python311>
-```
-Recovery:
+
+Dry-run preflight:
+
 ```bash
-# macOS
-brew install git python@3.11 tmux
-# Debian/Ubuntu
-sudo apt-get update && sudo apt-get install -y git python3.11 tmux
+bash scripts/install.sh --dry-run
 ```
-3. Confirm at least one supported runtime binary exists.
-```bash
-command -v claude || true
-command -v codex || true
-command -v gemini || true
-```
-Verify: at least one of `claude`, `codex`, `gemini` resolves.
-Failure:
-```text
-PREREQ_MISSING: no supported runtime binary found (claude/codex/gemini)
-```
-4. Create the installer scratch directory.
-```bash
-mkdir -p "$HOME/.agents/install"
-test -d "$HOME/.agents/install"
-```
-Failure:
-```text
-INSTALL_STATE_ERROR: failed to create ~/.agents/install
-```
-Hard rule: do not invent steps outside this file. If the playbook does not cover a required action, stop and surface the gap instead of improvising a deprecated installer path.
-## Step 1: Scan Environment
-Goal: produce one JSON manifest the user and downstream seats can both read.
-Command:
-```bash
-python3 "$CLAWSEAT_ROOT/scripts/env_scan.py" \
-  --output "$HOME/.agents/install/env-manifest.json"
-cat "$HOME/.agents/install/env-manifest.json"
-```
-What `scripts/env_scan.py` checks:
-- `~/.claude/` Claude OAuth evidence
-- `~/.agents/.env.global` / `CLAUDE_CODE_OAUTH_TOKEN`
-- `~/.agents/secrets/claude/anthropic-console.env` / `ANTHROPIC_API_KEY`
-- `~/.agent-runtime/secrets/claude/minimax.env`
-- `~/.agent-runtime/secrets/claude/xcode.env`
-- `~/.codex/` Codex OAuth evidence + `~/.agent-runtime/secrets/codex/xcode.env`
-- `~/.gemini/` Gemini OAuth evidence + `~/.agent-runtime/secrets/gemini/primary.env`
-- Anthropic/OpenAI base-url hints and localhost clues
-- runtime binaries `claude`, `codex`, `gemini`
+
+What `install.sh` does in order:
+
+1. Detect host OS and install / verify `tmux`, `iTerm2` (macOS), Python ≥3.11, `claude` binary.
+2. Run `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
+   → produces `machine/{credentials,network,openclaw,github,current_context}.json`.
+3. Pick ancestor provider from `credentials.json` by heuristic:
+   Minimax → DashScope → Anthropic → prompt operator for `base_url + api_key`.
+4. Write provider env to `~/.agents/tasks/install/ancestor-provider.env`.
+5. Render `core/templates/ancestor-brief.template.md` into
+   `~/.agents/tasks/install/patrol/handoffs/ancestor-bootstrap.md` (substitute `${PROJECT_NAME}`, `${CLAWSEAT_ROOT}`).
+6. Launch six project seats via `core/launchers/agent-launcher.sh`, keeping the stable session names `install-{ancestor,planner,builder,reviewer,qa,designer}` while giving each seat a sandbox HOME.
+7. Launch the six-pane monitor window via `core/scripts/iterm_panes_driver.py`
+   (iTerm2 native panes — **not** nested tmux).
+8. Launch `machine-memory-claude` through `core/launchers/agent-launcher.sh`, then open a second iTerm window for it with the same provider env.
+9. Focus the ancestor pane and emit 3-Enter flush so the operator visually sees bypass activate.
+10. Print the ancestor-prompt stub for the operator to copy and paste.
+
 Verify:
+
 ```bash
-python3 - <<'PY'
-import json
-from pathlib import Path
-p = Path.home() / ".agents" / "install" / "env-manifest.json"
-data = json.loads(p.read_text())
-assert "auth_methods" in data and "runtimes" in data
-print(len(data["auth_methods"]))
-PY
+test -f ~/.agents/tasks/install/ancestor-provider.env
+test -f ~/.agents/tasks/install/patrol/handoffs/ancestor-bootstrap.md
+for f in credentials network openclaw github current_context; do
+  test -f ~/.agents/memory/machine/$f.json || echo "MISSING $f"
+done
+for s in install-ancestor install-planner install-builder install-reviewer install-qa install-designer machine-memory-claude; do
+  tmux has-session -t "$s" || echo "MISSING $s"
+done
 ```
-Failure:
+
+Failure codes:
+
 ```text
-ENV_SCAN_FAILED: scripts/env_scan.py did not produce ~/.agents/install/env-manifest.json
+PREREQ_MISSING: <tmux|iterm2|python311|claude>
+ENV_SCAN_FAILED: expected ~/.agents/memory/machine/*.json missing
+PROVIDER_NO_KEY: no usable provider key and operator did not supply one
+GRID_LAUNCH_FAILED: install-* tmux sessions missing after bootstrap
+ITERM_DRIVER_FAIL: iTerm pane driver failed to open the grid or memory window
 ```
-Stop condition: if `auth_methods` is empty, stop immediately and show:
+
+`install.sh` ends by printing:
+
 ```text
-NO_AUTH_FOUND: configure Claude Code auth first, then re-invoke me
+ClawSeat install: ancestor is prompt-ready.
+Paste the prompt shown above into the ancestor pane.
+Six-pane window: clawseat-install
+Memory window: machine-memory-claude
 ```
-Notes:
-- This manifest is the installer-facing summary.
-- `auth_methods[]` is already normalized to exact runtime-matrix triples such as
-  `claude/oauth/anthropic`, `claude/oauth_token/anthropic`,
-  `claude/api/anthropic-console`, `claude/api/minimax`,
-  `codex/oauth/openai`, `gemini/api/google-api-key`.
-- Later, once memory is alive, memory can expand it with the richer
-  [`core/skills/memory-oracle/scripts/scan_environment.py`](../core/skills/memory-oracle/scripts/scan_environment.py)
-  pass.
-## Step 2: User Picks Runtime
-Goal: convert the raw scan manifest into a concrete runtime plan.
-Input:
-- `~/.agents/install/env-manifest.json`
-Output:
-- `~/.agents/install/runtime-selection.json`
-Checklist:
-1. Read the manifest and show the discovered options exactly as found.
-2. If a layer has exactly one sensible choice, say so and use it.
-3. If multiple choices exist, ask the user to choose for:
-   - `ancestor`
-   - `memory`
-   - `planner`
-   - `specialists` (`builder`, `reviewer`, `qa`, `designer`)
-   - `koder_tenant`
-4. If the user wants one runtime everywhere, record that explicitly.
-5. Write the normalized selection JSON.
-Rule:
-- `auth_mode` + `provider` must use the exact runtime-matrix names from
-  `auth_methods[]`. Do not invent aliases such as `claude/api/anthropic`.
-Recommended shape:
-```json
-{
-  "project": "install",
-  "koder_tenant": "yu",
-  "layers": {
-    "ancestor":    {"tool": "claude", "auth_mode": "oauth", "provider": "anthropic", "model": ""},
-    "memory":      {"tool": "claude", "auth_mode": "oauth", "provider": "anthropic"},
-    "planner":     {"tool": "claude", "auth_mode": "oauth", "provider": "anthropic"},
-    "specialists": {"tool": "claude", "auth_mode": "api",   "provider": "minimax"}
-  }
-}
+
+---
+
+## 3. Operator pastes prompt; ancestor runs Phase-A
+
+Paste (exact text from `install.sh` output):
+
+```text
+读 $CLAWSEAT_ANCESTOR_BRIEF，开始 Phase-A。每步向我确认或报告。
 ```
-One direct write path:
-```bash
-cat > "$HOME/.agents/install/runtime-selection.json" <<'JSON'
-{
-  "project": "install",
-  "koder_tenant": "yu",
-  "layers": {
-    "ancestor":    {"tool": "claude", "auth_mode": "oauth", "provider": "anthropic", "model": ""},
-    "memory":      {"tool": "claude", "auth_mode": "oauth", "provider": "anthropic"},
-    "planner":     {"tool": "claude", "auth_mode": "oauth", "provider": "anthropic"},
-    "specialists": {"tool": "claude", "auth_mode": "api",   "provider": "minimax"}
-  }
-}
-JSON
-```
-If the user does not request a fixed model, leave `"model": ""` and let the runtime default apply.
+
+Ancestor executes Phase-A in order:
+
+| Token | Action | Success criterion |
+|-------|--------|-------------------|
+| B0-env-scan-analysis | Read `~/.agents/memory/machine/*.json`. Summarize which harnesses (claude-code / codex / gemini / minimax / dashscope) are usable and recommend the cheapest viable provider mix. Explain the rationale. | User confirms or supplies custom plan; ancestor writes `~/.agents/tasks/install/ancestor-provider-decision.md` |
+| B1-read-brief | Parse the rendered ancestor brief. | Brief understood with no missing variables. |
+| B2-verify-memory | `tmux has-session -t machine-memory-claude`; relaunch once if dead. | Memory seat alive. |
+| B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
+| B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
+| B3.5-launch-engineers | **Interactive, one-by-one**. For each seat in `planner, builder, reviewer, qa, designer`: ask operator for provider (default: claude-code + MiniMax), write profile, launch seat, wait ≤15s for `tmux has-session`, user visually confirms pane is live, then move to next. | Each `install-<seat>` is alive and attached. |
+| B5-verify-feishu-binding | Read `~/.agents/tasks/install/PROJECT_BINDING.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
+| B6-smoke | If `feishu_group_id` set, ancestor triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, ancestor runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
+| B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<ancestor + 5 seats + memory>`. |
+
+Rules for ancestor:
+
+- Do not rewrite the machine scan artifacts or the tmux/iTerm layout that Step 2 created.
+- B3.5 is strictly serial — no fan-out.
+- On any blocking B-step: print `PHASE_A_FAILED: <token>`, write `phase=blocked` to `STATUS.md`, stop.
+- operator ↔ ancestor is CLI direct; never route through Feishu.
+
 Verify:
+
 ```bash
-python3 - <<'PY'
-import json
-from pathlib import Path
-p = Path.home() / ".agents" / "install" / "runtime-selection.json"
-data = json.loads(p.read_text())
-for key in ("ancestor", "memory", "planner", "specialists"):
-    layer = data["layers"][key]
-    assert layer["tool"] and layer["auth_mode"] and layer["provider"]
-print("ok")
-PY
+grep -q '^phase=ready$' ~/.agents/tasks/install/STATUS.md
+grep -q '^providers=' ~/.agents/tasks/install/STATUS.md
+for s in install-ancestor install-planner install-builder install-reviewer install-qa install-designer machine-memory-claude; do
+  tmux has-session -t "$s" || echo "MISSING $s"
+done
 ```
+
 Failure:
+
 ```text
-RUNTIME_SELECTION_INCOMPLETE: runtime-selection.json is missing layer/tool/auth/provider data
+B2-memory-dead: memory seat still dead after one retry
+B2.5-bootstrap-failed: machine.toml tenant population failed
+B3-binding-mismatch: OpenClaw binding points at wrong project
+B3.5_TIMEOUT: target seat did not come up in 15s
+B5-feishu-binding-missing: no feishu_group_id and operator did not skip
+B6-smoke-failed: smoke dispatch or CLI smoke failed
+B7-status-write-failed: STATUS.md could not be written
 ```
-If the user will not choose and multiple sensible options exist, stop instead
-of guessing.
-## Step 3: Build Seat Infrastructure
-Goal: materialize project directories, validated profile state, and project
-binding using the existing admin + validator primitives.
-Inputs:
-- `~/.agents/install/env-manifest.json`
-- `~/.agents/install/runtime-selection.json`
-- user-provided Feishu group id `oc_<...>`
-Checklist:
-1. Create or verify the project shell.
+
+---
+
+## 4. (Optional) Apply koder overlay — Feishu reverse channel
+
+Koder is an **OpenClaw-side agent** that subscribes to Feishu messages and forwards them via `tmux send-keys` into a ClawSeat seat. ClawSeat does not ship koder as a seat — it ships a **destructive overlay** that converts an existing OpenClaw agent into koder.
+
+When you want remote access (phone → Feishu → koder → ClawSeat seat):
+
 ```bash
-export PROJECT=install
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" \
-  project create "$PROJECT" "$CLAWSEAT_ROOT" || \
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project show "$PROJECT"
+bash scripts/apply-koder-overlay.sh "$PROJECT_NAME"
 ```
-2. Copy installer artifacts into the project task tree so ancestor and memory can read them later.
-```bash
-mkdir -p "$HOME/.agents/tasks/$PROJECT/install"
-cp "$HOME/.agents/install/env-manifest.json" \
-   "$HOME/.agents/tasks/$PROJECT/install/env-manifest.json"
-cp "$HOME/.agents/install/runtime-selection.json" \
-   "$HOME/.agents/tasks/$PROJECT/install/runtime-selection.json"
-```
-3. Write the project profile through
-   [`core/lib/profile_validator.py`](../core/lib/profile_validator.py). Do not
-   hand-write unchecked TOML.
-```bash
-python3 - <<'PY'
-import json, os
-from pathlib import Path
-from core.lib.profile_validator import write_validated
-project = os.environ.get("PROJECT", "install")
-root = Path(os.environ["CLAWSEAT_ROOT"]).resolve()
-home = Path.home()
-selection = json.loads((home / ".agents" / "install" / "runtime-selection.json").read_text())
-tasks_root = home / ".agents" / "tasks" / project
-specialists = selection["layers"]["specialists"]
-payload = {
-    "version": 2,
-    "profile_name": project,
-    "template_name": "gstack-harness",
-    "project_name": project,
-    "repo_root": str(root),
-    "tasks_root": str(tasks_root),
-    "project_doc": str(tasks_root / "PROJECT.md"),
-    "tasks_doc": str(tasks_root / "TASKS.md"),
-    "status_doc": str(tasks_root / "STATUS.md"),
-    "send_script": str(root / "core" / "shell-scripts" / "send-and-verify.sh"),
-    "agent_admin": str(root / "core" / "scripts" / "agent_admin.py"),
-    "workspace_root": str(home / ".agents" / "workspaces" / project),
-    "handoff_dir": str(tasks_root / "patrol" / "handoffs"),
-    "machine_services": ["memory"],
-    "openclaw_frontstage_agent": selection["koder_tenant"],
-    "seats": ["ancestor", "planner", "builder", "reviewer", "qa", "designer"],
-    "seat_roles": {"ancestor": "ancestor", "planner": "planner-dispatcher", "builder": "builder", "reviewer": "reviewer", "qa": "qa", "designer": "designer"},
-    "seat_overrides": {"ancestor": selection["layers"]["ancestor"], "planner": selection["layers"]["planner"], "builder": specialists, "reviewer": specialists, "qa": specialists, "designer": specialists},
-    "dynamic_roster": {"enabled": True, "session_root": str(home / ".agents" / "sessions"), "bootstrap_seats": ["ancestor"], "default_start_seats": ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]},
-    "patrol": {"planner_brief_path": str(tasks_root / "planner" / "PLANNER_BRIEF.md"), "cadence_minutes": 30},
-    "observability": {"announce_planner_events": True, "announce_event_types": ["task.completed", "chain.closeout"]},
-}
-write_validated(payload, home / ".agents" / "profiles" / f"{project}-profile-dynamic.toml")
-print(project)
-PY
-```
-4. Bind the Feishu group.
-```bash
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" \
-  project bind --project "$PROJECT" --feishu-group "<oc_group_id>" \
-  --feishu-bot-account koder
-```
-Rules:
-- group id must start with `oc_`
-- keep install default as non-mention-gated by leaving `--require-mention`
-  unset; `koder` is the Feishu frontstage
-- if bind reports auth refresh or missing group metadata, repair Feishu auth
-  first, then rerun the bind
-5. If the user already knows the OpenClaw tenant for koder, bind it now.
-```bash
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" \
-  project koder-bind --project "$PROJECT" --tenant "<tenant_id>"
-```
-6. Validate the resulting state.
-```bash
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project validate --project "$PROJECT"
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project binding-show "$PROJECT"
-```
+
+Flow:
+
+1. Script lists all registered OpenClaw tenants (from `~/.clawseat/machine.toml`).
+2. Operator picks one by number.
+3. Script prints a destructive-confirmation: the chosen agent's `IDENTITY.md`, `SOUL.md`, `TOOLS.md + TOOLS/*`, `MEMORY.md`, `AGENTS.md`, `WORKSPACE_CONTRACT.toml` will be **overwritten** with koder templates (backups auto-taken via `--on-conflict backup`).
+4. On confirmation: runs `init_koder.py` → `agent_admin project koder-bind` → `configure_koder_feishu.py`.
+
 Verify:
-- `~/.agents/profiles/install-profile-dynamic.toml` exists
-- project validation exits `0`
-- `PROJECT_BINDING.toml` shows non-empty `feishu_group_id`
+
+```bash
+python3 -c "from core.lib.machine_config import load_machine; m=load_machine(); print(m.tenants.get('<chosen-agent>'))"
+```
+
 Failure:
+
 ```text
-PROJECT_BOOTSTRAP_FAILED: profile/binding creation or validation failed
+ERR_NO_OPENCLAW_AGENTS: ~/.clawseat/machine.toml has no tenants (run B2.5 first)
+ERR_BAD_PICK: selection out of range
+ERR_INIT_KODER_FAILED: init_koder.py non-zero
 ```
-## Step 4: Launch Ancestor
-Goal: start the install frontstage once, then hand control over.
-Launcher contract:
-- [`scripts/launch_ancestor.sh`](../scripts/launch_ancestor.sh)
-- It reuses:
-  - [`core/scripts/agent_admin.py`](../core/scripts/agent_admin.py)
-  - [`core/launchers/agent-launcher.sh`](../core/launchers/agent-launcher.sh)
-  - [`core/shell-scripts/send-and-verify.sh`](../core/shell-scripts/send-and-verify.sh)
-Interface:
+
+Reversing the overlay: restore from backups in `<workspace>/.backup-koder-overlay-<ts>/`.
+
+---
+
+## 5. (Optional) Launch additional projects
+
+ClawSeat supports multiple concurrent projects (sessions prefixed `<project>-<seat>`).
+
+### Create a new project
+
 ```bash
-scripts/launch_ancestor.sh --project <name> \
-  --tool claude \
-  --auth-mode oauth|oauth_token|api \
-  --provider anthropic|anthropic-console|minimax|xcode-best|openai|google|google-api-key \
-  [--model <model-id>]
+agent_admin project bootstrap <new-name> --template default --local "$HOME/code/<new-name>"
+bash scripts/install.sh --project <new-name>   # (TBD — install.sh --project flag planned for v0.7.1)
 ```
-Notes:
-- `--provider` must stay on the exact runtime-matrix name already recorded in
-  `runtime-selection.json`.
-- `--model` is optional and currently only applies when `--tool claude`.
-Resolve ancestor runtime once:
+
+Until `install.sh --project` lands, re-run the full `install.sh` flow after setting:
+
 ```bash
-eval "$(python3 - <<'PY'
-import json
-from pathlib import Path
-layer = json.loads((Path.home()/'.agents/install/runtime-selection.json').read_text())['layers']['ancestor']
-print(f"ANCESTOR_TOOL={layer['tool']}")
-print(f"ANCESTOR_AUTH_MODE={layer['auth_mode']}")
-print(f"ANCESTOR_PROVIDER={layer['provider']}")
-print(f"ANCESTOR_MODEL={layer.get('model','')}")
-PY
-)"
+export PROJECT_NAME=<new-name>
 ```
-Launch:
+
+### Switch context
+
 ```bash
-cmd=(
-  "$CLAWSEAT_ROOT/scripts/launch_ancestor.sh"
-  --project "$PROJECT"
-  --tool "$ANCESTOR_TOOL"
-  --auth-mode "$ANCESTOR_AUTH_MODE"
-  --provider "$ANCESTOR_PROVIDER"
-)
-[[ -n "${ANCESTOR_MODEL:-}" ]] && cmd+=(--model "$ANCESTOR_MODEL")
-"${cmd[@]}"
+agent_admin project use <new-name>
 ```
-Verify:
+
+### Retire the install project and move to `foo`
+
 ```bash
-tmux list-sessions | grep "${PROJECT}-ancestor-"
+INSTALL=install
+FOO=foo
+agent_admin project use "$FOO"
+for seat in $(agent_admin session list --project "$INSTALL" 2>/dev/null | awk '/^running/{print $2}'); do
+  agent_admin session stop-engineer "$seat" --project "$INSTALL" 2>/dev/null || true
+done
+tmux kill-session -t "project-${INSTALL}-monitor" 2>/dev/null || true
+agent_admin session start-project "$FOO" --reset
+# agent_admin project delete "$INSTALL"   # only if you want to wipe state
 ```
-Failure:
-```text
-ANCESTOR_LAUNCH_FAILED: launch_ancestor.sh did not create a prompt-ready ancestor session
-```
-## Step 5: Hand Off To Ancestor
-Once Step 4 succeeds, the invoking agent stops orchestrating.
-Before dropping out, confirm these files exist:
-- `~/.agents/tasks/install/install/env-manifest.json`
-- `~/.agents/tasks/install/install/runtime-selection.json`
-- `~/.agents/profiles/install-profile-dynamic.toml`
-Then tell the user ancestor is now the install frontstage.
-What ancestor is expected to do next:
-1. Read `ancestor-bootstrap.md` and execute Phase-A `B1..B7` in order. The runtime brief path is `~/.agents/tasks/<project>/patrol/handoffs/ancestor-bootstrap.md`, exposed to ancestor by `CLAWSEAT_ANCESTOR_BRIEF`.
-2. `B2` verifies or launches machine memory from `machine.toml.services.memory`.
-3. `B4` launches every pending project seat declared in the brief, including any fan-out `sessions[]`.
-4. `B5` verifies `PROJECT_BINDING.toml.feishu_group_id`; `B6` sends the smoke
-   report; `B7` writes `STATUS.md phase=ready`.
-5. After or alongside that Phase-A path, the usual v0.5 continuation is: memory enriches the environment picture, ancestor reads the result, and the visible monitor uses the fixed role membership:
-   - `ancestor (frontstage)`
-   - `planner`
-   - `builder`
-   - `reviewer`
-   - `qa`
-   - `designer`
-Important:
-- `memory` runs but stays off-grid.
-- `koder` is the Feishu frontstage and is not a tmux pane.
-- ancestor includes itself in the grid as the frontstage pane.
-Verify handoff:
-- ancestor session exists
-- `STATUS.md` reaches `phase=ready`
-- any B2/B4/B6 degradation is surfaced in `STATUS.md` or alerts
-Failure:
-```text
-HANDOFF_INCOMPLETE: ancestor launched but Phase-A did not reach B7 phase=ready, or halted at B3/B5
-```
-## Failure Modes
-| Failure | Signal | Recovery command |
-|---|---|---|
-| No auth found | `NO_AUTH_FOUND` | Configure Claude Code auth, then rerun `python3 "$CLAWSEAT_ROOT/scripts/env_scan.py" --output "$HOME/.agents/install/env-manifest.json"` |
-| Auth expired / wrong key | missing credential, unsupported combo, or 401-style launcher failure | Refresh the credential, pick a runtime tuple that exactly matches `auth_methods[]`, rerun Step 1, then rerun `"$CLAWSEAT_ROOT/scripts/launch_ancestor.sh" ...` |
-| `tmux` missing | `PREREQ_MISSING: tmux` | `brew install tmux` on macOS, then rerun Step 4 |
-| Ancestor session conflict | stale session or `session.toml` already exists | `python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" session stop-engineer ancestor --project "$PROJECT"` then rerun Step 4 |
-| Binding missing / wrong group | `PROJECT_BOOTSTRAP_FAILED` or binding mismatch | `python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project bind --project "$PROJECT" --feishu-group "<oc_group_id>" --feishu-bot-account koder` |
-| Profile invalid | project validate non-zero | Re-run the Step 3 `write_validated(...)` block, then `python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project validate --project "$PROJECT"` |
-## Resume / Re-entry
-There is no separate resume entrypoint in v0.5. Re-entry means rerunning this
-playbook from the top and filling gaps.
-Checklist:
-1. Re-scan auth and binaries.
+
+`project use` switches context without killing sessions; the seat-stop loop + monitor kill is what "retires" the install grid.
+
+---
+
+## Failure modes (consolidated)
+
+| Code | Symptom | Recovery |
+|------|---------|----------|
+| `INSTALL_BROKEN` | repo missing or `scripts/install.sh` absent | reclone or restore install entrypoint |
+| `PREREQ_MISSING` | tmux / iTerm2 / Python 3.11 / claude missing | install the dep, rerun Step 2 |
+| `ENV_SCAN_FAILED` | machine JSON files missing | rerun Step 2; debug `scan_environment.py` if repeatable |
+| `PROVIDER_NO_KEY` | no provider key, operator skipped prompt | supply a valid key, rerun Step 2 |
+| `GRID_LAUNCH_FAILED` | install-* sessions missing | rerun Step 2 |
+| `ITERM_DRIVER_FAIL` | pane driver error | verify iTerm2 + Python SDK, rerun Step 2 |
+| `B2-memory-dead` | memory seat dead | ancestor halts, reports |
+| `B2.5-bootstrap-failed` | machine.toml tenant write failed | check `~/.clawseat/` permissions |
+| `B3-binding-mismatch` | openclaw binding project mismatch | fix binding, retry Phase-A |
+| `B3.5_TIMEOUT` | seat did not come up | retry that seat only |
+| `B5-feishu-binding-missing` | no feishu_group_id | operator may skip → CLI-only mode |
+| `B6-smoke-failed` | smoke failed | keep `phase=blocked`, inspect logs |
+| `B7-status-write-failed` | STATUS.md cannot be written | diagnose disk / permissions |
+| `ACCEPTANCE_FAILED` | final state mismatched | inspect `STATUS.md`, tmux sessions |
+| `ERR_NO_OPENCLAW_AGENTS` | koder overlay: no tenants registered | run B2.5 first or `agent_admin tenant register` manually |
+
+---
+
+## Resume
+
+To rerun bootstrap safely (idempotent):
+
 ```bash
-python3 "$CLAWSEAT_ROOT/scripts/env_scan.py" \
-  --output "$HOME/.agents/install/env-manifest.json"
+bash scripts/install.sh
 ```
-2. Inspect current project state.
+
+To resume from a blocked Phase-A step:
+
 ```bash
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project show "$PROJECT"
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project validate --project "$PROJECT"
-python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project binding-show "$PROJECT"
-tmux list-sessions | grep "$PROJECT" || true
+tmux attach -t install-ancestor
 ```
-3. Fill only what is missing.
-- If profile or binding is missing, repeat Step 3.
-- If ancestor is missing, repeat Step 4.
-- If ancestor is alive but the grid is incomplete, let ancestor continue or
-  prompt ancestor to fill the missing seats.
-- If memory is the only missing piece, let ancestor recover it; memory stays
-  off-grid by design.
-Success condition for resume:
-- ancestor is alive
-- project profile validates
-- project binding is correct
-- the fixed six-pane monitor is open or ancestor confirms it is healthy
-If those conditions hold, installation is complete and the invoking agent
-stands down.
+
+Then tell ancestor to continue from the blocked token after fixing the underlying issue.
+
+**Hard rule**: do not invent steps outside this file. If a required action is not
+covered here, stop and surface the gap instead of improvising.

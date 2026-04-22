@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import os
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -83,10 +87,12 @@ class SessionStartError(RuntimeError):
 @dataclass
 class SessionHooks:
     agentctl_path: str
+    launcher_path: str
     load_project: Callable[[str], Any]
     apply_template: Callable[[Any, Any], None]
     reconcile_session_runtime: Callable[[Any], Any]
     ensure_api_secret_ready: Callable[[Any], None]
+    write_session: Callable[[Any], None]
     load_project_sessions: Callable[[str], dict[str, Any]]
     project_template_context: Callable[[Any], Any]
     load_engineers: Callable[[], dict[str, Any]]
@@ -208,6 +214,197 @@ class SessionService:
                 f"{operation} failed for '{session.session}': no active panes detected; state={self._session_window_state(session.session)}"
             )
 
+    def _parse_env_file(self, path: str) -> dict[str, str]:
+        values: dict[str, str] = {}
+        if not path:
+            return values
+        env_path = Path(path)
+        if not env_path.exists():
+            return values
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            key, sep, value = line.partition("=")
+            if not sep:
+                continue
+            values[key.strip()] = shlex.split(value.strip(), posix=True)[0] if value.strip() else ""
+        return values
+
+    def _launcher_auth_for(self, session: Any) -> str:
+        if session.tool == "claude":
+            if session.auth_mode == "oauth":
+                return "oauth"
+            if session.auth_mode == "oauth_token":
+                return "oauth_token"
+            if session.auth_mode == "ccr":
+                return "custom"
+            if session.auth_mode == "api":
+                # Keep Claude API seats aligned with install.sh: all non-oauth
+                # Claude providers land in the same launcher "custom" sandbox
+                # namespace, keyed by session name rather than provider label.
+                return "custom"
+        if session.tool == "codex":
+            if session.auth_mode == "oauth":
+                return "chatgpt"
+            if session.auth_mode == "api":
+                return "custom"
+        if session.tool == "gemini":
+            if session.auth_mode == "oauth":
+                return "oauth"
+            if session.auth_mode == "api":
+                return {
+                    "google-api-key": "primary",
+                }.get(session.provider, "custom")
+        raise SessionStartError(
+            f"unsupported launcher auth mapping for {session.engineer_id}: "
+            f"tool={session.tool} auth_mode={session.auth_mode} provider={session.provider}"
+        )
+
+    def _launcher_secret_target(self, session: Any, launcher_auth: str) -> Path | None:
+        operator_home = Path.home()
+        if session.tool == "claude":
+            if launcher_auth == "oauth_token":
+                return operator_home / ".agents" / ".env.global"
+        if session.tool == "gemini" and launcher_auth == "primary":
+            return operator_home / ".agent-runtime" / "secrets" / "gemini" / "primary.env"
+        return None
+
+    def _sync_launcher_secret_file(self, session: Any, launcher_auth: str) -> None:
+        if not session.secret_file:
+            return
+        source = Path(session.secret_file)
+        target = self._launcher_secret_target(session, launcher_auth)
+        if target is None or not source.exists() or not source.read_text(encoding="utf-8").strip():
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        target.chmod(0o600)
+
+    def _custom_env_payload(self, session: Any) -> dict[str, str]:
+        if session.tool == "claude" and session.auth_mode == "ccr":
+            return {
+                "LAUNCHER_CUSTOM_API_KEY": "ccr-local-dummy",
+                "LAUNCHER_CUSTOM_BASE_URL": os.environ.get("CLAWSEAT_CCR_BASE_URL", "http://127.0.0.1:3456"),
+            }
+
+        secret_env = self._parse_env_file(session.secret_file)
+        if session.tool == "claude":
+            api_key = (
+                secret_env.get("ANTHROPIC_AUTH_TOKEN")
+                or secret_env.get("ANTHROPIC_API_KEY")
+                or secret_env.get("OPENAI_API_KEY")
+            )
+            if not api_key:
+                raise SessionStartError(
+                    f"custom launcher env for {session.engineer_id} is missing a Claude-compatible API key"
+                )
+            payload = {
+                "LAUNCHER_CUSTOM_API_KEY": api_key,
+            }
+            base_url = (
+                secret_env.get("ANTHROPIC_BASE_URL")
+                or secret_env.get("OPENAI_BASE_URL")
+                or secret_env.get("OPENAI_API_BASE")
+                or ""
+            )
+            if session.provider == "anthropic-console" and not base_url:
+                base_url = "https://api.anthropic.com"
+            if session.provider == "minimax" and not base_url:
+                base_url = "https://api.minimaxi.com/anthropic"
+            if session.provider == "xcode-best" and not base_url:
+                base_url = "https://xcode.best"
+            if base_url:
+                payload["LAUNCHER_CUSTOM_BASE_URL"] = base_url
+            model = secret_env.get("ANTHROPIC_MODEL") or secret_env.get("OPENAI_MODEL", "")
+            if session.provider == "minimax" and not model:
+                model = "MiniMax-M2.7-highspeed"
+            if model:
+                payload["LAUNCHER_CUSTOM_MODEL"] = model
+            return payload
+
+        if session.tool == "codex":
+            api_key = secret_env.get("OPENAI_API_KEY", "")
+            if not api_key:
+                raise SessionStartError(
+                    f"custom launcher env for {session.engineer_id} is missing OPENAI_API_KEY"
+                )
+            base_url = (
+                secret_env.get("OPENAI_BASE_URL")
+                or secret_env.get("OPENAI_API_BASE")
+                or ""
+            )
+            if session.provider == "xcode-best" and not base_url:
+                base_url = "https://api.xcode.best/v1"
+            payload = {
+                "LAUNCHER_CUSTOM_API_KEY": api_key,
+                "LAUNCHER_CUSTOM_BASE_URL": base_url or "https://api.openai.com/v1",
+            }
+            model = secret_env.get("OPENAI_MODEL", "") or getattr(session, "_template_model", "")
+            if session.provider == "xcode-best" and not model:
+                model = "gpt-5.4"
+            if model:
+                payload["LAUNCHER_CUSTOM_MODEL"] = model
+            return payload
+
+        if session.tool == "gemini":
+            api_key = secret_env.get("GEMINI_API_KEY") or secret_env.get("GOOGLE_API_KEY", "")
+            if not api_key:
+                raise SessionStartError(
+                    f"custom launcher env for {session.engineer_id} is missing GEMINI_API_KEY / GOOGLE_API_KEY"
+                )
+            payload = {
+                "LAUNCHER_CUSTOM_API_KEY": api_key,
+                "LAUNCHER_CUSTOM_BASE_URL": secret_env.get(
+                    "GOOGLE_GEMINI_BASE_URL",
+                    secret_env.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"),
+                ),
+            }
+            model = secret_env.get("GEMINI_MODEL", "") or getattr(session, "_template_model", "")
+            if model:
+                payload["LAUNCHER_CUSTOM_MODEL"] = model
+            return payload
+
+        raise SessionStartError(f"custom launcher env not implemented for tool={session.tool}")
+
+    def _write_launcher_custom_env_file(self, session: Any) -> str:
+        safe_session = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in session.session)
+        payload = self._custom_env_payload(session)
+        handle = tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix=f"agent-admin-custom-{safe_session}.",
+            dir="/tmp",
+            delete=False,
+            encoding="utf-8",
+        )
+        try:
+            for key, value in payload.items():
+                handle.write(f"export {key}={shlex.quote(value)}\n")
+        finally:
+            handle.close()
+        os.chmod(handle.name, 0o600)
+        return handle.name
+
+    def _launcher_runtime_dir(self, session: Any, launcher_auth: str) -> Path | None:
+        operator_home = Path.home()
+        if session.tool == "claude":
+            if launcher_auth == "oauth":
+                return None
+            if launcher_auth == "oauth_token":
+                return operator_home / ".agent-runtime" / "identities" / "claude" / "oauth_token" / f"{launcher_auth}-{session.session}"
+            return operator_home / ".agent-runtime" / "identities" / "claude" / "api" / f"{launcher_auth}-{session.session}"
+        if session.tool == "codex":
+            if launcher_auth == "chatgpt":
+                return None
+            return operator_home / ".agent-runtime" / "identities" / "codex" / "api" / f"{launcher_auth}-{session.session}"
+        if session.tool == "gemini":
+            if launcher_auth == "oauth":
+                return None
+            return operator_home / ".agent-runtime" / "identities" / "gemini" / "api" / f"{launcher_auth}-{session.session}"
+        return None
+
     def build_engineer_exec(self, session: Any) -> list[str]:
         if session.wrapper:
             return [session.wrapper]
@@ -227,23 +424,49 @@ class SessionService:
         if self.hooks.tmux_has_session(session.session):
             self._assert_session_running(session, operation=f"start_engineer idempotent check for {session.session}")
             return
-        cmd = self.build_engineer_exec(session)
-        quoted_cmd = " ".join(shlex.quote(part) for part in cmd)
+        launcher_auth = self._launcher_auth_for(session)
+        runtime_dir = self._launcher_runtime_dir(session, launcher_auth)
+        if runtime_dir is not None and session.runtime_dir != str(runtime_dir):
+            session.runtime_dir = str(runtime_dir)
+            self.hooks.write_session(session)
+            self.hooks.apply_template(session, project)
         for attempt in range(1, TMUX_COMMAND_RETRIES + 1):
+            custom_env_file = ""
             try:
-                self._run_tmux_with_retry(
-                    [
-                        "new-session",
-                        "-d",
-                        "-s",
-                        session.session,
-                        "-c",
-                        session.workspace,
-                        quoted_cmd,
-                    ],
-                    reason=f"start engineer {session.session} attempt={attempt}",
-                    check=True,
+                self._sync_launcher_secret_file(session, launcher_auth)
+                if launcher_auth == "custom":
+                    custom_env_file = self._write_launcher_custom_env_file(session)
+                cmd = [
+                    "bash",
+                    self.hooks.launcher_path,
+                    "--headless",
+                    "--tool",
+                    session.tool,
+                    "--auth",
+                    launcher_auth,
+                    "--dir",
+                    session.workspace,
+                    "--session",
+                    session.session,
+                ]
+                if custom_env_file:
+                    cmd.extend(["--custom-env-file", custom_env_file])
+                env = dict(os.environ)
+                env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
+                result = subprocess.run(
+                    cmd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+                    env=env,
                 )
+                if result.returncode != 0:
+                    detail = (result.stderr or result.stdout or "").strip()
+                    raise SessionStartError(
+                        f"start engineer {session.session} via launcher failed, "
+                        f"exit={result.returncode}, detail={detail}"
+                    )
                 self._assert_session_running(session, operation=f"start engineer {session.session}")
                 break
             except SessionStartError as exc:
@@ -267,6 +490,9 @@ class SessionService:
                     f"start engineer '{session.session}' failed after {TMUX_COMMAND_RETRIES} attempts; "
                     f"window_state={detail}; reason={exc}"
                 ) from exc
+            finally:
+                if custom_env_file and os.path.exists(custom_env_file):
+                    os.unlink(custom_env_file)
         # Enable tmux terminal titles so iTerm tabs show session name.
         # set-titles-string '#{session_name}' uses the session identifier as the tab title.
         self._run_tmux_with_retry(

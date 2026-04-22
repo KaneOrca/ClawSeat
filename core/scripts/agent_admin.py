@@ -958,7 +958,7 @@ def cmd_session_effective_launch(args: argparse.Namespace) -> int:
 
 
 def ensure_api_secret_ready(session: SessionRecord) -> None:
-    SWITCH_HANDLERS.ensure_api_secret_ready(session)
+    SWITCH_HANDLERS.ensure_secret_ready(session)
 
 
 def expected_identity_for_session(session: SessionRecord) -> str:
@@ -998,10 +998,12 @@ SWITCH_HANDLERS = SwitchHandlers(
 SESSION_SERVICE = SessionService(
     SessionHooks(
         agentctl_path=str(AGENTCTL_SH),
+        launcher_path=str(REPO_ROOT / "core" / "launchers" / "agent-launcher.sh"),
         load_project=load_project,
         apply_template=apply_template,
         reconcile_session_runtime=reconcile_session_runtime,
         ensure_api_secret_ready=ensure_api_secret_ready,
+        write_session=write_session,
         load_project_sessions=load_project_sessions,
         project_template_context=project_template_context,
         load_engineers=load_engineers,

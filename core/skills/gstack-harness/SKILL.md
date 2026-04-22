@@ -1,6 +1,6 @@
 ---
 name: gstack-harness
-description: Multi-seat harness orchestration for tmux/document-driven engineering teams. Use when you need to bootstrap a seat roster, start seats, dispatch tasks, complete handoffs with durable ACKs, provision frontstage heartbeat, or render a CLI operator console for a project profile.
+description: Multi-seat harness orchestration for document-driven engineering teams. Use when you need to bootstrap a seat roster, start seats, dispatch tasks, complete handoffs with durable ACKs, record handoff/state.db receipts, coordinate optional async transports, provision frontstage heartbeat, or render a CLI operator console for a project profile.
 ---
 
 # Gstack Harness
@@ -13,7 +13,7 @@ stable harness runtime:
 
 - seat model
 - dispatch/completion/ACK protocol
-- tmux transport
+- CLI-first transport plus optional async adapters
 - heartbeat / patrol / unblock
 - CLI control console
 - project profiles
@@ -25,8 +25,9 @@ project without changing the role model.
 ## Use this skill when
 
 - a project has a frontstage seat plus planner / specialist seats
-- task handoffs are document-first and tmux-notified
-- you need a reliable `assigned -> notified -> consumed` protocol
+- task handoffs are document-first and transport-aware
+- you need a reliable `assigned -> notified -> consumed` protocol that still
+  works in CLI-only mode
 - you need one CLI console to inspect chain health
 - you need to bootstrap or start seats from a project profile
 
@@ -42,8 +43,9 @@ Do not load every reference by default. Start from the project profile under
 - dispatch / completion / verify handoff
   - [Chain protocol](references/chain-protocol.md)
   - [Dispatch playbook](references/dispatch-playbook.md)
-  - [Feishu delegation report](references/feishu-delegation-report.md) when planner
-    uses user-identity group messages to wake frontstage/koder
+  - [Feishu delegation report](references/feishu-delegation-report.md) only when a
+    Feishu-side async sink or koder overlay is active; otherwise CLI-only flow
+    stays on handoff JSON + state.db events
 - console / patrol / reminder review
   - [Console model](references/console-model.md)
   - [Heartbeat policy](references/heartbeat-policy.md)
@@ -83,22 +85,27 @@ Keep those under:
   - default dispatch path for frontstage -> planner and planner -> specialist
     handoffs
   - writes `TODO`, updates project task/state docs, notifies the target seat,
-    emits the planner Feishu group broadcast only when a binding is available
-    and `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`, and
-    writes a machine-readable handoff receipt
+    records the durable handoff JSON + state.db event, and optionally fans out
+    an async broadcast through the configured transport
+  - Feishu group broadcast is only one transport; the legacy auto-broadcast path
+    remains opt-in via `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`
 - `scripts/notify_seat.py`
   - send a protocol-compliant seat-to-seat notice, reminder, or unblock
     message using the standard transport instead of raw tmux
 - `scripts/complete_handoff.py`
   - write `DELIVERY`, notify the target seat, and optionally write a durable
     `Consumed:` ACK when the receiver has consumed the handoff
-  - when planner is part of the handoff and a Feishu group is configured,
-    emit the matching group broadcast only when
-    `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`
+  - writes the matching durable closeout trail to handoff JSON + state.db, then
+    optionally mirrors the closeout on any configured async transport
+  - Feishu closeout/broadcast is optional transport only; legacy group
+    auto-broadcast still requires `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`
 - `scripts/send_delegation_report.py`
-  - send an `OC_DELEGATION_REPORT_V1` message to Feishu through `lark-cli --as user`
-  - use this when planner must wake `koder` through the user channel instead of
-    relying on sender identity
+  - emit a delegation report on the Feishu-side async path
+  - today's built-in serializer is `OC_DELEGATION_REPORT_V1` over
+    `lark-cli --as user`; in CLI-only mode the same delegation state lives in
+    handoff JSON + state.db events instead
+  - use this only when a koder overlay or other Feishu-side receiver is active;
+    it is not the primary control path
 - `scripts/verify_handoff.py`
   - verify `assigned`, `notified`, and `consumed` for one handoff
 - `scripts/render_console.py`
@@ -121,12 +128,21 @@ Keep those under:
 ## Design rules
 
 - Documents remain the source of truth.
-- tmux is the reminder transport, not the facts database.
+- CLI direct interaction is the primary control path for operator/frontstage
+  coordination.
+- handoff JSON + state.db events carry the durable delegation facts.
+- tmux and Feishu are transports/reminders, not the facts database.
+- `OC_DELEGATION_REPORT_V1` is one Feishu-side serialization format, not the
+  canonical or only control packet.
 - seat-to-seat transport must default to the framework transport helper at
   `<repo-root>/core/shell-scripts/send-and-verify.sh`; raw `tmux send-keys` is only a
   fallback path
 - if transport falls back to raw tmux, it must still honor the send contract: text, wait 1 second, `Enter`, then verify the message did not stay queued in the input buffer
 - frontstage and planner seats should prefer `scripts/notify_seat.py` for ad hoc reminders/unblocks rather than composing transport by hand
+- if an async broadcast path is configured, treat it as an optional mirror of
+  the same handoff state; planner stop-hook summaries, legacy Feishu group
+  broadcasts, and koder-facing envelopes all sit on top of the same receipt
+  trail
 - `gstack` specialist skills stay in place; this skill only orchestrates them.
 - Treat dynamic-roster fields as separate concerns:
   - `seats` = canonical roster
@@ -154,9 +170,12 @@ Keep those under:
   - the selected tool, auth mode, and provider/model family
   Then, after user approval, it may re-run the start command with explicit
   confirmation.
-- when a stage closeout lands back at frontstage, koder should reconcile the
-  linked delivery trail, update the project docs, and then summarize the wrap-up
-  for the user
+- when a stage closeout lands back at frontstage, the active frontstage should
+  reconcile the linked delivery trail, update the project docs, and then
+  summarize the wrap-up for the user
+  - in v0.7 CLI-first mode this is usually ancestor/operator-facing CLI work
+  - if koder overlay is active, it mirrors the same delivery trail for Feishu
+    presentation; it does not become a separate source of truth
 
 ## Claude recovery rule
 
@@ -217,10 +236,14 @@ the runtime environment. There is no code path that instantiates a real
 OpenClaw adapter object — the shim exists only as a structural placeholder.
 
 Practical implication: all seat-to-seat transport calls ultimately go through
-the tmux `send-and-verify.sh` path. When the target seat is the OpenClaw
-frontstage (koder), the caller must explicitly bypass tmux and use the Feishu
-user-message path (`complete_handoff.py` → `send_feishu_user_message`).
-Do not assume the adapter layer will detect and switch modes automatically.
+the tmux/file-artifact path unless an explicit async bridge is configured. When
+the Feishu-side koder overlay is active, the caller may explicitly bypass tmux
+and use the Feishu user-message path (`complete_handoff.py` /
+`send_delegation_report.py` → Feishu serializer). That bypass is optional and
+exists only when the overlay/bridge is configured. In CLI-only mode there is no
+Feishu bypass; use direct CLI interaction, handoff JSON, state.db events, or
+`agent_admin` CLI instead. Do not assume the adapter layer will detect and
+switch modes automatically.
 
 ## Sandbox HOME resolution
 
