@@ -87,12 +87,14 @@ python3 "$CLAWSEAT_ROOT/scripts/env_scan.py" \
 cat "$HOME/.agents/install/env-manifest.json"
 ```
 What `scripts/env_scan.py` checks:
-- `~/.claude/*` OAuth evidence
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_AUTH_TOKEN`
-- `ANTHROPIC_BASE_URL`
-- `MINIMAX_API_KEY`
-- Anthropic-compatible proxy / localhost clues
+- `~/.claude/` Claude OAuth evidence
+- `~/.agents/.env.global` / `CLAUDE_CODE_OAUTH_TOKEN`
+- `~/.agents/secrets/claude/anthropic-console.env` / `ANTHROPIC_API_KEY`
+- `~/.agent-runtime/secrets/claude/minimax.env`
+- `~/.agent-runtime/secrets/claude/xcode.env`
+- `~/.codex/` Codex OAuth evidence + `~/.agent-runtime/secrets/codex/xcode.env`
+- `~/.gemini/` Gemini OAuth evidence + `~/.agent-runtime/secrets/gemini/primary.env`
+- Anthropic/OpenAI base-url hints and localhost clues
 - runtime binaries `claude`, `codex`, `gemini`
 Verify:
 ```bash
@@ -115,6 +117,10 @@ NO_AUTH_FOUND: configure Claude Code auth first, then re-invoke me
 ```
 Notes:
 - This manifest is the installer-facing summary.
+- `auth_methods[]` is already normalized to exact runtime-matrix triples such as
+  `claude/oauth/anthropic`, `claude/oauth_token/anthropic`,
+  `claude/api/anthropic-console`, `claude/api/minimax`,
+  `codex/oauth/openai`, `gemini/api/google-api-key`.
 - Later, once memory is alive, memory can expand it with the richer
   [`core/skills/memory-oracle/scripts/scan_environment.py`](../core/skills/memory-oracle/scripts/scan_environment.py)
   pass.
@@ -135,6 +141,9 @@ Checklist:
    - `koder_tenant`
 4. If the user wants one runtime everywhere, record that explicitly.
 5. Write the normalized selection JSON.
+Rule:
+- `auth_mode` + `provider` must use the exact runtime-matrix names from
+  `auth_methods[]`. Do not invent aliases such as `claude/api/anthropic`.
 Recommended shape:
 ```json
 {
@@ -289,10 +298,14 @@ Interface:
 ```bash
 scripts/launch_ancestor.sh --project <name> \
   --tool claude \
-  --auth-mode oauth|api \
-  --provider anthropic|minimax|<other> \
+  --auth-mode oauth|oauth_token|api \
+  --provider anthropic|anthropic-console|minimax|xcode-best|openai|google|google-api-key \
   [--model <model-id>]
 ```
+Notes:
+- `--provider` must stay on the exact runtime-matrix name already recorded in
+  `runtime-selection.json`.
+- `--model` is optional and currently only applies when `--tool claude`.
 Resolve ancestor runtime once:
 ```bash
 eval "$(python3 - <<'PY'
@@ -362,7 +375,7 @@ HANDOFF_INCOMPLETE: ancestor launched but Phase-A did not reach B7 phase=ready, 
 | Failure | Signal | Recovery command |
 |---|---|---|
 | No auth found | `NO_AUTH_FOUND` | Configure Claude Code auth, then rerun `python3 "$CLAWSEAT_ROOT/scripts/env_scan.py" --output "$HOME/.agents/install/env-manifest.json"` |
-| Auth expired / wrong key | missing credential or 401-style launcher failure | Refresh the credential, rerun Step 1, then rerun `"$CLAWSEAT_ROOT/scripts/launch_ancestor.sh" ...` |
+| Auth expired / wrong key | missing credential, unsupported combo, or 401-style launcher failure | Refresh the credential, pick a runtime tuple that exactly matches `auth_methods[]`, rerun Step 1, then rerun `"$CLAWSEAT_ROOT/scripts/launch_ancestor.sh" ...` |
 | `tmux` missing | `PREREQ_MISSING: tmux` | `brew install tmux` on macOS, then rerun Step 4 |
 | Ancestor session conflict | stale session or `session.toml` already exists | `python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" session stop-engineer ancestor --project "$PROJECT"` then rerun Step 4 |
 | Binding missing / wrong group | `PROJECT_BOOTSTRAP_FAILED` or binding mismatch | `python3 "$CLAWSEAT_ROOT/core/scripts/agent_admin.py" project bind --project "$PROJECT" --feishu-group "<oc_group_id>" --feishu-bot-account koder` |

@@ -72,14 +72,15 @@ Externally, ClawSeat should be understood as an installable skill/plugin
 product:
 
 - in OpenClaw or Feishu environments, let the runtime load the `clawseat`
-  skill/plugin and start the full ClawSeat flow automatically
-- in Claude Code or Codex, install the ClawSeat entry skills on the local
-  runtime
-- treat `/cs` only as a local convenience alias after the install path is in
-  place
-- the resulting agent becomes the frontstage `koder`
-- `koder` clarifies the request, recommends the team, and then instantiates
-  seats
+  skill/plugin and route into the same v0.5 install playbook
+- in Claude Code or Codex, install the ClawSeat entry skills locally and treat
+  `clawseat` as the fresh-install entry
+- treat `/cs` only as a local re-entry shorthand after install state already
+  exists
+- fresh install writes validated state, launches `ancestor`, and hands project
+  runtime ownership to `ancestor`
+- `koder` is the tenant-side Feishu/OpenClaw frontstage when bound; it is not
+  the local install frontstage and not a tmux seat
 
 For OpenClaw, the repo root is now also a marketplace source. That means
 OpenClaw can install ClawSeat directly from the repo URL as a Claude-compatible
@@ -97,16 +98,21 @@ ClawSeat provides:
 - transport helpers for seat-to-seat notification
 - adapters for consumer projects
 
-For new projects, the default seat naming model is role-first:
+For v0.5, the default visible project roster is the fixed six-pane monitor:
 
-- `koder`
+- `ancestor`
 - `planner`
-- `builder-1`
-- `reviewer-1`
+- `builder`
+- `reviewer`
+- `qa`
+- `designer`
 
-New dynamic-roster projects should bootstrap only `koder` first. Legacy
-`engineer-*` seats remain available through `compat_legacy_seats = true` for
-migrated projects.
+The machine-level `memory` singleton stays off-grid. `koder` also stays
+off-grid as the tenant frontstage. Extra numbered sessions such as `builder-1`
+or `reviewer-1` are explicit fan-out or compatibility paths, not the default
+v0.5 story. Fresh installs bootstrap `ancestor` first; ancestor then brings up
+the rest of the monitor and patrol flow. Legacy `engineer-*` seats remain
+available through `compat_legacy_seats = true` for migrated projects.
 
 ## Boundaries
 

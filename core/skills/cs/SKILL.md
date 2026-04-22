@@ -5,9 +5,10 @@ description: Local ClawSeat re-entry helper. `/cs` is the shorthand for the v0.5
 
 # ClawSeat `/cs` — local re-entry entrypoint
 
-`/cs` is the thin local shortcut for operators who already have ClawSeat
-installed and want to quickly re-enter the canonical `install` project. It is
-NOT the bootstrap path for a fresh machine.
+`/cs` is the thin local shortcut for operators who already have valid v0.5
+install state and want to re-enter that runtime quickly. It is NOT the
+bootstrap path for a fresh machine, and it does not synthesize the `install`
+project on its own.
 
 The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 `/cs` is just the local shorthand for that file's `Resume / Re-entry` section.
@@ -16,14 +17,16 @@ The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 
 | State | Behavior |
 |-------|----------|
-| Existing `install` project with valid profile + binding + runtime metadata | Resume — inspect the current sessions and continue |
-| Existing install state but ancestor session is missing | Relaunch ancestor via `scripts/launch_ancestor.sh`, then continue |
+| Existing `install` state with valid profile + binding + runtime metadata | Resume the existing runtime; ancestor remains the project frontstage owner |
+| Existing install state but ancestor session is missing | Relaunch ancestor via `scripts/launch_ancestor.sh`, then return control to ancestor |
 | Missing or invalid install state | **Refuse** — point operator at `docs/INSTALL.md` fresh-install path |
 
 `/cs` will NEVER:
 
 - synthesize a fresh profile or PROJECT_BINDING on its own
+- create the canonical `install` project from scratch
 - start a parallel `install-*` project when the canonical one already exists
+- launch `planner` directly as a shortcut around ancestor
 - bypass ancestor and directly own seat lifecycle
 - treat local re-entry as a substitute for the install playbook
 
@@ -32,10 +35,11 @@ The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 1. Confirm `CLAWSEAT_ROOT` points at the ClawSeat checkout.
 2. Open [`docs/INSTALL.md`](../../../docs/INSTALL.md) and follow its
    `Resume / Re-entry` section.
-3. Reuse the existing project state. If ancestor is missing but the project
-   state is valid, relaunch ancestor with the runtime tuple already recorded for
-   the project.
-4. Report one of:
+3. Re-scan and inspect the existing install state; fill only the gaps that
+   `docs/INSTALL.md` says are missing.
+4. If ancestor is missing but the project state is valid, relaunch ancestor
+   with the runtime tuple already recorded for the project, then stop there.
+5. Report one of:
    - `resumed` — ancestor/session state already healthy
    - `relaunched_ancestor` — ancestor was missing and has been brought back
    - `refused_missing_state` — no install state exists yet
@@ -49,16 +53,16 @@ playbook in [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 
 ## Interaction rules
 
-- `/cs` itself is the operator's explicit approval to resume the canonical
-  `install` project.
+- `/cs` itself is the operator's explicit approval to resume the existing
+  `install` runtime.
 - Reuse an existing `install` workspace / live tmux sessions — no parallel
   `install-*` projects.
 - Treat OAuth, workspace trust, and permissions prompts as normal manual
   onboarding handled by the launcher/runtime.
 - If tmux or PTY support is unavailable, stop cleanly and hand the next terminal
   command back to the operator.
-- For all **post-re-entry** steps (adding seats, Feishu binding, patrol), ancestor
-  owns the flow — do not drive them from `/cs`.
+- For all **post-re-entry** steps (adding seats, Feishu binding, patrol),
+  ancestor owns the flow — do not drive them from `/cs`.
 
 ## References
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from agent_admin_config import validate_runtime_combo
+from agent_admin_config import AUTH_MODES_REQUIRING_SECRET_FILE, validate_runtime_combo
 
 
 @dataclass
@@ -39,8 +39,30 @@ class SwitchHandlers:
     def default_launch_args_for_tool(self, tool: str) -> list[str]:
         return list(self.hooks.default_tool_args.get(tool, []))
 
-    def ensure_api_secret_ready(self, session: Any) -> None:
-        if session.auth_mode != "api" or not session.secret_file:
+    def operator_home(self) -> Path:
+        return self.hooks.legacy_secrets_root.parent.parent
+
+    def shared_secret_candidates(self, session: Any) -> list[Path]:
+        operator_home = self.operator_home()
+        candidates: list[Path] = []
+        if session.tool == "claude" and session.auth_mode == "oauth_token":
+            candidates.append(operator_home / ".agents" / ".env.global")
+        if session.tool == "claude" and session.provider == "anthropic-console":
+            candidates.append(
+                operator_home / ".agents" / "secrets" / "claude" / "anthropic-console.env"
+            )
+        if session.tool == "claude" and session.provider == "minimax":
+            candidates.append(self.hooks.legacy_secrets_root / "claude" / "minimax.env")
+        if session.tool == "claude" and session.provider == "xcode-best":
+            candidates.append(self.hooks.legacy_secrets_root / "claude" / "xcode.env")
+        if session.tool == "codex" and session.provider == "xcode-best":
+            candidates.append(self.hooks.legacy_secrets_root / "codex" / "xcode.env")
+        if session.tool == "gemini" and session.provider == "google-api-key":
+            candidates.append(self.hooks.legacy_secrets_root / "gemini" / "primary.env")
+        return candidates
+
+    def ensure_secret_ready(self, session: Any) -> None:
+        if session.auth_mode not in AUTH_MODES_REQUIRING_SECRET_FILE or not session.secret_file:
             return
         secret_path = Path(session.secret_file)
         if not secret_path.exists() or not secret_path.read_text().strip():
@@ -51,21 +73,25 @@ class SwitchHandlers:
                 shutil.copy2(peer, secret_path)
                 self.hooks.ensure_secret_permissions(secret_path)
                 break
-        if (not secret_path.exists() or not secret_path.read_text().strip()) and session.tool == "codex" and session.provider == "xcode-best":
-            legacy_secret = self.hooks.legacy_secrets_root / "codex" / "xcode.env"
-            if legacy_secret.exists() and legacy_secret.read_text().strip():
+        if not secret_path.exists() or not secret_path.read_text().strip():
+            for shared_secret in self.shared_secret_candidates(session):
+                if not shared_secret.exists() or not shared_secret.read_text().strip():
+                    continue
                 self.hooks.ensure_dir(secret_path.parent)
-                shutil.copy2(legacy_secret, secret_path)
+                shutil.copy2(shared_secret, secret_path)
                 self.hooks.ensure_secret_permissions(secret_path)
+                break
         if not secret_path.exists():
             raise self.hooks.error_cls(
-                f"Abort: missing API secret file for {session.engineer_id}: {secret_path}. "
-                f"Provision the secret before switching to {session.tool}/{session.provider} API auth."
+                f"Abort: missing secret file for {session.engineer_id}: {secret_path}. "
+                f"Provision the secret before switching to {session.tool}/{session.provider} "
+                f"{session.auth_mode} auth."
             )
         if not secret_path.read_text().strip():
             raise self.hooks.error_cls(
-                f"Abort: API secret file is empty for {session.engineer_id}: {secret_path}. "
-                f"Provision the secret before switching to {session.tool}/{session.provider} API auth."
+                f"Abort: secret file is empty for {session.engineer_id}: {secret_path}. "
+                f"Provision the secret before switching to {session.tool}/{session.provider} "
+                f"{session.auth_mode} auth."
             )
 
     def expected_identity_for_session(self, session: Any) -> str:
@@ -108,11 +134,16 @@ class SwitchHandlers:
         tool: str,
         auth_mode: str,
         provider: str,
+        model: str = "",
     ) -> Any:
         engineer_id = old_session.engineer_id
         identity = self.hooks.identity_name(tool, auth_mode, provider, engineer_id, project.name)
-        secret_file = str(self.hooks.secret_file_for(tool, provider, engineer_id)) if auth_mode == "api" else ""
-        return self.hooks.session_record_cls(
+        secret_file = (
+            str(self.hooks.secret_file_for(tool, provider, engineer_id))
+            if auth_mode in AUTH_MODES_REQUIRING_SECRET_FILE
+            else ""
+        )
+        session = self.hooks.session_record_cls(
             engineer_id=engineer_id,
             project=project.name,
             tool=tool,
@@ -129,8 +160,16 @@ class SwitchHandlers:
             secret_file=secret_file,
             wrapper=old_session.wrapper,
         )
+        session._template_model = model.strip()
+        return session
 
     def session_switch_harness(self, args: Any) -> int:
+        requested_model = str(getattr(args, "model", "")).strip()
+        if requested_model and args.tool != "claude":
+            raise self.hooks.error_cls(
+                f"session switch-harness {args.engineer}: --model is only supported for tool=claude "
+                f"(got tool={args.tool!r})."
+            )
         # Validate the tool/auth_mode/provider triple BEFORE any mutation.
         # Same rationale as CRUD engineer_create: unknown provider strings
         # used to silently succeed through build_switched_session, burning
@@ -144,15 +183,23 @@ class SwitchHandlers:
         )
         project = self.hooks.load_project_or_current(args.project)
         old_session = self.hooks.load_session(project.name, self.hooks.normalize_name(args.engineer))
-        new_session = self.build_switched_session(old_session, project, args.tool, args.mode, args.provider)
+        new_session = self.build_switched_session(
+            old_session,
+            project,
+            args.tool,
+            args.mode,
+            args.provider,
+            model=requested_model,
+        )
         if (
             old_session.tool == new_session.tool
             and old_session.auth_mode == new_session.auth_mode
             and old_session.provider == new_session.provider
+            and not requested_model
         ):
             print(f"no change for {old_session.engineer_id} in {project.name}")
             return 0
-        self.ensure_api_secret_ready(new_session)
+        self.ensure_secret_ready(new_session)
         self.hooks.session_stop_engineer(old_session)
         self.hooks.write_session(new_session)
         self.hooks.apply_template(new_session, project)
@@ -175,7 +222,13 @@ class SwitchHandlers:
             error_cls=self.hooks.error_cls,
             context=f"session switch-auth {args.engineer}",
         )
-        new_session = self.build_switched_session(old_session, project, old_session.tool, args.mode, args.provider)
+        new_session = self.build_switched_session(
+            old_session,
+            project,
+            old_session.tool,
+            args.mode,
+            args.provider,
+        )
         if new_session.tool != old_session.tool:
             raise self.hooks.error_cls(
                 f"Tool change requested for {old_session.engineer_id}; use session switch-harness instead"
@@ -183,7 +236,7 @@ class SwitchHandlers:
         if old_session.auth_mode == new_session.auth_mode and old_session.provider == new_session.provider:
             print(f"no auth change for {old_session.engineer_id} in {project.name}")
             return 0
-        self.ensure_api_secret_ready(new_session)
+        self.ensure_secret_ready(new_session)
         self.hooks.session_stop_engineer(old_session)
         self.hooks.write_session(new_session)
         self.hooks.ensure_dir(Path(new_session.runtime_dir))

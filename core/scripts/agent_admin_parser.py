@@ -347,14 +347,19 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     switch_harness.add_argument("--project", required=True)
     switch_harness.add_argument("--engineer", required=True)
     switch_harness.add_argument("--tool", required=True, choices=["codex", "claude", "gemini"])
-    switch_harness.add_argument("--mode", required=True, choices=["oauth", "api"])
+    switch_harness.add_argument("--mode", required=True, choices=["oauth", "oauth_token", "api"])
     switch_harness.add_argument("--provider", required=True)
+    switch_harness.add_argument(
+        "--model",
+        default="",
+        help="Optional model override. Currently supported only for tool=claude.",
+    )
     switch_harness.set_defaults(func=hooks.cmd_session_switch_harness)
 
     switch_auth = session_sub.add_parser("switch-auth")
     switch_auth.add_argument("--project", required=True)
     switch_auth.add_argument("--engineer", required=True)
-    switch_auth.add_argument("--mode", required=True, choices=["oauth", "api"])
+    switch_auth.add_argument("--mode", required=True, choices=["oauth", "oauth_token", "api"])
     switch_auth.add_argument("--provider", required=True)
     switch_auth.set_defaults(func=hooks.cmd_session_switch_auth)
 

@@ -44,6 +44,12 @@ for flag in --tool --auth-mode --provider; do
   fi
 done
 
+if echo "$help_out" | grep -q "oauth_token"; then
+  pass "--help mentions oauth_token"
+else
+  fail "--help mentions oauth_token" "not found in help output"
+fi
+
 for code in 0 2 3 4; do
   if echo "$help_out" | grep -qe "$code"; then
     pass "--help documents exit code $code"
@@ -104,6 +110,23 @@ if "$REPO/scripts/env_scan.py" --output "$envscan_tmp" 2>/dev/null; then
         fail "env_scan JSON contains '$key'" "key not found"
       fi
     done
+    if REPO_PATH="$REPO" ENVSCAN_TMP="$envscan_tmp" python3 - <<'PY' >/dev/null 2>&1
+import json
+import os
+import sys
+from pathlib import Path
+repo = Path(os.environ["REPO_PATH"])
+sys.path.insert(0, str(repo / "core" / "scripts"))
+from agent_admin_config import is_supported_runtime_combo
+d = json.load(open(Path(os.environ["ENVSCAN_TMP"])))
+for item in d["auth_methods"]:
+    assert is_supported_runtime_combo(item["tool"], item["auth_mode"], item["provider"])
+PY
+    then
+      pass "env_scan auth_methods are supported runtime combos"
+    else
+      fail "env_scan auth_methods are supported runtime combos" "unsupported combo emitted"
+    fi
   else
     fail "env_scan.py writes valid JSON" "not valid JSON or empty"
   fi
@@ -132,6 +155,12 @@ if [[ "$ancestor_hits" -ge 5 ]]; then
   pass "INSTALL.md mentions ancestor ($ancestor_hits hits)"
 else
   fail "INSTALL.md mentions ancestor" "only $ancestor_hits hits (need ≥5)"
+fi
+
+if grep -q "anthropic-console" "$REPO/docs/INSTALL.md" 2>/dev/null; then
+  pass "INSTALL.md mentions anthropic-console"
+else
+  fail "INSTALL.md mentions anthropic-console" "missing exact provider name"
 fi
 
 # ── Check 7: SKILL.md contract ──────────────────────────────────────

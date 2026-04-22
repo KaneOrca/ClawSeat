@@ -24,6 +24,10 @@ that path is covered by the live smoke in the commit message, not here
 """
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -77,6 +81,170 @@ def test_matrix_has_every_triple_we_rely_on_in_docs():
             f"{tool}/{auth}/{provider} dropped from matrix — this breaks "
             "TOOLS/seat.md guidance"
         )
+
+
+def _write_executable(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _fake_launch_root(tmp_path: Path) -> tuple[Path, Path]:
+    root = tmp_path / "fake-root"
+    log_path = tmp_path / "calls.log"
+    (root / "scripts").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(_REPO / "scripts" / "launch_ancestor.sh", root / "scripts" / "launch_ancestor.sh")
+    (root / "scripts" / "launch_ancestor.sh").chmod(0o755)
+    _write_executable(
+        root / "core" / "launchers" / "agent-launcher.sh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'launcher %s\\n' "$*" >> "${LOG_FILE:?}"
+if [[ "${1:-}" == "--check-secrets" ]]; then
+  printf '{"status":"ok"}\\n'
+  exit 0
+fi
+echo "unexpected launcher invocation" >&2
+exit 99
+""",
+    )
+    _write_executable(
+        root / "core" / "scripts" / "agent_admin.py",
+        """#!/usr/bin/env python3
+from __future__ import annotations
+import os
+import sys
+from pathlib import Path
+Path(os.environ["LOG_FILE"]).open("a", encoding="utf-8").write(
+    "agent_admin " + " ".join(sys.argv[1:]) + "\\n"
+)
+raise SystemExit(0)
+""",
+    )
+    (root / "core" / "scripts" / "agent_admin_config.py").write_text(
+        """def validate_runtime_combo(tool, auth_mode, provider, error_cls=RuntimeError):
+    valid = {
+        ('claude', 'oauth', 'anthropic'),
+        ('claude', 'oauth_token', 'anthropic'),
+        ('claude', 'api', 'anthropic-console'),
+        ('claude', 'api', 'minimax'),
+        ('claude', 'api', 'xcode-best'),
+        ('codex', 'oauth', 'openai'),
+        ('codex', 'api', 'xcode-best'),
+        ('gemini', 'oauth', 'google'),
+        ('gemini', 'api', 'google-api-key'),
+    }
+    if (tool, auth_mode, provider) not in valid:
+        raise error_cls(f'unsupported runtime combination `{tool}/{auth_mode}/{provider}`')
+""",
+        encoding="utf-8",
+    )
+    _write_executable(
+        root / "core" / "shell-scripts" / "send-and-verify.sh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'send %s\\n' "$*" >> "${LOG_FILE:?}"
+""",
+    )
+    (root / "core" / "skills" / "clawseat-ancestor").mkdir(parents=True, exist_ok=True)
+    (root / "core" / "skills" / "clawseat-ancestor" / "SKILL.md").write_text(
+        "# stub ancestor skill\n",
+        encoding="utf-8",
+    )
+    return root, log_path
+
+
+def test_launch_ancestor_maps_install_runtime_combo_and_forwards_model(tmp_path: Path):
+    root, log_path = _fake_launch_root(tmp_path)
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "launch_ancestor.sh"),
+            "--project",
+            "install",
+            "--tool",
+            "claude",
+            "--auth-mode",
+            "api",
+            "--provider",
+            "minimax",
+            "--model",
+            "MiniMax-M2.7-highspeed",
+        ],
+        text=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "CLAWSEAT_ROOT": str(root),
+            "LOG_FILE": str(log_path),
+            "HOME": str(tmp_path / "home"),
+        },
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    log = log_path.read_text(encoding="utf-8")
+    assert "launcher --check-secrets claude --auth minimax" in log
+    assert (
+        "agent_admin session switch-harness --project install --engineer ancestor "
+        "--tool claude --mode api --provider minimax --model MiniMax-M2.7-highspeed"
+    ) in log
+    assert "agent_admin session start-engineer ancestor --project install" in log
+    assert "send --project install install-ancestor-claude" in log
+
+
+def test_env_scan_emits_only_supported_runtime_combos(tmp_path: Path):
+    fake_home = tmp_path / "home"
+    (fake_home / ".agents").mkdir(parents=True, exist_ok=True)
+    (fake_home / ".agents" / ".env.global").write_text(
+        "export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-test\n",
+        encoding="utf-8",
+    )
+    (fake_home / ".agents" / "secrets" / "claude").mkdir(parents=True, exist_ok=True)
+    (fake_home / ".agents" / "secrets" / "claude" / "anthropic-console.env").write_text(
+        "ANTHROPIC_API_KEY=sk-ant-api03-test\n",
+        encoding="utf-8",
+    )
+    (fake_home / ".agent-runtime" / "secrets" / "claude").mkdir(parents=True, exist_ok=True)
+    (fake_home / ".agent-runtime" / "secrets" / "claude" / "minimax.env").write_text(
+        "ANTHROPIC_AUTH_TOKEN=minimax-token\n",
+        encoding="utf-8",
+    )
+    (fake_home / ".codex").mkdir(parents=True, exist_ok=True)
+    (fake_home / ".codex" / "auth.json").write_text("{}", encoding="utf-8")
+    (fake_home / ".agent-runtime" / "secrets" / "gemini").mkdir(parents=True, exist_ok=True)
+    (fake_home / ".agent-runtime" / "secrets" / "gemini" / "primary.env").write_text(
+        "GEMINI_API_KEY=gem-key\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["python3", str(_REPO / "scripts" / "env_scan.py")],
+        text=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "CLAWSEAT_SCAN_HOME": str(fake_home),
+            "PATH": os.environ.get("PATH", ""),
+        },
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    combos = {
+        (item["tool"], item["auth_mode"], item["provider"])
+        for item in payload["auth_methods"]
+    }
+    expected = {
+        ("claude", "oauth_token", "anthropic"),
+        ("claude", "api", "anthropic-console"),
+        ("claude", "api", "minimax"),
+        ("codex", "oauth", "openai"),
+        ("gemini", "api", "google-api-key"),
+    }
+    assert expected.issubset(combos)
+    assert ("claude", "api", "anthropic") not in combos
+    for tool, auth_mode, provider in combos:
+        assert is_supported_runtime_combo(tool, auth_mode, provider)
 
 
 # ── validate_runtime_combo shape + error text ─────────────────────────────

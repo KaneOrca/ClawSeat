@@ -1,10 +1,19 @@
-"""Seat resolver: single source of truth for how to reach a target seat.
+"""Seat resolver: transport hook for legacy harness dispatch/notify flows.
 
 Detection order (short-circuit priority):
-1. explicit OpenClaw frontstage — target == heartbeat_owner and heartbeat_transport=openclaw
-2. tmux runtime seats         — target in profile.runtime_seats (or legacy seats fallback)
-3. named OpenClaw workspace   — ~/.openclaw/workspace-<target>/WORKSPACE_CONTRACT.toml exists + feishu_group_id
-4. file-only                  — all other cases (no known transport, write to handoff dir)
+1. explicit OpenClaw frontstage — target == frontstage target and transport=openclaw
+2. tmux project seats          — target in the profile's tmux-backed runtime seat set
+3. named OpenClaw workspace    — ~/.openclaw/workspace-<target>/WORKSPACE_CONTRACT.toml exists + feishu_group_id
+4. file-only                   — all other cases (no known transport, write to handoff dir)
+
+Compatibility boundary:
+- `profile_heartbeat_owner` / `profile_heartbeat_transport`
+- `profile_runtime_seats` (and upstream `materialized_seats` fallbacks)
+
+Those names survive only as legacy harness/local-override shims. Layered v2
+profiles do not carry them as canonical model fields; callers should reach this
+module through the transport router / migration helpers instead of treating the
+legacy names as the primary seat model.
 
 Side effects: NONE from resolve_seat() itself. File writes (handoff JSON) are
 the caller's responsibility.
@@ -91,6 +100,69 @@ def _find_frontstage_openclaw_contract(
             continue
         return contract_path
     return None
+
+
+@dataclass(frozen=True)
+class _ResolverTransportHints:
+    declared_project_seats: tuple[str, ...]
+    tmux_project_seats: tuple[str, ...]
+    frontstage_target: str
+    frontstage_transport: str
+
+
+def _normalized_seat_list(values: Optional[list[str]]) -> tuple[str, ...]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        seat = str(value).strip()
+        if not seat or seat in seen:
+            continue
+        seen.add(seat)
+        ordered.append(seat)
+    return tuple(ordered)
+
+
+def _resolver_transport_hints(
+    *,
+    profile_seats: list[str],
+    profile_runtime_seats: Optional[list[str]],
+    profile_heartbeat_owner: Optional[str],
+    profile_heartbeat_transport: str,
+) -> _ResolverTransportHints:
+    """Map legacy harness compat fields onto the transport concepts we route on."""
+    declared_project_seats = _normalized_seat_list(profile_seats)
+    tmux_project_seats = _normalized_seat_list(profile_runtime_seats) or declared_project_seats
+    frontstage_target = (profile_heartbeat_owner or "").strip()
+    frontstage_transport = (profile_heartbeat_transport or "tmux").strip().lower() or "tmux"
+    return _ResolverTransportHints(
+        declared_project_seats=declared_project_seats,
+        tmux_project_seats=tmux_project_seats,
+        frontstage_target=frontstage_target,
+        frontstage_transport=frontstage_transport,
+    )
+
+
+def _profile_tmux_runtime_seats(profile: "HarnessProfileLike", declared_project_seats: list[str]) -> list[str]:
+    resolver = getattr(profile, "tmux_runtime_seats", None)
+    if callable(resolver):
+        return list(resolver())
+    return list(getattr(profile, "runtime_seats", []) or declared_project_seats)
+
+
+def _profile_frontstage_target(profile: "HarnessProfileLike") -> str:
+    resolver = getattr(profile, "frontstage_target_seat", None)
+    if callable(resolver):
+        return str(resolver()).strip()
+    return str(getattr(profile, "heartbeat_owner", "")).strip()
+
+
+def _profile_frontstage_transport(profile: "HarnessProfileLike") -> str:
+    resolver = getattr(profile, "frontstage_transport_kind", None)
+    if callable(resolver):
+        value = resolver()
+    else:
+        value = getattr(profile, "heartbeat_transport", "tmux")
+    return str(value).strip().lower() or "tmux"
 
 
 # ── SeatResolution dataclass ───────────────────────────────────────────────────
@@ -216,7 +288,7 @@ def resolve_seat(
     target :
         Seat or agent name to resolve.
     profile_seats :
-        List of declared tmux seat names from the profile (e.g. ["koder", "planner", "builder-1"]).
+        Declared seat names from the profile or profile-like object.
     profile_project_name :
         Project name for session.toml resolution.
     profile_handoff_dir :
@@ -224,6 +296,12 @@ def resolve_seat(
     profile_session_name_resolver :
         Optional callable(profile_project_name, target) → str | None.
         If not provided, uses the built-in session.toml resolver.
+    profile_runtime_seats :
+        Legacy harness/local-override shim for the tmux-backed seat set. If
+        omitted, the resolver falls back to `profile_seats`.
+    profile_heartbeat_owner / profile_heartbeat_transport :
+        Legacy frontstage shims used only for the explicit OpenClaw frontstage
+        shortcut. Layered v2 profiles should not surface these fields directly.
     strict :
         If True, raise SeatResolutionError on resolution failure instead of
         returning kind="error".
@@ -234,9 +312,12 @@ def resolve_seat(
         Fully populated resolution. Use .into_error(strict) to convert
         kind="error" to an exception in strict mode.
     """
-    runtime_seats = list(profile_runtime_seats or profile_seats)
-    heartbeat_owner = (profile_heartbeat_owner or "").strip()
-    heartbeat_transport = (profile_heartbeat_transport or "tmux").strip().lower() or "tmux"
+    hints = _resolver_transport_hints(
+        profile_seats=profile_seats,
+        profile_runtime_seats=profile_runtime_seats,
+        profile_heartbeat_owner=profile_heartbeat_owner,
+        profile_heartbeat_transport=profile_heartbeat_transport,
+    )
     oc_home = _openclaw_home if _openclaw_home is not None else _openclaw_home_resolved()
 
     def _openclaw_resolution(contract_path: Path) -> SeatResolution:
@@ -263,10 +344,10 @@ def resolve_seat(
         )
 
     # ── 1. explicit OpenClaw frontstage ─────────────────────────────────────
-    if target == heartbeat_owner and heartbeat_transport == "openclaw":
+    if target == hints.frontstage_target and hints.frontstage_transport == "openclaw":
         contract_path = _find_frontstage_openclaw_contract(
             oc_home=oc_home,
-            heartbeat_owner=heartbeat_owner,
+            heartbeat_owner=hints.frontstage_target,
             profile_project_name=profile_project_name,
         )
         if contract_path is not None:
@@ -287,7 +368,7 @@ def resolve_seat(
         )
 
     # ── 2. tmux: target is a declared runtime seat in the profile ───────────
-    if target in runtime_seats:
+    if target in hints.tmux_project_seats:
         resolver = profile_session_name_resolver or _resolve_session_name_from_session_toml
         session_name = resolver(profile_project_name, target)
         return SeatResolution(
@@ -309,7 +390,7 @@ def resolve_seat(
     handoff_path = profile_handoff_dir / f"{target}.json"
     error_msg = (
         f"target {target!r} is not a declared tmux seat "
-        f"(runtime seats: {runtime_seats}) and has no OpenClaw workspace contract "
+        f"(runtime seats: {list(hints.tmux_project_seats)}) and has no OpenClaw workspace contract "
         f"(checked {workspace_contract}); cannot dispatch."
     )
     if strict:
@@ -330,16 +411,19 @@ def resolve_seat_from_profile(
     profile: "HarnessProfileLike",
     strict: bool = False,
 ) -> SeatResolution:
-    """Resolve a target using a profile-like object.
+    """Resolve a target using a legacy-harness-compatible profile-like object.
 
-    profile must have: seats, project_name, handoff_dir attributes.
+    profile must expose declared project seats/project_name/handoff_dir.
+    Optional helper methods (`tmux_runtime_seats`, `frontstage_target_seat`,
+    `frontstage_transport_kind`) override the legacy `runtime_seats` /
+    `heartbeat_*` attrs when present.
     """
     seats: list[str] = getattr(profile, "seats", [])
-    runtime_seats: list[str] = getattr(profile, "runtime_seats", []) or seats
+    runtime_seats = _profile_tmux_runtime_seats(profile, seats)
     project_name: str = getattr(profile, "project_name", "")
     handoff_dir: Path = getattr(profile, "handoff_dir", Path("~/.agents/tasks/hardening-b/patrol/handoffs"))
-    heartbeat_owner: str = getattr(profile, "heartbeat_owner", "")
-    heartbeat_transport: str = getattr(profile, "heartbeat_transport", "tmux")
+    frontstage_target = _profile_frontstage_target(profile)
+    frontstage_transport = _profile_frontstage_transport(profile)
 
     def session_resolver(proj: str, seat: str) -> Optional[str]:
         return _resolve_session_name_from_session_toml(proj, seat)
@@ -352,8 +436,8 @@ def resolve_seat_from_profile(
         profile_session_name_resolver=session_resolver,
         strict=strict,
         profile_runtime_seats=runtime_seats,
-        profile_heartbeat_owner=heartbeat_owner,
-        profile_heartbeat_transport=heartbeat_transport,
+        profile_heartbeat_owner=frontstage_target,
+        profile_heartbeat_transport=frontstage_transport,
     )
 
 
@@ -369,6 +453,15 @@ class HarnessProfileLike:
     heartbeat_transport: str = "tmux"
     profile_path: Path = Path()
 
+    def tmux_runtime_seats(self) -> list[str]:
+        return list(getattr(self, "runtime_seats", []) or getattr(self, "seats", []))
+
+    def frontstage_target_seat(self) -> str:
+        return str(getattr(self, "heartbeat_owner", "")).strip()
+
+    def frontstage_transport_kind(self) -> str:
+        return str(getattr(self, "heartbeat_transport", "tmux")).strip().lower() or "tmux"
+
     @classmethod
     def from_toml_path(cls, path: Path) -> "HarnessProfileLike":
         data = _load_toml(path)
@@ -381,6 +474,10 @@ class HarnessProfileLike:
         runtime_raw = dynamic.get("runtime_seats", obj.seats) if isinstance(dynamic, dict) else obj.seats
         obj.runtime_seats = [str(s) for s in runtime_raw]
         obj.project_name = str(data.get("project_name", ""))
+        # Compatibility only: layered v2 profiles removed heartbeat_* and
+        # runtime/materialized seat transport hints from the canonical schema.
+        # If the keys are absent, resolver falls back to declared seats and the
+        # explicit frontstage shortcut is disabled.
         obj.heartbeat_owner = str(data.get("heartbeat_owner", ""))
         obj.heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
         hdir = str(data.get("handoff_dir", ""))

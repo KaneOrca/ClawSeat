@@ -35,8 +35,8 @@ Somewhere inside `docs/INSTALL.md` is a launch step that calls:
 ```bash
 scripts/launch_ancestor.sh --project <name> \
   --tool claude \
-  --auth-mode oauth|api \
-  --provider anthropic|minimax|<other> \
+  --auth-mode oauth|oauth_token|api \
+  --provider <exact-runtime-matrix-provider> \
   [--model <model-id>]
 ```
 
@@ -44,6 +44,11 @@ That script is small (<120 lines) and only does one thing — it
 materializes the ancestor seat's `session.toml` and starts the tmux
 session via the existing `agent_admin.py` helpers. You pass it the
 runtime choices the user picked in the env-scan step.
+
+Important:
+- `auth_mode` + `provider` must stay on the exact runtime-matrix names emitted
+  by `scripts/env_scan.py` / recorded in `runtime-selection.json`.
+- `--model` is optional and currently only applies to `--tool claude`.
 
 After that, the **ancestor CC takes over**. You (the invoking agent)
 report back to the user that ancestor is live and step out of the

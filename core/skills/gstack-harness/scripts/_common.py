@@ -119,6 +119,7 @@ class ObservabilityConfig:
 
 @dataclass
 class HarnessProfile:
+    # Canonical project/runtime contract used by the legacy harness path.
     profile_path: Path
     profile_name: str
     template_name: str
@@ -134,6 +135,9 @@ class HarnessProfile:
     agent_admin: Path
     workspace_root: Path
     handoff_dir: Path
+    # Legacy frontstage transport shims. Layered v2 profiles move these
+    # semantics to PROJECT_BINDING + machine/tenant config; keep them here
+    # only because the legacy harness scripts still need to route koder/openclaw.
     heartbeat_owner: str
     heartbeat_transport: str
     active_loop_owner: str
@@ -143,6 +147,9 @@ class HarnessProfile:
     heartbeat_seats: list[str]
     seat_roles: dict[str, str]
     seat_overrides: dict[str, dict[str, str]]
+    # Legacy/local-override compatibility fields. These are not canonical v2
+    # profile schema fields; they survive here so pre-v2 harness/runtime files
+    # can still describe which seats were materialized into tmux.
     dynamic_roster_enabled: bool = False
     runtime_seats: list[str] | None = None
     session_root: Path = Path()
@@ -172,16 +179,35 @@ class HarnessProfile:
     def heartbeat_receipt_for(self, seat: str) -> Path:
         return self.workspace_for(seat) / "HEARTBEAT_RECEIPT.toml"
 
+    def declared_project_seats(self) -> list[str]:
+        return list(self.seats)
+
+    def tmux_runtime_seats(self) -> list[str]:
+        if self.runtime_seats is not None:
+            return list(self.runtime_seats)
+        if self.materialized_seats is not None:
+            return list(self.materialized_seats)
+        return self.declared_project_seats()
+
+    def compat_materialized_seats(self) -> list[str]:
+        return list(self.materialized_seats or self.seats)
+
+    def frontstage_target_seat(self) -> str:
+        return str(self.heartbeat_owner).strip()
+
+    def frontstage_transport_kind(self) -> str:
+        return str(self.heartbeat_transport).strip().lower() or "tmux"
+
     def declared_runtime_seats(self) -> list[str]:
-        return list(self.runtime_seats or self.materialized_seats or self.seats)
+        return self.tmux_runtime_seats()
 
     def seat_runs_in_tmux(self, seat: str) -> bool:
-        if seat == self.heartbeat_owner and self.heartbeat_transport == "openclaw":
+        if seat == self.frontstage_target_seat() and self.frontstage_transport_kind() == "openclaw":
             return False
-        return seat in set(self.declared_runtime_seats())
+        return seat in set(self.tmux_runtime_seats())
 
     def heartbeat_runs_in_openclaw(self) -> bool:
-        return self.heartbeat_transport == "openclaw"
+        return self.frontstage_transport_kind() == "openclaw"
 
 
 # Pane-text patterns that tell us a TUI is waiting on human interaction
@@ -321,7 +347,7 @@ def resolve_dynamic_seats(
     *,
     heartbeat_owner: str,
     declared_seats: list[str],
-    materialized_seats: list[str],
+    compat_materialized_seats: list[str],
     compat_legacy_seats: bool,
     legacy_seats: list[str],
     discovered_sessions: dict[str, dict[str, Any]],
@@ -332,7 +358,7 @@ def resolve_dynamic_seats(
     groups = [
         [heartbeat_owner],
         declared_seats,
-        materialized_seats,
+        compat_materialized_seats,
         legacy_seats if compat_legacy_seats else [],
         sorted(
             discovered_sessions.keys(),
@@ -365,15 +391,17 @@ def load_profile(path: str | Path) -> HarnessProfile:
         dynamic = {}
     dynamic_enabled = bool(dynamic.get("enabled", False))
     session_root = expand_profile_value(str(dynamic.get("session_root", AGENTS_ROOT / "sessions")))
-    # v0.4 profiles drop heartbeat_* (migrate_profile_to_v2 §7). Default
-    # to "koder" / "planner" so legacy-guard logic in complete_handoff
-    # keeps working under v0.4 semantics (koder = frontstage,
-    # planner = active loop owner).
-    heartbeat_owner = str(data.get("heartbeat_owner", "koder"))
-    heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
-    if heartbeat_transport not in {"tmux", "openclaw"}:
+    # Legacy harness loader: keep reading the old frontstage/runtime transport
+    # hints here because local override TOMLs and pre-v2 profiles still carry
+    # them. Layered v2 profiles intentionally removed these keys from the
+    # canonical schema.
+    compat_frontstage_owner = str(data.get("heartbeat_owner", "koder"))
+    compat_frontstage_transport = (
+        str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
+    )
+    if compat_frontstage_transport not in {"tmux", "openclaw"}:
         raise ValueError(
-            f"invalid heartbeat_transport {heartbeat_transport!r} in {profile_path}; "
+            f"invalid heartbeat_transport {compat_frontstage_transport!r} in {profile_path}; "
             "expected 'tmux' or 'openclaw'"
         )
     legacy_seat_roles = {
@@ -382,25 +410,30 @@ def load_profile(path: str | Path) -> HarnessProfile:
     }
     legacy_seats = [str(item) for item in data.get("legacy_seats", list(legacy_seat_roles.keys()))]
     declared_seats = [str(item) for item in data.get("seats", [])]
-    materialized_seats = [
+    compat_materialized_seats = [
         str(item)
         for item in dynamic.get("materialized_seats", declared_seats)
     ]
-    bootstrap_seats = [
+    compat_bootstrap_seats = [
         str(item)
-        for item in dynamic.get("bootstrap_seats", [heartbeat_owner])
+        for item in dynamic.get("bootstrap_seats", [compat_frontstage_owner])
     ]
-    default_start_seats = [
+    compat_default_start_seats = [
         str(item)
-        for item in dynamic.get("default_start_seats", bootstrap_seats or materialized_seats)
+        for item in dynamic.get(
+            "default_start_seats",
+            compat_bootstrap_seats or compat_materialized_seats,
+        )
     ]
-    runtime_seats_raw = dynamic.get("runtime_seats")
-    if runtime_seats_raw is None:
-        runtime_seats = list(materialized_seats or declared_seats)
-        if heartbeat_transport == "openclaw":
-            runtime_seats = [seat for seat in runtime_seats if seat != heartbeat_owner]
+    compat_runtime_seats_raw = dynamic.get("runtime_seats")
+    if compat_runtime_seats_raw is None:
+        compat_runtime_seats = list(compat_materialized_seats or declared_seats)
+        if compat_frontstage_transport == "openclaw":
+            compat_runtime_seats = [
+                seat for seat in compat_runtime_seats if seat != compat_frontstage_owner
+            ]
     else:
-        runtime_seats = [str(item) for item in runtime_seats_raw]
+        compat_runtime_seats = [str(item) for item in compat_runtime_seats_raw]
     compat_legacy_seats = bool(dynamic.get("compat_legacy_seats", False))
     discovered = discovered_session_data(session_root, str(data["project_name"])) if dynamic_enabled else {}
     seat_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items()}
@@ -410,13 +443,13 @@ def load_profile(path: str | Path) -> HarnessProfile:
         seat_roles[seat] = infer_role_from_seat_id(
             seat,
             fallback=role or seat_roles.get(seat, ""),
-            heartbeat_owner=heartbeat_owner,
+            heartbeat_owner=compat_frontstage_owner,
         )
     seats = (
         resolve_dynamic_seats(
-            heartbeat_owner=heartbeat_owner,
+            heartbeat_owner=compat_frontstage_owner,
             declared_seats=declared_seats,
-            materialized_seats=materialized_seats,
+            compat_materialized_seats=compat_materialized_seats,
             compat_legacy_seats=compat_legacy_seats,
             legacy_seats=legacy_seats,
             discovered_sessions=discovered,
@@ -425,7 +458,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
         if dynamic_enabled
         else [str(item) for item in data.get("seats", [])]
     )
-    runtime_seats = _unique_seats(runtime_seats)
+    compat_runtime_seats = _unique_seats(compat_runtime_seats)
     return HarnessProfile(
         profile_path=profile_path,
         profile_name=str(data["profile_name"]),
@@ -447,13 +480,13 @@ def load_profile(path: str | Path) -> HarnessProfile:
         agent_admin=expand_profile_value(str(data["agent_admin"])),
         workspace_root=expand_profile_value(str(data["workspace_root"])),
         handoff_dir=expand_profile_value(str(data["handoff_dir"])),
-        heartbeat_owner=heartbeat_owner,
-        heartbeat_transport=heartbeat_transport,
+        heartbeat_owner=compat_frontstage_owner,
+        heartbeat_transport=compat_frontstage_transport,
         active_loop_owner=str(data.get("active_loop_owner", "planner")),
         default_notify_target=str(data.get("default_notify_target", "planner")),
         heartbeat_receipt=expand_profile_value(str(data.get("heartbeat_receipt", ""))),
         seats=seats,
-        runtime_seats=runtime_seats,
+        runtime_seats=compat_runtime_seats,
         heartbeat_seats=[str(item) for item in data.get("heartbeat_seats", [])],
         seat_roles=seat_roles,
         seat_overrides={
@@ -462,9 +495,9 @@ def load_profile(path: str | Path) -> HarnessProfile:
         },
         dynamic_roster_enabled=dynamic_enabled,
         session_root=session_root,
-        materialized_seats=materialized_seats,
-        bootstrap_seats=bootstrap_seats,
-        default_start_seats=default_start_seats,
+        materialized_seats=compat_materialized_seats,
+        bootstrap_seats=compat_bootstrap_seats,
+        default_start_seats=compat_default_start_seats,
         compat_legacy_seats=compat_legacy_seats,
         legacy_seats=legacy_seats,
         legacy_seat_roles=legacy_seat_roles,
@@ -541,7 +574,7 @@ def detect_claude_onboarding_step(pane_text: str) -> str | None:
 # ── Seat/runtime helpers ─────────────────────────────────────────────
 
 def tracked_runtime_seats(profile: HarnessProfile) -> list[str]:
-    return list(profile.declared_runtime_seats())
+    return list(profile.tmux_runtime_seats())
 
 
 def heartbeat_manifest_path(profile: HarnessProfile, seat: str) -> Path:
@@ -561,19 +594,21 @@ def is_managed_runtime_path(profile: HarnessProfile, path: Path) -> bool:
 
 
 def make_local_override(profile: HarnessProfile, *, project_name: str, repo_root: Path) -> Path:
-    materialized_seats = list(profile.materialized_seats or profile.seats)
-    runtime_seats = list(profile.runtime_seats or materialized_seats)
+    seat_order = list(profile.compat_materialized_seats())
+    tmux_runtime_seats = list(profile.tmux_runtime_seats())
     lines = [
         "version = 1",
         "",
         f'project_name = "{project_name}"',
         f'repo_root = "{repo_root}"',
-        f"seat_order = {json.dumps(materialized_seats)}",
-        f"materialized_seats = {json.dumps(materialized_seats)}",
-        f"runtime_seats = {json.dumps(runtime_seats)}",
+        "# Local override / legacy harness compatibility fields.",
+        "# Layered v2 profiles do not store these keys directly.",
+        f"seat_order = {json.dumps(seat_order)}",
+        f"materialized_seats = {json.dumps(seat_order)}",
+        f"runtime_seats = {json.dumps(tmux_runtime_seats)}",
         f"bootstrap_seats = {json.dumps(list(profile.bootstrap_seats or []))}",
         f"default_start_seats = {json.dumps(list(profile.default_start_seats or []))}",
-        f'heartbeat_transport = "{profile.heartbeat_transport}"',
+        f'heartbeat_transport = "{profile.frontstage_transport_kind()}"',
     ]
     for seat_id, override in profile.seat_overrides.items():
         if not override:
@@ -850,11 +885,9 @@ def materialize_profile_runtime(profile: HarnessProfile) -> None:
     ensure_dir(profile.tasks_root)
     ensure_dir(profile.handoff_dir)
     all_seats: list[str] = []
-    for seat in [*(profile.materialized_seats or []), *profile.seats]:
+    for seat in [*profile.compat_materialized_seats(), *profile.declared_project_seats()]:
         if seat and seat not in all_seats:
             all_seats.append(seat)
-    if not all_seats:
-        all_seats = list(profile.seats)
     for seat in all_seats:
         ensure_dir(profile.tasks_root / seat)
         todo_path = profile.todo_path(seat)

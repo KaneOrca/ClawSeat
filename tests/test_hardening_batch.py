@@ -319,3 +319,67 @@ def test_bridge_binding_allows_clean_parent(tmp_path: Path, monkeypatch: pytest.
     )
     assert target.exists()
     assert "[bridge]" in target.read_text()
+
+
+# ── L12: legacy transport fields stay behind compat helpers ─────────
+
+
+def test_seat_resolver_profile_helpers_override_legacy_attrs(tmp_path: Path) -> None:
+    from core.lib import seat_resolver as sr
+
+    oc_home = tmp_path / ".openclaw"
+    contract = oc_home / "workspace-frontstage" / "WORKSPACE_CONTRACT.toml"
+    contract.parent.mkdir(parents=True)
+    contract.write_text(
+        'seat_id = "koder"\n'
+        'project = "demo"\n'
+        'feishu_group_id = "oc_frontstagecompat"\n',
+        encoding="utf-8",
+    )
+
+    handoff_dir = tmp_path / "handoffs"
+    handoff_dir.mkdir()
+    profile = SimpleNamespace(
+        seats=["koder", "planner"],
+        runtime_seats=["koder", "planner"],  # stale legacy attr must not win
+        heartbeat_owner="planner",
+        heartbeat_transport="tmux",
+        project_name="demo",
+        handoff_dir=handoff_dir,
+        tmux_runtime_seats=lambda: ["planner"],
+        frontstage_target_seat=lambda: "koder",
+        frontstage_transport_kind=lambda: "openclaw",
+    )
+
+    with patch.object(sr, "_openclaw_home_resolved", return_value=oc_home):
+        result = sr.resolve_seat_from_profile("koder", profile)
+
+    assert result.kind == "openclaw"
+    assert result.group_id == "oc_frontstagecompat"
+    assert result.agent_name == "frontstage"
+
+
+def test_make_local_override_marks_legacy_transport_fields_as_compat(tmp_path: Path) -> None:
+    import _common as common
+
+    profile = SimpleNamespace(
+        materialized_seats=["koder", "planner"],
+        seats=["koder", "planner"],
+        runtime_seats=["planner"],
+        bootstrap_seats=["koder"],
+        default_start_seats=["koder", "planner"],
+        heartbeat_transport="openclaw",
+        seat_overrides={},
+        compat_materialized_seats=lambda: ["koder", "planner"],
+        tmux_runtime_seats=lambda: ["planner"],
+        frontstage_transport_kind=lambda: "openclaw",
+    )
+
+    override = common.make_local_override(profile, project_name="demo", repo_root=tmp_path)
+    text = override.read_text(encoding="utf-8")
+
+    assert "# Local override / legacy harness compatibility fields." in text
+    assert "# Layered v2 profiles do not store these keys directly." in text
+    assert 'materialized_seats = ["koder", "planner"]' in text
+    assert 'runtime_seats = ["planner"]' in text
+    assert 'heartbeat_transport = "openclaw"' in text

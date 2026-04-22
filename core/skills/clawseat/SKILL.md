@@ -13,8 +13,9 @@ Treat `clawseat` as the product-level entrypoint.
   ClawSeat. Do not require the user to know `/cs`.
 - In **Claude Code / Codex** local runtimes, this skill points to the install
   playbook. `/cs` remains only a re-entry shortcut after install state exists.
-- This skill does not implement install logic itself. It routes the runtime to
-  `clawseat-install`, `docs/INSTALL.md`, and the OpenClaw wrapper as needed.
+- This skill does not implement install logic itself or claim long-lived
+  runtime ownership. It routes to `clawseat-install`,
+  `docs/INSTALL.md`, and the OpenClaw wrapper as needed.
 
 ## Canonical Behavior
 
@@ -27,8 +28,12 @@ Treat `clawseat` as the product-level entrypoint.
    - fresh install -> run the playbook
    - local re-entry -> `/cs`
    - OpenClaw bootstrap -> plugin wrapper + same playbook
-5. Once ancestor is prompt-ready, treat ancestor as the install frontstage and
-   stop inventing parallel bootstrap paths.
+5. Keep frontstage semantics consistent:
+   - local CLI install -> `ancestor` becomes the install frontstage after launch
+   - Feishu / OpenClaw tenant path -> `koder` remains the tenant frontstage and
+     `ancestor` runs behind it
+6. Once ancestor is prompt-ready, treat ancestor as the runtime owner for seat
+   lifecycle and patrol. Do not invent parallel bootstrap paths.
 
 ## OpenClaw / Feishu Contract
 
@@ -55,24 +60,29 @@ the machine, records runtime selection, materializes validated state, launches
 ancestor, and hands off the rest of seat bring-up to ancestor. Do not resurrect
 retired manual bootstrap paths.
 
-**Critical: koder identity in OpenClaw mode**
+**Critical: OpenClaw tenant frontstage**
 
-In the OpenClaw path, **you (the current agent) ARE koder**. You are the
-frontstage. You do NOT need a separate tmux session for koder.
+In the OpenClaw / Feishu path, the user-facing tenant frontstage is `koder`.
+If this skill is already running inside that tenant-facing agent, treat the
+current runtime as the existing `koder` frontstage instead of trying to spawn
+another one.
 
 - Do NOT run `start_seat.py --seat koder` — that creates a redundant tmux session
 - Do NOT bootstrap a project named after yourself (e.g. `koder-frontstage`)
 - The canonical project name is `install`
-- Only backend seats (planner, builder, reviewer, qa, designer) run in tmux
-- You talk to the user directly; backend seats talk to you via TODO/DELIVERY protocol
+- The tmux-backed project grid is still `ancestor`, `planner`, `builder`,
+  `reviewer`, `qa`, `designer`
+- Once ancestor is prompt-ready, seat lifecycle and patrol belong to ancestor
 
 ## Local Runtime Contract
 
 When the host runtime is local and supports explicit skills:
 
 - install `clawseat`, `clawseat-install`, and `cs`
-- explain that `clawseat` is the product entry
-- explain that `/cs` is only the fast local shortcut after install
+- explain that `clawseat` is the fresh-install product entry
+- explain that `/cs` is only the post-install re-entry shortcut
+- explain that local fresh install hands off to `ancestor`, not directly to
+  `koder`
 
 ## References
 
