@@ -812,6 +812,51 @@ load_custom_env() {
   rm -f "$env_file"
 }
 
+seed_user_tool_dirs() {
+  # Seed user-level tool directories/files from the real HOME into the
+  # per-seat sandbox HOME. This keeps user-auth state and tool sockets
+  # visible to isolated runtimes without copying secrets out of band.
+  #
+  # If a sandbox already has an independent copy, move it aside under
+  # .sandbox-pre-seed-backup/ and replace it with a symlink so we can
+  # retroactively heal old runtimes.
+  local runtime_home="$1"
+  local seeds=(
+    ".lark-cli"
+    "Library/Application Support/iTerm2"
+    "Library/Preferences/com.googlecode.iterm2.plist"
+    ".config/gemini"
+    ".gemini"
+    ".config/codex"
+    ".codex"
+  )
+
+  local subpath src tgt backup_base backup_path current_target
+  backup_base="$runtime_home/.sandbox-pre-seed-backup"
+  for subpath in "${seeds[@]}"; do
+    src="$REAL_HOME/$subpath"
+    tgt="$runtime_home/$subpath"
+    [[ -e "$src" ]] || continue
+
+    if [[ -L "$tgt" ]]; then
+      current_target="$(readlink "$tgt" 2>/dev/null || true)"
+      if [[ "$current_target" == "$src" ]]; then
+        continue
+      fi
+      rm -f "$tgt"
+    elif [[ -e "$tgt" ]]; then
+      backup_path="$backup_base/$subpath.$(date +%s)"
+      mkdir -p "$(dirname "$backup_path")"
+      mv "$tgt" "$backup_path"
+    fi
+
+    if [[ ! -e "$tgt" ]]; then
+      mkdir -p "$(dirname "$tgt")"
+      ln -s "$src" "$tgt"
+    fi
+  done
+}
+
 resolve_claude_secret_file() {
   case "$1" in
     oauth_token) printf '%s\n' "$REAL_HOME/.agents/.env.global" ;;
@@ -930,6 +975,7 @@ run_claude_runtime() {
   if [[ "$auth_mode" == "oauth" ]]; then
     unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
     export HOME="$REAL_HOME"
+    seed_user_tool_dirs "$HOME"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Claude Code · Legacy OAuth"
@@ -1025,6 +1071,7 @@ run_claude_runtime() {
   export XDG_CACHE_HOME="$runtime_dir/xdg/cache"
   export XDG_STATE_HOME="$runtime_dir/xdg/state"
 
+  seed_user_tool_dirs "$HOME"
   # Skip Claude onboarding in the isolated HOME. Without this the seat
   # blocks on the welcome + auth pages even when API keys are live in env.
   prepare_claude_home "$HOME"
@@ -1050,6 +1097,7 @@ run_codex_runtime() {
   if [[ "$auth_mode" == "chatgpt" ]]; then
     export HOME="$REAL_HOME"
     export CODEX_HOME="$REAL_HOME/.codex"
+    seed_user_tool_dirs "$HOME"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Codex · ChatGPT login"
@@ -1074,6 +1122,7 @@ run_codex_runtime() {
 
   export HOME="$runtime_dir/home"
   export CODEX_HOME="$runtime_dir/codex-home"
+  seed_user_tool_dirs "$HOME"
   prepare_codex_home "$CODEX_HOME"
 
   if [[ "$auth_mode" == "custom" ]]; then
@@ -1126,6 +1175,7 @@ run_gemini_runtime() {
   if [[ "$auth_mode" == "oauth" ]]; then
     unset GEMINI_API_KEY GOOGLE_API_KEY
     export HOME="$REAL_HOME"
+    seed_user_tool_dirs "$HOME"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Gemini CLI · OAuth"
@@ -1158,6 +1208,7 @@ run_gemini_runtime() {
   export XDG_DATA_HOME="$runtime_dir/xdg/data"
   export XDG_CACHE_HOME="$runtime_dir/xdg/cache"
   export XDG_STATE_HOME="$runtime_dir/xdg/state"
+  seed_user_tool_dirs "$HOME"
   prepare_gemini_home "$HOME"
 
   if [[ "$auth_mode" == "custom" ]]; then
@@ -1194,6 +1245,10 @@ run_selected_tool() {
     *) echo "error: unsupported tool: $1" >&2; exit 2 ;;
   esac
 }
+
+if [[ "${CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY:-}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 if [[ -z "$EXEC_MODE" ]]; then
   if [[ -z "$TOOL_NAME" ]]; then

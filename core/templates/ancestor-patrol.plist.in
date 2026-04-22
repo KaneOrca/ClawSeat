@@ -23,10 +23,11 @@
     launchctl bootout    gui/$(id -u)/com.clawseat.{PROJECT}.ancestor-patrol
 
   Behavior: every CADENCE_SECONDS, this plist runs the one-liner below. The
-  one-liner only sends a `/patrol-tick` marker to the ancestor tmux session
-  if that session currently exists. If the session is gone (user killed it
-  or hasn't started it yet), the send is silently skipped so we don't error-
-  spam the logs.
+  one-liner uses the canonical send-and-verify wrapper to send a
+  `/patrol-tick` marker to the ancestor tmux session if that session
+  currently exists. If the session is gone (user killed it or hasn't
+  started it yet), the send is silently skipped so we don't error-spam
+  the logs.
 -->
 <plist version="1.0">
 <dict>
@@ -37,7 +38,7 @@
     <array>
         <string>/bin/bash</string>
         <string>-lc</string>
-        <string>tmux has-session -t '={PROJECT}-ancestor-{TOOL}' 2&gt;/dev/null &amp;&amp; tmux send-keys -t '={PROJECT}-ancestor-{TOOL}' '/patrol-tick' Enter</string>
+        <string>tmux has-session -t '={PROJECT}-ancestor-{TOOL}' 2&gt;/dev/null &amp;&amp; '{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh' --project '{PROJECT}' ancestor '/patrol-tick' &gt;/dev/null 2&gt;&amp;1 || true</string>
     </array>
 
     <key>StartInterval</key>

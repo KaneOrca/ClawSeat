@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "send_delegation_report.py"
+
+
+def _write_lark_cli_stub(bin_dir: Path, log_file: Path, *, auth_identity: str) -> None:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    stub = bin_dir / "lark-cli"
+    stub.write_text(
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "${{LARK_LOG_FILE:?}}"
+case "$1 $2" in
+  "auth status")
+    cat <<'JSON'
+{{"identity":"{auth_identity}","tokenStatus":"valid","userName":"Tester"}}
+JSON
+    ;;
+  "im +messages-send")
+    printf 'sent\\n'
+    ;;
+  *)
+    echo "unexpected command: $*" >&2
+    exit 1
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def _run_report(
+    tmp_path: Path,
+    *,
+    identity: str,
+    auth_identity: str,
+    extra_args: list[str] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    real_home = tmp_path / "real_home"
+    sandbox_home = tmp_path / "sandbox_home"
+    real_home.mkdir(parents=True)
+    sandbox_home.mkdir(parents=True)
+    (real_home / ".openclaw").mkdir(parents=True, exist_ok=True)
+
+    bin_dir = tmp_path / "bin"
+    log_file = tmp_path / "lark-cli.log"
+    _write_lark_cli_stub(bin_dir, log_file, auth_identity=auth_identity)
+
+    args = [
+        sys.executable,
+        str(SCRIPT),
+        "--project",
+        "demo",
+        "--lane",
+        "builder",
+        "--task-id",
+        "task-1",
+        "--report-status",
+        "done",
+        "--decision-hint",
+        "proceed",
+        "--user-gate",
+        "none",
+        "--next-action",
+        "wait",
+        "--summary",
+        "hello world",
+        "--chat-id",
+        "oc_demo_group",
+        "--as",
+        identity,
+    ]
+    if extra_args:
+        args.extend(extra_args)
+
+    env = {
+        **os.environ,
+        "HOME": str(sandbox_home),
+        "CLAWSEAT_REAL_HOME": str(real_home),
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "LARK_LOG_FILE": str(log_file),
+    }
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    commands = log_file.read_text(encoding="utf-8").splitlines() if log_file.exists() else []
+    return result, commands
+
+
+def test_send_report_user_mode_passes_user_identity(tmp_path: Path) -> None:
+    result, commands = _run_report(tmp_path, identity="user", auth_identity="user")
+
+    assert result.returncode == 0, result.stderr
+    assert commands[0] == "auth status --as user"
+    assert any(line.startswith("im +messages-send --as user") for line in commands)
+
+
+def test_send_report_bot_mode_passes_bot_identity(tmp_path: Path) -> None:
+    result, commands = _run_report(tmp_path, identity="bot", auth_identity="bot")
+
+    assert result.returncode == 0, result.stderr
+    assert commands[0] == "auth status --as bot"
+    assert any(line.startswith("im +messages-send --as bot") for line in commands)
+
+
+def test_send_report_auto_omits_as_flag(tmp_path: Path) -> None:
+    result, commands = _run_report(tmp_path, identity="auto", auth_identity="bot")
+
+    assert result.returncode == 0, result.stderr
+    assert commands[0] == "auth status"
+    assert any(line.startswith("im +messages-send") and "--as" not in line for line in commands)
+
+
+def test_check_auth_uses_requested_identity(tmp_path: Path) -> None:
+    result, commands = _run_report(
+        tmp_path,
+        identity="bot",
+        auth_identity="bot",
+        extra_args=["--check-auth"],
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert commands == ["auth status --as bot"]
+    assert '"requested_as": "bot"' in result.stdout
+    assert '"status": "ok"' in result.stdout

@@ -31,6 +31,7 @@ TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
 MEMORY_HOOK_INSTALLER="$REPO_ROOT/core/skills/memory-oracle/scripts/install_memory_hook.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
+SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
@@ -136,6 +137,17 @@ ensure_host_deps() {
     die 10 PREFLIGHT_FAILED "preflight failed. 按上面的输出修复后重跑 install.sh。"
   fi
   echo "OK: preflight"
+}
+
+ensure_python_tomllib_fallback() {
+  note "Step 2.5: ensure Python tomllib fallback"
+  if "$PYTHON_BIN" -c 'import tomllib' >/dev/null 2>&1; then
+    return 0
+  fi
+  if "$PYTHON_BIN" -c 'import tomli' >/dev/null 2>&1; then
+    return 0
+  fi
+  "$PYTHON_BIN" -m pip install --user --quiet tomli >/dev/null 2>&1 || true
 }
 
 scan_machine() {
@@ -681,7 +693,7 @@ ancestor 在每个 B 步开始前会先跑 `${CLAWSEAT_ROOT}/scripts/ancestor-br
 
 1. \`tmux kill-session -t ${PROJECT}-ancestor\`
 2. 重新启动 ancestor（建议重跑 \`scripts/install.sh --project ${PROJECT}\`，或按同样的 \`agent-launcher.sh\` 参数重起）
-3. 让 ancestor 重新读取 `\$CLAWSEAT_ANCESTOR_BRIEF`
+3. 让 ancestor 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
 
 如果你暂时不 restart，也可以继续按旧 brief 跑，但它不会自动感知后续改动。
 EOF
@@ -886,7 +898,7 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; ensure_host_deps; scan_machine; select_provider; render_brief
+  parse_args "$@"; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
   launch_seat "$PROJECT-ancestor" "$REPO_ROOT" "$BRIEF_PATH"
   bootstrap_project_profile
@@ -909,16 +921,13 @@ main() {
     launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE"
     open_iterm_window "$(memory_payload)" memory_window_id
   fi
-  note "Step 9: focus ancestor, flush, and persist operator guide"
+  note "Step 9: focus ancestor and persist operator guide"
   run sleep 3; focus_iterm_window "$GRID_WINDOW_ID" "ancestor"
-  run tmux send-keys -t "$PROJECT-ancestor" Enter; run sleep 0.5; run tmux send-keys -t "$PROJECT-ancestor" Enter; run sleep 0.5; run tmux send-keys -t "$PROJECT-ancestor" Enter
   if [[ "$DRY_RUN" != "1" ]]; then
     note "Step 9.5: auto-send Phase-A kickoff prompt"
     sleep 12
     local kickoff="读 $BRIEF_PATH 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
-    tmux send-keys -l -t "$PROJECT-ancestor" "$kickoff" 2>/dev/null || true
-    sleep 1
-    tmux send-keys -t "$PROJECT-ancestor" Enter 2>/dev/null || true
+    bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" ancestor "$kickoff" >/dev/null 2>&1 || true
   fi
   write_operator_guide
   print_operator_banner

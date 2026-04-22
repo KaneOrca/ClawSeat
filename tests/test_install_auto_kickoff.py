@@ -17,10 +17,15 @@ _fake_install_root = _HELPERS._fake_install_root
 _read_jsonl = _HELPERS._read_jsonl
 
 
-def _run_install(tmp_path: Path, *, dry_run: bool) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
+def _run_install(
+    tmp_path: Path,
+    *,
+    dry_run: bool,
+) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path, Path]:
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     agent_admin_log = tmp_path / "agent_admin.jsonl"
     iterm_payload_log = tmp_path / "iterm_payload.jsonl"
+    agentctl_log = tmp_path / "agentctl.log"
     args = ["bash", str(root / "scripts" / "install.sh")]
     if dry_run:
         args.append("--dry-run")
@@ -40,27 +45,29 @@ def _run_install(tmp_path: Path, *, dry_run: bool) -> tuple[subprocess.Completed
             "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
             "PYTHON_BIN": sys.executable,
             "LOG_FILE": str(launcher_log),
+            "AGENTCTL_LOG": str(agentctl_log),
             "TMUX_LOG_FILE": str(tmux_log),
             "AGENT_ADMIN_LOG": str(agent_admin_log),
             "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
         },
         check=False,
     )
-    return result, launcher_log, tmux_log, home
+    return result, launcher_log, tmux_log, home, agentctl_log
 
 
 def test_install_dry_run_does_not_send_phase_a_kickoff(tmp_path: Path) -> None:
-    result, _, _, _ = _run_install(tmp_path, dry_run=True)
+    result, _, _, _, agentctl_log = _run_install(tmp_path, dry_run=True)
 
     combined = result.stdout + result.stderr
     assert result.returncode == 0, result.stderr
     assert "Step 9.5: auto-send Phase-A kickoff prompt" not in combined
     assert "读 " not in combined
     assert "spawn engineer seat 要 one-at-a-time" not in combined
+    assert not agentctl_log.exists()
 
 
 def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
-    result, launcher_log, tmux_log, home = _run_install(tmp_path, dry_run=False)
+    result, launcher_log, tmux_log, home, agentctl_log = _run_install(tmp_path, dry_run=False)
 
     combined = result.stdout + result.stderr
     expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
@@ -71,6 +78,7 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
     assert expected_brief.is_file()
     assert guide_path.is_file()
     assert "Phase-A 不让 memory 做同步调研" in guide_path.read_text(encoding="utf-8")
+    assert "session-name ancestor --project kickoff50" in agentctl_log.read_text(encoding="utf-8")
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "send-keys -l -t kickoff50-ancestor" in tmux_output

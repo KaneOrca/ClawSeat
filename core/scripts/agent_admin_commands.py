@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+import agent_admin_window as window_ops
+
 
 @dataclass
 class CommandHooks:
@@ -36,6 +38,34 @@ class CommandHandlers:
         except Exception as exc:
             print(f"heartbeat: {exc}")
         print(session.session)
+        return 0
+
+    def session_reseed_sandbox(self, args: Any) -> int:
+        project = self.hooks.load_project_or_current(getattr(args, "project", None))
+        engineer_ids = list(getattr(args, "engineers", []) or [])
+        if getattr(args, "all", False):
+            engineer_ids = list(project.engineers)
+        if not engineer_ids:
+            raise self.hooks.error_cls(
+                "session reseed-sandbox requires --all or one or more engineer ids"
+            )
+
+        changed: list[str] = []
+        for engineer_id in engineer_ids:
+            session = self.hooks.resolve_engineer_session(engineer_id, project_name=project.name)
+            try:
+                updated = self.hooks.session_service.reseed_sandbox_user_tool_dirs(session)
+            except Exception as exc:  # noqa: BLE001 - surface a readable CLI error
+                raise self.hooks.error_cls(
+                    f"reseed-sandbox failed for {session.session}: {exc}"
+                ) from exc
+            if updated:
+                changed.append(f"{session.engineer_id}: {', '.join(updated)}")
+
+        if changed:
+            print("\n".join(changed))
+        else:
+            print(f"no sandbox tool dirs needed reseed for {project.name}")
         return 0
 
     def session_batch_start_engineer(self, args: Any) -> int:
@@ -241,6 +271,18 @@ class CommandHandlers:
         for project in visible_projects:
             self.hooks.session_service.start_project(project, ensure_monitor=True, reset=False)
         self.hooks.open_dashboard_window(visible_projects)
+        return 0
+
+    def window_open_grid(self, args: Any) -> int:
+        projects = self.hooks.load_projects()
+        project = projects.get(args.project)
+        if project is None:
+            raise self.hooks.error_cls(f"project not registered: {args.project}")
+        window_ops.open_grid_window(
+            project,
+            recover=bool(getattr(args, "recover", False)),
+            open_memory=bool(getattr(args, "open_memory", False)),
+        )
         return 0
 
     def window_open_engineer(self, args: Any) -> int:

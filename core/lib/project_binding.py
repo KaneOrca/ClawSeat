@@ -2,10 +2,10 @@
 
 `~/.agents/tasks/<project>/PROJECT_BINDING.toml` is the single source of
 truth for a project's external bindings — currently its Feishu group,
-bot account, and mention-gate policy. The file is written by
-``agent_admin project bind`` (and anything else that understands this
-schema) and is read by every Feishu closeout path via
-``_feishu.resolve_feishu_group_strict(project)``.
+sender identity, OpenClaw koder overlay target, and mention-gate
+policy. The file is written by ``agent_admin project bind`` (and
+anything else that understands this schema) and is read by every Feishu
+closeout path via ``_feishu.resolve_feishu_group_strict(project)``.
 
 Why this file (and not WORKSPACE_CONTRACT.toml):
 
@@ -20,20 +20,24 @@ Why this file (and not WORKSPACE_CONTRACT.toml):
    what is bound where, and makes drift (bindings without a project,
    stale bindings after project delete) trivially detectable.
 
-Schema (v1):
+Schema (v2):
 
-    version = 1
+    version = 2
     project = "install"
     feishu_group_id = "oc_b0386423ec11582696a3079ab2ab89ba"
     feishu_group_name = "ClawSeat Squad"   # enriched from lark-cli chats list
     feishu_external = false                # cross-tenant flag from lark-cli
-    feishu_bot_account = "koder"
+    feishu_sender_app_id = "cli_a96abcca2e78dbc2"
+    feishu_sender_mode = "user"
+    openclaw_koder_agent = "yu"
     require_mention = false
     bound_at = "2026-04-21T16:45:16+00:00"
     bound_by = "koder"         # optional — seat that wrote the binding
 
 Unknown fields are preserved on rewrite so future schema extensions
 don't silently drop operator-authored metadata.
+Legacy ``feishu_bot_account`` is accepted on read and mapped to the new
+v2 fields when a binding is rewritten.
 """
 from __future__ import annotations
 
@@ -54,8 +58,23 @@ try:  # Python 3.11+ has tomllib in stdlib; fall back to `tomli` for older.
 except ImportError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
-BINDING_SCHEMA_VERSION = 1
+BINDING_SCHEMA_VERSION = 2
 BINDING_FILE_NAME = "PROJECT_BINDING.toml"
+
+_BINDING_KNOWN_FIELDS = {
+    "version",
+    "project",
+    "feishu_group_id",
+    "feishu_group_name",
+    "feishu_external",
+    "feishu_sender_app_id",
+    "feishu_sender_mode",
+    "openclaw_koder_agent",
+    "feishu_bot_account",
+    "require_mention",
+    "bound_at",
+    "bound_by",
+}
 
 # Canonical Feishu group id: `oc_` + alphanumerics/underscore/hyphen. Same
 # regex as _feishu._FEISHU_GROUP_ID_RE — duplicated here to avoid a cycle
@@ -74,12 +93,40 @@ class ProjectBinding:
     feishu_group_id: str
     feishu_group_name: str = ""   # display name from lark-cli chats list
     feishu_external: bool = False  # whether the chat spans multiple tenants
-    feishu_bot_account: str = "koder"
+    feishu_sender_app_id: str = ""   # lark-cli app id (sender identity)
+    feishu_sender_mode: str = "auto"  # user | bot | auto
+    openclaw_koder_agent: str = ""    # OpenClaw agent that gets koder overlay
+    feishu_bot_account: str = ""      # legacy alias; kept for compat only
     require_mention: bool = False
     bound_at: str = ""
     bound_by: str = ""
     version: int = BINDING_SCHEMA_VERSION
     extras: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.project = validate_project_name(self.project)
+        group_id = (self.feishu_group_id or "").strip()
+        if group_id:
+            self.feishu_group_id = validate_feishu_group_id(group_id)
+        else:
+            self.feishu_group_id = ""
+        self.feishu_group_name = self.feishu_group_name.strip()
+        self.feishu_external = bool(self.feishu_external)
+        self.feishu_sender_app_id = self.feishu_sender_app_id.strip()
+        self.feishu_sender_mode = _normalize_sender_mode(self.feishu_sender_mode)
+        self.openclaw_koder_agent = self.openclaw_koder_agent.strip()
+        self.feishu_bot_account = self.feishu_bot_account.strip()
+        if self.feishu_bot_account and not (self.feishu_sender_app_id or self.openclaw_koder_agent):
+            if self.feishu_bot_account.startswith("cli_"):
+                self.feishu_sender_app_id = self.feishu_bot_account
+            else:
+                self.openclaw_koder_agent = self.feishu_bot_account
+        if not self.feishu_bot_account:
+            self.feishu_bot_account = self.feishu_sender_app_id or self.openclaw_koder_agent
+        self.require_mention = bool(self.require_mention)
+        self.bound_at = self.bound_at.strip()
+        self.bound_by = self.bound_by.strip()
+        self.version = max(int(self.version or BINDING_SCHEMA_VERSION), BINDING_SCHEMA_VERSION)
 
     def as_toml(self) -> str:
         """Serialize to TOML. Deterministic field order for diff readability."""
@@ -89,7 +136,9 @@ class ProjectBinding:
             f'feishu_group_id = "{_escape(self.feishu_group_id)}"',
             f'feishu_group_name = "{_escape(self.feishu_group_name)}"',
             f"feishu_external = {'true' if self.feishu_external else 'false'}",
-            f'feishu_bot_account = "{_escape(self.feishu_bot_account)}"',
+            f'feishu_sender_app_id = "{_escape(self.feishu_sender_app_id)}"',
+            f'feishu_sender_mode = "{_escape(self.feishu_sender_mode)}"',
+            f'openclaw_koder_agent = "{_escape(self.openclaw_koder_agent)}"',
             f"require_mention = {'true' if self.require_mention else 'false'}",
             f'bound_at = "{_escape(self.bound_at)}"',
         ]
@@ -98,6 +147,39 @@ class ProjectBinding:
         for key in sorted(self.extras):
             lines.append(_format_extra(key, self.extras[key]))
         return "\n".join(lines) + "\n"
+
+    @classmethod
+    def from_toml(
+        cls,
+        data: dict[str, Any],
+        *,
+        fallback_project: str | None = None,
+    ) -> "ProjectBinding":
+        raw = dict(data)
+        legacy = str(raw.pop("feishu_bot_account", "")).strip()
+        if legacy and not (str(raw.get("feishu_sender_app_id", "")).strip() or str(raw.get("openclaw_koder_agent", "")).strip()):
+            if legacy.startswith("cli_"):
+                raw["feishu_sender_app_id"] = legacy
+            else:
+                raw["openclaw_koder_agent"] = legacy
+
+        project = str(raw.get("project", fallback_project or "")).strip()
+        binding = cls(
+            project=project,
+            feishu_group_id=str(raw.get("feishu_group_id", "")).strip(),
+            feishu_group_name=str(raw.get("feishu_group_name", "")).strip(),
+            feishu_external=bool(raw.get("feishu_external", False)),
+            feishu_sender_app_id=str(raw.get("feishu_sender_app_id", "")).strip(),
+            feishu_sender_mode=str(raw.get("feishu_sender_mode", "auto")).strip() or "auto",
+            openclaw_koder_agent=str(raw.get("openclaw_koder_agent", "")).strip(),
+            feishu_bot_account=legacy,
+            require_mention=bool(raw.get("require_mention", False)),
+            bound_at=str(raw.get("bound_at", "")).strip(),
+            bound_by=str(raw.get("bound_by", "")).strip(),
+            version=int(raw.get("version", BINDING_SCHEMA_VERSION)),
+            extras={k: v for k, v in raw.items() if k not in _BINDING_KNOWN_FIELDS},
+        )
+        return binding
 
 
 def _escape(value: str) -> str:
@@ -115,6 +197,17 @@ def _format_extra(key: str, value: Any) -> str:
         f"cannot serialize extra key {key!r} of type {type(value).__name__} "
         "back to TOML; bindings only support scalar string/int/bool extras"
     )
+
+
+def _normalize_sender_mode(mode: str) -> str:
+    value = (mode or "").strip().lower()
+    if not value:
+        return "auto"
+    if value not in {"user", "bot", "auto"}:
+        raise ProjectBindingError(
+            f"invalid feishu_sender_mode {mode!r}: must be one of user, bot, auto"
+        )
+    return value
 
 
 def validate_feishu_group_id(group_id: str) -> str:
@@ -176,24 +269,9 @@ def load_binding(project: str, *, home: Path | None = None) -> ProjectBinding | 
     group_id = str(raw.get("feishu_group_id", "")).strip()
     if group_id:
         validate_feishu_group_id(group_id)
-
-    known = {
-        "version", "project", "feishu_group_id", "feishu_group_name", "feishu_external",
-        "feishu_bot_account", "require_mention", "bound_at", "bound_by",
-    }
-    extras = {k: v for k, v in raw.items() if k not in known}
-    return ProjectBinding(
-        project=validate_project_name(project),
-        feishu_group_id=group_id,
-        feishu_group_name=str(raw.get("feishu_group_name", "")).strip(),
-        feishu_external=bool(raw.get("feishu_external", False)),
-        feishu_bot_account=str(raw.get("feishu_bot_account", "koder")).strip() or "koder",
-        require_mention=bool(raw.get("require_mention", False)),
-        bound_at=str(raw.get("bound_at", "")).strip(),
-        bound_by=str(raw.get("bound_by", "")).strip(),
-        version=int(raw.get("version", BINDING_SCHEMA_VERSION)),
-        extras=extras,
-    )
+    if not declared_project:
+        raw["project"] = project
+    return ProjectBinding.from_toml(raw, fallback_project=project)
 
 
 # ── Write ─────────────────────────────────────────────────────────────
@@ -229,7 +307,10 @@ def bind_project(
     feishu_group_id: str,
     feishu_group_name: str = "",
     feishu_external: bool = False,
-    feishu_bot_account: str = "koder",
+    feishu_sender_app_id: str = "",
+    feishu_sender_mode: str = "auto",
+    openclaw_koder_agent: str = "",
+    feishu_bot_account: str = "",
     require_mention: bool = False,
     bound_by: str = "",
     home: Path | None = None,
@@ -240,7 +321,10 @@ def bind_project(
         feishu_group_id=validate_feishu_group_id(feishu_group_id),
         feishu_group_name=feishu_group_name.strip(),
         feishu_external=feishu_external,
-        feishu_bot_account=feishu_bot_account.strip() or "koder",
+        feishu_sender_app_id=feishu_sender_app_id.strip(),
+        feishu_sender_mode=feishu_sender_mode,
+        openclaw_koder_agent=openclaw_koder_agent.strip(),
+        feishu_bot_account=feishu_bot_account.strip(),
         require_mention=require_mention,
         bound_by=bound_by.strip(),
     )

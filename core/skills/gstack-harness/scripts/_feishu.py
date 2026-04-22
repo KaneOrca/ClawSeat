@@ -460,6 +460,13 @@ def _lark_cli_env() -> dict[str, str]:
     }
 
 
+def _normalize_lark_identity(identity: str | None) -> str:
+    value = (identity or "auto").strip().lower()
+    if value not in {"user", "bot", "auto"}:
+        raise ValueError(f"invalid lark-cli identity: {identity!r}")
+    return value
+
+
 # ── Token lifetime / keepalive constants ─────────────────────────────
 #
 # Feishu user OAuth:
@@ -499,17 +506,28 @@ def _days_since(ts: datetime.datetime | None) -> float | None:
     return (now - ts).total_seconds() / 86400.0
 
 
-def _read_lark_auth_status(lark_cli: str) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+def _read_lark_auth_status(
+    lark_cli: str,
+    *,
+    identity: str = "auto",
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
     """Run `lark-cli auth status` once. Return (auth_info, error_payload)."""
+    normalized = _normalize_lark_identity(identity)
+    cmd = [lark_cli, "auth", "status"]
+    if normalized != "auto":
+        cmd.extend(["--as", normalized])
     result = run_command_with_env(
-        [lark_cli, "auth", "status"],
+        cmd,
         cwd=str(OPENCLAW_HOME),
         env=_lark_cli_env(),
     )
     if result.returncode != 0:
         return None, {
             "status": "error",
-            "reason": f"lark-cli auth status failed (rc={result.returncode}): {result.stderr.strip()}",
+            "reason": (
+                f"lark-cli auth status failed (rc={result.returncode}, "
+                f"identity={normalized}): {result.stderr.strip()}"
+            ),
             "fix": "lark-cli auth login",
         }
     stdout = result.stdout.strip()
@@ -539,7 +557,7 @@ def _keepalive_ping(lark_cli: str) -> bool:
     return result.returncode == 0
 
 
-def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
+def check_feishu_auth(*, keepalive: bool = False, identity: str = "auto") -> dict[str, str]:
     """Check lark-cli availability and auth token status.
 
     keepalive=True enables opportunistic token refresh: if grantedAt is
@@ -560,7 +578,8 @@ def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
             "reason": "lark-cli not found in PATH",
             "fix": "brew install larksuite/cli/lark-cli",
         }
-    auth_info, err = _read_lark_auth_status(lark_cli)
+    normalized = _normalize_lark_identity(identity)
+    auth_info, err = _read_lark_auth_status(lark_cli, identity=normalized)
     if err is not None:
         return err
     if auth_info is None:
@@ -575,7 +594,7 @@ def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
         age_days = _days_since(granted_at)
         if age_days is not None and age_days >= REFRESH_KEEPALIVE_DAYS:
             if _keepalive_ping(lark_cli):
-                refreshed, err2 = _read_lark_auth_status(lark_cli)
+                refreshed, err2 = _read_lark_auth_status(lark_cli, identity=normalized)
                 if err2 is None and refreshed is not None:
                     auth_info = refreshed
 
@@ -587,7 +606,8 @@ def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
         payload: dict[str, str] = {
             "status": "ok",
             "reason": "auth token is valid",
-            "identity": identity,
+            "identity": auth_info.get("identity", normalized),
+            "requested_as": normalized,
         }
         if user_name:
             payload["userName"] = user_name
@@ -602,7 +622,8 @@ def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
                 "access_token expired; refresh_token still valid "
                 "(lark-cli will auto-refresh on next API call)"
             ),
-            "identity": identity,
+            "identity": auth_info.get("identity", normalized),
+            "requested_as": normalized,
             "warning": "needs_refresh",
         }
         if user_name:
@@ -614,21 +635,32 @@ def check_feishu_auth(*, keepalive: bool = False) -> dict[str, str]:
             "status": "expired",
             "reason": "refresh_token past 7d window (no calls for >7 days)",
             "fix": "lark-cli auth login  (in a terminal with a browser)",
+            "requested_as": normalized,
         }
 
     return {
         "status": "error",
         "reason": f"unexpected token status: {token_status}",
         "fix": "lark-cli auth login",
+        "requested_as": normalized,
     }
 
 
-def _classify_send_failure(stderr: str) -> tuple[str, str]:
+def _classify_send_failure(stderr: str, *, identity: str = "user") -> tuple[str, str]:
     lower = stderr.lower()
     if "token" in lower and ("expired" in lower or "invalid" in lower or "refresh" in lower):
         return "auth_expired", "lark-cli auth login"
     if "permission" in lower or "scope" in lower or "forbidden" in lower:
-        return "permission_denied", "lark-cli auth login  (ensure im:message scope is granted)"
+        normalized = _normalize_lark_identity(identity)
+        if normalized == "user":
+            return "permission_denied", "ensure lark-cli has im:message.send_as_user scope for user identity"
+        if normalized == "bot":
+            return "permission_denied", "ensure lark-cli has im:message scope for bot identity"
+        return (
+            "permission_denied",
+            "rerun with --as user or --as bot after verifying the matching scope "
+            "(user: im:message.send_as_user; bot: im:message)",
+        )
     if "not found" in lower or "no such" in lower or "404" in lower:
         return "group_not_found", "check that the group ID is correct and the bot is in the group"
     if "timeout" in lower or "connection" in lower or "network" in lower:
@@ -644,7 +676,11 @@ def send_feishu_user_message(
     group_id: str | None = None,
     project: str | None = None,
     pre_check_auth: bool = False,
+    identity: str = "user",
 ) -> dict[str, str]:
+    # Allow override via env var for smoke/one-shot dispatch
+    identity = os.environ.get("FEISHU_SENDER_MODE", identity)
+    normalized = _normalize_lark_identity(identity)
     payload: dict[str, str] = {"message": message.strip()}
     resolved_source = "explicit:group_id" if group_id else ""
     resolved_group_id = (group_id or "").strip()
@@ -672,20 +708,23 @@ def send_feishu_user_message(
         payload["fix"] = "brew install larksuite/cli/lark-cli"
         return payload
     if pre_check_auth:
-        auth = check_feishu_auth(keepalive=True)
+        auth = check_feishu_auth(keepalive=True, identity=normalized)
         if auth["status"] != "ok":
             payload["status"] = "failed"
             payload["reason"] = f"auth_{auth['status']}"
             payload["fix"] = auth.get("fix", "lark-cli auth login")
             payload["auth_detail"] = auth.get("reason", "")
             return payload
+    send_cmd = [lark_cli, "im", "+messages-send"]
+    if normalized != "auto":
+        send_cmd.extend(["--as", normalized])
+    send_cmd.extend(["--chat-id", resolved_group_id, "--text", message])
     result = run_command_with_env(
-        [lark_cli, "im", "+messages-send", "--as", "user",
-         "--chat-id", resolved_group_id, "--text", message],
+        send_cmd,
         cwd=str(OPENCLAW_HOME),
         env=_lark_cli_env(),
     )
-    payload["transport"] = "lark-cli-user"
+    payload["transport"] = f"lark-cli-{normalized}"
     payload["returncode"] = str(result.returncode)
     if result.stdout.strip():
         payload["stdout"] = result.stdout.strip()
@@ -695,7 +734,7 @@ def send_feishu_user_message(
         payload["status"] = "sent"
     else:
         payload["status"] = "failed"
-        reason, fix = _classify_send_failure(result.stderr)
+        reason, fix = _classify_send_failure(result.stderr, identity=normalized)
         payload["reason"] = reason
         payload["fix"] = fix
     return payload

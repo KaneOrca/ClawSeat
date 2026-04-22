@@ -181,7 +181,9 @@ def do_koder_bind(
                 feishu_group_id=existing.feishu_group_id,
                 feishu_group_name=existing.feishu_group_name,
                 feishu_external=existing.feishu_external,
-                feishu_bot_account=existing.feishu_bot_account,
+                feishu_sender_app_id=existing.feishu_sender_app_id,
+                feishu_sender_mode=existing.feishu_sender_mode,
+                openclaw_koder_agent=existing.openclaw_koder_agent,
                 require_mention=existing.require_mention,
                 bound_by=existing.bound_by,
                 extras=extras,
@@ -192,7 +194,7 @@ def do_koder_bind(
             binding = ProjectBinding(
                 project=project,
                 feishu_group_id="oc_pending",
-                feishu_bot_account="koder",
+                openclaw_koder_agent="koder",
                 bound_by="agent-admin project koder-bind",
                 extras=extras,
             )

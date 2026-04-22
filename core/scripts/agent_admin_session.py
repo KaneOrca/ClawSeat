@@ -100,6 +100,63 @@ class SessionHooks:
     build_monitor_layout: Callable[[Any, dict[str, Any]], None]
 
 
+_SANDBOX_TOOL_SEED_SUBPATHS = (
+    ".lark-cli",
+    "Library/Application Support/iTerm2",
+    "Library/Preferences/com.googlecode.iterm2.plist",
+    ".config/gemini",
+    ".gemini",
+    ".config/codex",
+    ".codex",
+)
+
+
+def _real_home_for_tool_seeding() -> Path:
+    real_home_str = (
+        os.environ.get("CLAWSEAT_REAL_HOME")
+        or os.environ.get("AGENT_HOME")
+        or str(Path.home())
+    )
+    return Path(real_home_str).expanduser()
+
+
+def seed_user_tool_dirs(runtime_home: Path, real_home: Path | None = None) -> list[str]:
+    """Link user-level tool dirs/files from the real HOME into a runtime HOME.
+
+    Existing sandbox-owned copies are backed up under
+    ``.sandbox-pre-seed-backup`` before being replaced with symlinks.
+    """
+    runtime_home = Path(runtime_home)
+    real_home = Path(real_home) if real_home is not None else _real_home_for_tool_seeding()
+    changed: list[str] = []
+    backup_base = runtime_home / ".sandbox-pre-seed-backup"
+
+    for subpath in _SANDBOX_TOOL_SEED_SUBPATHS:
+        src = real_home / subpath
+        tgt = runtime_home / subpath
+        if not src.exists():
+            continue
+
+        if tgt.is_symlink():
+            try:
+                if tgt.resolve() == src.resolve():
+                    continue
+            except OSError:
+                pass
+            tgt.unlink()
+        elif tgt.exists():
+            backup_path = backup_base / f"{subpath}.{time.time_ns()}"
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(tgt), str(backup_path))
+
+        tgt.parent.mkdir(parents=True, exist_ok=True)
+        if not tgt.exists():
+            tgt.symlink_to(src)
+            changed.append(subpath)
+
+    return changed
+
+
 class SessionService:
     def __init__(self, hooks: SessionHooks) -> None:
         self.hooks = hooks
@@ -416,13 +473,15 @@ class SessionService:
         return None
 
     def _ancestor_brief_path(self, project: str) -> Path:
-        real_home_str = (
-            os.environ.get("CLAWSEAT_REAL_HOME")
-            or os.environ.get("AGENT_HOME")
-            or str(Path.home())
-        )
-        real_home = Path(real_home_str)
+        real_home = _real_home_for_tool_seeding()
         return real_home / ".agents" / "tasks" / project / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+
+    def reseed_sandbox_user_tool_dirs(self, session: Any) -> list[str]:
+        launcher_auth = self._launcher_auth_for(session)
+        runtime_dir = self._launcher_runtime_dir(session, launcher_auth)
+        if runtime_dir is None:
+            return []
+        return seed_user_tool_dirs(Path(runtime_dir) / "home")
 
     def build_engineer_exec(self, session: Any) -> list[str]:
         if session.wrapper:
@@ -449,6 +508,13 @@ class SessionService:
             session.runtime_dir = str(runtime_dir)
             self.hooks.write_session(session)
             self.hooks.apply_template(session, project)
+        if runtime_dir is not None:
+            try:
+                self.reseed_sandbox_user_tool_dirs(session)
+            except OSError as exc:
+                raise SessionStartError(
+                    f"reseed sandbox HOME failed for {session.session}: {exc}"
+                ) from exc
         for attempt in range(1, TMUX_COMMAND_RETRIES + 1):
             custom_env_file = ""
             try:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import shlex
+import shutil
 import subprocess
 import sys
 import textwrap
 import time
+from pathlib import Path
 from typing import Any
 
 
@@ -17,6 +20,11 @@ TMUX_COMMAND_TIMEOUT_SECONDS = 8.0
 TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 ITERM_SCRIPT_APPS = ("iTerm", "iTerm2")
 ITERM_SCRIPT_RETRIES = 3
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_ITERM_PANES_DRIVER = Path(__file__).resolve().with_name("iterm_panes_driver.py")
+_WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
+_GRID_WINDOW_TITLE_PREFIX = "clawseat-"
+_MEMORY_WINDOW_TITLE = "machine-memory-claude"
 
 
 def tmux(
@@ -165,6 +173,187 @@ def _is_frontstage_engineer(engineer_id: str) -> bool:
     # includes it by mistake, silently skip rather than auto-spawning a
     # ghost tmux session that clobbers the real OpenClaw identity.
     return engineer_id in _FRONTSTAGE_ENGINEER_IDS
+
+
+def _project_grid_seat_ids(project: Any) -> list[str]:
+    """Return the non-ancestor project seats in roster order."""
+    roster: list[str] = []
+    seen: set[str] = set()
+    for raw_engineer_id in getattr(project, "engineers", []) or []:
+        engineer_id = str(raw_engineer_id)
+        if engineer_id == "ancestor" or _is_frontstage_engineer(engineer_id):
+            continue
+        if engineer_id in seen:
+            continue
+        seen.add(engineer_id)
+        roster.append(engineer_id)
+    return roster
+
+
+def build_grid_payload(project: Any, *, wait_for_seat_script: Path | None = None) -> dict[str, Any]:
+    wait_script = wait_for_seat_script or _WAIT_FOR_SEAT_SCRIPT
+    seats = _project_grid_seat_ids(project)
+    if not seats:
+        print(
+            f"agent_admin_window: project {project.name} has no non-ancestor seats; "
+            "falling back to ancestor-only grid",
+            file=sys.stderr,
+        )
+
+    panes: list[dict[str, str]] = [
+        {
+            "label": "ancestor",
+            "command": f"tmux attach -t '={project.name}-ancestor'",
+        }
+    ]
+    for seat_id in seats:
+        panes.append(
+            {
+                "label": seat_id,
+                "command": (
+                    "bash "
+                    + shlex.quote(str(wait_script))
+                    + " "
+                    + shlex.quote(f"{project.name}-{seat_id}")
+                ),
+            }
+        )
+    return {"title": f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}", "panes": panes}
+
+
+def build_memory_payload() -> dict[str, Any]:
+    return {
+        "title": _MEMORY_WINDOW_TITLE,
+        "panes": [
+            {
+                "label": "memory",
+                "command": "tmux attach -t '=machine-memory-claude'",
+            }
+        ],
+    }
+
+
+def run_iterm_panes_driver(payload: dict[str, Any]) -> dict[str, Any]:
+    result = subprocess.run(
+        [sys.executable, str(_ITERM_PANES_DRIVER)],
+        input=json.dumps(payload, ensure_ascii=False),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    stdout = (result.stdout or "").strip()
+    stderr = (result.stderr or "").strip()
+    if result.returncode != 0:
+        detail = stderr or stdout or f"rc={result.returncode}"
+        raise AgentAdminWindowError(f"iTerm pane driver failed: {detail}")
+    try:
+        decoded = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise AgentAdminWindowError(
+            f"iTerm pane driver returned invalid JSON: {exc}: {stdout}"
+        ) from exc
+    if not isinstance(decoded, dict):
+        raise AgentAdminWindowError("iTerm pane driver returned a non-object payload")
+    if decoded.get("status") != "ok":
+        raise AgentAdminWindowError(decoded.get("reason") or "iTerm pane driver returned non-ok status")
+    return decoded
+
+
+def _iterm_window_script(app_name: str, title: str, *, focus: bool) -> str:
+    quoted_title = applescript_quote(title)
+    if focus:
+        return textwrap.dedent(
+            f'''
+            tell application "{app_name}"
+              activate
+              repeat with w in windows
+                try
+                  if (name of w as string) contains "{quoted_title}" then
+                    select w
+                    return "1"
+                  end if
+                end try
+              end repeat
+              return "0"
+            end tell
+            '''
+        ).strip()
+    return textwrap.dedent(
+        f'''
+        tell application "{app_name}"
+          repeat with w in windows
+            try
+              if (name of w as string) contains "{quoted_title}" then
+                return "1"
+              end if
+            end try
+          end repeat
+          return "0"
+        end tell
+        '''
+    ).strip()
+
+
+def iterm_window_exists(title: str) -> bool:
+    if shutil.which("osascript") is None:
+        return False
+    for app_name in ITERM_SCRIPT_APPS:
+        result = subprocess.run(
+            ["osascript", "-e", _iterm_window_script(app_name, title, focus=False)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip() == "1":
+            return True
+    return False
+
+
+def focus_iterm_window(title: str) -> None:
+    if shutil.which("osascript") is None:
+        return
+    for app_name in ITERM_SCRIPT_APPS:
+        result = subprocess.run(
+            ["osascript", "-e", _iterm_window_script(app_name, title, focus=True)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip() == "1":
+            return
+
+
+def open_memory_window() -> dict[str, Any]:
+    if not tmux_has_session(_MEMORY_WINDOW_TITLE):
+        print(
+            f"agent_admin_window: memory tmux session missing for {_MEMORY_WINDOW_TITLE}; "
+            "skipping open-memory",
+            file=sys.stderr,
+        )
+        return {"status": "skipped", "reason": "memory tmux session missing"}
+    if iterm_window_exists(_MEMORY_WINDOW_TITLE):
+        return {"status": "ok", "window_id": "", "reused": True}
+    result = run_iterm_panes_driver(build_memory_payload())
+    result["reused"] = False
+    return result
+
+
+def open_grid_window(
+    project: Any,
+    *,
+    recover: bool = False,
+    open_memory: bool = False,
+) -> dict[str, Any]:
+    window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}"
+    if recover and iterm_window_exists(window_title):
+        focus_iterm_window(window_title)
+        result: dict[str, Any] = {"status": "ok", "window_id": "", "recovered": True}
+    else:
+        result = run_iterm_panes_driver(build_grid_payload(project))
+        result["recovered"] = False
+    if open_memory:
+        result["memory"] = open_memory_window()
+    return result
 
 
 def _monitor_layout_target_sessions(project: Any, sessions: dict[str, Any]) -> list[Any]:

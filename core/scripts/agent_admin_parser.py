@@ -32,6 +32,7 @@ class ParserHooks:
     cmd_project_binding_list: Callable[[Any], int]
     cmd_project_unbind: Callable[[Any], int]
     cmd_session_start_engineer: Callable[[Any], int]
+    cmd_session_reseed_sandbox: Callable[[Any], int]
     cmd_session_batch_start_engineer: Callable[[Any], int]
     cmd_session_provision_heartbeat: Callable[[Any], int]
     cmd_session_stop_engineer: Callable[[Any], int]
@@ -42,6 +43,7 @@ class ParserHooks:
     cmd_session_switch_auth: Callable[[Any], int]
     cmd_window_open_monitor: Callable[[Any], int]
     cmd_window_open_dashboard: Callable[[Any], int]
+    cmd_window_open_grid: Callable[[Any], int]
     cmd_window_open_engineer: Callable[[Any], int]
     cmd_window_config_monitor: Callable[[Any], int]
     cmd_engineer_create: Callable[[Any], int]
@@ -179,7 +181,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     # C2: per-project binding SSOT — writes ~/.agents/tasks/<project>/PROJECT_BINDING.toml
     project_bind_nested = project_sub.add_parser(
         "bind",
-        help="Write per-project binding (Feishu group / bot account). See C2 guardrail.",
+        help="Write per-project binding (Feishu group / sender app / koder agent). See C2 guardrail.",
     )
     project_bind_nested.add_argument("--project", required=True)
     project_bind_nested.add_argument(
@@ -190,11 +192,30 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         help="Feishu group id (must start with 'oc_').",
     )
     project_bind_nested.add_argument(
+        "--feishu-sender-app-id",
+        dest="feishu_sender_app_id",
+        default="",
+        help="lark-cli sender app id (cli_...).",
+    )
+    project_bind_nested.add_argument(
+        "--feishu-sender-mode",
+        dest="feishu_sender_mode",
+        choices=["user", "bot", "auto"],
+        default="auto",
+        help="lark-cli sender mode (default: auto).",
+    )
+    project_bind_nested.add_argument(
+        "--openclaw-koder-agent",
+        dest="openclaw_koder_agent",
+        default="",
+        help="OpenClaw agent that receives the koder overlay.",
+    )
+    project_bind_nested.add_argument(
         "--feishu-bot-account",
         "--account",
         dest="feishu_bot_account",
-        default="koder",
-        help="Feishu bot account name (default: koder).",
+        default=None,
+        help="Deprecated alias: routes to sender app id when value starts with cli_, else to openclaw-koder-agent.",
     )
     project_bind_nested.add_argument(
         "--require-mention",
@@ -286,6 +307,15 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_start_eng.add_argument("--reset", action="store_true")
     session_start_eng.set_defaults(func=hooks.cmd_session_start_engineer)
 
+    session_reseed_sandbox = session_sub.add_parser(
+        "reseed-sandbox",
+        help="Rebuild sandbox HOME symlinks for a project or specific seats.",
+    )
+    session_reseed_sandbox.add_argument("--project")
+    session_reseed_sandbox.add_argument("--all", action="store_true")
+    session_reseed_sandbox.add_argument("engineers", nargs="*")
+    session_reseed_sandbox.set_defaults(func=hooks.cmd_session_reseed_sandbox)
+
     # batch-start-engineer: atomic multi-seat startup.
     # Phase 1: parallel tmux start for every engineer (no iTerm side effects).
     # Python threads join before Phase 2, replacing the `wait` that shell
@@ -372,6 +402,15 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
 
     open_dashboard = window_sub.add_parser("open-dashboard")
     open_dashboard.set_defaults(func=hooks.cmd_window_open_dashboard)
+
+    open_grid = window_sub.add_parser(
+        "open-grid",
+        help="Reopen the project iTerm grid. Use --recover to focus an existing grid and --open-memory to also ensure the memory window is open.",
+    )
+    open_grid.add_argument("project")
+    open_grid.add_argument("--recover", action="store_true")
+    open_grid.add_argument("--open-memory", action="store_true")
+    open_grid.set_defaults(func=hooks.cmd_window_open_grid)
 
     open_engineer = window_sub.add_parser("open-engineer")
     open_engineer.add_argument("engineer")

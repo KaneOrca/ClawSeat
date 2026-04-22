@@ -38,10 +38,16 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     tmux_log = tmp_path / "tmux.log"
 
     (root / "scripts").mkdir(parents=True, exist_ok=True)
+    (root / "core" / "shell-scripts").mkdir(parents=True, exist_ok=True)
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
     shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
     (root / "scripts" / "wait-for-seat.sh").chmod(0o755)
+    shutil.copy2(
+        _REPO / "core" / "shell-scripts" / "send-and-verify.sh",
+        root / "core" / "shell-scripts" / "send-and-verify.sh",
+    )
+    (root / "core" / "shell-scripts" / "send-and-verify.sh").chmod(0o755)
 
     _write_executable(
         root / "core" / "preflight.py",
@@ -112,6 +118,32 @@ if log_file:
 raise SystemExit(0)
 """,
     )
+    _write_executable(
+        root / "core" / "shell-scripts" / "agentctl.sh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${AGENTCTL_LOG:-}" ]]; then
+  printf '%s\\n' "$*" >> "${AGENTCTL_LOG:?}"
+fi
+if [[ "${1:-}" == "session-name" ]]; then
+  shift
+  project=""
+  seat=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --project) project="$2"; shift 2 ;;
+      *) seat="$1"; shift ;;
+    esac
+  done
+  if [[ -n "$project" && -n "$seat" ]]; then
+    printf '%s-%s\\n' "$project" "$seat"
+  else
+    printf '%s\\n' "$seat"
+  fi
+fi
+exit 0
+""",
+    )
     (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
     (root / "core" / "templates" / "ancestor-brief.template.md").write_text(
         "\n".join(
@@ -159,6 +191,7 @@ mkdir -p "$runtime_dir/home"
 python3 - "$LOG_FILE" "$session" "$tool" "$auth" "$dir" "$custom_env_file" "$runtime_dir/home" "${CLAWSEAT_ROOT:-}" "${CLAWSEAT_ANCESTOR_BRIEF:-}" "${LAUNCHER_CUSTOM_BASE_URL:-}" "${LAUNCHER_CUSTOM_MODEL:-}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -191,6 +224,9 @@ record = {
 }
 with Path(log_file).open("a", encoding="utf-8") as handle:
     handle.write(json.dumps(record) + "\\n")
+if os.environ.get("TMUX_LOG_FILE"):
+    with Path(os.environ["TMUX_LOG_FILE"] + ".sessions").open("a", encoding="utf-8") as handle:
+        handle.write(session + "\\n")
 PY
 """,
     )
@@ -200,6 +236,10 @@ PY
 set -euo pipefail
 if [[ "${1:-}" == "has-session" ]]; then
   target="${3:-}"
+  registry="${TMUX_LOG_FILE:-}.sessions"
+  if [[ -n "${TMUX_LOG_FILE:-}" && -f "$registry" ]] && grep -Fxq "$target" "$registry"; then
+    exit 0
+  fi
   if [[ "$target" == "=machine-memory-claude" ]]; then
     exit "${TMUX_HAS_MEMORY_SESSION_RC:-1}"
   fi

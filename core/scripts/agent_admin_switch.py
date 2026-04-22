@@ -166,6 +166,11 @@ class SwitchHandlers:
         return session
 
     def session_switch_harness(self, args: Any) -> int:
+        if args.provider == "ark" and args.tool != "claude":
+            raise self.hooks.error_cls(
+                f"session switch-harness {args.engineer}: ark provider is claude-only; "
+                f"rerun with --tool claude --provider ark (got tool={args.tool!r})."
+            )
         requested_model = str(getattr(args, "model", "")).strip()
         if requested_model and args.tool != "claude":
             raise self.hooks.error_cls(

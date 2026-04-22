@@ -856,12 +856,30 @@ def cmd_project_bind(args: argparse.Namespace) -> int:
         existing = load_binding(args.project)
         # Best-effort enrichment from lark-cli chat metadata.
         group_name, group_external = fetch_chat_metadata(args.feishu_group)
+        legacy_account = getattr(args, "feishu_bot_account", None)
+        sender_app_id = getattr(args, "feishu_sender_app_id", "") or ""
+        sender_mode = getattr(args, "feishu_sender_mode", "auto") or "auto"
+        koder_agent = getattr(args, "openclaw_koder_agent", "") or ""
+        if legacy_account is not None:
+            route_label = "feishu_sender_app_id" if str(legacy_account).startswith("cli_") else "openclaw_koder_agent"
+            print(
+                "warning: --feishu-bot-account is deprecated; "
+                f"routing to {route_label}",
+                file=sys.stderr,
+            )
+            if str(legacy_account).startswith("cli_") and not sender_app_id:
+                sender_app_id = str(legacy_account)
+            elif not koder_agent:
+                koder_agent = str(legacy_account)
         path = bind_project(
             project=args.project,
             feishu_group_id=args.feishu_group,
             feishu_group_name=group_name,
             feishu_external=group_external,
-            feishu_bot_account=args.feishu_bot_account,
+            feishu_sender_app_id=sender_app_id,
+            feishu_sender_mode=sender_mode,
+            openclaw_koder_agent=koder_agent,
+            feishu_bot_account="" if legacy_account is None else str(legacy_account),
             require_mention=bool(args.require_mention),
             bound_by=args.bound_by,
         )
@@ -914,7 +932,9 @@ def cmd_project_binding_list(args: argparse.Namespace) -> int:
     for binding in bindings:
         print(
             f"{binding.project:<{width}}  {binding.feishu_group_id}  "
-            f"account={binding.feishu_bot_account}  "
+            f"sender_app_id={binding.feishu_sender_app_id or '-'}  "
+            f"sender_mode={binding.feishu_sender_mode}  "
+            f"koder_agent={binding.openclaw_koder_agent or '-'}  "
             f"require_mention={'true' if binding.require_mention else 'false'}"
         )
     return 0
@@ -934,6 +954,10 @@ def cmd_project_unbind(args: argparse.Namespace) -> int:
 
 def cmd_session_start_engineer(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_start_engineer(args)
+
+
+def cmd_session_reseed_sandbox(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_reseed_sandbox(args)
 
 
 def cmd_session_batch_start_engineer(args: argparse.Namespace) -> int:
@@ -1156,6 +1180,10 @@ def cmd_window_open_dashboard(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.window_open_dashboard(args)
 
 
+def cmd_window_open_grid(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.window_open_grid(args)
+
+
 def cmd_window_open_engineer(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.window_open_engineer(args)
 
@@ -1222,6 +1250,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_project_binding_list=cmd_project_binding_list,
     cmd_project_unbind=cmd_project_unbind,
     cmd_session_start_engineer=cmd_session_start_engineer,
+    cmd_session_reseed_sandbox=cmd_session_reseed_sandbox,
     cmd_session_batch_start_engineer=cmd_session_batch_start_engineer,
     cmd_session_provision_heartbeat=cmd_session_provision_heartbeat,
     cmd_session_stop_engineer=cmd_session_stop_engineer,
@@ -1232,6 +1261,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_session_switch_auth=cmd_session_switch_auth,
     cmd_window_open_monitor=cmd_window_open_monitor,
     cmd_window_open_dashboard=cmd_window_open_dashboard,
+    cmd_window_open_grid=cmd_window_open_grid,
     cmd_window_open_engineer=cmd_window_open_engineer,
     cmd_window_config_monitor=cmd_window_config_monitor,
     cmd_engineer_create=cmd_engineer_create,
