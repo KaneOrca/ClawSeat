@@ -1,0 +1,480 @@
+from __future__ import annotations
+
+import importlib.util
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+_HELPERS_PATH = Path(__file__).with_name("test_install_isolation.py")
+_HELPERS_SPEC = importlib.util.spec_from_file_location("test_install_isolation_helpers", _HELPERS_PATH)
+assert _HELPERS_SPEC is not None and _HELPERS_SPEC.loader is not None
+_HELPERS = importlib.util.module_from_spec(_HELPERS_SPEC)
+_HELPERS_SPEC.loader.exec_module(_HELPERS)
+
+_INSTALL = _HELPERS._INSTALL
+_WAIT_FOR_SEAT = _HELPERS._WAIT_FOR_SEAT
+_fake_install_root = _HELPERS._fake_install_root
+_read_jsonl = _HELPERS._read_jsonl
+_write_executable = _HELPERS._write_executable
+
+
+def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_path: Path) -> None:
+    root, home, _, _, py_stubs = _fake_install_root(tmp_path)
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--dry-run",
+            "--project",
+            "spawn49",
+            "--provider",
+            "minimax",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+        },
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    output = result.stdout + result.stderr
+
+    assert output.count("agent-launcher.sh") == 2
+    assert "spawn49-ancestor" in output
+    assert "machine-memory-claude" in output
+    assert "project bootstrap --template clawseat-default --local" in output
+    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+        assert f"bash {root}/scripts/wait-for-seat.sh spawn49-{seat}" in output
+
+
+def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path) -> None:
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    agent_admin_log = tmp_path / "agent_admin.jsonl"
+    iterm_payload_log = tmp_path / "iterm_payload.jsonl"
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "spawn49",
+            "--provider",
+            "minimax",
+        ],
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "AGENT_ADMIN_LOG": str(agent_admin_log),
+            "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+        },
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+    bootstrap_calls = _read_jsonl(agent_admin_log)
+    assert bootstrap_calls == [
+        {
+            "argv": [
+                "project",
+                "bootstrap",
+                "--template",
+                "clawseat-default",
+                "--local",
+                str(home / ".agents" / "tasks" / "spawn49" / "project-local.toml"),
+            ],
+            "cwd": str(home / ".agents" / "templates"),
+        }
+    ]
+
+    template_text = (
+        home / ".agents" / "templates" / "clawseat-default" / "template.toml"
+    ).read_text(encoding="utf-8")
+    assert 'id = "ancestor"' in template_text
+    assert 'id = "planner"' in template_text
+    assert 'id = "designer"' in template_text
+    assert 'provider = "minimax"' in template_text
+    assert 'auth_mode = "api"' in template_text
+
+    local_text = (
+        home / ".agents" / "tasks" / "spawn49" / "project-local.toml"
+    ).read_text(encoding="utf-8")
+    assert 'seat_order = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]' in local_text
+    assert 'session_name = "spawn49-ancestor"' in local_text
+    assert local_text.count("[[overrides]]") == 6
+    assert 'auth_mode = "api"' in local_text
+    assert 'provider = "minimax"' in local_text
+    assert "materialized_seats" not in local_text
+    assert "runtime_seats" not in local_text
+
+    payloads = _read_jsonl(iterm_payload_log)
+    grid_payload = payloads[0]
+    assert grid_payload["title"] == "clawseat-spawn49"
+    commands = {pane["label"]: pane["command"] for pane in grid_payload["panes"]}
+    assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor'"
+    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+        assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49-{seat}"
+
+    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+        secret_path = home / ".agents" / "secrets" / "claude" / "minimax" / f"{seat}.env"
+        assert secret_path.is_file()
+        text = secret_path.read_text(encoding="utf-8")
+        assert "ANTHROPIC_AUTH_TOKEN" in text
+        assert "https://api.minimaxi.com/anthropic" in text
+    assert not (home / ".agents" / "secrets" / "claude" / "minimax" / "ancestor.env").exists()
+
+    guide_path = home / ".agents" / "tasks" / "spawn49" / "OPERATOR-START-HERE.md"
+    assert guide_path.is_file()
+    guide_text = guide_path.read_text(encoding="utf-8")
+    assert "Phase-A 不让 memory 做同步调研" in guide_text
+    assert "B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件" in guide_text
+    assert "B7 后接收 phase-a-decisions learnings" in guide_text
+    assert "agent_admin.py session start-engineer" in guide_text
+    assert "第一步：让 memory 做 openclaw 生态调研（brief B2.6）" not in guide_text
+    assert "ClawSeat install complete" in result.stdout
+
+
+def test_install_explicit_custom_api_flags_work_without_detect_or_tty(tmp_path: Path) -> None:
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    agent_admin_log = tmp_path / "agent_admin.jsonl"
+    iterm_payload_log = tmp_path / "iterm_payload.jsonl"
+    _write_executable(
+        root / "core" / "skills" / "memory-oracle" / "scripts" / "scan_environment.py",
+        """#!/usr/bin/env python3
+from __future__ import annotations
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+machine = Path(args.output) / "machine"
+machine.mkdir(parents=True, exist_ok=True)
+(machine / "credentials.json").write_text("{", encoding="utf-8")
+for name in ("network", "openclaw", "github", "current_context"):
+    (machine / f"{name}.json").write_text("{}", encoding="utf-8")
+""",
+    )
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "custom49",
+            "--base-url",
+            "https://custom.api.invalid/v1",
+            "--api-key",
+            "sk-custom49",
+            "--model",
+            "claude-custom-49",
+        ],
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "AGENT_ADMIN_LOG": str(agent_admin_log),
+            "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Using: explicit custom API" in result.stdout
+
+    provider_env = (
+        home / ".agents" / "tasks" / "custom49" / "ancestor-provider.env"
+    ).read_text(encoding="utf-8")
+    assert "https://custom.api.invalid/v1" in provider_env
+    assert "sk-custom49" in provider_env
+    assert "claude-custom-49" in provider_env
+
+    records = _read_jsonl(launcher_log)
+    assert [record["session"] for record in records] == [
+        "custom49-ancestor",
+        "machine-memory-claude",
+    ]
+    for record in records:
+        assert record["custom_api_key_present"] is True
+        assert record["custom_base_url"] == "https://custom.api.invalid/v1"
+        assert record["custom_model"] == "claude-custom-49"
+
+
+def test_install_rejects_unpaired_base_url_flag(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = subprocess.run(
+        ["bash", str(_INSTALL), "--base-url", "https://custom.api.invalid/v1"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PYTHON_BIN": sys.executable,
+        },
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "ERR_CODE: INVALID_FLAGS" in result.stderr
+    assert "--base-url 必须和 --api-key 成对" in result.stderr
+
+
+def test_install_rejects_provider_conflict_with_explicit_custom_flags(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = subprocess.run(
+        [
+            "bash",
+            str(_INSTALL),
+            "--provider",
+            "minimax",
+            "--base-url",
+            "https://custom.api.invalid/v1",
+            "--api-key",
+            "sk-custom49",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PYTHON_BIN": sys.executable,
+        },
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "ERR_CODE: INVALID_FLAGS" in result.stderr
+    assert "--base-url/--api-key 只能配 --provider custom_api 或不传 --provider" in result.stderr
+
+
+def test_install_provider_minimax_with_api_key_auto_fills_base_url_and_model(tmp_path: Path) -> None:
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    agent_admin_log = tmp_path / "agent_admin.jsonl"
+    iterm_payload_log = tmp_path / "iterm_payload.jsonl"
+    _write_executable(
+        root / "core" / "skills" / "memory-oracle" / "scripts" / "scan_environment.py",
+        """#!/usr/bin/env python3
+from __future__ import annotations
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+machine = Path(args.output) / "machine"
+machine.mkdir(parents=True, exist_ok=True)
+(machine / "credentials.json").write_text("{", encoding="utf-8")
+for name in ("network", "openclaw", "github", "current_context"):
+    (machine / f"{name}.json").write_text("{}", encoding="utf-8")
+""",
+    )
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "mini49",
+            "--provider",
+            "minimax",
+            "--api-key",
+            "sk-mini49",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "AGENT_ADMIN_LOG": str(agent_admin_log),
+            "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Using forced provider: minimax" in result.stdout
+
+    provider_env = (
+        home / ".agents" / "tasks" / "mini49" / "ancestor-provider.env"
+    ).read_text(encoding="utf-8")
+    assert "ANTHROPIC_AUTH_TOKEN=sk-mini49" in provider_env
+    assert "ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic" in provider_env
+    assert "ANTHROPIC_MODEL=MiniMax-M2.7-highspeed" in provider_env
+
+    records = _read_jsonl(launcher_log)
+    assert [record["session"] for record in records] == [
+        "mini49-ancestor",
+        "machine-memory-claude",
+    ]
+    for record in records:
+        assert record["custom_api_key_present"] is True
+        assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
+        assert record["custom_model"] == "MiniMax-M2.7-highspeed"
+
+
+def test_install_provider_anthropic_console_with_api_key_skips_detection(tmp_path: Path) -> None:
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    agent_admin_log = tmp_path / "agent_admin.jsonl"
+    iterm_payload_log = tmp_path / "iterm_payload.jsonl"
+    _write_executable(
+        root / "core" / "skills" / "memory-oracle" / "scripts" / "scan_environment.py",
+        """#!/usr/bin/env python3
+from __future__ import annotations
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", required=True)
+args = parser.parse_args()
+machine = Path(args.output) / "machine"
+machine.mkdir(parents=True, exist_ok=True)
+(machine / "credentials.json").write_text("{", encoding="utf-8")
+for name in ("network", "openclaw", "github", "current_context"):
+    (machine / f"{name}.json").write_text("{}", encoding="utf-8")
+""",
+    )
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "console49",
+            "--provider",
+            "anthropic_console",
+            "--api-key",
+            "sk-ant-49",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "AGENT_ADMIN_LOG": str(agent_admin_log),
+            "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Using forced provider: anthropic_console" in result.stdout
+
+    provider_env = (
+        home / ".agents" / "tasks" / "console49" / "ancestor-provider.env"
+    ).read_text(encoding="utf-8")
+    assert "ANTHROPIC_API_KEY=sk-ant-49" in provider_env
+    assert "export ANTHROPIC_AUTH_TOKEN" not in provider_env
+
+    records = _read_jsonl(launcher_log)
+    assert [record["session"] for record in records] == [
+        "console49-ancestor",
+        "machine-memory-claude",
+    ]
+    for record in records:
+        assert record["custom_api_key_present"] is True
+        assert record["custom_base_url"] == "https://api.anthropic.com"
+
+
+@pytest.mark.parametrize(
+    "matched_session",
+    [
+        "spawn49-planner",
+        "spawn49-planner-claude",
+        "spawn49-planner-codex",
+        "spawn49-planner-gemini",
+    ],
+)
+def test_wait_for_seat_attaches_when_matching_session_appears(tmp_path: Path, matched_session: str) -> None:
+    bin_dir = tmp_path / "bin"
+    count_file = tmp_path / "count.txt"
+    attach_log = tmp_path / "attach.log"
+    _write_executable(
+        bin_dir / "tmux",
+        """#!/usr/bin/env bash
+set -euo pipefail
+count_file="${TMUX_COUNT_FILE:?}"
+attach_log="${TMUX_ATTACH_LOG:?}"
+case "$1" in
+  has-session)
+    count=0
+    if [[ -f "$count_file" ]]; then
+      count="$(cat "$count_file")"
+    fi
+    count=$((count + 1))
+    printf '%s' "$count" > "$count_file"
+    if [[ "$count" -ge 2 && "$3" == "=${TMUX_MATCH_SESSION:?}" ]]; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  attach)
+    printf '%s\\n' "$*" >> "$attach_log"
+    ;;
+esac
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49-planner"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
+            "TMUX_COUNT_FILE": str(count_file),
+            "TMUX_ATTACH_LOG": str(attach_log),
+            "TMUX_MATCH_SESSION": matched_session,
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "pane is waiting for spawn49-planner" in result.stdout
+    assert attach_log.read_text(encoding="utf-8").strip() == f"attach -t ={matched_session}"

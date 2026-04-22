@@ -17,6 +17,7 @@ class StoreHooks:
     workspaces_root: Path
     current_project_path: Path
     templates_root: Path
+    repo_templates_root: Path
     tool_binaries: dict[str, str]
     default_tool_args: dict[str, list[str]]
     normalize_name: Callable[[str], str]
@@ -199,7 +200,13 @@ class StoreHandlers:
             if candidate.is_dir():
                 candidate = candidate / "template.toml"
         else:
-            candidate = self.hooks.templates_root / name_or_path / "template.toml"
+            candidates = [
+                self.hooks.templates_root / name_or_path / "template.toml",
+                self.hooks.repo_templates_root / name_or_path,
+                self.hooks.repo_templates_root / f"{name_or_path}.toml",
+                self.hooks.repo_templates_root / name_or_path / "template.toml",
+            ]
+            candidate = next((path for path in candidates if path.exists()), candidates[0])
         if not candidate.exists():
             raise self.hooks.error_cls(f"Template not found: {name_or_path}")
         data = self.hooks.load_toml(candidate)
@@ -515,6 +522,7 @@ class StoreHandlers:
         auth_mode: str,
         provider: str,
         monitor: bool = True,
+        session_name: str = "",
         legacy_session: str = "",
         launch_args: list[str] | None = None,
         wrapper: str = "",
@@ -531,6 +539,13 @@ class StoreHandlers:
             if launch_args is not None
             else self.default_launch_args_for_tool(tool)
         )
+        canonical_session = self.hooks.session_name_for(project.name, engineer_id, tool)
+        effective_session = session_name or canonical_session
+        legacy_sessions = []
+        if legacy_session:
+            legacy_sessions.append(legacy_session)
+        if effective_session != canonical_session and canonical_session not in legacy_sessions:
+            legacy_sessions.append(canonical_session)
         return self.hooks.session_record_cls(
             engineer_id=engineer_id,
             project=project.name,
@@ -540,10 +555,10 @@ class StoreHandlers:
             identity=identity,
             workspace=str(workspace),
             runtime_dir=str(runtime_dir),
-            session=self.hooks.session_name_for(project.name, engineer_id, tool),
+            session=effective_session,
             bin_path=self.hooks.tool_binaries[tool],
             monitor=monitor,
-            legacy_sessions=[legacy_session] if legacy_session else [],
+            legacy_sessions=legacy_sessions,
             launch_args=resolved_launch_args,
             secret_file=secret_file,
             wrapper=wrapper,

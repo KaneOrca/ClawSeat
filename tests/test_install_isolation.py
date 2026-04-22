@@ -12,6 +12,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
+_WAIT_FOR_SEAT = _REPO / "scripts" / "wait-for-seat.sh"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -39,6 +40,8 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     (root / "scripts").mkdir(parents=True, exist_ok=True)
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
+    shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
+    (root / "scripts" / "wait-for-seat.sh").chmod(0o755)
 
     _write_executable(
         root / "core" / "preflight.py",
@@ -82,16 +85,44 @@ raise SystemExit(0)
         """#!/usr/bin/env python3
 from __future__ import annotations
 import json
+import os
 import sys
 
 payload = json.load(sys.stdin)
+payload_log = os.environ.get("ITERM_PAYLOAD_LOG")
+if payload_log:
+    with open(payload_log, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\\n")
 window_id = "grid-window" if payload.get("title", "").startswith("clawseat-") else "memory-window"
 json.dump({"status": "ok", "window_id": window_id}, sys.stdout)
 """,
     )
+    _write_executable(
+        root / "core" / "scripts" / "agent_admin.py",
+        """#!/usr/bin/env python3
+from __future__ import annotations
+import json
+import os
+import sys
+
+log_file = os.environ.get("AGENT_ADMIN_LOG")
+if log_file:
+    with open(log_file, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd()}) + "\\n")
+raise SystemExit(0)
+""",
+    )
     (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
     (root / "core" / "templates" / "ancestor-brief.template.md").write_text(
-        "# Brief for ${PROJECT_NAME} at ${CLAWSEAT_ROOT}\n",
+        "\n".join(
+            [
+                "# Brief for ${PROJECT_NAME} at ${CLAWSEAT_ROOT}",
+                "Memory: ${AGENT_HOME}/.agents/memory/machine/",
+                "Binding: ${AGENT_HOME}/.openclaw/workspace.toml",
+                "Status: ${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/STATUS.md",
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
     _write_executable(
@@ -283,11 +314,6 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     records = _read_jsonl(launcher_log)
     expected_sessions = [
         "smoketest-ancestor",
-        "smoketest-planner",
-        "smoketest-builder",
-        "smoketest-reviewer",
-        "smoketest-qa",
-        "smoketest-designer",
         "machine-memory-claude",
     ]
     assert [record["session"] for record in records] == expected_sessions
@@ -314,7 +340,13 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
         )
 
     assert records[0]["brief"] == expected_brief
-    assert all(record["brief"] == "" for record in records[1:])
+    assert records[1]["brief"] == ""
+    brief_text = Path(expected_brief).read_text(encoding="utf-8")
+    assert "~/" not in brief_text
+    assert "${AGENT_HOME}" not in brief_text
+    assert f"Memory: {home}/.agents/memory/machine/" in brief_text
+    assert f"Binding: {home}/.openclaw/workspace.toml" in brief_text
+    assert f"Status: {home}/.agents/tasks/smoketest/STATUS.md" in brief_text
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "new-session" not in tmux_output

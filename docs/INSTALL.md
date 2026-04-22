@@ -13,7 +13,7 @@
 | 2 `install.sh` | script (auto) | host deps, env scan, provider pick, six-pane grid, memory window, bypass flush |
 | 3 Phase-A | ancestor CLI | B0–B7 interactive bootstrap |
 | 4 (optional) Koder overlay | ancestor or operator | `scripts/apply-koder-overlay.sh` — pick an OpenClaw agent to become the Feishu reverse-channel koder |
-| 5 (optional) Additional projects | operator | `agent_admin project bootstrap <name>` |
+| 5 (optional) Additional projects | operator | `bash scripts/install.sh --project <name>` |
 
 > **Why `install.sh` instead of `agent_admin` or `agent-launcher.sh` directly?**
 > `install.sh` is the L1 user-facing entry for fresh-machine bootstrap
@@ -75,22 +75,50 @@ Dry-run preflight:
 bash scripts/install.sh --dry-run
 ```
 
+Non-interactive provider shortcuts:
+
+```bash
+bash scripts/install.sh --provider minimax
+bash scripts/install.sh --provider minimax --api-key sk-cp-...
+bash scripts/install.sh --provider anthropic_console --api-key sk-ant-...
+bash scripts/install.sh --base-url https://api.example.invalid --api-key sk-test --model claude-sonnet
+```
+
+Security note: `--api-key` is visible in `ps` output and shell history. Prefer:
+
+```bash
+export ANTHROPIC_BASE_URL=https://api.example.invalid
+export ANTHROPIC_API_KEY=sk-test
+bash scripts/install.sh --provider custom_api
+```
+
+Use `--base-url + --api-key` only for CI / agent automation / no-env / no-tty cases.
+
 What `install.sh` does in order:
 
 1. Detect host OS and install / verify `tmux`, `iTerm2` (macOS), Python ≥3.11, `claude` binary.
 2. Run `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
    → produces `machine/{credentials,network,openclaw,github,current_context}.json`.
-3. Pick ancestor provider from `credentials.json` by heuristic:
+3. Pick ancestor provider from `credentials.json` by heuristic unless explicit
+   `--base-url + --api-key` already short-circuited detection:
    Minimax → DashScope → Anthropic → prompt operator for `base_url + api_key`.
 4. Write provider env to `~/.agents/tasks/install/ancestor-provider.env`.
 5. Render `core/templates/ancestor-brief.template.md` into
    `~/.agents/tasks/install/patrol/handoffs/ancestor-bootstrap.md` (substitute `${PROJECT_NAME}`, `${CLAWSEAT_ROOT}`).
-6. Launch six project seats via `core/launchers/agent-launcher.sh`, keeping the stable session names `install-{ancestor,planner,builder,reviewer,qa,designer}` while giving each seat a sandbox HOME.
-7. Launch the six-pane monitor window via `core/scripts/iterm_panes_driver.py`
-   (iTerm2 native panes — **not** nested tmux).
-8. Launch `machine-memory-claude` through `core/launchers/agent-launcher.sh`, then open a second iTerm window for it with the same provider env.
-9. Focus the ancestor pane and emit 3-Enter flush so the operator visually sees bypass activate.
-10. Print the ancestor-prompt stub for the operator to copy and paste.
+6. Launch only `install-ancestor` via `core/launchers/agent-launcher.sh`
+   with sandbox HOME isolation.
+7. Bootstrap the project roster via `agent_admin project bootstrap`:
+   write project / engineer / session records for
+   `ancestor, planner, builder, reviewer, qa, designer`, but do **not** start
+   their tmux seats yet.
+8. Launch the six-pane monitor window via `core/scripts/iterm_panes_driver.py`
+   (iTerm2 native panes — **not** nested tmux): the ancestor pane attaches
+   immediately; the other five panes run `scripts/wait-for-seat.sh` and will
+   auto-attach after ancestor later spawns each seat in B3.5.
+9. Launch `machine-memory-claude` through `core/launchers/agent-launcher.sh`,
+   then open a second iTerm window for it.
+10. Focus the ancestor pane and emit 3-Enter flush so the operator visually sees bypass activate.
+11. Print the ancestor-prompt stub for the operator to copy and paste.
 
 Verify:
 
@@ -100,8 +128,11 @@ test -f ~/.agents/tasks/install/patrol/handoffs/ancestor-bootstrap.md
 for f in credentials network openclaw github current_context; do
   test -f ~/.agents/memory/machine/$f.json || echo "MISSING $f"
 done
-for s in install-ancestor install-planner install-builder install-reviewer install-qa install-designer machine-memory-claude; do
+for s in install-ancestor machine-memory-claude; do
   tmux has-session -t "$s" || echo "MISSING $s"
+done
+for s in install-planner install-builder install-reviewer install-qa install-designer; do
+  tmux has-session -t "$s" 2>/dev/null && echo "UNEXPECTED $s"
 done
 ```
 
@@ -111,7 +142,7 @@ Failure codes:
 PREREQ_MISSING: <tmux|iterm2|python311|claude>
 ENV_SCAN_FAILED: expected ~/.agents/memory/machine/*.json missing
 PROVIDER_NO_KEY: no usable provider key and operator did not supply one
-GRID_LAUNCH_FAILED: install-* tmux sessions missing after bootstrap
+GRID_LAUNCH_FAILED: ancestor / memory session or lazy grid failed to appear
 ITERM_DRIVER_FAIL: iTerm pane driver failed to open the grid or memory window
 ```
 
@@ -143,7 +174,7 @@ Ancestor executes Phase-A in order:
 | B2-verify-memory | `tmux has-session -t machine-memory-claude`; relaunch once if dead. | Memory seat alive. |
 | B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
 | B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
-| B3.5-launch-engineers | **Interactive, one-by-one**. For each seat in `planner, builder, reviewer, qa, designer`: ask operator for provider (default: claude-code + MiniMax), write profile, launch seat, wait ≤15s for `tmux has-session`, user visually confirms pane is live, then move to next. | Each `install-<seat>` is alive and attached. |
+| B3.5-launch-engineers | **Interactive, one-by-one**. For each seat in `planner, builder, reviewer, qa, designer`: ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
 | B5-verify-feishu-binding | Read `~/.agents/tasks/install/PROJECT_BINDING.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
 | B6-smoke | If `feishu_group_id` set, ancestor triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, ancestor runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<ancestor + 5 seats + memory>`. |
@@ -221,15 +252,13 @@ ClawSeat supports multiple concurrent projects (sessions prefixed `<project>-<se
 ### Create a new project
 
 ```bash
-agent_admin project bootstrap <new-name> --template default --local "$HOME/code/<new-name>"
-bash scripts/install.sh --project <new-name>   # (TBD — install.sh --project flag planned for v0.7.1)
+bash scripts/install.sh --project <new-name>
+bash scripts/install.sh --project <new-name> --provider minimax
+bash scripts/install.sh --project <new-name> --base-url https://api.example.invalid --api-key sk-test --model claude-sonnet
 ```
 
-Until `install.sh --project` lands, re-run the full `install.sh` flow after setting:
-
-```bash
-export PROJECT_NAME=<new-name>
-```
+`install.sh --project` already wires `agent_admin project bootstrap` under the
+hood, so the same lazy-spawn install flow works for additional projects too.
 
 ### Switch context
 

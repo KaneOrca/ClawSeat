@@ -301,6 +301,7 @@ class CrudHandlers:
                 auth_mode=str(engineer_spec["auth_mode"]),
                 provider=str(engineer_spec["provider"]),
                 monitor=bool(engineer_spec.get("monitor", True)),
+                session_name=str(engineer_spec.get("session_name", "")).strip(),
             )
             # Attach template-only fields (model, effort) for settings generation.
             # These are not part of SessionRecord but are consumed by _render_claude_settings.

@@ -1,0 +1,171 @@
+version = 1
+template_name = "clawseat-default"
+description = "Default lazy-spawn install roster: ancestor + planner + builder + reviewer + qa + designer"
+
+[defaults]
+window_mode = "tabs-1up"
+monitor_max_panes = 4
+open_detail_windows = false
+
+[[engineers]]
+id = "ancestor"
+display_name = "ancestor"
+role = "ancestor"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = true
+unblock_authority = true
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md",
+]
+role_details = [
+  "project ancestor; owns seat lifecycle, patrol, and install Phase-A execution",
+  "bootstrap starts only me; other seats are spawned one by one after user clarification",
+  "when a seat is spawned, its waiting iTerm pane auto-attaches via wait-for-seat.sh",
+]
+
+[[engineers]]
+id = "planner"
+display_name = "planner"
+role = "planner-dispatcher"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = true
+dispatch_authority = true
+patrol_authority = false
+unblock_authority = false
+escalation_authority = true
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/planner/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "active-loop owner and dispatcher for implementation/review/test/design work",
+  "spawned lazily by ancestor after operator confirms provider/runtime choices",
+]
+
+[[engineers]]
+id = "builder"
+display_name = "builder"
+role = "builder"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "default implementation seat for code, scripts, config, and docs",
+]
+
+[[engineers]]
+id = "reviewer"
+display_name = "reviewer"
+role = "reviewer"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = true
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "default review gate; ancestor may later switch this seat to codex/xcode-best",
+]
+
+[[engineers]]
+id = "qa"
+display_name = "qa"
+role = "qa"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = true
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "default verification and smoke/regression lane",
+]
+
+[[engineers]]
+id = "designer"
+display_name = "designer"
+role = "designer"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = true
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "default design and visual-review lane; ancestor may later switch this seat to gemini",
+]

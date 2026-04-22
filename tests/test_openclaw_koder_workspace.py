@@ -87,6 +87,7 @@ def _store_handlers(tmp_path: Path) -> StoreHandlers:
             workspaces_root=tmp_path / "workspaces",
             current_project_path=tmp_path / "state" / "current_project",
             templates_root=tmp_path / "templates",
+            repo_templates_root=tmp_path / "repo-templates",
             tool_binaries={},
             default_tool_args={},
             normalize_name=lambda value: value,
