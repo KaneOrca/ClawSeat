@@ -91,7 +91,7 @@ parse_args() {
       || die 2 INVALID_FLAGS "--base-url/--api-key 只能配 --provider custom_api 或不传 --provider"
   elif [[ -n "$FORCE_API_KEY" ]]; then
     case "$FORCE_PROVIDER" in
-      minimax|anthropic_console) ;;
+      minimax|anthropic_console|ark) ;;
       *)
         die 2 INVALID_FLAGS "--base-url 必须和 --api-key 成对"
         ;;
@@ -100,10 +100,10 @@ parse_args() {
   if [[ -n "$FORCE_MODEL" ]]; then
     if [[ -n "$FORCE_BASE_URL" && -n "$FORCE_API_KEY" ]]; then
       :
-    elif [[ -n "$FORCE_API_KEY" && ( "$FORCE_PROVIDER" == "minimax" || "$FORCE_PROVIDER" == "anthropic_console" ) ]]; then
+    elif [[ -n "$FORCE_API_KEY" && ( "$FORCE_PROVIDER" == "minimax" || "$FORCE_PROVIDER" == "anthropic_console" || "$FORCE_PROVIDER" == "ark" ) ]]; then
       :
     else
-      die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console + --api-key"
+      die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|ark + --api-key"
     fi
   fi
   PROVIDER_ENV="$HOME/.agents/tasks/$PROJECT/ancestor-provider.env"
@@ -190,6 +190,9 @@ if k:
 k, b = lookup("keys.DASHSCOPE_API_KEY.value"), lookup("keys.DASHSCOPE_BASE_URL.value")
 if k:
     add("custom_api", "claude-code + custom API (DASHSCOPE_API_KEY)", k, b)
+k, b = lookup("keys.ARK_API_KEY.value"), lookup("keys.ARK_BASE_URL.value")
+if k:
+    add("ark", f"claude-code + ARK 火山方舟 ({b or 'https://ark.cn-beijing.volces.com/api/coding'})", k, b or "https://ark.cn-beijing.volces.com/api/coding")
 if lookup("oauth.has_any") == "true":
     add("oauth", "claude-code + host oauth (Anthropic Pro / Claude.ai login)", "", "")
 
@@ -208,6 +211,14 @@ write_provider_env() {
         export_line ANTHROPIC_BASE_URL "$base"
         export_line ANTHROPIC_AUTH_TOKEN "$key"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
+        echo 'export API_TIMEOUT_MS=3000000'
+        echo 'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
+        echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
+        ;;
+      ark)
+        export_line ANTHROPIC_BASE_URL "${base:-https://ark.cn-beijing.volces.com/api/coding}"
+        export_line ANTHROPIC_AUTH_TOKEN "$key"
+        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-ark-code-latest}"
         echo 'export API_TIMEOUT_MS=3000000'
         echo 'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
         echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
@@ -249,6 +260,17 @@ select_provider() {
         fi
         return
         ;;
+      ark)
+        [[ -n "$FORCE_MODEL" ]] || FORCE_MODEL="ark-code-latest"
+        remember_provider_selection ark "$FORCE_API_KEY" "https://ark.cn-beijing.volces.com/api/coding" "$FORCE_MODEL"
+        if [[ "$DRY_RUN" == "1" ]]; then
+          printf '[dry-run] force provider=ark via explicit api-key and write %s\n' "$PROVIDER_ENV"
+        else
+          write_provider_env ark "$FORCE_API_KEY" "https://ark.cn-beijing.volces.com/api/coding"
+          printf 'Using forced provider: ark (base_url=%s)\n' "https://ark.cn-beijing.volces.com/api/coding"
+        fi
+        return
+        ;;
       anthropic_console)
         remember_provider_selection anthropic_console "$FORCE_API_KEY" "" "$FORCE_MODEL"
         if [[ "$DRY_RUN" == "1" ]]; then
@@ -287,6 +309,7 @@ select_provider() {
       forced_found=1
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
+        ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
       if [[ "$DRY_RUN" == "1" ]]; then
@@ -303,6 +326,7 @@ select_provider() {
     if [[ "$DRY_RUN" == "1" && ${#candidates[@]} -eq 0 ]]; then
       case "$FORCE_PROVIDER" in
         minimax) remember_provider_selection minimax "dry-run-placeholder-key" "https://api.minimaxi.com/anthropic" "MiniMax-M2.7-highspeed" ;;
+        ark) remember_provider_selection ark "dry-run-placeholder-key" "https://ark.cn-beijing.volces.com/api/coding" "ark-code-latest" ;;
         custom_api) remember_provider_selection custom_api "dry-run-placeholder-key" "https://api.anthropic.com" "$FORCE_MODEL" ;;
         anthropic_console) remember_provider_selection anthropic_console "dry-run-placeholder-key" ;;
         oauth_token) remember_provider_selection oauth_token "dry-run-placeholder-token" ;;
@@ -322,6 +346,7 @@ select_provider() {
       IFS=$'\t' read -r mode label key base <<<"${candidates[0]}"
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
+        ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
     fi
@@ -348,6 +373,7 @@ select_provider() {
       IFS=$'\t' read -r mode label key base <<<"${candidates[$((reply-1))]}"
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
+        ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
       write_provider_env "$mode" "$key" "$base"
@@ -377,7 +403,7 @@ select_provider() {
 
 seat_auth_mode_for_provider_mode() {
   case "$PROVIDER_MODE" in
-    minimax|custom_api|anthropic_console) printf '%s\n' "api" ;;
+    minimax|ark|custom_api|anthropic_console) printf '%s\n' "api" ;;
     oauth_token) printf '%s\n' "oauth_token" ;;
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for seat auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -387,6 +413,7 @@ seat_auth_mode_for_provider_mode() {
 seat_provider_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "minimax" ;;
+    ark) printf '%s\n' "ark" ;;
     custom_api|anthropic_console) printf '%s\n' "anthropic-console" ;;
     oauth_token|oauth) printf '%s\n' "anthropic" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for seat provider mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -396,6 +423,7 @@ seat_provider_for_provider_mode() {
 seat_model_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
+    ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
     custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
     *) return 0 ;;
   esac
@@ -524,6 +552,11 @@ write_bootstrap_secret_file() {
         export_line ANTHROPIC_BASE_URL "${PROVIDER_BASE:-https://api.minimaxi.com/anthropic}"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
         ;;
+      ark)
+        export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
+        export_line ANTHROPIC_BASE_URL "${PROVIDER_BASE:-https://ark.cn-beijing.volces.com/api/coding}"
+        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-ark-code-latest}"
+        ;;
       custom_api)
         export_line ANTHROPIC_API_KEY "$PROVIDER_KEY"
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
@@ -639,6 +672,18 @@ Phase-A 不让 memory 做同步调研。B2.5 / B5 都按 brief 由 ancestor 自�
 ---
 
 3. 每走完一步向 ancestor 说"继续"或给修正（provider / chat_id 等）
+
+## 如果 ancestor 报 BRIEF_DRIFT_DETECTED
+
+ancestor 在每个 B 步开始前会先跑 `${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh`。这只能检测 brief 是否在你启动后被更新，不能让运行中的 Claude Code 热更新 system prompt。
+
+推荐处理：
+
+1. \`tmux kill-session -t ${PROJECT}-ancestor\`
+2. 重新启动 ancestor（建议重跑 \`scripts/install.sh --project ${PROJECT}\`，或按同样的 \`agent-launcher.sh\` 参数重起）
+3. 让 ancestor 重新读取 `\$CLAWSEAT_ANCESTOR_BRIEF`
+
+如果你暂时不 restart，也可以继续按旧 brief 跑，但它不会自动感知后续改动。
 EOF
   chmod 600 "$GUIDE_FILE" || die 30 GUIDE_CHMOD_FAILED "unable to chmod $GUIDE_FILE"
 }
@@ -657,7 +702,7 @@ print_operator_banner() {
 
 launcher_auth_for_provider() {
   case "$PROVIDER_MODE" in
-    minimax|custom_api|anthropic_console) printf '%s\n' "custom" ;;
+    minimax|ark|custom_api|anthropic_console) printf '%s\n' "custom" ;;
     oauth_token) printf '%s\n' "oauth_token" ;;
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for launcher auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -671,6 +716,11 @@ launcher_custom_env_file_for_session() {
       api_key="$PROVIDER_KEY"
       base_url="${PROVIDER_BASE:-https://api.minimaxi.com/anthropic}"
       model="${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
+      ;;
+    ark)
+      api_key="$PROVIDER_KEY"
+      base_url="${PROVIDER_BASE:-https://ark.cn-beijing.volces.com/api/coding}"
+      model="${PROVIDER_MODEL:-ark-code-latest}"
       ;;
     custom_api)
       api_key="$PROVIDER_KEY"
@@ -750,6 +800,29 @@ install_memory_hook() {
     || die 32 MEMORY_HOOK_INSTALL_FAILED "failed to install memory Stop-hook into $MEMORY_WORKSPACE"
 }
 
+check_iterm_window_exists() {
+  local title="$1"
+  if ! command -v osascript >/dev/null 2>&1; then
+    printf '0\n'
+    return 0
+  fi
+  osascript - "$title" <<'APPLESCRIPT' 2>/dev/null || printf '0\n'
+on run argv
+  set wanted to item 1 of argv
+  tell application "iTerm"
+    repeat with w in windows
+      try
+        if (name of w as string) contains wanted then
+          return "1"
+        end if
+      end try
+    end repeat
+  end tell
+  return "0"
+end run
+APPLESCRIPT
+}
+
 open_iterm_window() {
   local payload="$1" target_var="$2" err_file out status
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -818,12 +891,35 @@ main() {
   launch_seat "$PROJECT-ancestor" "$REPO_ROOT" "$BRIEF_PATH"
   bootstrap_project_profile
   note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
-  install_memory_hook
-  note "Step 8: start memory session + iTerm window"
-  launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE"; open_iterm_window "$(memory_payload)" memory_window_id
+  note "Step 8: ensure memory singleton daemon"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    install_memory_hook
+    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE"
+    open_iterm_window "$(memory_payload)" memory_window_id
+  elif tmux has-session -t '=machine-memory-claude' 2>/dev/null; then
+    printf 'memory seat already running (machine-memory-claude), reusing.\n'
+    install_memory_hook
+    if [[ "$(check_iterm_window_exists "machine-memory-claude")" != "1" ]]; then
+      open_iterm_window "$(memory_payload)" memory_window_id
+    else
+      printf 'memory iTerm window already open, skipping open.\n'
+    fi
+  else
+    install_memory_hook
+    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE"
+    open_iterm_window "$(memory_payload)" memory_window_id
+  fi
   note "Step 9: focus ancestor, flush, and persist operator guide"
   run sleep 3; focus_iterm_window "$GRID_WINDOW_ID" "ancestor"
   run tmux send-keys -t "$PROJECT-ancestor" Enter; run sleep 0.5; run tmux send-keys -t "$PROJECT-ancestor" Enter; run sleep 0.5; run tmux send-keys -t "$PROJECT-ancestor" Enter
+  if [[ "$DRY_RUN" != "1" ]]; then
+    note "Step 9.5: auto-send Phase-A kickoff prompt"
+    sleep 12
+    local kickoff="读 $BRIEF_PATH 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
+    tmux send-keys -l -t "$PROJECT-ancestor" "$kickoff" 2>/dev/null || true
+    sleep 1
+    tmux send-keys -t "$PROJECT-ancestor" Enter 2>/dev/null || true
+  fi
   write_operator_guide
   print_operator_banner
 }

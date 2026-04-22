@@ -198,7 +198,21 @@ PY
         bin_dir / "tmux",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "has-session" ]]; then
+  target="${3:-}"
+  if [[ "$target" == "=machine-memory-claude" ]]; then
+    exit "${TMUX_HAS_MEMORY_SESSION_RC:-1}"
+  fi
+  exit 1
+fi
 printf '%s\\n' "$*" >> "${TMUX_LOG_FILE:?}"
+""",
+    )
+    _write_executable(
+        bin_dir / "sleep",
+        """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
 """,
     )
     _write_executable(

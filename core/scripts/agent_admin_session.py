@@ -296,6 +296,7 @@ class SessionService:
                 secret_env.get("ANTHROPIC_AUTH_TOKEN")
                 or secret_env.get("ANTHROPIC_API_KEY")
                 or secret_env.get("OPENAI_API_KEY")
+                or secret_env.get("ARK_API_KEY")
             )
             if not api_key:
                 raise SessionStartError(
@@ -308,19 +309,28 @@ class SessionService:
                 secret_env.get("ANTHROPIC_BASE_URL")
                 or secret_env.get("OPENAI_BASE_URL")
                 or secret_env.get("OPENAI_API_BASE")
+                or secret_env.get("ARK_BASE_URL")
                 or ""
             )
             if session.provider == "anthropic-console" and not base_url:
                 base_url = "https://api.anthropic.com"
             if session.provider == "minimax" and not base_url:
                 base_url = "https://api.minimaxi.com/anthropic"
+            if session.provider == "ark" and not base_url:
+                base_url = "https://ark.cn-beijing.volces.com/api/coding"
             if session.provider == "xcode-best" and not base_url:
                 base_url = "https://xcode.best"
             if base_url:
                 payload["LAUNCHER_CUSTOM_BASE_URL"] = base_url
-            model = secret_env.get("ANTHROPIC_MODEL") or secret_env.get("OPENAI_MODEL", "")
+            model = (
+                secret_env.get("ANTHROPIC_MODEL")
+                or secret_env.get("OPENAI_MODEL")
+                or secret_env.get("ARK_MODEL", "")
+            )
             if session.provider == "minimax" and not model:
                 model = "MiniMax-M2.7-highspeed"
+            if session.provider == "ark" and not model:
+                model = "ark-code-latest"
             if model:
                 payload["LAUNCHER_CUSTOM_MODEL"] = model
             return payload
@@ -405,6 +415,15 @@ class SessionService:
             return operator_home / ".agent-runtime" / "identities" / "gemini" / "api" / f"{launcher_auth}-{session.session}"
         return None
 
+    def _ancestor_brief_path(self, project: str) -> Path:
+        real_home_str = (
+            os.environ.get("CLAWSEAT_REAL_HOME")
+            or os.environ.get("AGENT_HOME")
+            or str(Path.home())
+        )
+        real_home = Path(real_home_str)
+        return real_home / ".agents" / "tasks" / project / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+
     def build_engineer_exec(self, session: Any) -> list[str]:
         if session.wrapper:
             return [session.wrapper]
@@ -453,6 +472,10 @@ class SessionService:
                     cmd.extend(["--custom-env-file", custom_env_file])
                 env = dict(os.environ)
                 env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
+                if session.engineer_id == "ancestor":
+                    ancestor_brief = self._ancestor_brief_path(session.project)
+                    if ancestor_brief.is_file():
+                        env["CLAWSEAT_ANCESTOR_BRIEF"] = str(ancestor_brief)
                 result = subprocess.run(
                     cmd,
                     check=False,

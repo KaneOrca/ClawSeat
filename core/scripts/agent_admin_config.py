@@ -302,6 +302,19 @@ CLAUDE_API_PROVIDER_CONFIGS = {
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         },
     },
+    "ark": {
+        "model": "ark-code-latest",
+        "base_url": "https://ark.cn-beijing.volces.com/api/coding",
+        # ARK exposes an Anthropic-compatible Claude Code endpoint but
+        # operators already store the upstream secret as ARK_API_KEY in
+        # ~/.agent-runtime/secrets/claude/ark.env. Session startup aliases
+        # that name into launcher custom env at runtime.
+        "auth_token_var": "ARK_API_KEY",
+        "extra_env": {
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        },
+    },
 }
 
 CODEX_API_PROVIDER_CONFIGS = {
@@ -373,7 +386,7 @@ def parse_codex_provider_config(data: dict[str, Any]) -> CodexProviderConfig:
 SUPPORTED_RUNTIME_MATRIX = {
     "claude": {
         "oauth": ("anthropic",),
-        "api": ("xcode-best", "minimax", "anthropic-console"),
+        "api": ("xcode-best", "minimax", "ark", "anthropic-console"),
         # C5: long-lived token from `claude setup-token` (valid ~1 year).
         # Skips macOS Keychain entirely — avoids the per-seat popup storm
         # caused by each seat having a different HOME (upstream

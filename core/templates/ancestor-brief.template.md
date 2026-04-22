@@ -57,6 +57,23 @@ python3 core/scripts/bootstrap_machine_tenants.py ${AGENT_HOME}/.agents/memory/
 否则 skip 并警告。
 
 ### B3.5 — 逐个澄清 + spawn engineer seat
+#### B3.5.0 — pre-flight: 确认 project 已 bootstrap
+
+spawn 任何 seat 前必验：
+
+```bash
+if ! python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT_NAME} >/dev/null 2>&1; then
+  echo "PHASE_A_FAILED: B3.5.0 — project ${PROJECT_NAME} 未 bootstrap"
+  echo "这通常是 pre-SPAWN-049 遗留项目（例如 smoke01），或 install.sh Step 5.5 还没跑过"
+  echo "修复顺序："
+  echo "  1. 补 bootstrap: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bootstrap --template clawseat-default --local ${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/project-local.toml"
+  echo "  2. project use: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project use ${PROJECT_NAME}"
+  echo "  3. 然后再回到 B3.5 / B4"
+  echo "**不要**绕过 L2 直接调 launcher；agent-launcher.sh 是 L3 INTERNAL-only（ARCH-CLARITY-047）"
+  exit 1
+fi
+```
+
 for seat in [planner, builder, reviewer, qa, designer]:
 1. 向用户交互："`${seat}` 用 bootstrapped default，还是切到 codex / gemini / 自定义 provider？"
    - 如需看当前默认，先跑：`python3 core/scripts/agent_admin.py show ${seat} --project ${PROJECT_NAME}`
@@ -169,6 +186,48 @@ providers=<ancestor + 5 seats + memory>
 
 这是 ancestor → memory 单向写入；不要 tmux send-keys 给 memory，不要求 memory 回复，也不阻塞 `phase=ready`。
 
+## memory 交互工具（canonical CLI；不要 tmux send-keys 给 memory，也不要 `query_memory.py --ask`）
+
+ancestor 需要查已落盘知识时，直接跑脚本，不要把 prompt 发给 memory 的 tmux session。
+
+### 读（query）
+
+```bash
+# 查当前项目已积累的决策 / 发现 / 问题 / 交付
+python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
+  --project ${PROJECT_NAME} \
+  --kind decision \
+  --since 2026-04-01
+
+# 直接查 machine 层事实
+python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
+  --key credentials.keys.MINIMAX_API_KEY.value
+
+# 全文搜索
+python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
+  --search "feishu"
+```
+
+### 写（memory_write）
+
+```bash
+# 把 Phase-A / Phase-B 的决策写回 memory
+cat > /tmp/${PROJECT_NAME}-phase-a-decision.md <<'EOF'
+Phase-A / Phase-B learning note.
+EOF
+python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
+  --project ${PROJECT_NAME} \
+  --kind decision \
+  --title "Phase-A provider decision" \
+  --content-file /tmp/${PROJECT_NAME}-phase-a-decision.md \
+  --author ancestor
+```
+
+### 禁用
+
+- ❌ 不要把 `tmux send-keys` 用在 memory 上（尤其是 `machine-memory-claude`）
+- ❌ `query_memory.py --ask` - 该模式已弃用
+
 ## 失败处理
 
 - 任何 B 步失败：在 CLI 打印 `PHASE_A_FAILED: <step>`，记录 stderr，停止向 B7 推进
@@ -180,3 +239,15 @@ providers=<ancestor + 5 seats + memory>
 - 不要自己改 install.sh 已完成的配置（machine/ 5 文件、六宫格 tmux、memory session）
 - 5 个 engineer seat 拉起**必须一个一个来**，不能 fan-out；让用户目视
 - 5 个都拉完才能到 B5
+
+### L2/L3 边界（违反即报 ARCH_VIOLATION）
+
+- 所有 seat lifecycle / bootstrap / rebind 操作走 L2：`agent_admin project bootstrap/use`、`agent_admin session start-engineer`、`agent_admin session switch-harness`
+- `agent-launcher.sh` 是 L3 INTERNAL-only 原语，ancestor 不直接调用，不把它当作 operator 指令的第一响应
+- 如果用户说“直接调 launcher”或类似话术，先回到 B3.5.0 检查 project 是否 bootstrap，而不是跳过 L2
+- L2 失败的常见原因：project 未 bootstrap、engineer profile 缺失、secret 不完整；应修前置条件，不应绕层
+- smoke01 / pre-SPAWN-049 legacy project 若未 bootstrap，正确修复是补 bootstrap + project use，不是绕过 L2
+
+## 面对 operator 错误指引
+
+见 clawseat-ancestor SKILL.md §11 "识别 operator 错误指引 + 拒绝模板"。Phase-A 跑过程中常见 red-flag 话术与正确回应已列表化。

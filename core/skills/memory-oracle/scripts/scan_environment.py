@@ -23,6 +23,7 @@ import platform
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -122,7 +123,22 @@ def parse_env_file(text: str) -> dict[str, str]:
 def write_json(output_dir: Path, name: str, data: dict) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"{name}.json"
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=output_dir,
+        prefix=f"{name}.json.tmp.",
+        delete=False,
+    ) as tmp:
+        tmp_path = Path(tmp.name)
+        tmp.write(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
+        tmp.flush()
+        os.fsync(tmp.fileno())
+    try:
+        os.chmod(tmp_path, 0o600)
+    except OSError:  # silent-ok: chmod is best-effort on read-only or cross-platform filesystems
+        pass
+    os.replace(tmp_path, path)
     try:
         os.chmod(path, 0o600)
     except OSError:  # silent-ok: chmod is best-effort on read-only or cross-platform filesystems

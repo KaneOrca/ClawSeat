@@ -53,6 +53,8 @@ class SwitchHandlers:
             )
         if session.tool == "claude" and session.provider == "minimax":
             candidates.append(self.hooks.legacy_secrets_root / "claude" / "minimax.env")
+        if session.tool == "claude" and session.provider == "ark":
+            candidates.append(self.hooks.legacy_secrets_root / "claude" / "ark.env")
         if session.tool == "claude" and session.provider == "xcode-best":
             candidates.append(self.hooks.legacy_secrets_root / "claude" / "xcode.env")
         if session.tool == "codex" and session.provider == "xcode-best":

@@ -13,7 +13,7 @@ Modes:
      python3 query_memory.py --search feishu
      python3 query_memory.py --file openclaw --section feishu
 
-  Ask Memory CC TUI (slow, reasoning):
+  Ask Memory CC TUI (deprecated compatibility path):
      python3 query_memory.py --ask "designer seat uses which provider?" --profile <p.toml>
 
 Zero third-party dependencies.  Supports both old flat layout and new v3 machine/ layout.
@@ -21,10 +21,10 @@ Zero third-party dependencies.  Supports both old flat layout and new v3 machine
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,6 +52,25 @@ def _load_json(path: Path) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _index_lock_path(index_path: Path) -> Path:
+    return index_path.with_name(f"{index_path.name}.lock")
+
+
+def _load_locked_json(path: Path) -> dict | None:
+    lock_path = _index_lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_SH)
+        try:
+            return _load_json(path)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _load_root_index(memory_dir: Path) -> dict | None:
+    return _load_locked_json(memory_dir / "index.json")
 
 
 def _load_jsonl(path: Path) -> list[dict]:
@@ -87,6 +106,105 @@ def load_memory_file(memory_dir: Path, name: str) -> dict | None:
     if flat_path.is_file():
         return _load_json(flat_path)
     return None
+
+
+def _split_markdown_front_matter(text: str) -> tuple[dict[str, str], str]:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+    meta: dict[str, str] = {}
+    for i in range(1, len(lines)):
+        line = lines[i]
+        if line.strip() == "---":
+            return meta, "\n".join(lines[i + 1:])
+        if not line.strip():
+            continue
+        key, sep, value = line.partition(":")
+        if sep:
+            meta[key.strip()] = value.strip()
+    return {}, text
+
+
+def _derive_note_title(meta: dict[str, str], body: str, fallback: str) -> str:
+    title = meta.get("title")
+    if title:
+        return title
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            stripped = stripped.lstrip("#").strip()
+        return stripped or fallback
+    return fallback
+
+
+def _load_markdown_note(path: Path, *, project: str | None = None, kind: str | None = None) -> dict | None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    meta, body = _split_markdown_front_matter(text)
+    note_project = meta.get("project") or project
+    note_kind = meta.get("kind") or kind
+    note = {
+        "schema_version": int(meta.get("schema_version", "1")) if meta.get("schema_version", "1").isdigit() else 1,
+        "format": meta.get("format", "markdown_note"),
+        "id": meta.get("id", path.stem),
+        "project": note_project,
+        "kind": note_kind,
+        "title": _derive_note_title(meta, body, fallback=path.stem),
+        "author": meta.get("author"),
+        "ts": meta.get("ts") or meta.get("created_at"),
+        "created_at": meta.get("created_at"),
+        "filename_stamp": meta.get("filename_stamp"),
+        "content_source": meta.get("content_source"),
+        "body": body.rstrip("\n"),
+        "path": str(path),
+        "source": meta.get("source", "drop_cli"),
+    }
+    return note
+
+
+def _note_map_key(record: dict) -> str | None:
+    path = record.get("path")
+    return path if isinstance(path, str) and path else None
+
+
+def _upsert_note(note_map: dict[str, dict], record: dict) -> None:
+    key = _note_map_key(record)
+    if key is None:
+        return
+    existing = note_map.get(key)
+    if existing is None:
+        note_map[key] = record
+        return
+    existing.update(record)
+
+
+def _result_sort_key(record: dict) -> tuple[str, str, str]:
+    ts = record.get("ts") or record.get("created_at") or record.get("scanned_at") or ""
+    path = record.get("path") or ""
+    ident = record.get("id") or record.get("title") or ""
+    return (str(ts), str(path), str(ident))
+
+
+def _matches_list_filters(
+    record: dict,
+    *,
+    project: str | None,
+    kind: str | None,
+    since: str | None,
+) -> bool:
+    if project is not None and record.get("project") != project:
+        return False
+    if kind is not None and record.get("kind") != kind:
+        return False
+    if since:
+        ts = record.get("ts") or record.get("created_at") or record.get("scanned_at")
+        if not isinstance(ts, str) or ts < since:
+            return False
+    return True
 
 
 def walk_path(data: dict | list, path_parts: list[str]) -> object | None:
@@ -263,7 +381,7 @@ def cmd_status(memory_dir: Path) -> int:
     if not memory_dir.is_dir():
         print(json.dumps({"exists": False, "path": str(memory_dir)}, indent=2))
         return 1
-    index_data = load_memory_file(memory_dir, "index")
+    index_data = _load_root_index(memory_dir)
     flat_files = sorted(p.name for p in memory_dir.glob("*.json"))
     machine_files = sorted(
         p.name for p in (memory_dir / "machine").glob("*.json")
@@ -322,6 +440,15 @@ def cmd_list(
     })
 
     results: list[dict] = []
+    note_map: dict[str, dict] = {}
+
+    root_index = _load_root_index(memory_dir)
+    if isinstance(root_index, dict):
+        notes = root_index.get("memory_notes")
+        if isinstance(notes, list):
+            for note in notes:
+                if isinstance(note, dict):
+                    _upsert_note(note_map, note)
 
     def _collect_dir(d: Path) -> None:
         if not d.is_dir():
@@ -330,6 +457,14 @@ def cmd_list(
             rec = _load_json(f)
             if isinstance(rec, dict):
                 results.append(rec)
+
+    def _collect_markdown_dir(d: Path, *, default_project: str | None = None, default_kind: str | None = None) -> None:
+        if not d.is_dir():
+            return
+        for f in sorted(d.glob("*.md")):
+            note = _load_markdown_note(f, project=default_project, kind=default_kind)
+            if isinstance(note, dict):
+                _upsert_note(note_map, note)
 
     def _collect_project_kind(proj_name: str, kind_name: str) -> None:
         """Collect facts for a (project, kind) pair, routing JSONL kinds correctly."""
@@ -356,13 +491,16 @@ def cmd_list(
         if proj_name == "_shared":
             subdir = SHARED_KIND_SUBDIRS.get(kind_name, f"{kind_name}s")
             _collect_dir(memory_dir / "shared" / subdir)
+            _collect_markdown_dir(proj_path / kind_name, default_project=proj_name, default_kind=kind_name)
             return
 
         subdir = KIND_SUBDIRS.get(kind_name)
         if subdir:
             _collect_dir(proj_path / subdir)
+            _collect_markdown_dir(proj_path / kind_name, default_project=proj_name, default_kind=kind_name)
         else:
             _collect_dir(proj_path)
+            _collect_markdown_dir(proj_path / kind_name, default_project=proj_name, default_kind=kind_name)
 
     if kind == "event":
         # Global JSONL — project arg is ignored for event
@@ -378,6 +516,7 @@ def cmd_list(
             for entry in sorted(proj_root.iterdir()):
                 if entry.is_dir():
                     _collect_dir(entry)
+                    _collect_markdown_dir(entry, default_project=project, default_kind=entry.name)
                 elif entry.name == "reflections.jsonl":
                     results.extend(_load_jsonl(entry))
                 elif entry.suffix == ".json":
@@ -395,6 +534,14 @@ def cmd_list(
         # Also check shared for shared-scoped kinds
         if kind in SHARED_KIND_SUBDIRS:
             _collect_dir(memory_dir / "shared" / SHARED_KIND_SUBDIRS[kind])
+        if kind in KIND_SUBDIRS and projects_root.is_dir():
+            for proj_dir in sorted(projects_root.iterdir()):
+                if proj_dir.is_dir():
+                    _collect_markdown_dir(
+                        proj_dir / kind,
+                        default_project=proj_dir.name,
+                        default_kind=kind,
+                    )
 
     else:
         # --since only: scan all projects, all kinds (JSON + JSONL)
@@ -407,11 +554,14 @@ def cmd_list(
                         if isinstance(rec, dict):
                             results.append(rec)
                     results.extend(_load_jsonl(proj_dir / "reflections.jsonl"))
+                    for entry in sorted(proj_dir.iterdir()):
+                        if entry.is_dir():
+                            _collect_markdown_dir(entry, default_project=proj_dir.name, default_kind=entry.name)
         results.extend(_load_jsonl(memory_dir / "events.log"))
 
-    # Apply --since filter on the `ts` field
-    if since:
-        results = [r for r in results if isinstance(r.get("ts"), str) and r["ts"] >= since]
+    results.extend(note_map.values())
+    results = [r for r in results if _matches_list_filters(r, project=project, kind=kind, since=since)]
+    results.sort(key=_result_sort_key)
 
     print(json.dumps(results, indent=2, ensure_ascii=False))
     return 0 if results else 1
@@ -421,52 +571,11 @@ def cmd_list(
 
 
 def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
-    """Ask Memory CC via dispatch_task.py + poll responses/{task_id}.json."""
-    if not profile_path:
-        print("error: --ask requires --profile <profile.toml>", file=sys.stderr)
-        return 2
-
-    task_id = f"MEMORY-QUERY-{int(time.time())}-{os.getpid()}"
-    responses_dir = DEFAULT_MEMORY_DIR / "responses"
-    responses_dir.mkdir(parents=True, exist_ok=True)
-    response_path = responses_dir / f"{task_id}.json"
-
-    script_dir = Path(__file__).resolve().parent
-    clawseat_root = script_dir.parents[3]
-    dispatch = clawseat_root / "core" / "skills" / "gstack-harness" / "scripts" / "dispatch_task.py"
-    if not dispatch.is_file():
-        print(f"error: dispatch_task.py not found at {dispatch}", file=sys.stderr)
-        return 2
-
-    import subprocess
-    cmd = [
-        "python3", str(dispatch),
-        "--profile", profile_path,
-        "--source", "memory-client",
-        "--target", "memory",
-        "--task-id", task_id,
-        "--title", "Memory query",
-        "--objective", question,
-    ]
-    dispatch_result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if dispatch_result.returncode != 0:
-        print(f"error: dispatch failed: {dispatch_result.stderr}", file=sys.stderr)
-        return 1
-
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if response_path.exists():
-            try:
-                response = json.loads(response_path.read_text(encoding="utf-8"))
-                if response.get("query_id") == task_id:
-                    verified = verify_claims(response, DEFAULT_MEMORY_DIR)
-                    response["verification"] = verified
-                    print(json.dumps(response, indent=2, ensure_ascii=False))
-                    return 0 if verified["all_verified"] else 3
-            except json.JSONDecodeError:
-                pass
-        time.sleep(1)
-    print(f"error: timed out waiting for response after {timeout}s", file=sys.stderr)
+    """Deprecated --ask path: keep the CLI entrypoint but stop dispatching."""
+    print(
+        "warning: --ask is deprecated; use --project/--kind listing or memory_deliver.py",
+        file=sys.stderr,
+    )
     return 1
 
 
@@ -577,12 +686,12 @@ Examples (v1 backward-compatible):
     group.add_argument("--key", help="Dotted path, e.g. credentials.keys.MINIMAX_API_KEY")
     group.add_argument("--file", help="Dump a single memory file (e.g. openclaw)")
     group.add_argument("--search", help="Case-insensitive search across all files")
-    group.add_argument("--ask", help="Ask Memory CC TUI (requires --profile)")
+    group.add_argument("--ask", help="Deprecated compatibility flag; returns rc=1 and does not dispatch")
     group.add_argument("--status", action="store_true", help="Show memory DB status")
 
     p.add_argument("--section", help="With --file: dotted sub-path to extract")
-    p.add_argument("--profile", help="With --ask: profile TOML for dispatch")
-    p.add_argument("--timeout", type=float, default=60.0, help="With --ask: poll timeout seconds")
+    p.add_argument("--profile", help="Deprecated compatibility flag for --ask; ignored")
+    p.add_argument("--timeout", type=float, default=60.0, help="Deprecated compatibility flag for --ask; ignored")
     p.add_argument("--files", help="With --search: comma-separated file names to restrict scope")
 
     # ── v3 new-layout filters (usable standalone or with --search) ─────────

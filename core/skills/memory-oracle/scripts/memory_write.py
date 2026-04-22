@@ -28,9 +28,11 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -46,6 +48,9 @@ from _memory_paths import (  # noqa: E402
     reflections_path,
 )
 from _memory_schema import SchemaError, make_record, validate  # noqa: E402
+
+
+DROP_KINDS = frozenset(KIND_SUBDIRS.keys())
 
 
 def now_iso() -> str:
@@ -66,15 +71,10 @@ def _fact_path(kind: str, project: str, fact_id: str, memory_root: Path) -> Path
 
 
 def _write_fact(record: dict, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    _atomic_write_text(
+        path,
         json.dumps(record, indent=2, ensure_ascii=False, sort_keys=False),
-        encoding="utf-8",
     )
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
 
 
 def _append_jsonl(record: dict, path: Path) -> None:
@@ -89,15 +89,188 @@ def _append_jsonl(record: dict, path: Path) -> None:
         pass
 
 
+def _default_memory_root() -> Path:
+    agent_home = os.environ.get("AGENT_HOME")
+    if agent_home:
+        return Path(agent_home).expanduser().resolve() / ".agents" / "memory"
+    return MEMORY_ROOT
+
+
+def _load_json(path: Path) -> dict | None:
+    try:
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}.{time.time_ns()}")
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    try:
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def _index_lock_path(index_path: Path) -> Path:
+    return index_path.with_name(f"{index_path.name}.lock")
+
+
+def _update_memory_index(memory_root: Path, entry: dict) -> Path:
+    index_path = memory_root / "index.json"
+    lock_path = _index_lock_path(index_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        current = _load_json(index_path) or {}
+        if not isinstance(current, dict):
+            current = {}
+
+        notes = current.get("memory_notes")
+        if not isinstance(notes, list):
+            notes = []
+        notes = list(notes)
+        notes.append(entry)
+
+        current["memory_notes"] = notes
+        current["memory_notes_updated_at"] = now_iso()
+        current["memory_notes_count"] = len(notes)
+        _atomic_write_text(
+            index_path,
+            json.dumps(current, indent=2, ensure_ascii=False, sort_keys=True),
+        )
+        fcntl.flock(lock, fcntl.LOCK_UN)
+    return index_path
+
+
+def _filename_stamp(ts: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return (
+            ts.strip()
+            .replace(":", "-")
+            .replace("+", "-")
+            .replace("/", "-")
+            .replace(" ", "_")
+        )
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = parsed.astimezone(timezone.utc)
+    return f"{parsed.strftime('%Y-%m-%dT%H-%M-%S')}.{parsed.microsecond * 1000:09d}Z"
+
+
+def _drop_filename_stamp() -> str:
+    ns = time.time_ns()
+    dt = datetime.fromtimestamp(ns / 1_000_000_000, tz=timezone.utc)
+    return f"{dt.strftime('%Y-%m-%dT%H-%M-%S')}-{ns % 1_000_000_000:09d}"
+
+
+def _derive_note_title(content: str, fallback: str) -> str:
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            stripped = stripped.lstrip("#").strip()
+        return stripped or fallback
+    return fallback
+
+
+def _read_drop_content(args: argparse.Namespace) -> tuple[str, str]:
+    if args.content_file:
+        content_path = Path(args.content_file).expanduser()
+        try:
+            return content_path.read_text(encoding="utf-8"), str(content_path)
+        except OSError as exc:
+            raise ValueError(f"error: unable to read --content-file {content_path}: {exc}") from exc
+    return sys.stdin.read(), "stdin"
+
+
+def _build_markdown_note(metadata: dict[str, object], content: str) -> str:
+    header_lines = ["---"]
+    for key, value in metadata.items():
+        if value is None:
+            continue
+        header_lines.append(f"{key}: {value}")
+    header_lines.append("---")
+    body = content.rstrip("\n")
+    if body:
+        return "\n".join(header_lines + ["", body, ""])
+    return "\n".join(header_lines + ["", ""])
+
+
+def _write_markdown_note(path: Path, metadata: dict[str, object], content: str) -> None:
+    _atomic_write_text(path, _build_markdown_note(metadata, content))
+
+
+def _append_memory_note_index(
+    memory_root: Path,
+    *,
+    note_id: str,
+    project: str,
+    kind: str,
+    title: str,
+    author: str,
+    ts: str,
+    created_at: str,
+    filename_stamp: str,
+    note_path: Path,
+    content_source: str,
+    content_bytes: int,
+) -> Path:
+    return _update_memory_index(memory_root, {
+        "id": note_id,
+        "project": project,
+        "kind": kind,
+        "title": title,
+        "author": author,
+        "ts": ts,
+        "created_at": created_at,
+        "filename_stamp": filename_stamp,
+        "path": str(note_path),
+        "content_source": content_source,
+        "content_bytes": content_bytes,
+        "source": "drop_cli",
+    })
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Write a memory fact to the structured knowledge base."
     )
     p.add_argument("--kind", required=True, help="Fact kind (decision, finding, …)")
     p.add_argument("--project", required=True, help="Project name or '_shared'")
-    p.add_argument("--title", required=True, help="Short title")
+    p.add_argument("--title", default=None, help="Short title (required for legacy record mode)")
     p.add_argument("--body", default="", help="Long-form body (markdown OK)")
-    p.add_argument("--author", required=True, help="Author seat name")
+    p.add_argument("--author", default=None, help="Author seat name (legacy mode required; drop mode defaults to ancestor)")
+    content_group = p.add_mutually_exclusive_group(required=False)
+    content_group.add_argument(
+        "--content-file",
+        help="Drop mode: markdown content file to write into projects/<project>/<kind>/",
+    )
+    content_group.add_argument(
+        "--content-stdin",
+        action="store_true",
+        help="Drop mode: read markdown content from stdin",
+    )
+    p.add_argument(
+        "--iso",
+        default=None,
+        help="Drop mode: override the timestamp used in the markdown filename and note metadata",
+    )
     p.add_argument(
         "--evidence",
         default="[]",
@@ -132,7 +305,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--memory-dir",
-        default=str(MEMORY_ROOT),
+        default=str(_default_memory_root()),
         help=f"Memory root directory (default: {MEMORY_ROOT})",
     )
     p.add_argument(
@@ -146,6 +319,81 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+
+    drop_mode = bool(args.content_file or args.content_stdin)
+    if drop_mode:
+        if args.kind not in DROP_KINDS:
+            print(
+                "error: drop mode only supports kinds: decision, delivery, issue, finding",
+                file=sys.stderr,
+            )
+            return 2
+
+        try:
+            content, content_source = _read_drop_content(args)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
+        note_ts = args.iso or now_iso()
+        created_at = now_iso()
+        filename_stamp = _filename_stamp(args.iso) if args.iso else _drop_filename_stamp()
+        note_id = f"{args.project}-{args.kind}-{filename_stamp}-PID{os.getpid()}"
+        out_path = (
+            Path(args.memory_dir).expanduser().resolve()
+            / "projects"
+            / args.project
+            / args.kind
+            / f"{note_id}.md"
+        )
+        title = args.title or _derive_note_title(content, fallback=args.kind)
+        author = args.author or "ancestor"
+        warnings: list[str] = []
+        known_authors: list[str] | None = (
+            [s.strip() for s in args.seats.split(",") if s.strip()] or None
+        )
+        if known_authors is not None and author not in known_authors:
+            warnings.append(
+                f"author {author!r} is not in seats whitelist {known_authors!r}"
+            )
+        if args.dry_run:
+            if not args.quiet:
+                print(str(out_path))
+            return 0
+
+        metadata = {
+            "schema_version": 1,
+            "format": "markdown_note",
+            "id": note_id,
+            "project": args.project,
+            "kind": args.kind,
+            "title": title,
+            "author": author,
+            "ts": note_ts,
+            "created_at": created_at,
+            "filename_stamp": filename_stamp,
+            "content_source": content_source,
+        }
+        _write_markdown_note(out_path, metadata, content)
+        _append_memory_note_index(
+            Path(args.memory_dir).expanduser().resolve(),
+            note_id=note_id,
+            project=args.project,
+            kind=args.kind,
+            title=title,
+            author=author,
+            ts=note_ts,
+            created_at=created_at,
+            filename_stamp=filename_stamp,
+            note_path=out_path,
+            content_source=content_source,
+            content_bytes=len(content.encode("utf-8")),
+        )
+        if not args.quiet:
+            print(str(out_path))
+        for warning in warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+        return 0
 
     # ── Parse evidence JSON ──────────────────────────────────────────
     try:
@@ -165,6 +413,13 @@ def main() -> int:
     known_authors: list[str] | None = (
         [s.strip() for s in args.seats.split(",") if s.strip()] or None
     )
+
+    if args.title is None:
+        print("error: --title is required in legacy record mode", file=sys.stderr)
+        return 2
+    if args.author is None:
+        print("error: --author is required in legacy record mode", file=sys.stderr)
+        return 2
 
     ts = now_iso()
     fact_id = generate_id(args.kind, args.project, args.title)
