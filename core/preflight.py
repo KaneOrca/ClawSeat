@@ -318,8 +318,8 @@ def _check_dynamic_profile(project: str) -> PreflightItem:
             status=PreflightStatus.RETRYABLE,
             message="no dynamic profile found for canonical install project",
             fix_command=(
-                "python3 \"${CLAWSEAT_ROOT}/core/skills/clawseat-install/scripts/cs_init.py\" "
-                "--refresh-profile"
+                "Follow docs/INSTALL.md step 3 to (re)materialize "
+                "~/.agents/profiles/install-profile-dynamic.toml"
             ),
         )
     return PreflightItem(
@@ -671,9 +671,9 @@ def preflight_check(project: str) -> PreflightResult:
     # genuinely needs gstack (builder / reviewer / qa / designer); WARNING
     # otherwise (koder-only profiles like starter.toml can legitimately
     # ship without gstack). Previously this was always WARNING, which
-    # gave a misleading green-light when install_bundled_skills.py and
-    # bootstrap_harness.py would then hard-fail on the same missing
-    # dependency — a textbook "ladder of mysterious failures".
+    # gave a misleading green-light when downstream bootstrap helpers
+    # would then hard-fail on the same missing dependency — a textbook
+    # "ladder of mysterious failures".
     #
     # GSTACK_SKILLS_ROOT env lets operators who cloned gstack at a
     # non-canonical path opt out of the default `~/.gstack/repos/gstack/`

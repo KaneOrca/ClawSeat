@@ -81,7 +81,7 @@ while [[ $# -gt 0 ]]; do
     --exec-agent) EXEC_MODE="1"; shift ;;
     --clone-from) CLONE_FROM="$2"; shift 2 ;;
     --skip-ancestor-preflight) SKIP_ANCESTOR_PREFLIGHT="1"; shift ;;
-    # Sub-command for ClawSeat install_wizard: pop the AppleScript auth
+    # Sub-command for ClawSeat install helpers: pop the AppleScript auth
     # picker for <tool> and print the user's chosen auth value to stdout.
     # Exits 0 on selection, 1 on cancel, 2 on bad tool name.
     --prompt-auth) PROMPT_AUTH_TOOL="$2"; shift 2 ;;
@@ -577,7 +577,7 @@ PY
 }
 
 # ── --check-secrets dispatch ───────────────────────────────────────────
-# install_entrypoint preflight hook: given --check-secrets <tool> + --auth <mode>,
+# install preflight hook: given --check-secrets <tool> + --auth <mode>,
 # resolve the expected secret file and report its state as one JSON line on
 # stdout so Python callers can parse without shelling out to jq.
 #   exit 0 = secret file present + required key found (or inherently not needed)
@@ -1220,9 +1220,9 @@ if [[ -z "$EXEC_MODE" ]]; then
   fi
 
   # ── Ancestor-session preflight ──────────────────────────────────────
-  # When session name matches "<project>-ancestor-<tool>" and the project
-  # lacks a v2 profile, run install_wizard (honoring --clone-from if set)
-  # and ancestor_brief BEFORE spawning Claude. This makes profile + brief
+  # When session name matches "<project>-ancestor-<tool>", ensure the
+  # playbook-generated profile + brief are present before spawning Claude.
+  # This makes profile + brief
   # ready-to-consume by the time the ancestor skill comes online.
   if [[ "$SKIP_ANCESTOR_PREFLIGHT" != "1" && "$SESSION_NAME" =~ ^(.+)-ancestor-(claude|codex|gemini)$ ]]; then
     _preflight_project="${BASH_REMATCH[1]}"
@@ -1230,7 +1230,7 @@ if [[ -z "$EXEC_MODE" ]]; then
     _profile_path="$REAL_HOME/.agents/profiles/${_preflight_project}-profile-dynamic.toml"
     _brief_path="$REAL_HOME/.agents/tasks/${_preflight_project}/patrol/handoffs/ancestor-bootstrap.md"
     _binding_path="$REAL_HOME/.agents/tasks/${_preflight_project}/PROJECT_BINDING.toml"
-    _clawseat_root="${CLAWSEAT_ROOT:-$REAL_HOME/.clawseat}"
+    _clawseat_root="${CLAWSEAT_ROOT:-$REAL_HOME/ClawSeat}"
     _clawseat_core="$_clawseat_root/core"
 
     if [[ -f "$_profile_path" ]]; then
@@ -1254,7 +1254,7 @@ PY
       if [[ "$_profile_ver" != "2" ]]; then
         echo "error: profile at $_profile_path is not v2 (version=$_profile_ver)" >&2
         echo "       run: python3 $_clawseat_core/scripts/migrate_profile_to_v2.py apply --profile $_profile_path" >&2
-        echo "       or remove the old profile to have the wizard regenerate it" >&2
+        echo "       or remove the old profile and re-run docs/INSTALL.md" >&2
         exit 6
       fi
       if [[ -n "$CLONE_FROM" ]]; then
@@ -1264,26 +1264,17 @@ PY
       fi
       echo "ancestor-preflight: reusing existing v2 profile for '$_preflight_project'"
     else
-      _wizard_args=(--project "$_preflight_project")
+      echo "error: ancestor-preflight no longer auto-runs the retired TUI installer in v0.5" >&2
+      echo "       materialize the v2 profile and PROJECT_BINDING first via docs/INSTALL.md, then relaunch ancestor" >&2
       if [[ -n "$CLONE_FROM" ]]; then
-        _wizard_args+=(--clone-from "$CLONE_FROM")
-        echo "ancestor-preflight: cloning '$CLONE_FROM' → '$_preflight_project' (wizard will only ask for the new Feishu group)"
-      else
-        echo "ancestor-preflight: running install wizard for new project '$_preflight_project'"
+        echo "       requested clone source: $CLONE_FROM" >&2
       fi
-      (
-        cd "$_clawseat_root" &&
-        PYTHONPATH="$_clawseat_core/lib:${PYTHONPATH:-}" \
-          python3 -m core.tui.install_wizard "${_wizard_args[@]}"
-      ) || {
-        echo "error: install_wizard failed; aborting ancestor launch" >&2
-        exit 3
-      }
+      exit 3
     fi
 
     if [[ ! -f "$_binding_path" ]] || ! grep -q 'feishu_group_id *= *"oc_' "$_binding_path" 2>/dev/null; then
       echo "error: PROJECT_BINDING.toml for '$_preflight_project' is missing feishu_group_id" >&2
-      echo "       the wizard should have written it; rerun the wizard or bind manually" >&2
+      echo "       the install playbook should have written it; rerun docs/INSTALL.md step 3 or bind manually" >&2
       exit 4
     fi
 
