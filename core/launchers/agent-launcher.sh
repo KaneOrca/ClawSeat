@@ -970,10 +970,14 @@ run_claude_runtime() {
 
   if [[ "$auth_mode" == "custom" ]]; then
     load_custom_env "$CUSTOM_ENV_FILE"
+    # Claude Code reports a conflict if both ANTHROPIC_AUTH_TOKEN and
+    # ANTHROPIC_API_KEY are set. For non-anthropic.com endpoints
+    # (minimax / xcode-best / any custom proxy) the correct variable is
+    # AUTH_TOKEN. anthropic-console seats use --auth anthropic-console,
+    # which lands in the explicit branch below and sets API_KEY only.
     export ANTHROPIC_AUTH_TOKEN="${LAUNCHER_CUSTOM_API_KEY:-}"
     export ANTHROPIC_BASE_URL="${LAUNCHER_CUSTOM_BASE_URL:-}"
     export ANTHROPIC_MODEL="${LAUNCHER_CUSTOM_MODEL:-}"
-    export ANTHROPIC_API_KEY="${LAUNCHER_CUSTOM_API_KEY:-}"
     export API_TIMEOUT_MS=3000000
     export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
     mode_label="Custom API"
