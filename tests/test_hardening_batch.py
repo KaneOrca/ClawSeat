@@ -11,9 +11,6 @@ Covers:
   are no longer treated as "verified" even when their fingerprint
   still matches. `CLAWSEAT_HEARTBEAT_RECEIPT_TTL_SECONDS` overrides the
   window for sandbox runs.
-- **M19** — `install_bundled_skills.ensure_symlink` refuses to
-  overwrite a regular file at the destination (already on main;
-  regression guard so it doesn't silently regress).
 - **M20** — `check-engineer-status.sh` no longer uses `echo "$RAW"`
   which can interpret backslash escapes on some shells. Guard against
   re-introduction.
@@ -91,7 +88,7 @@ def test_invalid_group_ids_rejected(bad: str) -> None:
 def test_realistic_group_ids_accepted(ok: str) -> None:
     """Regression — the validator must not reject real-world shaped
     group ids. Seen in tests/test_real_user_home_resolution.py and
-    tests/test_generate_ancestor_brief.py."""
+    other Feishu-id fixtures across the suite."""
     from _feishu import is_valid_feishu_group_id
 
     assert is_valid_feishu_group_id(ok)
@@ -223,24 +220,6 @@ def test_receipt_missing_timestamp_is_rejected(tmp_path: Path) -> None:
         receipt = _fresh_receipt(datetime.now())
         receipt.pop("verified_at")
         assert not handlers.receipt_matches_manifest(receipt, manifest, session)
-
-
-# ── M19: ensure_symlink refuses regular file ────────────────────────
-
-
-def test_ensure_symlink_refuses_to_overwrite_regular_file(tmp_path: Path) -> None:
-    from install_bundled_skills import ensure_symlink
-
-    source = tmp_path / "source_dir"
-    source.mkdir()
-    dest = tmp_path / "destination"
-    dest.write_text("human-authored content")
-
-    with pytest.raises(RuntimeError, match="refusing to overwrite non-symlink"):
-        ensure_symlink(dest, source, dry_run=False)
-
-    # Data must survive.
-    assert dest.read_text() == "human-authored content"
 
 
 # ── M20: check-engineer-status.sh no longer uses echo "$RAW" ────────

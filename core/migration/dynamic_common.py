@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# DEPRECATED (2026-04-22): shared support code for transitional
+# dynamic-roster compatibility shims. Remove only after the router cleanup no
+# longer needs to bridge legacy/static callers.
 from __future__ import annotations
 
 import importlib.util

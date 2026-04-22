@@ -115,7 +115,7 @@ Common flags that skip interactive prompts:
 |---|---|
 | `--yes` / `-y` | npm, apt, pip |
 | `--consent` | Claude Code |
-| `--non-interactive` | various CLIs |
+| `batch / no-prompt flag` | various CLIs |
 | `--force` / `-f` | git, rm |
 | `--no-input` | composer, symfony |
 

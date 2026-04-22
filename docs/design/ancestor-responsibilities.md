@@ -151,8 +151,7 @@ This claim is **revoked** as of v0.4 Phase 2:
 
 **Architect action requested**: confirm the koder engineer.toml update
 and (if applicable) the `core/skills/clawseat-koder-frontstage/SKILL.md`
-edit to remove the lifecycle responsibility claim. See the review packet
-(`docs/review/ancestor-phase2-review-packet.md`) for the proposed diff.
+edit to remove the lifecycle responsibility claim.
 
 ## 8. Open questions / deferred
 

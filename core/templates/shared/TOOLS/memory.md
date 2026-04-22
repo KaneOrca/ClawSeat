@@ -73,7 +73,7 @@ is sufficient, and what residual risk remains after both land.
 
 ### builder
 ```
-LEARNING REQUEST: Extract the validator design pattern from T18 install_complete.py
+LEARNING REQUEST: Extract the validator design pattern from the retired T18 install validator
 — the G1–G15 check dict contract, CRITICAL set, warn_only flag, and how to extend
 it for new checks — as a reusable finding for future builders.
 ```

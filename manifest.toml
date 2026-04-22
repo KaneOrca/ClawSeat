@@ -20,7 +20,7 @@ core = [
 adapters = ["adapters/harness"]
 shells = ["shells/openclaw-plugin", "shells/claude-bundle", "shells/codex-bundle"]
 profiles = ["examples/starter/profiles"]
-docs = ["docs/INSTALL.md", "docs/INSTALL_GUIDE.md", "docs/ARCHITECTURE.md"]
+docs = ["docs/INSTALL.md", "docs/ARCHITECTURE.md"]
 optional = [
   "adapters/projects/openclaw",
   "examples/arena-pretext-ui",

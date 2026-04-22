@@ -4,7 +4,7 @@
 
 项目面向前台的 koder 账号在飞书群中默认需要 @mention 机器人才能接收消息。通过配置 `requireMention: false`，可以让它在群中无需被 @ 就能看到所有消息。可选的系统 seat（例如显式部署的 `warden`）也可以按同样方式配置，但不再属于默认安装主链。
 
-> 参考：`cs_init.py` 注释 — "main agent 在群里保持 requireMention=true；项目面向前台的 koder 账号在群里设置 requireMention=false"
+> 参考：v0.5 安装契约 — main agent 在群里保持 `requireMention=true`；项目面向前台的 koder 账号在群里设置 `requireMention=false`
 
 ## 配置位置
 

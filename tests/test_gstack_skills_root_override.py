@@ -3,18 +3,17 @@
 Stranger-report: friends who cloned gstack to a non-canonical path (e.g.
 `~/gstack/` instead of `~/.gstack/repos/gstack/`) get ModuleNotFound /
 "gstack skills missing" from whichever consumer checks first. The fix is
-a single env var `GSTACK_SKILLS_ROOT` that redirects all four consumers:
+a single env var `GSTACK_SKILLS_ROOT` that redirects the remaining consumers:
 
   - core/skill_registry.py::expand_skill_path (loader-level — covers
     bootstrap_harness, start_seat, skill_manager, preflight's registry
     validation)
   - core/preflight.py (the direct gstack presence check)
-  - shells/openclaw-plugin/install_bundled_skills.py (the symlink probe)
   - core/skills/gstack-harness/scripts/dispatch_task.py (the INTENT_MAP,
     already covered by test_dispatch_gstack_root.py)
 
-This test locks in that the first three all honor the env var. The
-fourth has its own existing regression in test_dispatch_gstack_root.py.
+This test locks in that the first two all honor the env var. The third has its
+own existing regression in test_dispatch_gstack_root.py.
 """
 from __future__ import annotations
 
@@ -112,30 +111,6 @@ def test_empty_env_is_treated_as_unset(monkeypatch):
     )
 
 
-def test_install_bundled_skills_resolver_honors_env(monkeypatch, tmp_path):
-    """install_bundled_skills.py's module-level GSTACK_SKILLS_ROOT must
-    reflect the env var at import time."""
-    monkeypatch.setenv("GSTACK_SKILLS_ROOT", str(tmp_path / "alt-gstack"))
-    # Run via subprocess so the module loads from scratch with the new env.
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; sys.path.insert(0, %r); "
-            "import install_bundled_skills as m; print(m.GSTACK_SKILLS_ROOT)"
-            % str(_REPO / "shells" / "openclaw-plugin"),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        env={**os.environ, "GSTACK_SKILLS_ROOT": str(tmp_path / "alt-gstack")},
-    )
-    assert result.returncode == 0, result.stderr
-    assert str(tmp_path / "alt-gstack") in result.stdout, (
-        f"install_bundled_skills.GSTACK_SKILLS_ROOT did not honor env: {result.stdout}"
-    )
-
-
 def test_preflight_gstack_check_reports_env_path(monkeypatch, tmp_path):
     """preflight's gstack WARN message must name the override path when
     GSTACK_SKILLS_ROOT is set and the override path doesn't exist."""
@@ -227,25 +202,3 @@ def test_dispatch_task_resolver_rejects_relative(monkeypatch, tmp_path):
     # Warning should have landed on stderr
     assert "not absolute" in result.stderr
 
-
-def test_install_bundled_skills_resolver_rejects_relative(monkeypatch, tmp_path):
-    """install_bundled_skills.py's module-level GSTACK_SKILLS_ROOT must
-    not reflect a relative env value."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; sys.path.insert(0, %r); "
-            "import install_bundled_skills as m; print(m.GSTACK_SKILLS_ROOT)"
-            % str(_REPO / "shells" / "openclaw-plugin"),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        env={**os.environ, "GSTACK_SKILLS_ROOT": "./skills"},
-    )
-    assert result.returncode == 0, result.stderr
-    assert "skills" in result.stdout  # canonical path ends in "skills"
-    # But NOT the relative "./skills" — canonical should win
-    assert ".gstack/repos/gstack/.agents/skills" in result.stdout
-    assert "not absolute" in result.stderr

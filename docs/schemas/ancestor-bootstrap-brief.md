@@ -3,8 +3,8 @@
 > **Status**: Provisional. TUI engineer draft; architect review required
 > before v1.0.
 > **Consumer**: ancestor seat (via `clawseat-ancestor` skill)
-> **Producer**: `core/tui/ancestor_brief.py` (called by
-> `core/tui/install_entrypoint.py` after wizard completes)
+> **Producer**: `core/tui/ancestor_brief.py` (invoked by the v0.5 install
+> playbook before ancestor handoff)
 > **Format**: Markdown with a leading fenced YAML metadata block so both
 > humans and the ancestor skill can parse deterministically.
 > **Location**: `~/.agents/tasks/<project>/patrol/handoffs/ancestor-bootstrap.md`
@@ -43,7 +43,7 @@ brief_generator: core/tui/ancestor_brief.py
 project: install
 profile_path: ~/.agents/profiles/install-profile-dynamic.toml
 profile_version: 2
-machine_config_path: ~/.clawseat/machine.toml    # null if missing
+machine_config_path: ~/ClawSeat/machine.toml    # null if missing
 openclaw_tenant: yu
 openclaw_tenant_workspace: ~/.openclaw/workspace-yu
 feishu_group_binding: null    # PROJECT_BINDING.toml not yet written
@@ -100,7 +100,7 @@ observability:
   feishu_sender_seat: ancestor
   feishu_lark_cli_identity: planner    # shared OAuth per 2026-04-21 Q2=a
 
-clawseat_root: /Users/ywf/.clawseat
+clawseat_root: /Users/ywf/ClawSeat
 ---
 
 # Ancestor bootstrap brief — <project>
@@ -154,7 +154,11 @@ Each token has a fixed contract.
 | `B6-smoke-dispatch` | Send `OC_DELEGATION_REPORT_V1` report type=`smoke` to group | message delivered | Retry 3×, then mark B6 failed in STATUS.md; proceed (not hard-fail) |
 | `B7-write-status-ready` | Write `~/.agents/tasks/<project>/STATUS.md` with `phase=ready`, then enter Phase-B (no operator ack gate) | file present | hard failure (disk issue) |
 
-**Note**: B8 (await-operator-ack) was removed in v0.1. Rationale: launcher already shows the operator the full profile during `install_wizard`; a second "ack before patrol" gate provides no additional information. Phase-B patrol is benign (read-only observation + restart-dead-seats) so unconditionally entering it after B7 is safe.
+**Note**: B8 (await-operator-ack) was removed in v0.1. Rationale: the install
+playbook already surfaces runtime selection and binding inputs before ancestor
+is launched; a second "ack before patrol" gate provides no additional
+information. Phase-B patrol is benign (read-only observation +
+restart-dead-seats) so unconditionally entering it after B7 is safe.
 
 ## Phase-B patrol semantics
 

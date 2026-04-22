@@ -847,23 +847,10 @@ bash {shell}/wait-for-text.sh -t <session> -p "pattern" -T <timeout>
 
 ## 首次安装
 
-Canonical 6-phase flow，见
-`core/skills/clawseat-install/references/ancestor-runbook.md`。关键脚本：
-
-```bash
-# P0.1 agent-neutral skill symlinks
-python3 {clawseat_root}/shells/openclaw-plugin/install_bundled_skills.py
-
-# P0.5 bootstrap workspace + session.toml (after P0.3 credential seed)
-python3 {scripts}/bootstrap_harness.py --profile <profile> --project-name <project>
-
-# P2 koder overlay (after P1 memory seat + agent confirm)
-python3 {clawseat_root}/shells/openclaw-plugin/install_koder_overlay.py --agent <AGENT>
-
-# P2.3 finalize koder workspace
-python3 {clawseat_root}/core/skills/clawseat-install/scripts/init_koder.py \\
-  --workspace <workspace> --project <project>
-```
+v0.5 以 `docs/INSTALL.md` 为唯一安装 SSOT。安装代理先完成环境扫描、
+runtime 选择、validated profile / binding 写入，再通过
+`scripts/launch_ancestor.sh` 拉起 ancestor。ancestor 接手后再按当前
+profile 拉起 memory 与项目六席。
 
 ## 更新后刷新所有 workspace（git pull 之后必须跑，零参数自动检测）
 

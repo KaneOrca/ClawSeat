@@ -1,8 +1,8 @@
 # Feishu Bridge Setup & Smoke Test
 
 > **Canonical SOP**: This file is the reference guide for the 7-step Feishu bridge setup.
-> The install flow entry point is [install-flow.md Phase 5](install-flow.md#phase-5-feishu-bridge-smoke-test).
-> For the step-by-step ancestor runbook, see [ancestor-runbook.md Phase 5](ancestor-runbook.md).
+> Fresh installs should follow [`docs/INSTALL.md`](../../../../docs/INSTALL.md),
+> then let ancestor execute the bridge-related steps from the runtime brief.
 
 ## Prerequisites
 

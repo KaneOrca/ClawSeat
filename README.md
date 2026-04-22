@@ -5,98 +5,66 @@ ClawSeat is an independent skill-first multi-agent control plane.
 It is not `cartooner`, `openclaw`, or `arena-pretext-ui`.
 Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core source tree.
 
-## Profile Selection
-
-| Profile | Seats | Requires gstack? | Use when |
-|---|---|---|---|
-| `starter.toml` | koder | No | Experimenting, no specialist seats needed |
-| `install-with-memory.toml` | memory + koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical local `/cs` install flow |
-| `install-openclaw.toml` | memory + koder + planner + builder-1 + reviewer-1 | **Yes** | Canonical OpenClaw overlay install flow |
-| `install.toml` | koder + planner + builder-1 + reviewer-1 | **Yes** | Legacy local memory-less variant |
-| `full-team.toml` | 6 seats | **Yes** | Full-roster projects |
-
-All profiles live in `examples/starter/profiles/`. To install gstack (required for `install-with-memory.toml`, `install-openclaw.toml`, `install.toml`, and `full-team.toml` — **skip this block entirely if you only need `starter.toml`**):
-
-```bash
-# Default install location. ClawSeat preflight looks here unless you override below.
-git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.gstack/repos/gstack
-cd ~/.gstack/repos/gstack && ./setup
-
-# Already have gstack cloned elsewhere? Skip the clone above and just export:
-#   export GSTACK_SKILLS_ROOT=/absolute/path/to/your/gstack/.agents/skills
-# ClawSeat's preflight, install_bundled_skills, skill_registry, and dispatch_task
-# all honor that env var — no re-clone needed. Must be an absolute path.
-```
-
-> ⚠️  First run can take 10+ minutes — `./setup` calls `brew` which may trigger `brew update` with no progress output. Do not cancel.
->
-> ℹ️  `starter.toml` is koder-only and does NOT need gstack — you can skip the block above entirely if that's your profile. `install-with-memory.toml` / `install-openclaw.toml` / `install.toml` / `full-team.toml` declare specialist seats (builder / reviewer / qa / designer) that require gstack; ClawSeat's `preflight install` will **HARD_BLOCK** if you try to run those profiles without gstack.
-
 ## Install
 
-**ClawSeat install is an interactive 6-phase flow, not a single script.**
-It is driven by an **ancestor agent** (a Claude Code session the user has
-open) that walks the install step-by-step and halts at user-decision points
-(target OpenClaw agent, seat auth/provider, Feishu group ID).
+v0.5 install is agent-driven. The single source of truth is
+[`docs/INSTALL.md`](docs/INSTALL.md). There is no separate TUI bootstrap
+binary to memorize.
 
 ### Step 1 — Clone and set `CLAWSEAT_ROOT`
 
 ```bash
-# Clone to any user-level directory (NOT inside ~/.openclaw/)
-git clone https://github.com/KaneOrca/ClawSeat.git
-export CLAWSEAT_ROOT="$(pwd)/ClawSeat"
+git clone https://github.com/KaneOrca/ClawSeat.git "$HOME/ClawSeat"
+export CLAWSEAT_ROOT="$HOME/ClawSeat"
 ```
 
-### Step 2 — Ancestor agent reads the runbook and walks the flow
+> Clone to a user-level directory (NOT inside `~/.openclaw/`). ClawSeat is a
+> standalone project, not an OpenClaw internal component.
 
-The canonical SOP lives at:
-[`core/skills/clawseat-install/references/ancestor-runbook.md`](core/skills/clawseat-install/references/ancestor-runbook.md)
+### Step 2 — Run the playbook
 
-The flow, at a glance:
+Tell the invoking runtime (Claude Code, Codex, or OpenClaw) to read
+[`docs/INSTALL.md`](docs/INSTALL.md) and execute it end-to-end. The playbook:
 
-| Phase | What happens | User interaction |
-|---|---|---|
-| P0 | Preflight + credential seed + bootstrap | Confirm project name and resolve missing prerequisites |
-| P1 | Memory online + system-scan | Complete first-launch memory onboarding |
-| P2 | Query memory → operator picks target OpenClaw agent | Pick target agent, do not auto-pick |
-| P3 | Overlay + `/new` identity check + Feishu group creation | Verify koder identity and provide group ID |
-| P4 | Configure + start backend seats + Feishu bridge smoke | Confirm per-seat runtime/auth/provider choices (B1: six-choice interview, default `oauth_token`), complete OAuth/API entry, and confirm smoke |
-| P5 | Handoff, ancestor standby | No more install actions unless debugging |
+1. scans the machine and credential state
+2. records the runtime selection the user wants
+3. materializes validated project/profile/binding state
+4. launches the ancestor via [`scripts/launch_ancestor.sh`](scripts/launch_ancestor.sh)
+5. hands control to ancestor for seat bring-up and patrol
 
-### Do NOT run individual scripts out of order
+### Resume / re-entry
 
-Running `install_bundled_skills.py` alone gets you Phase 0 only, with no
-memory seat, no agent selection, and no koder overlay. The runbook's halt
-conditions and verification checks exist so partial installs fail loudly
-instead of leaving a half-wired system.
-
-### After install
-
-Say "启动 ClawSeat" in OpenClaw/Feishu, or run `/cs` in a local Claude Code
-session. The `clawseat` skill (loaded via P0.1 symlinks) takes over from
-there.
+Re-run [`docs/INSTALL.md`](docs/INSTALL.md) and follow its `Resume / Re-entry`
+section. `/cs` is only a local shorthand for that re-entry contract; it is not
+a fresh-install path.
 
 ### Starting over / fresh-machine simulation
 
-If you want to re-run the install from a clean baseline — testing the git
-install on the same machine, uninstalling ClawSeat, or setting up a CI
-smoke fixture — use [`scripts/clean-slate.sh`](scripts/clean-slate.sh):
+Reset to a clean baseline (testing the git install on the same machine,
+uninstalling ClawSeat, preparing a CI smoke fixture):
 
 ```bash
 bash scripts/clean-slate.sh         # dry-run: shows what would be deleted
 bash scripts/clean-slate.sh --yes   # actually delete
 ```
 
-The script preserves your OpenClaw account (`~/.openclaw/agents/`,
-`openclaw.json`), API secrets (`~/.agent-runtime/secrets/`), gstack, and
-lark-cli OAuth. It deletes `/tmp/ClawSeat`, ClawSeat-installed skill
-symlinks, `~/.agents/`, and sandbox residue. See the script header for the
-full preserve/delete list.
+The script preserves OpenClaw account data (`~/.openclaw/agents/`, `openclaw.json`),
+API secrets (`~/.agent-runtime/secrets/`), gstack, and lark-cli OAuth. It
+deletes ClawSeat-installed skill symlinks, `~/.agents/`, and sandbox residue.
+See the script header for the full preserve/delete list.
 
-> **Reminder**: canonical install profiles (`install-with-memory.toml`,
-> `install-openclaw.toml`, `full-team.toml`) require `gstack` for
-> specialist seats — see the `./setup` command in the Profile Selection
-> block above if you have not installed it yet.
+### Legacy profiles (pre-v0.5)
+
+The old five-template lineup (`install.toml`, `install-with-memory.toml`,
+`install-openclaw.toml`, `starter.toml`, `full-team.toml`) is archived under
+[`examples/starter/profiles/legacy/`](examples/starter/profiles/legacy/). They
+are migration/reference material only. New installs should follow
+[`docs/INSTALL.md`](docs/INSTALL.md) and write validated v2 profiles instead.
+Read that directory's `README.md` if you need to migrate an existing v1 profile:
+
+```bash
+python3 core/scripts/migrate_profile_to_v2.py apply --project <name>
+```
 
 ## Positioning
 

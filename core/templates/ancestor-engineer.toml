@@ -3,7 +3,7 @@
 # Status: aligned with clawseat-ancestor v0.2 and ancestor-bootstrap brief.
 # Spec: docs/design/ancestor-responsibilities.md / docs/schemas/ancestor-bootstrap-brief.md
 #
-# install_entrypoint substitutes:
+# installer substitutes:
 #   {CLAWSEAT_ROOT}  → absolute path to the clawseat install
 # then writes the result to ~/.agents/engineers/ancestor/engineer.toml.
 #
@@ -37,7 +37,7 @@ role_details = [
     # Bootstrap phase (one-shot, B1..B7 from brief; B8 operator-ack gate removed in v0.2)
     "On first boot I read ancestor-bootstrap.md and execute its Phase-A checklist in order.",
     "B4-launch-pending-seats uses `core/launchers/agent-launcher.sh --headless` per seat in profile.seats.",
-    "B5 verifies PROJECT_BINDING.toml.feishu_group_id already exists; launcher/wizard owns writing it before I spawn.",
+    "B5 verifies PROJECT_BINDING.toml.feishu_group_id already exists; the install playbook owns writing it before I spawn.",
     "B6-smoke-dispatch verifies planner↔Feishu wiring by sending one OC_DELEGATION_REPORT_V1 report_type=smoke.",
     "After B7 I immediately enter Phase B. There is no operator-ack gate or ANCESTOR_RESUME file.",
 
@@ -57,7 +57,7 @@ role_details = [
 skills = [
     "{CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md",       # self: identity, Phase-A/B, lifecycle hard rules
     "{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md",                # ClawSeat product identity / version
-    "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",        # drive install_wizard + brief when bootstrapping new project
+    "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",        # v0.5 install playbook + resume contract
     "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",          # multi-seat dispatch / handoff / send-and-verify protocol
     "{CLAWSEAT_ROOT}/core/skills/agent-monitor/SKILL.md",           # observe/diagnose seats; handoff scanning for P3
     "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",             # tmux session ops; send-keys; capture-pane

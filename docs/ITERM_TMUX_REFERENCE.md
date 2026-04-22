@@ -3,8 +3,8 @@
 ## 1. 资料盘点（本地）
 
 ### A 级：主控（优先）
-- `docs/INSTALL_GUIDE.md`（高）  
-  - iTerm-only 前置检查、`/cs` 流程入口、`tmux` 与权限故障修复文案。
+- `docs/INSTALL.md`（高）  
+  - v0.5 安装/重入 playbook、ancestor 拉起、`tmux` 与权限故障修复文案。
 - `core/scripts/agent_admin_window.py`（高）  
   - iTerm 打开/重连命令、`env -u TMUX`、重试、失败即停、监控布局回滚。
 - `core/shell-scripts/send-and-verify.sh`（高）  
@@ -82,6 +82,6 @@
 - `RETRY_NEEDED`/`RETRY_FAILED`：发送命令仍停留在输入态，优先人工确认输入焦点状态。  
 - `TMUX_CAPTURE_FAILED`：pane 不可读，优先确认会话是否存活、pane 是否在前端阻塞。  
 
-## 5. 与 `/cs` 入口的衔接
-- 该链路默认走 iTerm-only：`/cs` 先启动 `koder`，确认后推进 `planner`。  
+## 5. 与安装 / 重入入口的衔接
+- v0.5 主链路默认走 `docs/INSTALL.md` 与 `scripts/launch_ancestor.sh`：先拉起 `ancestor`，再由 ancestor 接手后续席位。  
 - 若链路失败，当前实现会给出可执行修复建议，不做非阻断 GUI 降级。  

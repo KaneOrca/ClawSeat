@@ -67,40 +67,18 @@ This keeps the user experience product-shaped:
 - do not require the user to understand `/cs` or `gstack-harness`
 
 If you are working on a local checkout and explicitly want the symlink-based
-developer path, use the two-step install:
-
-**Phase 0 — Agent-neutral bundled skills** (no workspace touch):
+developer path, point OpenClaw at the repo and then follow
+[`docs/INSTALL.md`](../../docs/INSTALL.md):
 
 ```bash
 export CLAWSEAT_ROOT=/path/to/ClawSeat
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_bundled_skills.py"
+openclaw plugins install clawseat --marketplace "$CLAWSEAT_ROOT"
 ```
 
-This installs the minimum ClawSeat-facing skill surface into `~/.openclaw/skills/`:
-
-- `clawseat`
-- `clawseat-install`
-- `clawseat-koder-frontstage`
-
-exit 0 = all OK; exit 2 = external dependency missing (gstack / lark-cli).
-
-**Phase 3 — Per-agent koder overlay** (requires `--agent <NAME>`):
-
-```bash
-python3 "$CLAWSEAT_ROOT/shells/openclaw-plugin/install_koder_overlay.py" \
-  --agent <agent-name> \
-  [--openclaw-home <path>] \
-  [--dry-run]
-```
-
-- `--agent <NAME>`: required — the OpenClaw agent workspace to overlay. Query memory (Phase 2) to determine which agent to use; do not hardcode.
-- `--openclaw-home`: override `~/.openclaw` (default).
-- `--dry-run`: preview changes without writing.
-- Omitting `--agent` → exit 2; consult [memory-query-protocol.md](../../core/skills/clawseat-install/references/memory-query-protocol.md).
-- Exit 3: target agent workspace does not exist — verify agent was created first.
-
-After Phase 0 + Phase 3, the user should interact with OpenClaw by saying "安装 ClawSeat" or
-"启动 ClawSeat". OpenClaw should load `clawseat` as the product entry.
+After the plugin is available, the user should interact with OpenClaw by
+saying "安装 ClawSeat" or "启动 ClawSeat". OpenClaw should load `clawseat` as
+the product entry, and the runtime should follow the v0.5 playbook rather than
+manual workspace-overlay scripts.
 
 ## Environment Variables
 

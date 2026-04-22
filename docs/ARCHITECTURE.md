@@ -81,17 +81,23 @@ Primary home:
 - `core/lib/seat_resolver.py` — tmux vs openclaw vs file-only routing hook used by notify_seat + complete_handoff (upstream T19)
 - `core/engine/instantiate_seat.py` — seat materialization: workspace + symlinks + session records + tmux config
 
-#### Heartbeat transport vs runtime seats
+#### Layered runtime model (v0.4)
 
-Two profile fields control how the frontstage seat is represented at runtime:
-`heartbeat_transport` says whether the `heartbeat_owner` is a tmux seat or an
-OpenClaw-frontstage agent, while `runtime_seats` says which seats should
-receive runtime/session records for that profile.
+v0.4 replaces the v0.3 `heartbeat_transport` / `heartbeat_owner` fields with a
+three-layer split enforced by the v2 profile validator. See
+[`schemas/v0.4-layered-model.md`](schemas/v0.4-layered-model.md) for the
+authoritative schema.
 
-| Mode | Canonical profile | `heartbeat_transport` | `runtime_seats` effect |
-|---|---|---|---|
-| Local `/cs` | `install-with-memory.toml` | `tmux` | `koder` remains a tmux seat alongside `memory` and backend seats |
-| OpenClaw overlay | `install-openclaw.toml` | `openclaw` | `koder` stays frontstage and is excluded from tmux runtime records; `memory` and backend seats still run in tmux |
+| Layer | Seat(s) | Runtime |
+|---|---|---|
+| Machine | `memory` (one per host) | tmux `machine-memory-<tool>`, managed by ancestor B2 |
+| Tenant | `koder` (one per OpenClaw agent) | OpenClaw frontstage — never a tmux seat |
+| Project | `ancestor` (one per project) + `planner` + specialist seats (`builder-*`, `reviewer-*`, `qa-*`, `designer-*`) | tmux `<project>-<seat>-<tool>`; ancestor owns lifecycle |
+
+v1 profile templates (`install-with-memory.toml`, `install-openclaw.toml`, …)
+are archived under `examples/starter/profiles/legacy/` — they declare
+`heartbeat_*` fields the v2 validator rejects. The v0.4 install wizard
+generates a compliant v2 profile interactively.
 
 ### 3. Skill Layer
 
@@ -115,7 +121,7 @@ which one to edit, use this table before you touch either:
 | Skill | Role | Invoked by | Writes |
 |---|---|---|---|
 | `clawseat` | Product façade. One-liner that loads the install runbook and hands off. | OpenClaw / Feishu / Claude Code / Codex when the user says "启动 ClawSeat" | Nothing directly; delegates to `clawseat-install` |
-| `clawseat-install` | 6-phase install SOP (`core/skills/clawseat-install/scripts/*.py`). Phases P0–P5 in `references/ancestor-runbook.md`. | Ancestor agent, step-by-step per user confirmation | `~/.openclaw/skills/*`, `~/.agents/profiles/*.toml`, `~/.claude/skills/*`, Feishu bridge config |
+| `clawseat-install` | v0.5 agent-driven install playbook. The invoking runtime reads `docs/INSTALL.md`, materializes validated state, launches ancestor via `scripts/launch_ancestor.sh`, and then ancestor owns the remaining bootstrap steps. | Claude Code / Codex / OpenClaw runtimes when the user asks to install ClawSeat | `~/.agents/profiles/*.toml`, `~/.agents/tasks/<project>/PROJECT_BINDING.toml`, entry-skill symlinks in `~/.claude/skills/` and `~/.codex/skills/` |
 | `clawseat-koder-frontstage` | Runtime wrapper for the user-visible `koder` seat (reads `PLANNER_BRIEF`, enforces transport via router). Not an installer. | The `koder` seat itself after install | Never writes workspaces; only reads + dispatches |
 | `cs` | Local `/cs` convenience alias (**post-install only**). Resumes or creates the canonical `install` project and starts `planner`. | User in a local Claude Code / Codex session after `clawseat-install` has completed P0–P5 | Minimal — resumes existing `~/.agents/projects/install` state |
 
@@ -124,7 +130,7 @@ Invariant — do not cross the boundaries:
 - `clawseat` must not write install state (no `~/.agents/*` writes; delegate to `clawseat-install`)
 - `clawseat-install` must not read from `PLANNER_BRIEF` (it runs before seats exist)
 - `clawseat-koder-frontstage` must not call `install_*` scripts (install is ancestor-owned)
-- `cs` must fail fast if `~/.agents/projects/install/session.toml` is missing (it is post-install only; guard with `install_entry_skills.py` check)
+- `cs` must fail fast if the `install` project state is missing or invalid (it is post-install only and points back to `docs/INSTALL.md`)
 
 ### 4. Adapter Layer
 

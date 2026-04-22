@@ -1,13 +1,12 @@
-"""Install flow P0 → P5 smoke tests.
+"""Legacy install-helper smoke tests.
 
-Exercises the install-flow.md phases in a fresh tmp-path environment.
-Stub external I/O (tmux, Feishu) at the subprocess level so no real
-sessions or network calls fire.
+Exercises the remaining helper scripts that still exist during the v0.5
+transition in a fresh tmp-path environment. External I/O (tmux, Feishu) is
+stubbed at the subprocess level so no real sessions or network calls fire.
 
 Scope
 -----
 P0.0  preflight --help               → exit 0
-P0.1  install_bundled_skills.py --help → exit 0
 P0.2  install_entry_skills.py --help   → exit 0
 P0.3  scan_environment.py --only credentials → exit 0, writes machine/credentials.json
 P0.4  profile template exists + valid TOML
@@ -21,7 +20,6 @@ Deferred (require tmux seat or operator action):
 - P1.4/P1.5 operator sync
 - P2.1 query_memory (requires memory seat)
 - P2.2 agent selection (operator action)
-- P3.1 install_koder_overlay (requires OpenClaw agent list)
 - P3.2 init_koder (requires OpenClaw workspace)
 - P3.3 configure_feishu (requires OpenClaw config)
 - P3.4/P3.5 operator identity verification + Feishu group creation
@@ -104,9 +102,9 @@ def test_p0_0_preflight_install_mode_runs():
     """preflight.py install must reach its skill-check phase without crashing.
 
     Note: preflight install exits 1 in a stranger environment because
-    python3 (system) is 3.9 < 3.11. This is documented in install-flow.md
-    as a known failure. The important invariant is that it does NOT crash
-    with an uncaught exception — it must surface the failure cleanly.
+    python3 (system) is 3.9 < 3.11. That failure is expected; the important
+    invariant is that it does NOT crash with an uncaught exception — it must
+    surface the failure cleanly.
     """
     r = _run([sys.executable, str(REPO / "core" / "preflight.py"), "install"])
     # Exit 1 is expected (python3 version warning). No crash.
@@ -117,28 +115,6 @@ def test_p0_0_preflight_install_mode_runs():
     # The python3 version check must appear in output so stranger knows why.
     combined = r.stdout + r.stderr
     assert "python" in combined.lower(), "python3 version issue not surfaced"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# P0.1 — Install bundled OpenClaw skills
-# ─────────────────────────────────────────────────────────────────────────────
-
-def test_p0_1_install_bundled_skills_help_exits_zero():
-    r = _run([
-        sys.executable,
-        str(REPO / "shells" / "openclaw-plugin" / "install_bundled_skills.py"),
-        "--help",
-    ])
-    assert r.returncode == 0, f"--help failed:\nSTDERR:{r.stderr}"
-
-
-def test_p0_1_install_bundled_skills_dry_run_exits_zero():
-    r = _run([
-        sys.executable,
-        str(REPO / "shells" / "openclaw-plugin" / "install_bundled_skills.py"),
-        "--dry-run",
-    ])
-    assert r.returncode == 0, f"--dry-run failed:\nSTDERR:{r.stderr}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -254,55 +230,3 @@ def test_p0_6_refresh_workspaces_dry_run_exits_zero():
         "--dry-run",
     ])
     assert r.returncode == 0, f"refresh_workspaces --dry-run failed:\nSTDERR:{r.stderr}"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# /cs init smoke (cs_init.py as entry point)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def test_cs_init_help_exits_zero():
-    r = _run([
-        sys.executable,
-        str(REPO / "core" / "skills" / "clawseat-install" / "scripts" / "cs_init.py"),
-        "--help",
-    ])
-    assert r.returncode == 0, f"cs_init --help failed:\nSTDERR:{r.stderr}"
-
-
-def test_cs_init_v04_rejects_missing_or_v1_profile(tmp_path):
-    """v0.4: cs_init no longer writes profiles or spawns koder/memory tmux.
-    It only resumes existing v2 profiles; missing/v1 → exit 2 with a
-    pointer to install_entrypoint.py / migrate_profile_to_v2.py.
-    """
-    env = {
-        **_clean_env(),
-        "HOME": str(tmp_path),
-        "CLAWSEAT_REAL_HOME": str(tmp_path),
-    }
-    r = _run([
-        sys.executable,
-        str(REPO / "core" / "skills" / "clawseat-install" / "scripts" / "cs_init.py"),
-    ], env=env)
-    assert r.returncode == 2, (
-        f"expected exit 2 from v0.4 refusal, got {r.returncode}\n"
-        f"stdout:{r.stdout}\nstderr:{r.stderr}"
-    )
-    full = (r.stdout + r.stderr).lower()
-    assert "cs_init refuses" in full, f"missing refusal message; stderr was: {r.stderr}"
-    assert "install_entrypoint" in full or "migrate_profile_to_v2" in full
-
-
-def test_cs_init_v04_has_no_refresh_profile_flag():
-    """v0.4 removed the --refresh-profile flag (it was the v1 regenerator).
-    argparse must reject it loudly — not silently re-generate.
-    """
-    r = _run([
-        sys.executable,
-        str(REPO / "core" / "skills" / "clawseat-install" / "scripts" / "cs_init.py"),
-        "--refresh-profile",
-    ])
-    assert r.returncode != 0
-    assert (
-        "unrecognized arguments" in r.stderr
-        or "unrecognized arguments" in r.stdout
-    )

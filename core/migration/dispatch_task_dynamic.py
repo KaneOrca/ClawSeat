@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# DEPRECATED (2026-04-22): transitional dynamic-roster compatibility shim.
+# Keep until every live profile has `[dynamic_roster].enabled = true` and the
+# router-level migration cleanup can delete the last legacy/static caller.
 from __future__ import annotations
 
 import argparse

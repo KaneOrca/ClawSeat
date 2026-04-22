@@ -3,10 +3,10 @@ profile declares a specialist role (builder / reviewer / qa / designer),
 and WARNING otherwise.
 
 Before the UX-audit fix, preflight always returned WARNING for missing
-gstack even though install_bundled_skills.py and bootstrap_harness.py
-would later exit non-zero on the same missing skills. A stranger
-installer hit a "ladder of mysterious failures": preflight green-lighted
-them, then the next script blew up with a cryptic skill-registry error.
+gstack even though downstream bootstrap helpers would later exit non-zero on
+the same missing skills. A stranger installer hit a "ladder of mysterious
+failures": preflight green-lighted them, then the next script blew up with a
+cryptic skill-registry error.
 
 The fix: preflight now loads the profile's seat_roles and HARD_BLOCKS if
 any role actually needs gstack. This test locks that behavior so a

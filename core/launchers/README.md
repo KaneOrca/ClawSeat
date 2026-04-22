@@ -21,10 +21,10 @@ keep personal copies in sync.
 
 ```bash
 # Via wrapper (common case)
-~/.clawseat/core/launchers/claude.sh --session install-planner-claude --dir ~/.clawseat
+"$HOME/ClawSeat"/core/launchers/claude.sh --session install-planner-claude --dir "$HOME/ClawSeat"
 
 # Directly
-~/.clawseat/core/launchers/agent-launcher.sh \
+"$HOME/ClawSeat"/core/launchers/agent-launcher.sh \
     --tool claude \
     --auth oauth_token \
     --session install-builder-1-claude \
@@ -37,10 +37,11 @@ keep personal copies in sync.
 ~/.clawseat/core/launchers/agent-launcher.sh --tool claude --dry-run
 ```
 
-`--headless` is important for the ClawSeat install flow: `install_entrypoint.py`
-uses it to spawn the ancestor-cc tmux session, then opens one iTerm window
-separately via `iterm_panes_driver.py`. This keeps tmux creation and iTerm
-window policy independent.
+`--headless` is important for the v0.5 install playbook and re-entry path:
+[`scripts/launch_ancestor.sh`](../../scripts/launch_ancestor.sh) uses it to
+spawn the ancestor tmux session, then the runtime opens or reattaches the
+visible window separately. This keeps tmux creation and iTerm window policy
+independent.
 
 ## Configuration (env vars)
 
@@ -85,7 +86,5 @@ fallback so no state is lost.
 
 - `core/scripts/iterm_panes_driver.py` — the iTerm Python API driver that
   opens multi-pane monitor windows once seats are running.
-- `core/tui/install_wizard.py` — the v0.4 profile wizard that produces the
-  project TOML consumed by the launcher.
-- `docs/schemas/v0.4-layered-model.md` — the layered-architecture spec that
-  motivates one canonical launcher location.
+- `docs/INSTALL.md` — the v0.5 install playbook that drives ancestor launch.
+- `core/skills/clawseat-install/SKILL.md` — the install contract for agents.

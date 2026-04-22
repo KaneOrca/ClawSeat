@@ -408,12 +408,11 @@ Rules:
 
 Operators may ask you questions like "why is builder-2 idle?" or "how do
 I switch seat X to api?". Each backend seat has a `session.toml` with
-`auth_mode` + `provider` written during install by
-`resolve_auth_mode.py`. The six canonical choices and their trade-offs
-live in `docs/auth-modes.md` (per-mode runtime details) and
-`docs/install.md#choosing-auth-mode-claude-seats` (decision table).
-Prefer reading those files over improvising an answer — the modes and
-recommended defaults change between releases.
+`auth_mode` + `provider` written from the v0.5 runtime-selection contract.
+The trade-offs live in `docs/auth-modes.md` (per-mode runtime details) and
+`docs/INSTALL.md` (selection + launch flow). Prefer reading those files over
+improvising an answer — the modes and recommended defaults change between
+releases.
 
 Typical triage pattern:
 
@@ -421,9 +420,8 @@ Typical triage pattern:
 2. If a seat is stuck on legacy `oauth` and hitting the Keychain popup,
    route the user to `docs/auth-modes.md` — migration belongs to A1's
    `migrate_seat_auth.py`, not a koder-owned edit.
-3. For new-seat installs, direct the operator to
-   `core/skills/clawseat-install/scripts/resolve_auth_mode.py --seat <id>`;
-   do not write `session.toml` from koder.
+3. For new-seat installs or seat-auth changes, direct the operator back to the
+   v0.5 install/reconfigure playbook; do not write `session.toml` from koder.
 
 ## Non-Negotiables
 
