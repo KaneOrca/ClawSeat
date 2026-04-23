@@ -481,7 +481,7 @@ def render_heartbeat_manifest(profile: HarnessProfile, seat: str) -> str:
         f'role = "{profile.seat_roles.get(seat, "frontstage-supervisor")}"',
         'kind = "heartbeat"',
         "enabled = true",
-        "interval_minutes = 10",
+        "interval_minutes = 15",
         f'active_loop_owner = "{profile.active_loop_owner}"',
         'expected_idle_reply = "HEARTBEAT_OK"',
         f'workspace = "{workspace}"',

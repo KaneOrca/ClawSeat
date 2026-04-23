@@ -2,7 +2,7 @@
 
 Recurring heartbeat belongs only to the frontstage-supervisor seat.
 
-Default cadence is every 10 minutes unless a project profile explicitly narrows
+Default cadence is every 15 minutes unless a project profile explicitly narrows
 it for a temporary debugging window.
 
 ## Duties

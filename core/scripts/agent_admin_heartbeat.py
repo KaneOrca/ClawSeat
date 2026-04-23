@@ -126,7 +126,7 @@ def verify_heartbeat_install_from_pane(session: Any, previous_text: str) -> dict
 
 
 def build_claude_loop_command(manifest: dict) -> str:
-    interval = int(manifest.get("interval_minutes", 10))
+    interval = int(manifest.get("interval_minutes", 15))
     workspace = str(manifest.get("workspace", "")).strip()
     active_loop_owner = str(manifest.get("active_loop_owner", "planner")).strip() or "planner"
     heartbeat_md = f"{workspace}/HEARTBEAT.md" if workspace else "HEARTBEAT.md"
