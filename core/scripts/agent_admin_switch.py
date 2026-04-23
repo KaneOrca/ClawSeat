@@ -222,7 +222,7 @@ class SwitchHandlers:
                 new_session.provider,
                 model=getattr(new_session, "_template_model", "") or "",
             )
-        except Exception:
+        except Exception:  # silent-ok: harness memory write is best-effort; must not fail switch
             pass
         return 0
 

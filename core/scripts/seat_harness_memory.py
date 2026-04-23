@@ -47,7 +47,10 @@ def load_last_harness(seat_id: str, home: Path | None = None) -> dict[str, str] 
     required = {"tool", "auth_mode", "provider"}
     if not required.issubset(data.keys()):
         return None
-    return {k: str(v) for k, v in data.items() if isinstance(v, str)}
+    result = {k: str(v) for k, v in data.items() if isinstance(v, str) and v}
+    if not required.issubset(result.keys()):
+        return None
+    return result
 
 
 def save_last_harness(
