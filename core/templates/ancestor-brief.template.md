@@ -391,7 +391,8 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 - `wait-for-seat.sh` 会先解析当前 canonical session，再把重启后的 seat 自动 re-attach 回原来的 iTerm pane。
 - 不要手动 `tmux attach` 抢占这 5 个 wait-for-seat pane；手动 attach 只会让 pane 状态混乱。
-- 六宫格窗口本身丢失时，用 `agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` 恢复。
+- **如果 specialist pane 显示 ancestor 的 TUI 内容（pane 错连到 ancestor）**：跑 `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}`，detach 多余 client 让 wait-for-seat 重新 resolve；**不要**重开整个窗口（会丢 pane 状态）。
+- 六宫格窗口本身丢失时（iTerm 窗口消失，不是 pane 错连），才用 `agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` 恢复。
 
 ### Sandbox HOME / lark-cli
 
@@ -404,8 +405,11 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 | 场景 | 命令 |
 |------|------|
-| 重开 / 恢复 iTerm 6 宫格 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
+| **specialist pane 显示 ancestor 内容**（pane 错连） | `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}` |
+| 整个 iTerm 6 宫格窗口丢失 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
 | 同时开 memory 独立窗口 | 加 `--open-memory` flag |
+
+**诊断 pane 错连**：`tmux list-clients -t '=${PROJECT_NAME}-ancestor'`；若超过 1 个 client 说明 specialist pane 错接到 ancestor 上（详见 `docs/ITERM_TMUX_REFERENCE.md §3.1.1`）。`recover-grid.sh` 幂等安全。
 
 ### Brief drift
 

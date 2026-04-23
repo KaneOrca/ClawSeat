@@ -65,6 +65,32 @@
 - 如果之前误开了多个同项目窗口，修复命令会清理旧窗口并恢复到单窗口多 tab 的布局
 - koder 的日常维护只需要记住这一个入口；不要把窗口维护分散到多个手工命令里
 
+## 3.1.1 六宫格 pane 错连恢复（install 布局专用）
+
+现象：specialist pane（planner/builder/reviewer/qa/designer）里显示的是 **ancestor 的 TUI 内容**，而不是自己 seat 的 Claude/Codex/Gemini 界面。
+
+根因（已观察）：grid 开窗时（install.sh Step 7）specialist tmux session 都还没存在；每个 pane 的 `wait-for-seat.sh` 在那个瞬态里可能错 attach 到 `install-ancestor`（目前已被 round-3+ 严格化，但旧窗口仍可能卡在此状态）。tmux-attach 阻塞成功后 while-true 循环不再 iterate，即便 canonical seat 后来起来也不会自动切回。
+
+诊断：
+```bash
+env -u TMUX tmux list-clients -t '=<project>-ancestor'
+# 正常：1 个 client（ancestor pane 自己）
+# 错连：6 个 client（ancestor + 5 个错位 specialist pane）
+```
+
+修复：
+```bash
+bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh <project>
+# 等价手动操作：detach 所有 install-ancestor 的多余 client
+# 每个被 detach 的 pane 的 wait-for-seat.sh 会自动 re-resolve + attach 到 canonical seat
+```
+
+幂等：`recover-grid.sh` 若发现 ancestor 只有 1 个 client，直接 `ok` 退出，不做任何动作。
+
+与 `window open-grid` 的区别：
+- `recover-grid.sh` — **保留现有 iTerm 窗口 + 6 个 pane**，只修正 client 路由；首选。
+- `window open-grid` — **新开 iTerm 窗口**；整个窗口丢失时使用。
+
 ## 3.2 脚本化回归入口
 - 运行 `python3 core/scripts/iterm_tmux_selftest.py`
 - 该自测不依赖真实 iTerm GUI；它使用 fake `tmux` / fake `osascript` 回放关键约束
