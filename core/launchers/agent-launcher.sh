@@ -700,11 +700,17 @@ run_claude_runtime() {
   local mode_label="Claude Code"
 
   if [[ "$auth_mode" == "oauth" ]]; then
-    echo "error: claude --auth oauth (legacy macOS Keychain OAuth) is retired." >&2
-    echo "  reason: sandbox HOME per-seat breaks keychain reuse; every fresh seat re-authenticates." >&2
-    echo "  fix: use --auth oauth_token (long-lived token; 'claude setup-token')" >&2
-    echo "       or --auth api + ANTHROPIC_AUTH_TOKEN + a supported provider." >&2
-    exit 64
+    unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
+    export HOME="$REAL_HOME"
+    seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
+    cd "$workdir"
+    echo "────────────────────────────────────────"
+    echo " Claude Code · Legacy OAuth"
+    echo " Session:    $session_name"
+    echo " Directory:  $workdir"
+    echo " HOME:       $HOME"
+    echo "────────────────────────────────────────"
+    exec claude --dangerously-skip-permissions
   fi
 
   local secret_file="" runtime_dir
