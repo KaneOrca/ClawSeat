@@ -175,7 +175,7 @@ class StoreHandlers:
             workspace=data["workspace"],
             runtime_dir=data["runtime_dir"],
             session=data["session"],
-            bin_path=data.get("bin_path", self.hooks.tool_binaries[data["tool"]]),
+            bin_path=data.get("bin_path", self.hooks.tool_binaries.get(data["tool"], "")),
             monitor=bool(data.get("monitor", True)),
             legacy_sessions=list(data.get("legacy_sessions", [])),
             launch_args=list(data.get("launch_args", [])),

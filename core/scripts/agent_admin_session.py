@@ -359,7 +359,7 @@ class SessionService:
             key, sep, value = line.partition("=")
             if not sep:
                 continue
-            values[key.strip()] = shlex.split(value.strip(), posix=True)[0] if value.strip() else ""
+            values[key.strip()] = (shlex.split(value.strip(), posix=True) or [""])[0] if value.strip() else ""
         return values
 
     def _launcher_auth_for(self, session: Any) -> str:
