@@ -33,6 +33,7 @@ class _FakeSession:
         self.session_id = sid
         self.name = ""
         self.sent_text: list[str] = []
+        self.variables: dict[str, str] = {}
         # Each call appends a child to chain so order can be inspected
         self._children: list["_FakeSession"] = []
         self.split_will_fail = False
@@ -51,6 +52,9 @@ class _FakeSession:
         if not isinstance(name, str):
             raise TypeError("name must be str")
         self.name = name
+
+    async def async_set_variable(self, name: str, value: str) -> None:
+        self.variables[name] = value
 
     async def async_send_text(self, text: str) -> None:
         if not isinstance(text, str):
@@ -321,6 +325,8 @@ def test_build_writes_label_and_command_to_each_pane(no_tmux_calls):
     assert len(sessions) == 2
     assert sessions[0].name == "memory"
     assert sessions[1].name == "planner"
+    assert sessions[0].variables["user.seat_id"] == "memory"
+    assert sessions[1].variables["user.seat_id"] == "planner"
     assert sessions[0].sent_text == [
         "tmux attach -t '=install-memory-claude'\n"
     ]

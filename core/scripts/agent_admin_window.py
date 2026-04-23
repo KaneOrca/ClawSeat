@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import shlex
 import shutil
@@ -12,6 +13,10 @@ from typing import Any
 
 
 class AgentAdminWindowError(Exception):
+    pass
+
+
+class SeatNotFoundInWindow(AgentAdminWindowError):
     pass
 
 
@@ -354,6 +359,120 @@ def open_grid_window(
     if open_memory:
         result["memory"] = open_memory_window()
     return result
+
+
+def _window_title(window: Any) -> str:
+    for attr in ("title", "name"):
+        value = getattr(window, attr, "")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _iter_session_tree(session: Any) -> list[Any]:
+    child_sessions = getattr(session, "sessions", None)
+    if isinstance(child_sessions, list) and child_sessions:
+        items: list[Any] = []
+        for child in child_sessions:
+            items.extend(_iter_session_tree(child))
+        return items
+    return [session]
+
+
+def _iter_window_sessions(window: Any) -> list[Any]:
+    sessions: list[Any] = []
+    for tab in getattr(window, "tabs", []) or []:
+        tab_sessions = getattr(tab, "sessions", None)
+        if isinstance(tab_sessions, list) and tab_sessions:
+            for session in tab_sessions:
+                sessions.extend(_iter_session_tree(session))
+            continue
+        current_session = getattr(tab, "current_session", None)
+        if current_session is not None:
+            sessions.extend(_iter_session_tree(current_session))
+    return sessions
+
+
+async def _session_seat_id(session: Any) -> str:
+    getter = getattr(session, "async_get_variable", None)
+    if getter is not None:
+        try:
+            value = await getter("user.seat_id")
+        except Exception:  # noqa: BLE001 best-effort lookup
+            value = ""
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    name = getattr(session, "name", "")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return ""
+
+
+async def _find_reseed_target_session(app: Any, project_name: str, seat_id: str) -> Any:
+    target_window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project_name}"
+    for window in getattr(app, "windows", []) or []:
+        window_title = _window_title(window)
+        if window_title and target_window_title not in window_title:
+            continue
+        for session in _iter_window_sessions(window):
+            if await _session_seat_id(session) == seat_id:
+                return session
+    raise SeatNotFoundInWindow(
+        f"seat '{seat_id}' not found in iTerm grid window '{target_window_title}'"
+    )
+
+
+async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -> dict[str, str]:
+    import iterm2  # type: ignore[import-not-found]
+
+    app = await iterm2.async_get_app(connection)
+    target = await _find_reseed_target_session(app, project_name, seat_id)
+    activate = getattr(target, "async_activate", None)
+    if activate is not None:
+        try:
+            await activate()
+        except Exception:  # noqa: BLE001 focus is best-effort
+            pass
+    wait_command = (
+        "bash "
+        + shlex.quote(str(_WAIT_FOR_SEAT_SCRIPT))
+        + " "
+        + shlex.quote(f"{project_name}-{seat_id}")
+        + "\n"
+    )
+    for payload in ("\x03", "\x02d", wait_command):
+        await target.async_send_text(payload)
+        await asyncio.sleep(0)
+    return {"status": "ok", "project": project_name, "seat_id": seat_id}
+
+
+def reseed_pane(project: Any, seat_id: str) -> dict[str, str]:
+    seat = str(seat_id).strip()
+    if seat == "ancestor":
+        raise AgentAdminWindowError("cannot reseed ancestor pane")
+    try:
+        import iterm2  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise AgentAdminWindowError(
+            "iterm2 Python module not installed; run `pip3 install --user iterm2`"
+        ) from exc
+
+    holder: dict[str, dict[str, str]] = {}
+
+    async def _main(connection: Any) -> None:
+        holder["result"] = await _reseed_pane_async(connection, project.name, seat)
+
+    try:
+        iterm2.run_until_complete(_main, retry=True)
+    except SeatNotFoundInWindow:
+        raise
+    except AgentAdminWindowError:
+        raise
+    except Exception as exc:  # noqa: BLE001 convert to CLI-friendly error
+        raise AgentAdminWindowError(
+            f"reseed-pane failed for {project.name}/{seat}: {exc}"
+        ) from exc
+    return holder["result"]
 
 
 def _monitor_layout_target_sessions(project: Any, sessions: dict[str, Any]) -> list[Any]:

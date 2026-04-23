@@ -213,6 +213,7 @@ def test_start_engineer_invokes_launcher_and_updates_runtime_dir(
     assert cmd[10] == session.session
     assert ("--custom-env-file" in cmd) is expect_custom_env
     assert env["CLAWSEAT_ROOT"] == str(Path(hooks.launcher_path).resolve().parents[2])
+    assert env["CLAWSEAT_PROVIDER"] == provider
     assert session.runtime_dir == str(fake_home / expected_runtime)
     hooks.write_session.assert_called_once_with(session)
     hooks.apply_template.assert_called_with(session, hooks.load_project.return_value)

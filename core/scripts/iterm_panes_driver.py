@@ -232,6 +232,12 @@ async def _build_layout(connection: Any, payload: dict[str, Any]) -> dict[str, A
                     await session.async_set_name(label)
                 except Exception:  # noqa: BLE001 silent-ok: label is cosmetic
                     pass
+                setter = getattr(session, "async_set_variable", None)
+                if setter is not None:
+                    try:
+                        await setter("user.seat_id", label)
+                    except Exception:  # noqa: BLE001 silent-ok: metadata is best-effort
+                        pass
             if command:
                 try:
                     await session.async_send_text(command + "\n")

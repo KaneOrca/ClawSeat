@@ -15,6 +15,22 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
 _LAUNCHERS = _REPO / "core" / "launchers"
+_DETERMINISTIC_LAUNCHER_SOURCES = (
+    "agent-launcher.sh",
+    "agent-launcher-common.sh",
+    "agent-launcher-fuzzy.py",
+)
+_FORBIDDEN_INTERACTIVE_PATTERNS = (
+    "osascript",
+    "AppleScript",
+    "display dialog",
+    "choose from list",
+    "choose folder",
+    "curses",
+    "launcher_choose_",
+    "launcher_prompt_",
+    "--prompt-auth",
+)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -94,22 +110,31 @@ def test_wrapper_delegates_to_main(wrapper, tool):
 # Dry-run shape — resolved config is printed, no side effects
 # ─────────────────────────────────────────────────────────────────────
 
-def _run(args: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+def _run(
+    args: list[str],
+    env: dict[str, str] | None = None,
+    cwd: str | None = None,
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         args,
         capture_output=True,
         text=True,
         env={**os.environ, **(env or {})},
+        cwd=cwd,
         timeout=10,
     )
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "gemini"])
-def test_dry_run_prints_expected_fields(tool):
+@pytest.mark.parametrize("tool,auth", [
+    ("claude", "oauth_token"),
+    ("codex", "chatgpt"),
+    ("gemini", "oauth"),
+])
+def test_dry_run_prints_expected_fields(tool, auth):
     result = _run([
         str(_LAUNCHERS / "agent-launcher.sh"),
         "--tool", tool,
-        "--auth", "oauth_token",
+        "--auth", auth,
         "--session", "test-session",
         "--dir", str(Path.home()),
         "--dry-run",
@@ -143,6 +168,40 @@ def test_help_exits_zero():
     assert result.returncode == 0
     assert "--tool" in result.stdout
     assert "--headless" in result.stdout
+    assert "--prompt-auth" not in result.stdout
+
+
+@pytest.mark.parametrize("name", _DETERMINISTIC_LAUNCHER_SOURCES)
+def test_deterministic_launcher_sources_have_no_interactive_primitives(name):
+    text = (_LAUNCHERS / name).read_text(encoding="utf-8")
+    for pattern in _FORBIDDEN_INTERACTIVE_PATTERNS:
+        assert pattern not in text, f"{name}: found retired interactive primitive {pattern!r}"
+
+
+def test_missing_auth_exits_two_with_explicit_error():
+    result = _run([
+        str(_LAUNCHERS / "agent-launcher.sh"),
+        "--tool", "claude",
+        "--dry-run",
+    ])
+    assert result.returncode == 2
+    assert "error: --auth is required" in result.stderr
+
+
+def test_dry_run_defaults_dir_and_session_from_cwd(tmp_path: Path):
+    workspace = tmp_path / "Agent Launcher Workspace"
+    workspace.mkdir()
+
+    result = _run([
+        str(_LAUNCHERS / "agent-launcher.sh"),
+        "--tool", "claude",
+        "--auth", "oauth_token",
+        "--dry-run",
+    ], cwd=str(workspace))
+
+    assert result.returncode == 0, result.stderr
+    assert f"dir:      {workspace.resolve()}" in result.stdout
+    assert "session:  claude-oauth_token-agent-launcher-workspace" in result.stdout
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -195,6 +254,27 @@ def test_fuzzy_defaults_are_home_relative(tmp_path):
         assert fav.startswith(str(tmp_path)), (
             f"fuzzy favorite {fav} is not under HOME {tmp_path}"
         )
+
+
+def test_fuzzy_script_runs_under_system_python3(tmp_path: Path):
+    root = tmp_path / "repos"
+    target = root / "alpha-launcher"
+    target.mkdir(parents=True)
+
+    result = _run([
+        "python3",
+        str(_LAUNCHERS / "agent-launcher-fuzzy.py"),
+        "--query", "alpha",
+        "--limit", "1",
+    ], env={
+        "HOME": str(tmp_path),
+        "REAL_HOME": str(tmp_path),
+        "CLAWSEAT_LAUNCHER_ROOTS": f"{root}:2",
+        "CLAWSEAT_LAUNCHER_FAVORITES": "",
+    })
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(target.resolve())
 
 
 # ─────────────────────────────────────────────────────────────────────

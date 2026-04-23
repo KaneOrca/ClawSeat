@@ -276,24 +276,117 @@ DEFAULT_TOOL_ARGS = {
     "gemini": ["--approval-mode=yolo"],
 }
 
+DEFAULT_CCR_BASE_URL = "http://127.0.0.1:3456"
+
+DEFAULT_TOOL_BASE_URLS = {
+    "claude": "https://api.anthropic.com",
+    "codex": "https://api.openai.com/v1",
+    "gemini": "https://generativelanguage.googleapis.com",
+}
+
+PROVIDER_DEFAULTS = {
+    "claude": {
+        "anthropic-console": {
+            "base_url": DEFAULT_TOOL_BASE_URLS["claude"],
+            "url_markers": ("api.anthropic.com",),
+        },
+        "minimax": {
+            "base_url": "https://api.minimaxi.com/anthropic",
+            "default_model": "MiniMax-M2.7-highspeed",
+            "url_markers": ("minimaxi.com",),
+        },
+        "ark": {
+            "base_url": "https://ark.cn-beijing.volces.com/api/coding",
+            "default_model": "ark-code-latest",
+            "url_markers": ("volces.com",),
+        },
+        "xcode-best": {
+            "base_url": "https://xcode.best",
+            "url_markers": ("xcode.best",),
+        },
+        "ccr-local": {
+            "base_url": DEFAULT_CCR_BASE_URL,
+            "url_markers": ("127.0.0.1:3456", "localhost:3456"),
+        },
+    },
+    "codex": {
+        "openai": {
+            "base_url": DEFAULT_TOOL_BASE_URLS["codex"],
+            "url_markers": ("api.openai.com",),
+        },
+        "xcode-best": {
+            "base_url": "https://api.xcode.best/v1",
+            "default_model": "gpt-5.4",
+            "url_markers": ("xcode.best",),
+        },
+    },
+    "gemini": {
+        "google-api-key": {
+            "base_url": DEFAULT_TOOL_BASE_URLS["gemini"],
+            "url_markers": ("generativelanguage.googleapis.com",),
+        },
+    },
+}
+
+
+def tool_default_base_url(tool: str) -> str | None:
+    value = DEFAULT_TOOL_BASE_URLS.get(tool)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def provider_defaults(tool: str, provider: str) -> dict[str, object]:
+    raw = PROVIDER_DEFAULTS.get(tool, {}).get(provider, {})
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def provider_default_base_url(tool: str, provider: str) -> str | None:
+    value = provider_defaults(tool, provider).get("base_url")
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def provider_default_model(tool: str, provider: str) -> str | None:
+    value = provider_defaults(tool, provider).get("default_model")
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def provider_url_markers(tool: str, provider: str) -> tuple[str, ...]:
+    value = provider_defaults(tool, provider).get("url_markers", ())
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item) for item in value if str(item).strip())
+    return ()
+
+
+def provider_url_matches(tool: str, provider: str, base_url: str) -> bool:
+    candidate = str(base_url or "").strip().lower()
+    if not candidate:
+        return False
+    return any(marker.lower() in candidate for marker in provider_url_markers(tool, provider))
+
+
 XCODE_PROVIDER_ENDPOINT_RULES = {
     "claude": {
         "xcode-best": {
             "env_var": "ANTHROPIC_BASE_URL",
-            "base_url": "https://xcode.best",
+            "base_url": PROVIDER_DEFAULTS["claude"]["xcode-best"]["base_url"],
         }
     },
     "codex": {
         "xcode-best": {
-            "base_url": "https://api.xcode.best/v1",
+            "base_url": PROVIDER_DEFAULTS["codex"]["xcode-best"]["base_url"],
         }
     },
 }
 
 CLAUDE_API_PROVIDER_CONFIGS = {
     "minimax": {
-        "model": "MiniMax-M2.7-highspeed",
-        "base_url": "https://api.minimaxi.com/anthropic",
+        "model": PROVIDER_DEFAULTS["claude"]["minimax"]["default_model"],
+        "base_url": PROVIDER_DEFAULTS["claude"]["minimax"]["base_url"],
         # MiniMax Anthropic-compatible endpoint requires ANTHROPIC_AUTH_TOKEN
         # instead of ANTHROPIC_API_KEY, plus extended timeout and traffic control.
         "auth_token_var": "ANTHROPIC_AUTH_TOKEN",
@@ -303,8 +396,8 @@ CLAUDE_API_PROVIDER_CONFIGS = {
         },
     },
     "ark": {
-        "model": "ark-code-latest",
-        "base_url": "https://ark.cn-beijing.volces.com/api/coding",
+        "model": PROVIDER_DEFAULTS["claude"]["ark"]["default_model"],
+        "base_url": PROVIDER_DEFAULTS["claude"]["ark"]["base_url"],
         # ARK exposes an Anthropic-compatible Claude Code endpoint but
         # operators already store the upstream secret as ARK_API_KEY in
         # ~/.agent-runtime/secrets/claude/ark.env. Session startup aliases
@@ -320,12 +413,12 @@ CLAUDE_API_PROVIDER_CONFIGS = {
 CODEX_API_PROVIDER_CONFIGS = {
     "xcode-best": {
         "model_provider": "api111",
-        "model": "gpt-5.4",
+        "model": PROVIDER_DEFAULTS["codex"]["xcode-best"]["default_model"],
         "model_reasoning_effort": "high",
         "disable_response_storage": True,
         "preferred_auth_method": "apikey",
         "personality": "pragmatic",
-        "base_url": "https://api.xcode.best/v1",
+        "base_url": PROVIDER_DEFAULTS["codex"]["xcode-best"]["base_url"],
         "wire_api": "responses",
     },
 }
@@ -416,10 +509,6 @@ SUPPORTED_RUNTIME_MATRIX = {
 AUTH_MODES_REQUIRING_SECRET_FILE = frozenset({"api", "oauth_token"})
 AUTH_MODES_WITHOUT_SECRET_FILE = frozenset({"oauth", "ccr"})
 ALL_AUTH_MODES = AUTH_MODES_REQUIRING_SECRET_FILE | AUTH_MODES_WITHOUT_SECRET_FILE
-
-
-# Default endpoint for the local CCR proxy (override with CLAWSEAT_CCR_BASE_URL).
-DEFAULT_CCR_BASE_URL = "http://127.0.0.1:3456"
 
 
 def supported_providers(tool: str, auth_mode: str) -> tuple[str, ...]:

@@ -1202,6 +1202,10 @@ def cmd_window_open_engineer(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.window_open_engineer(args)
 
 
+def cmd_window_reseed_pane(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.window_reseed_pane(args)
+
+
 def cmd_engineer_create(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.engineer_create(args)
 
@@ -1279,6 +1283,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_window_open_dashboard=cmd_window_open_dashboard,
     cmd_window_open_grid=cmd_window_open_grid,
     cmd_window_open_engineer=cmd_window_open_engineer,
+    cmd_window_reseed_pane=cmd_window_reseed_pane,
     cmd_window_config_monitor=cmd_window_config_monitor,
     cmd_engineer_create=cmd_engineer_create,
     cmd_engineer_delete=cmd_engineer_delete,

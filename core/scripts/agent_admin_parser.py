@@ -47,6 +47,7 @@ class ParserHooks:
     cmd_window_open_dashboard: Callable[[Any], int]
     cmd_window_open_grid: Callable[[Any], int]
     cmd_window_open_engineer: Callable[[Any], int]
+    cmd_window_reseed_pane: Callable[[Any], int]
     cmd_window_config_monitor: Callable[[Any], int]
     cmd_engineer_create: Callable[[Any], int]
     cmd_engineer_delete: Callable[[Any], int]
@@ -462,6 +463,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     open_engineer.add_argument("engineer")
     open_engineer.add_argument("--project")
     open_engineer.set_defaults(func=hooks.cmd_window_open_engineer)
+
+    reseed_pane = window_sub.add_parser("reseed-pane")
+    reseed_pane.add_argument("seat")
+    reseed_pane.add_argument("--project", required=True)
+    reseed_pane.set_defaults(func=hooks.cmd_window_reseed_pane)
 
     config_monitor = window_sub.add_parser("config-monitor")
     config_monitor.add_argument("project", nargs="?")

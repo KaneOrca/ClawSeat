@@ -38,11 +38,21 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     tmux_log = tmp_path / "tmux.log"
 
     (root / "scripts").mkdir(parents=True, exist_ok=True)
+    (root / "core" / "lib").mkdir(parents=True, exist_ok=True)
+    (root / "core" / "scripts").mkdir(parents=True, exist_ok=True)
     (root / "core" / "shell-scripts").mkdir(parents=True, exist_ok=True)
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
     shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
     (root / "scripts" / "wait-for-seat.sh").chmod(0o755)
+    shutil.copy2(
+        _REPO / "core" / "scripts" / "agent_admin_config.py",
+        root / "core" / "scripts" / "agent_admin_config.py",
+    )
+    shutil.copy2(
+        _REPO / "core" / "lib" / "real_home.py",
+        root / "core" / "lib" / "real_home.py",
+    )
     shutil.copy2(
         _REPO / "core" / "shell-scripts" / "send-and-verify.sh",
         root / "core" / "shell-scripts" / "send-and-verify.sh",
@@ -245,6 +255,37 @@ if [[ "${1:-}" == "has-session" ]]; then
     exit "${TMUX_HAS_MEMORY_SESSION_RC:-1}"
   fi
   exit 1
+fi
+if [[ "${1:-}" == "capture-pane" ]]; then
+  target=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -t) target="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  target="${target#=}"
+  printf 'capture-pane -t =%s\\n' "$target" >> "${TMUX_LOG_FILE:?}"
+  if [[ -n "${TMUX_PANE_DIR:-}" ]]; then
+    counter_file="${TMUX_PANE_DIR}/.${target}.counter"
+    counter="1"
+    if [[ -f "$counter_file" ]]; then
+      counter="$(cat "$counter_file")"
+    fi
+    numbered_path="${TMUX_PANE_DIR}/${target}.${counter}.txt"
+    static_path="${TMUX_PANE_DIR}/${target}.txt"
+    if [[ -f "$numbered_path" ]]; then
+      cat "$numbered_path"
+      printf '%s' "$((counter + 1))" > "$counter_file"
+      exit 0
+    fi
+    if [[ -f "$static_path" ]]; then
+      cat "$static_path"
+      exit 0
+    fi
+  fi
+  printf '%s' "${TMUX_CAPTURE_PANE_TEXT:-Type your message}"
+  exit 0
 fi
 printf '%s\\n' "$*" >> "${TMUX_LOG_FILE:?}"
 """,

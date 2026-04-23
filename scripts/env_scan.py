@@ -14,7 +14,7 @@ _CORE_SCRIPTS = str(_REPO_ROOT / "core" / "scripts")
 if _CORE_SCRIPTS not in sys.path:
     sys.path.insert(0, _CORE_SCRIPTS)
 
-from agent_admin_config import is_supported_runtime_combo  # noqa: E402
+from agent_admin_config import is_supported_runtime_combo, provider_url_matches  # noqa: E402
 
 
 def real_home() -> Path:
@@ -49,6 +49,10 @@ def env_file_has_key(path: Path, key: str) -> bool:
         if sep and name.strip() == key:
             return True
     return False
+
+
+def env_file_has_any_key(path: Path, *keys: str) -> bool:
+    return any(env_file_has_key(path, key) for key in keys)
 
 
 def dir_has_evidence(path: Path) -> bool:
@@ -99,6 +103,7 @@ def scan() -> dict:
     legacy_secrets_root = home / ".agent-runtime" / "secrets"
     global_env_file = agents_root / ".env.global"
     anthropic_console_file = agents_secrets_root / "claude" / "anthropic-console.env"
+    claude_ark_file = legacy_secrets_root / "claude" / "ark.env"
     claude_minimax_file = legacy_secrets_root / "claude" / "minimax.env"
     claude_xcode_file = legacy_secrets_root / "claude" / "xcode.env"
     codex_xcode_file = legacy_secrets_root / "codex" / "xcode.env"
@@ -121,31 +126,67 @@ def scan() -> dict:
     )
 
     base_url = env.get("ANTHROPIC_BASE_URL", "").strip()
-    openai_base_url = env.get("OPENAI_BASE_URL", "").strip()
+    openai_base_url = (
+        env.get("OPENAI_BASE_URL", "").strip()
+        or env.get("OPENAI_API_BASE", "").strip()
+    )
     local_model = any(
         str(env.get(name, "")).startswith(("http://localhost", "http://127.0.0.1"))
-        for name in ("ANTHROPIC_BASE_URL", "OPENAI_BASE_URL", "OLLAMA_HOST", "GEMINI_BASE_URL")
+        for name in (
+            "ANTHROPIC_BASE_URL",
+            "OPENAI_BASE_URL",
+            "OPENAI_API_BASE",
+            "OLLAMA_HOST",
+            "GEMINI_BASE_URL",
+        )
     )
-    claude_minimax_ready = (
-        env_file_has_key(claude_minimax_file, "ANTHROPIC_AUTH_TOKEN")
+    claude_ark_file_has_url = env_file_has_key(claude_ark_file, "ANTHROPIC_BASE_URL")
+    claude_minimax_file_has_url = env_file_has_key(claude_minimax_file, "ANTHROPIC_BASE_URL")
+    claude_xcode_file_has_url = env_file_has_key(claude_xcode_file, "ANTHROPIC_BASE_URL")
+    codex_xcode_file_has_url = env_file_has_any_key(
+        codex_xcode_file,
+        "OPENAI_BASE_URL",
+        "OPENAI_API_BASE",
+    )
+    claude_ark_ready = (
+        (
+            env_file_has_key(claude_ark_file, "ANTHROPIC_AUTH_TOKEN")
+            and claude_ark_file_has_url
+        )
         or (
             bool(env.get("ANTHROPIC_AUTH_TOKEN"))
-            and "minimaxi.com" in base_url
+            and provider_url_matches("claude", "ark", base_url)
+        )
+    )
+    claude_minimax_ready = (
+        (
+            env_file_has_key(claude_minimax_file, "ANTHROPIC_AUTH_TOKEN")
+            and claude_minimax_file_has_url
+        )
+        or (
+            bool(env.get("ANTHROPIC_AUTH_TOKEN"))
+            and provider_url_matches("claude", "minimax", base_url)
         )
     )
     claude_xcode_ready = (
-        env_file_has_key(claude_xcode_file, "ANTHROPIC_AUTH_TOKEN")
+        (
+            env_file_has_key(claude_xcode_file, "ANTHROPIC_AUTH_TOKEN")
+            and claude_xcode_file_has_url
+        )
         or (
             bool(env.get("ANTHROPIC_AUTH_TOKEN"))
-            and "xcode.best" in base_url
+            and provider_url_matches("claude", "xcode-best", base_url)
         )
     )
     codex_oauth_ready = dir_has_evidence(codex_dir)
     codex_xcode_ready = (
-        env_file_has_key(codex_xcode_file, "OPENAI_API_KEY")
+        (
+            env_file_has_key(codex_xcode_file, "OPENAI_API_KEY")
+            and codex_xcode_file_has_url
+        )
         or (
             bool(env.get("OPENAI_API_KEY"))
-            and "xcode.best" in openai_base_url
+            and provider_url_matches("codex", "xcode-best", openai_base_url)
         )
     )
     gemini_oauth_ready = dir_has_evidence(gemini_dir)
@@ -198,8 +239,21 @@ def scan() -> dict:
             provider="minimax",
             source=(
                 "ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BASE_URL"
-                if env.get("ANTHROPIC_AUTH_TOKEN") and "minimaxi.com" in base_url
+                if env.get("ANTHROPIC_AUTH_TOKEN") and provider_url_matches("claude", "minimax", base_url)
                 else str(claude_minimax_file)
+            ),
+        )
+    if claude_ark_ready:
+        add_auth_method(
+            auth_methods,
+            seen_triples,
+            tool="claude",
+            auth_mode="api",
+            provider="ark",
+            source=(
+                "ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BASE_URL"
+                if env.get("ANTHROPIC_AUTH_TOKEN") and provider_url_matches("claude", "ark", base_url)
+                else str(claude_ark_file)
             ),
         )
     if claude_xcode_ready:
@@ -211,7 +265,7 @@ def scan() -> dict:
             provider="xcode-best",
             source=(
                 "ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BASE_URL"
-                if env.get("ANTHROPIC_AUTH_TOKEN") and "xcode.best" in base_url
+                if env.get("ANTHROPIC_AUTH_TOKEN") and provider_url_matches("claude", "xcode-best", base_url)
                 else str(claude_xcode_file)
             ),
         )
@@ -232,8 +286,8 @@ def scan() -> dict:
             auth_mode="api",
             provider="xcode-best",
             source=(
-                "OPENAI_API_KEY + OPENAI_BASE_URL"
-                if env.get("OPENAI_API_KEY") and "xcode.best" in openai_base_url
+                "OPENAI_API_KEY + OPENAI_BASE_URL/OPENAI_API_BASE"
+                if env.get("OPENAI_API_KEY") and provider_url_matches("codex", "xcode-best", openai_base_url)
                 else str(codex_xcode_file)
             ),
         )
@@ -279,10 +333,11 @@ def scan() -> dict:
         },
         "providers": {
             "anthropic-console": claude_anthropic_console_ready,
+            "ark": claude_ark_ready,
             "minimax": claude_minimax_ready,
             "xcode-best": claude_xcode_ready or codex_xcode_ready,
             "oauth_token": claude_oauth_token_ready,
-            "anthropic_proxy": bool(base_url and "api.anthropic.com" not in base_url),
+            "anthropic_proxy": bool(base_url and not provider_url_matches("claude", "anthropic-console", base_url)),
             "local_model": local_model,
         },
         "runtimes": {name: shutil.which(name) for name in ("claude", "codex", "gemini")},

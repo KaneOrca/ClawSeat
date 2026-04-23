@@ -55,6 +55,27 @@ def test_all_three_api_provider_dicts_are_symmetric() -> None:
         assert isinstance(getattr(cfg, name), dict)
 
 
+def test_provider_url_helpers_resolve_canonical_defaults() -> None:
+    from core.scripts.agent_admin_config import provider_default_base_url, tool_default_base_url
+
+    assert tool_default_base_url("claude") == "https://api.anthropic.com"
+    assert tool_default_base_url("codex") == "https://api.openai.com/v1"
+    assert provider_default_base_url("claude", "minimax") == "https://api.minimaxi.com/anthropic"
+    assert provider_default_base_url("claude", "ark") == "https://ark.cn-beijing.volces.com/api/coding"
+    assert provider_default_base_url("claude", "xcode-best") == "https://xcode.best"
+    assert provider_default_base_url("codex", "xcode-best") == "https://api.xcode.best/v1"
+
+
+def test_provider_url_matches_uses_canonical_domain_markers() -> None:
+    from core.scripts.agent_admin_config import provider_url_matches
+
+    assert provider_url_matches("claude", "minimax", "https://api.minimaxi.com/anthropic")
+    assert provider_url_matches("claude", "ark", "https://ark.cn-beijing.volces.com/api/coding")
+    assert provider_url_matches("claude", "xcode-best", "https://xcode.best")
+    assert provider_url_matches("codex", "xcode-best", "https://api.xcode.best/v1")
+    assert not provider_url_matches("claude", "ark", "https://api.anthropic.com")
+
+
 # ── H2: Codex config dataclass schema ────────────────────────────────
 
 

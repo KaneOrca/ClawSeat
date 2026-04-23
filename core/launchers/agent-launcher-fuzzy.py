@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 import argparse
-import curses
 import os
-import sys
 from pathlib import Path
+from typing import Optional
 
 
 def _home() -> Path:
@@ -149,7 +148,7 @@ def score_choice_empty(choice: str, default_choice: str):
     return (preferred, len(choice), lowered)
 
 
-def resolve_manual_path(query: str) -> str | None:
+def resolve_manual_path(query: str) -> Optional[str]:
     if not query:
         return None
     expanded = Path(query).expanduser()
@@ -264,131 +263,21 @@ def load_choices(path: str) -> list[str]:
     return loaded
 
 
-def run_curses_picker(
-    candidates: list[str],
-    initial_query: str,
-    limit: int,
-    mode: str,
-    prompt: str,
-    default_choice: str,
-) -> int:
-    selection_holder = {"path": None}
-
-    def main(stdscr):
-        query = initial_query
-        selected_index = 0
-        scroll_offset = 0
-
-        curses.curs_set(1)
-        stdscr.keypad(True)
-        curses.use_default_colors()
-
-        if default_choice and not query:
-            try:
-                selected_index = candidates.index(default_choice)
-            except ValueError:
-                selected_index = 0
-
-        while True:
-            height, width = stdscr.getmaxyx()
-            result_limit = max(8, min(limit, height - 7))
-            matches = get_matches(candidates, query, result_limit, mode, default_choice)
-            if matches:
-                selected_index = max(0, min(selected_index, len(matches) - 1))
-            else:
-                selected_index = 0
-            if selected_index < scroll_offset:
-                scroll_offset = selected_index
-            if selected_index >= scroll_offset + max(1, height - 6):
-                scroll_offset = selected_index - (height - 6) + 1
-
-            stdscr.erase()
-            title = "Directory Picker (fzf-like)" if mode == "directories" else "Option Picker (fzf-like)"
-            stdscr.addnstr(0, 0, title, width - 1, curses.A_BOLD)
-            stdscr.addnstr(
-                1,
-                0,
-                prompt or "Type to filter. Enter confirm. Up/Down select. Ctrl-U clear. Esc cancel.",
-                width - 1,
-            )
-            stdscr.addnstr(2, 0, f"Query: {query}", width - 1)
-
-            visible_rows = max(1, height - 6)
-            if not matches:
-                empty_text = (
-                    "No matches. Try another keyword or paste an absolute path."
-                    if mode == "directories"
-                    else "No matches. Keep typing to narrow the choices."
-                )
-                stdscr.addnstr(4, 0, empty_text, width - 1)
-            else:
-                visible = matches[scroll_offset : scroll_offset + visible_rows]
-                for idx, candidate in enumerate(visible, start=0):
-                    row = 4 + idx
-                    actual_index = scroll_offset + idx
-                    prefix = "> " if actual_index == selected_index else "  "
-                    text = f"{prefix}{candidate}"
-                    attrs = curses.A_REVERSE if actual_index == selected_index else curses.A_NORMAL
-                    stdscr.addnstr(row, 0, text, width - 1, attrs)
-
-                current = matches[selected_index]
-                footer = f"Selected: {current}"
-                stdscr.addnstr(height - 1, 0, footer, width - 1, curses.A_DIM)
-
-            cursor_x = min(width - 1, len("Query: ") + len(query))
-            stdscr.move(2, cursor_x)
-            stdscr.refresh()
-
-            key = stdscr.get_wch()
-            if key in ("\n", "\r", curses.KEY_ENTER):
-                if matches:
-                    selection_holder["path"] = matches[selected_index]
-                    return
-                continue
-            if key in ("\x1b",):
-                raise KeyboardInterrupt
-            if key in (curses.KEY_UP,):
-                if matches:
-                    selected_index = max(0, selected_index - 1)
-                continue
-            if key in (curses.KEY_DOWN,):
-                if matches:
-                    selected_index = min(len(matches) - 1, selected_index + 1)
-                continue
-            if key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
-                query = query[:-1]
-                selected_index = 0
-                scroll_offset = 0
-                continue
-            if key == "\x15":
-                query = ""
-                selected_index = 0
-                scroll_offset = 0
-                continue
-            if isinstance(key, str) and key.isprintable():
-                query += key
-                selected_index = 0
-                scroll_offset = 0
-                continue
-
-    try:
-        curses.wrapper(main)
-    except KeyboardInterrupt:
-        return 130
-
-    if selection_holder["path"]:
-        print(selection_holder["path"])
-        return 0
-    return 130
+def print_best_match(candidates: list[str], query: str, limit: int, mode: str, default_choice: str) -> int:
+    matches = get_matches(candidates, query, limit, mode, default_choice)
+    if not matches:
+        return 1
+    print(matches[0])
+    return 0
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Interactive fzf-like picker.")
+    parser = argparse.ArgumentParser(description="Deterministic launcher matcher.")
     parser.add_argument("--mode", choices=["directories", "choices"], default="directories")
     parser.add_argument("--query", default="", help="Initial query")
-    parser.add_argument("--dump", action="store_true", help="Print matches and exit")
+    parser.add_argument("--dump", action="store_true", help="Print all matches and exit")
     parser.add_argument("--limit", type=int, default=12, help="Maximum visible results")
-    parser.add_argument("--prompt", default="", help="Prompt shown above the search box")
+    parser.add_argument("--prompt", default="", help="Ignored compatibility flag")
     parser.add_argument("--default-choice", default="", help="Preferred selection when query is empty")
     parser.add_argument("--choices-file", default="", help="Newline-delimited options file for choice mode")
     return parser.parse_args()
@@ -404,14 +293,7 @@ def main() -> int:
         candidates = collect_candidates()
     if args.dump:
         return dump_matches(candidates, args.query, args.limit, args.mode, args.default_choice)
-    return run_curses_picker(
-        candidates,
-        args.query,
-        args.limit,
-        args.mode,
-        args.prompt,
-        args.default_choice,
-    )
+    return print_best_match(candidates, args.query, args.limit, args.mode, args.default_choice)
 
 
 if __name__ == "__main__":

@@ -304,3 +304,9 @@ class CommandHandlers:
         else:
             self.hooks.open_engineer_window(session, self.hooks.load_engineers().get(session.engineer_id))
         return 0
+
+    def window_reseed_pane(self, args: Any) -> int:
+        project = self.hooks.load_project_or_current(getattr(args, "project", None))
+        result = window_ops.reseed_pane(project, args.seat)
+        print(f"reseeded {result['project']}/{result['seat_id']}")
+        return 0

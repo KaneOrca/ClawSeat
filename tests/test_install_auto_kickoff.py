@@ -21,11 +21,28 @@ def _run_install(
     tmp_path: Path,
     *,
     dry_run: bool,
+    pane_snapshots: list[str] | None = None,
+    steady_pane_text: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path, Path]:
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     agent_admin_log = tmp_path / "agent_admin.jsonl"
     iterm_payload_log = tmp_path / "iterm_payload.jsonl"
     agentctl_log = tmp_path / "agentctl.log"
+    pane_dir = tmp_path / "tmux-panes"
+    brief_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    if pane_snapshots is not None or steady_pane_text is not None:
+        pane_dir.mkdir(parents=True, exist_ok=True)
+        session_name = "kickoff50-ancestor"
+        for index, pane_text in enumerate(pane_snapshots or [], start=1):
+            (pane_dir / f"{session_name}.{index}.txt").write_text(
+                pane_text.replace("{BRIEF_PATH}", str(brief_path)),
+                encoding="utf-8",
+            )
+        if steady_pane_text is not None:
+            (pane_dir / f"{session_name}.txt").write_text(
+                steady_pane_text.replace("{BRIEF_PATH}", str(brief_path)),
+                encoding="utf-8",
+            )
     args = ["bash", str(root / "scripts" / "install.sh")]
     if dry_run:
         args.append("--dry-run")
@@ -49,6 +66,7 @@ def _run_install(
             "TMUX_LOG_FILE": str(tmux_log),
             "AGENT_ADMIN_LOG": str(agent_admin_log),
             "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+            "TMUX_PANE_DIR": str(pane_dir),
         },
         check=False,
     )
@@ -63,26 +81,51 @@ def test_install_dry_run_does_not_send_phase_a_kickoff(tmp_path: Path) -> None:
     assert "Step 9.5: auto-send Phase-A kickoff prompt" not in combined
     assert "读 " not in combined
     assert "spawn engineer seat 要 one-at-a-time" not in combined
+    assert "IF ANCESTOR IS IDLE, COPY AND PASTE THIS:" not in combined
     assert not agentctl_log.exists()
 
 
 def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
-    result, launcher_log, tmux_log, home, agentctl_log = _run_install(tmp_path, dry_run=False)
+    brief_stub = (
+        "读 {BRIEF_PATH} 开始 Phase-A。"
+        "按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；"
+        "spawn engineer seat 要 one-at-a-time。"
+    )
+    result, launcher_log, tmux_log, home, agentctl_log = _run_install(
+        tmp_path,
+        dry_run=False,
+        pane_snapshots=[
+            "",
+            "Browser didn't open? Use the url below to sign in",
+            "Type your message",
+            brief_stub,
+        ],
+        steady_pane_text=brief_stub,
+    )
 
     combined = result.stdout + result.stderr
     expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
     guide_path = home / ".agents" / "tasks" / "kickoff50" / "OPERATOR-START-HERE.md"
+    kickoff = (
+        f"读 {expected_brief} 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。"
+        "不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
+    )
 
     assert result.returncode == 0, result.stderr
     assert "Step 9.5: auto-send Phase-A kickoff prompt" in combined
+    assert "Phase-A kickoff delivered to kickoff50-ancestor" in combined
+    assert "IF ANCESTOR IS IDLE, COPY AND PASTE THIS:" in combined
+    assert kickoff in combined
     assert expected_brief.is_file()
     assert guide_path.is_file()
     assert "Phase-A 不让 memory 做同步调研" in guide_path.read_text(encoding="utf-8")
     assert "session-name ancestor --project kickoff50" in agentctl_log.read_text(encoding="utf-8")
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
+    assert tmux_output.index("capture-pane -t =kickoff50-ancestor") < tmux_output.index("send-keys -l -t kickoff50-ancestor")
     assert "send-keys -l -t kickoff50-ancestor" in tmux_output
-    assert f"读 {expected_brief} 开始 Phase-A。" in tmux_output
+    assert tmux_output.count("send-keys -l -t kickoff50-ancestor") == 1
+    assert kickoff in tmux_output
     assert "spawn engineer seat 要 one-at-a-time。" in tmux_output
 
     records = _read_jsonl(launcher_log)
@@ -90,3 +133,27 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
         "kickoff50-ancestor",
         "machine-memory-claude",
     ]
+
+
+def test_install_keeps_manual_fallback_when_auto_send_times_out(tmp_path: Path) -> None:
+    result, _, tmux_log, home, _ = _run_install(
+        tmp_path,
+        dry_run=False,
+        steady_pane_text="Quick safety check:",
+    )
+
+    combined = result.stdout + result.stderr
+    expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    kickoff = (
+        f"读 {expected_brief} 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。"
+        "不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Auto-send could not verify kickoff delivery to kickoff50-ancestor." in combined
+    assert "IF ANCESTOR IS IDLE, COPY AND PASTE THIS:" in combined
+    assert kickoff in combined
+
+    tmux_output = tmux_log.read_text(encoding="utf-8")
+    assert "capture-pane -t =kickoff50-ancestor" in tmux_output
+    assert "send-keys -l -t kickoff50-ancestor" not in tmux_output

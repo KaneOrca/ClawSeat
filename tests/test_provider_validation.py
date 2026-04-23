@@ -206,7 +206,13 @@ def test_env_scan_emits_only_supported_runtime_combos(tmp_path: Path):
     )
     (fake_home / ".agent-runtime" / "secrets" / "claude").mkdir(parents=True, exist_ok=True)
     (fake_home / ".agent-runtime" / "secrets" / "claude" / "minimax.env").write_text(
-        "ANTHROPIC_AUTH_TOKEN=minimax-token\n",
+        "ANTHROPIC_AUTH_TOKEN=minimax-token\n"
+        "ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic\n",
+        encoding="utf-8",
+    )
+    (fake_home / ".agent-runtime" / "secrets" / "claude" / "ark.env").write_text(
+        "ANTHROPIC_AUTH_TOKEN=ark-token\n"
+        "ANTHROPIC_BASE_URL=https://ark.cn-beijing.volces.com/api/coding\n",
         encoding="utf-8",
     )
     (fake_home / ".codex").mkdir(parents=True, exist_ok=True)
@@ -237,6 +243,7 @@ def test_env_scan_emits_only_supported_runtime_combos(tmp_path: Path):
     expected = {
         ("claude", "oauth_token", "anthropic"),
         ("claude", "api", "anthropic-console"),
+        ("claude", "api", "ark"),
         ("claude", "api", "minimax"),
         ("codex", "oauth", "openai"),
         ("gemini", "api", "google-api-key"),

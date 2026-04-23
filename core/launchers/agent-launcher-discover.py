@@ -3,8 +3,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Iterable
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_SCRIPTS = str(_REPO_ROOT / "core" / "scripts")
+if _CORE_SCRIPTS not in sys.path:
+    sys.path.insert(0, _CORE_SCRIPTS)
+
+from agent_admin_config import tool_default_base_url
 
 
 TOOL_KEYS = {
@@ -24,13 +32,6 @@ TOOL_MODELS = {
     "codex": ["OPENAI_MODEL", "CODEX_MODEL", "MODEL"],
     "gemini": ["GEMINI_MODEL", "GOOGLE_GEMINI_MODEL", "MODEL"],
 }
-
-DEFAULT_URLS = {
-    "claude": "https://api.anthropic.com",
-    "codex": "https://api.openai.com/v1",
-    "gemini": "https://generativelanguage.googleapis.com",
-}
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -164,7 +165,7 @@ def iter_discovered(tool: str, workdir: str) -> Iterable[dict[str, str]]:
     key_names = TOOL_KEYS[tool]
     url_names = TOOL_URLS[tool]
     model_names = TOOL_MODELS[tool]
-    default_url = DEFAULT_URLS[tool]
+    default_url = tool_default_base_url(tool) or ""
     emitted: set[tuple[str, str, str, str]] = set()
     collected: list[dict[str, str]] = []
 

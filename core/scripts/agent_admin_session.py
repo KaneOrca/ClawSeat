@@ -413,10 +413,17 @@ class SessionService:
         target.chmod(0o600)
 
     def _custom_env_payload(self, session: Any) -> dict[str, str]:
+        from agent_admin_config import (
+            DEFAULT_CCR_BASE_URL,
+            provider_default_base_url,
+            provider_default_model,
+            tool_default_base_url,
+        )
+
         if session.tool == "claude" and session.auth_mode == "ccr":
             return {
                 "LAUNCHER_CUSTOM_API_KEY": "ccr-local-dummy",
-                "LAUNCHER_CUSTOM_BASE_URL": os.environ.get("CLAWSEAT_CCR_BASE_URL", "http://127.0.0.1:3456"),
+                "LAUNCHER_CUSTOM_BASE_URL": os.environ.get("CLAWSEAT_CCR_BASE_URL", DEFAULT_CCR_BASE_URL),
             }
 
         secret_env = self._parse_env_file(session.secret_file)
@@ -441,14 +448,8 @@ class SessionService:
                 or secret_env.get("ARK_BASE_URL")
                 or ""
             )
-            if session.provider == "anthropic-console" and not base_url:
-                base_url = "https://api.anthropic.com"
-            if session.provider == "minimax" and not base_url:
-                base_url = "https://api.minimaxi.com/anthropic"
-            if session.provider == "ark" and not base_url:
-                base_url = "https://ark.cn-beijing.volces.com/api/coding"
-            if session.provider == "xcode-best" and not base_url:
-                base_url = "https://xcode.best"
+            if not base_url:
+                base_url = provider_default_base_url("claude", session.provider) or ""
             if base_url:
                 payload["LAUNCHER_CUSTOM_BASE_URL"] = base_url
             model = (
@@ -456,10 +457,8 @@ class SessionService:
                 or secret_env.get("OPENAI_MODEL")
                 or secret_env.get("ARK_MODEL", "")
             )
-            if session.provider == "minimax" and not model:
-                model = "MiniMax-M2.7-highspeed"
-            if session.provider == "ark" and not model:
-                model = "ark-code-latest"
+            if not model:
+                model = provider_default_model("claude", session.provider) or ""
             if model:
                 payload["LAUNCHER_CUSTOM_MODEL"] = model
             return payload
@@ -475,15 +474,15 @@ class SessionService:
                 or secret_env.get("OPENAI_API_BASE")
                 or ""
             )
-            if session.provider == "xcode-best" and not base_url:
-                base_url = "https://api.xcode.best/v1"
+            if not base_url:
+                base_url = provider_default_base_url("codex", session.provider) or ""
             payload = {
                 "LAUNCHER_CUSTOM_API_KEY": api_key,
-                "LAUNCHER_CUSTOM_BASE_URL": base_url or "https://api.openai.com/v1",
+                "LAUNCHER_CUSTOM_BASE_URL": base_url or (tool_default_base_url("codex") or ""),
             }
             model = secret_env.get("OPENAI_MODEL", "") or getattr(session, "_template_model", "")
-            if session.provider == "xcode-best" and not model:
-                model = "gpt-5.4"
+            if not model:
+                model = provider_default_model("codex", session.provider) or ""
             if model:
                 payload["LAUNCHER_CUSTOM_MODEL"] = model
             return payload
@@ -498,7 +497,7 @@ class SessionService:
                 "LAUNCHER_CUSTOM_API_KEY": api_key,
                 "LAUNCHER_CUSTOM_BASE_URL": secret_env.get(
                     "GOOGLE_GEMINI_BASE_URL",
-                    secret_env.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"),
+                    secret_env.get("GEMINI_BASE_URL", tool_default_base_url("gemini") or ""),
                 ),
             }
             model = secret_env.get("GEMINI_MODEL", "") or getattr(session, "_template_model", "")
@@ -620,8 +619,10 @@ class SessionService:
                 if custom_env_file:
                     cmd.extend(["--custom-env-file", custom_env_file])
                 env = dict(os.environ)
+                env.pop("CLAWSEAT_ANCESTOR_BRIEF", None)
                 env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
                 env["CLAWSEAT_PROJECT"] = session.project
+                env["CLAWSEAT_PROVIDER"] = session.provider
                 env["CLAWSEAT_TOOLS_ISOLATION"] = tools_isolation
                 if tools_isolation == "per-project":
                     env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
