@@ -37,6 +37,19 @@
 3. 不要手动 `tmux attach -t ${PROJECT_NAME}-<seat>` 去“救”某个 pane；这会污染 `wait-for-seat.sh` 所在 pane，把它从 canonical re-attach loop 里拽出来。
 4. 真正需要人工恢复的是六宫格窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
 
+## Pane ↔ Seat 映射（强制理解）
+
+- 六宫格 pane 的身份以 `user.seat_id` 为准，不要靠 pane 显示名、滚动内容或你自己的视觉猜测判断。
+- 如需核对当前窗口，把 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window list-panes --project ${PROJECT_NAME}` 当 canonical。
+- 默认布局固定为：
+  - `Row1-Col1 = ancestor`
+  - `Row1-Col2 = planner`
+  - `Row1-Col3 = builder`
+  - `Row2-Col1 = reviewer`
+  - `Row2-Col2 = qa`
+  - `Row2-Col3 = designer`
+- 如果某个 pane 内容异常，先核对 `user.seat_id` 和上面的固定位置，再决定是否 `window reseed-pane` 或 `window open-grid --recover`。
+
 ## Phase-A Steps
 
 ### B0 — env_scan LLM 分析（必须向用户汇报）
