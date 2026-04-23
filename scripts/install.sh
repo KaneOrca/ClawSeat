@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DRY_RUN=0; PROJECT="install"
+DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
@@ -279,16 +279,21 @@ parse_args() {
     case "$1" in
       --dry-run) DRY_RUN=1; shift ;;
       --project) PROJECT="$2"; shift 2 ;;
+      --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
       --provider) FORCE_PROVIDER="$2"; shift 2 ;;
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--dry-run]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--dry-run]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
+  if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
+    [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
+  fi
+  PROJECT_REPO_ROOT="${REPO_ROOT_OVERRIDE:-$REPO_ROOT}"
   if [[ -n "$FORCE_BASE_URL" ]]; then
     [[ -n "$FORCE_API_KEY" ]] || die 2 INVALID_FLAGS "--base-url 必须和 --api-key 成对"
     [[ -z "$FORCE_PROVIDER" || "$FORCE_PROVIDER" == "custom_api" ]] \
@@ -819,7 +824,7 @@ write_project_local_toml() {
   mkdir -p "$(dirname "$PROJECT_LOCAL_TOML")" || die 31 PROJECT_LOCAL_DIR_FAILED "unable to create $(dirname "$PROJECT_LOCAL_TOML")"
   cat >"$PROJECT_LOCAL_TOML" <<EOF
 project_name = "$PROJECT"
-repo_root = "$REPO_ROOT"
+repo_root = "$PROJECT_REPO_ROOT"
 seat_order = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
 
 [[overrides]]
@@ -1476,7 +1481,7 @@ main() {
   local memory_window_id=""
   parse_args "$@"; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
-  launch_seat "$PROJECT-ancestor" "$REPO_ROOT" "$BRIEF_PATH" "ancestor"
+  launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
   bootstrap_project_profile
   install_ancestor_patrol_plist
   note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
