@@ -4,7 +4,8 @@ set -euo pipefail
 DRY_RUN=0; PROJECT="install"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CLAWSEAT_ROOT="${CLAWSEAT_ROOT:-$REPO_ROOT}"
+CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
+PYTHON_BIN_WAS_SET="${PYTHON_BIN+1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
 CALLER_HOME="${HOME:-}"
@@ -61,6 +62,104 @@ PENDING_SEATS=(planner builder reviewer qa designer)
 die() { local n="$1" code="$2" msg="$3"; printf '%s\nERR_CODE: %s\n' "$msg" "$code" >&2; exit "$n"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
 note() { printf '==> %s\n' "$*"; }
+PYTHON_BIN_OVERRIDE="${PYTHON_BIN:-}"
+PYTHON_BIN_VERSION=""
+PYTHON_BIN_RESOLUTION=""
+
+resolve_python_candidate() {
+  local candidate="$1"
+  if [[ "$candidate" == */* ]]; then
+    [[ -x "$candidate" ]] || return 1
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  command -v "$candidate" 2>/dev/null || return 1
+}
+
+python_candidate_version() {
+  local candidate="$1"
+  "$candidate" -c 'import sys; print(".".join(str(part) for part in sys.version_info[:3]))' 2>/dev/null
+}
+
+python_version_supported() {
+  local version="$1"
+  local major="" minor="" patch=""
+  IFS=. read -r major minor patch <<<"$version"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > 3 || (major == 3 && minor >= 11) ))
+}
+
+resolve_supported_python_bin() {
+  local resolved="" version="" detail="" candidate=""
+  local -a attempted=()
+  local -a candidates=(
+    "python3.13"
+    "python3.12"
+    "python3.11"
+    "/opt/homebrew/bin/python3.13"
+    "/opt/homebrew/bin/python3.12"
+    "/opt/homebrew/bin/python3.11"
+    "/usr/local/bin/python3.13"
+    "/usr/local/bin/python3.12"
+    "/usr/local/bin/python3.11"
+    "python3"
+    "python"
+  )
+
+  if [[ -n "$PYTHON_BIN_WAS_SET" && -n "$PYTHON_BIN_OVERRIDE" ]]; then
+    resolved="$(resolve_python_candidate "$PYTHON_BIN_OVERRIDE" || true)"
+    if [[ -z "$resolved" ]]; then
+      die 2 INVALID_PYTHON_BIN \
+        "PYTHON_BIN=$PYTHON_BIN_OVERRIDE was provided, but that executable was not found. ClawSeat install requires Python >= 3.11 before preflight can import. Try: PYTHON_BIN=/opt/homebrew/bin/python3.12 bash scripts/install.sh --provider 1"
+    fi
+    version="$(python_candidate_version "$resolved" || true)"
+    if [[ -n "$version" ]] && python_version_supported "$version"; then
+      PYTHON_BIN="$resolved"
+      PYTHON_BIN_VERSION="$version"
+      PYTHON_BIN_RESOLUTION="explicit"
+      export PYTHON_BIN
+      return 0
+    fi
+    detail="version probe failed"
+    [[ -n "$version" ]] && detail="Python $version"
+    die 2 INVALID_PYTHON_BIN \
+      "PYTHON_BIN=$PYTHON_BIN_OVERRIDE resolves to $resolved ($detail), but ClawSeat install requires Python >= 3.11 before preflight can import. Try: PYTHON_BIN=/opt/homebrew/bin/python3.12 bash scripts/install.sh --provider 1"
+  fi
+
+  for candidate in "${candidates[@]}"; do
+    resolved="$(resolve_python_candidate "$candidate" || true)"
+    [[ -n "$resolved" ]] || continue
+    version="$(python_candidate_version "$resolved" || true)"
+    if [[ -n "$version" ]]; then
+      attempted+=("$resolved=$version")
+      if python_version_supported "$version"; then
+        PYTHON_BIN="$resolved"
+        PYTHON_BIN_VERSION="$version"
+        PYTHON_BIN_RESOLUTION="auto"
+        export PYTHON_BIN
+        return 0
+      fi
+    fi
+  done
+
+  local attempted_summary="none"
+  if [[ ${#attempted[@]} -gt 0 ]]; then
+    attempted_summary="$(printf '%s' "${attempted[0]}")"
+    local idx=1
+    while (( idx < ${#attempted[@]} )); do
+      attempted_summary+=", ${attempted[$idx]}"
+      ((idx += 1))
+    done
+  fi
+  die 2 MISSING_PYTHON311 \
+    "No supported Python >= 3.11 found for ClawSeat install before preflight import. Detected: $attempted_summary. Install/use python3.11+ or run: PYTHON_BIN=/opt/homebrew/bin/python3.12 bash scripts/install.sh --provider 1"
+}
+
+resolve_supported_python_bin
+if [[ "$PYTHON_BIN_RESOLUTION" == "auto" ]]; then
+  note "Using Python $PYTHON_BIN_VERSION at $PYTHON_BIN"
+fi
+
 run() {
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] '
@@ -76,6 +175,82 @@ remember_provider_selection() {
   PROVIDER_KEY="${2:-}"
   PROVIDER_BASE="${3:-}"
   PROVIDER_MODEL="${4:-}"
+}
+
+provider_config_value() {
+  local query="$1"
+  local tool="$2"
+  local provider="${3:-}"
+  "$PYTHON_BIN" - "$REPO_ROOT" "$query" "$tool" "$provider" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+query = sys.argv[2]
+tool = sys.argv[3]
+provider = sys.argv[4]
+sys.path.insert(0, str(repo_root / "core" / "scripts"))
+
+from agent_admin_config import provider_default_base_url, tool_default_base_url
+
+value = ""
+if query == "tool-default-base-url":
+    value = tool_default_base_url(tool) or ""
+elif query == "provider-default-base-url":
+    value = provider_default_base_url(tool, provider) or ""
+print(value)
+PY
+}
+
+CLAUDE_DEFAULTS_LOADED=0
+CLAUDE_DEFAULT_BASE_URL=""
+CLAUDE_MINIMAX_DEFAULT_BASE_URL=""
+CLAUDE_ARK_DEFAULT_BASE_URL=""
+CLAUDE_XCODE_DEFAULT_BASE_URL=""
+
+load_claude_default_base_urls() {
+  [[ "$CLAUDE_DEFAULTS_LOADED" == "1" ]] && return 0
+  CLAUDE_DEFAULT_BASE_URL="$(provider_config_value tool-default-base-url claude)"
+  CLAUDE_MINIMAX_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude minimax)"
+  CLAUDE_ARK_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude ark)"
+  CLAUDE_XCODE_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude xcode-best)"
+  CLAUDE_DEFAULTS_LOADED=1
+}
+
+claude_tool_default_base_url() {
+  load_claude_default_base_urls
+  printf '%s\n' "$CLAUDE_DEFAULT_BASE_URL"
+}
+
+provider_default_base_url() {
+  load_claude_default_base_urls
+  case "$1" in
+    minimax) printf '%s\n' "$CLAUDE_MINIMAX_DEFAULT_BASE_URL" ;;
+    ark) printf '%s\n' "$CLAUDE_ARK_DEFAULT_BASE_URL" ;;
+    xcode-best) printf '%s\n' "$CLAUDE_XCODE_DEFAULT_BASE_URL" ;;
+    anthropic_console) printf '%s\n' "$CLAUDE_DEFAULT_BASE_URL" ;;
+    *) return 1 ;;
+  esac
+}
+
+provider_base_or_default() {
+  local mode="$1" base="${2:-}"
+  if [[ -n "$base" ]]; then
+    printf '%s\n' "$base"
+    return 0
+  fi
+  provider_default_base_url "$mode"
+}
+
+print_provider_url_notice() {
+  local mode="$1" base="${2:-}"
+  case "$mode" in
+    minimax|ark|xcode-best)
+      [[ -n "$base" ]] && printf 'Provider URL will be auto-configured to %s\n' "$base"
+      ;;
+  esac
 }
 
 parse_args() {
@@ -99,7 +274,7 @@ parse_args() {
       || die 2 INVALID_FLAGS "--base-url/--api-key 只能配 --provider custom_api 或不传 --provider"
   elif [[ -n "$FORCE_API_KEY" ]]; then
     case "$FORCE_PROVIDER" in
-      minimax|anthropic_console|ark) ;;
+      minimax|anthropic_console|ark|xcode-best) ;;
       *)
         die 2 INVALID_FLAGS "--base-url 必须和 --api-key 成对"
         ;;
@@ -108,10 +283,10 @@ parse_args() {
   if [[ -n "$FORCE_MODEL" ]]; then
     if [[ -n "$FORCE_BASE_URL" && -n "$FORCE_API_KEY" ]]; then
       :
-    elif [[ -n "$FORCE_API_KEY" && ( "$FORCE_PROVIDER" == "minimax" || "$FORCE_PROVIDER" == "anthropic_console" || "$FORCE_PROVIDER" == "ark" ) ]]; then
+    elif [[ -n "$FORCE_API_KEY" && ( "$FORCE_PROVIDER" == "minimax" || "$FORCE_PROVIDER" == "anthropic_console" || "$FORCE_PROVIDER" == "ark" || "$FORCE_PROVIDER" == "xcode-best" ) ]]; then
       :
     else
-      die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|ark + --api-key"
+      die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|ark|xcode-best + --api-key"
     fi
   fi
   STATUS_FILE="$HOME/.agents/tasks/$PROJECT/STATUS.md"
@@ -184,10 +359,15 @@ scan_machine() {
 }
 
 detect_provider() {
-  "$PYTHON_BIN" - "$MEMORY_ROOT/machine/credentials.json" <<'PY'
+  "$PYTHON_BIN" - "$REPO_ROOT" "$MEMORY_ROOT/machine/credentials.json" <<'PY'
 import json, sys
 from pathlib import Path
-p = Path(sys.argv[1])
+repo_root = Path(sys.argv[1])
+sys.path.insert(0, str(repo_root / "core" / "scripts"))
+
+from agent_admin_config import provider_default_base_url, provider_url_matches
+
+p = Path(sys.argv[2])
 if not p.is_file(): raise SystemExit(1)
 d = json.loads(p.read_text(encoding="utf-8"))
 def lookup(name):
@@ -208,10 +388,13 @@ def add(mode, label, key="", base=""):
 
 k, b = lookup("keys.MINIMAX_API_KEY.value"), lookup("keys.MINIMAX_BASE_URL.value")
 if k:
-    add("minimax", "claude-code + minimax (MINIMAX_API_KEY env)", k, b or "https://api.minimaxi.com/anthropic")
+    default_base = provider_default_base_url("claude", "minimax") or ""
+    add("minimax", "claude-code + minimax (MINIMAX_API_KEY env)", k, b or default_base)
 k, b = lookup("keys.ANTHROPIC_AUTH_TOKEN.value"), lookup("keys.ANTHROPIC_BASE_URL.value")
-if k and "minimaxi.com" in b:
+if k and provider_url_matches("claude", "minimax", b):
     add("minimax", "claude-code + minimax (ANTHROPIC_AUTH_TOKEN -> minimaxi)", k, b)
+elif k and provider_url_matches("claude", "xcode-best", b):
+    add("xcode-best", "claude-code + xcode-best (ANTHROPIC_AUTH_TOKEN -> xcode.best)", k, b)
 elif k and b:
     add("custom_api", f"claude-code + custom API ({b})", k, b)
 k, b = lookup("keys.ANTHROPIC_API_KEY.value"), lookup("keys.ANTHROPIC_BASE_URL.value")
@@ -227,7 +410,8 @@ if k:
     add("custom_api", "claude-code + custom API (DASHSCOPE_API_KEY)", k, b)
 k, b = lookup("keys.ARK_API_KEY.value"), lookup("keys.ARK_BASE_URL.value")
 if k:
-    add("ark", f"claude-code + ARK 火山方舟 ({b or 'https://ark.cn-beijing.volces.com/api/coding'})", k, b or "https://ark.cn-beijing.volces.com/api/coding")
+    default_base = provider_default_base_url("claude", "ark") or ""
+    add("ark", f"claude-code + ARK 火山方舟 ({b or default_base})", k, b or default_base)
 if lookup("oauth.has_any") == "true":
     add("oauth", "claude-code + host oauth (Anthropic Pro / Claude.ai login)", "", "")
 
@@ -238,12 +422,14 @@ PY
 
 write_provider_env() {
   local mode="$1" key="${2:-}" base="${3:-}"
+  local resolved_base=""
   mkdir -p "$(dirname "$PROVIDER_ENV")" || die 22 PROVIDER_ENV_DIR_FAILED "unable to create provider env directory."
   {
     printf '# generated by scripts/install.sh for project=%s\n# provider_mode=%s\n' "$PROJECT" "$mode"
     case "$mode" in
       minimax)
-        export_line ANTHROPIC_BASE_URL "$base"
+        resolved_base="$(provider_base_or_default minimax "$base")"
+        export_line ANTHROPIC_BASE_URL "$resolved_base"
         export_line ANTHROPIC_AUTH_TOKEN "$key"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
         echo 'export API_TIMEOUT_MS=3000000'
@@ -251,12 +437,20 @@ write_provider_env() {
         echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
         ;;
       ark)
-        export_line ANTHROPIC_BASE_URL "${base:-https://ark.cn-beijing.volces.com/api/coding}"
+        resolved_base="$(provider_base_or_default ark "$base")"
+        export_line ANTHROPIC_BASE_URL "$resolved_base"
         export_line ANTHROPIC_AUTH_TOKEN "$key"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-ark-code-latest}"
         echo 'export API_TIMEOUT_MS=3000000'
         echo 'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
         echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
+        ;;
+      xcode-best)
+        resolved_base="$(provider_base_or_default xcode-best "$base")"
+        export_line ANTHROPIC_BASE_URL "$resolved_base"
+        export_line ANTHROPIC_AUTH_TOKEN "$key"
+        [[ -n "$PROVIDER_MODEL" ]] && export_line ANTHROPIC_MODEL "$PROVIDER_MODEL" || echo 'unset ANTHROPIC_MODEL'
+        echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY API_TIMEOUT_MS CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'
         ;;
       custom_api)
         export_line ANTHROPIC_BASE_URL "$base"
@@ -294,6 +488,7 @@ select_provider_candidate() {
   case "$mode" in
     minimax) remember_provider_selection minimax "$key" "$base" "MiniMax-M2.7-highspeed" ;;
     ark) remember_provider_selection ark "$key" "$base" "ark-code-latest" ;;
+    xcode-best) remember_provider_selection xcode-best "$key" "$base" "$FORCE_MODEL" ;;
     *) remember_provider_selection "$mode" "$key" "$base" ;;
   esac
 
@@ -301,6 +496,7 @@ select_provider_candidate() {
     printf '[dry-run] choose provider #%s via %s and write %s\n' "$choice" "$label" "$PROVIDER_ENV"
   else
     write_provider_env "$mode" "$key" "$base"
+    print_provider_url_notice "$mode" "$(provider_base_or_default "$mode" "$base" || true)"
     printf 'Using selected provider candidate #%s: %s\n' "$choice" "$label"
   fi
 }
@@ -314,23 +510,36 @@ select_provider() {
     case "$FORCE_PROVIDER" in
       minimax)
         [[ -n "$FORCE_MODEL" ]] || FORCE_MODEL="MiniMax-M2.7-highspeed"
-        remember_provider_selection minimax "$FORCE_API_KEY" "https://api.minimaxi.com/anthropic" "$FORCE_MODEL"
+        remember_provider_selection minimax "$FORCE_API_KEY" "$(provider_base_or_default minimax)" "$FORCE_MODEL"
         if [[ "$DRY_RUN" == "1" ]]; then
           printf '[dry-run] force provider=minimax via explicit api-key and write %s\n' "$PROVIDER_ENV"
         else
-          write_provider_env minimax "$FORCE_API_KEY" "https://api.minimaxi.com/anthropic"
-          printf 'Using forced provider: minimax (base_url=%s)\n' "https://api.minimaxi.com/anthropic"
+          write_provider_env minimax "$FORCE_API_KEY" "$(provider_base_or_default minimax)"
+          print_provider_url_notice minimax "$(provider_base_or_default minimax)"
+          printf 'Using forced provider: minimax (base_url=%s)\n' "$(provider_base_or_default minimax)"
         fi
         return
         ;;
       ark)
         [[ -n "$FORCE_MODEL" ]] || FORCE_MODEL="ark-code-latest"
-        remember_provider_selection ark "$FORCE_API_KEY" "https://ark.cn-beijing.volces.com/api/coding" "$FORCE_MODEL"
+        remember_provider_selection ark "$FORCE_API_KEY" "$(provider_base_or_default ark)" "$FORCE_MODEL"
         if [[ "$DRY_RUN" == "1" ]]; then
           printf '[dry-run] force provider=ark via explicit api-key and write %s\n' "$PROVIDER_ENV"
         else
-          write_provider_env ark "$FORCE_API_KEY" "https://ark.cn-beijing.volces.com/api/coding"
-          printf 'Using forced provider: ark (base_url=%s)\n' "https://ark.cn-beijing.volces.com/api/coding"
+          write_provider_env ark "$FORCE_API_KEY" "$(provider_base_or_default ark)"
+          print_provider_url_notice ark "$(provider_base_or_default ark)"
+          printf 'Using forced provider: ark (base_url=%s)\n' "$(provider_base_or_default ark)"
+        fi
+        return
+        ;;
+      xcode-best)
+        remember_provider_selection xcode-best "$FORCE_API_KEY" "$(provider_base_or_default xcode-best)" "$FORCE_MODEL"
+        if [[ "$DRY_RUN" == "1" ]]; then
+          printf '[dry-run] force provider=xcode-best via explicit api-key and write %s\n' "$PROVIDER_ENV"
+        else
+          write_provider_env xcode-best "$FORCE_API_KEY" "$(provider_base_or_default xcode-best)"
+          print_provider_url_notice xcode-best "$(provider_base_or_default xcode-best)"
+          printf 'Using forced provider: xcode-best (base_url=%s)\n' "$(provider_base_or_default xcode-best)"
         fi
         return
         ;;
@@ -378,12 +587,14 @@ select_provider() {
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
         ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
+        xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
       if [[ "$DRY_RUN" == "1" ]]; then
         printf '[dry-run] force provider=%s via %s and write %s\n' "$FORCE_PROVIDER" "$label" "$PROVIDER_ENV"
       else
         write_provider_env "$mode" "$key" "$base"
+        print_provider_url_notice "$mode" "$(provider_base_or_default "$mode" "$base" || true)"
         printf 'Using forced provider: %s\n' "$label"
       fi
       return
@@ -393,9 +604,10 @@ select_provider() {
     fi
     if [[ "$DRY_RUN" == "1" && ${#candidates[@]} -eq 0 ]]; then
       case "$FORCE_PROVIDER" in
-        minimax) remember_provider_selection minimax "dry-run-placeholder-key" "https://api.minimaxi.com/anthropic" "MiniMax-M2.7-highspeed" ;;
-        ark) remember_provider_selection ark "dry-run-placeholder-key" "https://ark.cn-beijing.volces.com/api/coding" "ark-code-latest" ;;
-        custom_api) remember_provider_selection custom_api "dry-run-placeholder-key" "https://api.anthropic.com" "$FORCE_MODEL" ;;
+        minimax) remember_provider_selection minimax "dry-run-placeholder-key" "$(provider_base_or_default minimax)" "MiniMax-M2.7-highspeed" ;;
+        ark) remember_provider_selection ark "dry-run-placeholder-key" "$(provider_base_or_default ark)" "ark-code-latest" ;;
+        xcode-best) remember_provider_selection xcode-best "dry-run-placeholder-key" "$(provider_base_or_default xcode-best)" "$FORCE_MODEL" ;;
+        custom_api) remember_provider_selection custom_api "dry-run-placeholder-key" "$(claude_tool_default_base_url)" "$FORCE_MODEL" ;;
         anthropic_console) remember_provider_selection anthropic_console "dry-run-placeholder-key" ;;
         oauth_token) remember_provider_selection oauth_token "dry-run-placeholder-token" ;;
         oauth) remember_provider_selection oauth ;;
@@ -409,12 +621,13 @@ select_provider() {
 
   if [[ "$DRY_RUN" == "1" ]]; then
     if [[ ${#candidates[@]} -eq 0 ]]; then
-      remember_provider_selection custom_api "dry-run-placeholder-key" "https://api.anthropic.com"
+      remember_provider_selection custom_api "dry-run-placeholder-key" "$(claude_tool_default_base_url)"
     else
       IFS=$'\t' read -r mode label key base <<<"${candidates[0]}"
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
         ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
+        xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
     fi
@@ -442,9 +655,11 @@ select_provider() {
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
         ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
+        xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
       write_provider_env "$mode" "$key" "$base"
+      print_provider_url_notice "$mode" "$(provider_base_or_default "$mode" "$base" || true)"
       printf 'Using: %s\n' "$label"
       return
     fi
@@ -471,7 +686,7 @@ select_provider() {
 
 seat_auth_mode_for_provider_mode() {
   case "$PROVIDER_MODE" in
-    minimax|ark|custom_api|anthropic_console) printf '%s\n' "api" ;;
+    minimax|ark|xcode-best|custom_api|anthropic_console) printf '%s\n' "api" ;;
     oauth_token) printf '%s\n' "oauth_token" ;;
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for seat auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -482,6 +697,7 @@ seat_provider_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "minimax" ;;
     ark) printf '%s\n' "ark" ;;
+    xcode-best) printf '%s\n' "xcode-best" ;;
     custom_api|anthropic_console) printf '%s\n' "anthropic-console" ;;
     oauth_token|oauth) printf '%s\n' "anthropic" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for seat provider mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -492,7 +708,7 @@ seat_model_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
     ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
-    custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
+    xcode-best|custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
     *) return 0 ;;
   esac
 }
@@ -617,18 +833,25 @@ write_bootstrap_secret_file() {
     case "$PROVIDER_MODE" in
       minimax)
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
-        export_line ANTHROPIC_BASE_URL "${PROVIDER_BASE:-https://api.minimaxi.com/anthropic}"
+        export_line ANTHROPIC_BASE_URL "$(provider_base_or_default minimax "$PROVIDER_BASE")"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
         ;;
       ark)
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
-        export_line ANTHROPIC_BASE_URL "${PROVIDER_BASE:-https://ark.cn-beijing.volces.com/api/coding}"
+        export_line ANTHROPIC_BASE_URL "$(provider_base_or_default ark "$PROVIDER_BASE")"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-ark-code-latest}"
+        ;;
+      xcode-best)
+        export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
+        export_line ANTHROPIC_BASE_URL "$(provider_base_or_default xcode-best "$PROVIDER_BASE")"
+        if [[ -n "$PROVIDER_MODEL" ]]; then
+          export_line ANTHROPIC_MODEL "$PROVIDER_MODEL"
+        fi
         ;;
       custom_api)
         export_line ANTHROPIC_API_KEY "$PROVIDER_KEY"
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
-        export_line ANTHROPIC_BASE_URL "${PROVIDER_BASE:-https://api.anthropic.com}"
+        export_line ANTHROPIC_BASE_URL "${PROVIDER_BASE:-$(provider_base_or_default anthropic_console)}"
         if [[ -n "$PROVIDER_MODEL" ]]; then
           export_line ANTHROPIC_MODEL "$PROVIDER_MODEL"
         fi
@@ -756,7 +979,104 @@ EOF
   chmod 600 "$GUIDE_FILE" || die 30 GUIDE_CHMOD_FAILED "unable to chmod $GUIDE_FILE"
 }
 
+phase_a_kickoff_prompt() {
+  printf '读 %s 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。\n' "$BRIEF_PATH"
+}
+
+capture_tmux_pane_text() {
+  local session_name="$1"
+  tmux capture-pane -t "=$session_name" -p -S -120 2>/dev/null || true
+}
+
+pane_has_non_whitespace() {
+  local pane_text="$1"
+  printf '%s' "$pane_text" | grep -q '[^[:space:]]'
+}
+
+ancestor_pane_waiting_on_operator() {
+  local pane_text="$1"
+  case "$pane_text" in
+    *"Browser didn't open? Use the url below to sign in"*|\
+    *"Paste code here if prompted >"*|\
+    *"Login successful. Press Enter to continue"*|\
+    *"Accessing workspace:"*|\
+    *"Quick safety check:"*|\
+    *"WARNING: Claude Code running in Bypass Permissions mode"*|\
+    *"OAuth error:"*|\
+    *"Do you trust the files in this folder"*|\
+    *"Trust folder"*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+ancestor_pane_shows_active_response() {
+  local pane_text="$1"
+  case "$pane_text" in
+    *"Thinking..."*|*"Shell awaiting input"*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+pane_contains_text_relaxed() {
+  local pane_text="$1" expected_text="$2" pane_compact="" expected_compact=""
+  pane_compact="$(printf '%s' "$pane_text" | tr -d '[:space:]')"
+  expected_compact="$(printf '%s' "$expected_text" | tr -d '[:space:]')"
+  [[ -n "$expected_compact" && "$pane_compact" == *"$expected_compact"* ]]
+}
+
+auto_send_phase_a_kickoff() {
+  local kickoff="$1" session_name="$PROJECT-ancestor"
+  local max_polls=24 poll_seconds=3 post_send_seconds=2 max_send_attempts=3
+  local poll_count=0 send_attempts=0 pane_text="" post_send_text=""
+
+  while [[ "$poll_count" -lt "$max_polls" ]]; do
+    poll_count=$((poll_count + 1))
+    if ! tmux has-session -t "=$session_name" 2>/dev/null; then
+      sleep "$poll_seconds"
+      continue
+    fi
+
+    pane_text="$(capture_tmux_pane_text "$session_name")"
+    if ! pane_has_non_whitespace "$pane_text"; then
+      sleep "$poll_seconds"
+      continue
+    fi
+    if ancestor_pane_waiting_on_operator "$pane_text"; then
+      sleep "$poll_seconds"
+      continue
+    fi
+
+    send_attempts=$((send_attempts + 1))
+    if bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" ancestor "$kickoff" >/dev/null 2>&1; then
+      sleep "$post_send_seconds"
+      post_send_text="$(capture_tmux_pane_text "$session_name")"
+      if pane_contains_text_relaxed "$post_send_text" "$kickoff"; then
+        note "Phase-A kickoff delivered to $session_name"
+        return 0
+      fi
+      if ancestor_pane_shows_active_response "$post_send_text"; then
+        note "Phase-A kickoff submitted to $session_name"
+        return 0
+      fi
+    fi
+
+    if [[ "$send_attempts" -ge "$max_send_attempts" ]]; then
+      break
+    fi
+    sleep "$poll_seconds"
+  done
+
+  warn "Auto-send could not verify kickoff delivery to $session_name. Use the fallback prompt below."
+  return 1
+}
+
 print_operator_banner() {
+  local kickoff=""
+  kickoff="$(phase_a_kickoff_prompt)"
   printf '\n'
   printf '╔════════════════════════════════════════════════════════════════╗\n'
   printf '║  ClawSeat install complete                                   ║\n'
@@ -766,11 +1086,16 @@ print_operator_banner() {
   printf '║  Or read the file at: %s\n' "$GUIDE_FILE"
   printf '╚════════════════════════════════════════════════════════════════╝\n'
   printf '\n'
+  if [[ "$DRY_RUN" != "1" ]]; then
+    printf 'IF ANCESTOR IS IDLE, COPY AND PASTE THIS:\n'
+    printf '%s\n' "$kickoff"
+    printf '\n'
+  fi
 }
 
 launcher_auth_for_provider() {
   case "$PROVIDER_MODE" in
-    minimax|ark|custom_api|anthropic_console) printf '%s\n' "custom" ;;
+    minimax|ark|xcode-best|custom_api|anthropic_console) printf '%s\n' "custom" ;;
     oauth_token) printf '%s\n' "oauth_token" ;;
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for launcher auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -782,13 +1107,18 @@ launcher_custom_env_file_for_session() {
   case "$PROVIDER_MODE" in
     minimax)
       api_key="$PROVIDER_KEY"
-      base_url="${PROVIDER_BASE:-https://api.minimaxi.com/anthropic}"
+      base_url="$(provider_base_or_default minimax "$PROVIDER_BASE")"
       model="${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
       ;;
     ark)
       api_key="$PROVIDER_KEY"
-      base_url="${PROVIDER_BASE:-https://ark.cn-beijing.volces.com/api/coding}"
+      base_url="$(provider_base_or_default ark "$PROVIDER_BASE")"
       model="${PROVIDER_MODEL:-ark-code-latest}"
+      ;;
+    xcode-best)
+      api_key="$PROVIDER_KEY"
+      base_url="$(provider_base_or_default xcode-best "$PROVIDER_BASE")"
+      model="$PROVIDER_MODEL"
       ;;
     custom_api)
       api_key="$PROVIDER_KEY"
@@ -797,7 +1127,7 @@ launcher_custom_env_file_for_session() {
       ;;
     anthropic_console)
       api_key="$PROVIDER_KEY"
-      base_url="${PROVIDER_BASE:-https://api.anthropic.com}"
+      base_url="${PROVIDER_BASE:-$(provider_base_or_default anthropic_console)}"
       model="$PROVIDER_MODEL"
       ;;
     *)
@@ -861,7 +1191,7 @@ launch_seat() {
 
   local -a cmd=(env "CLAWSEAT_ROOT=$CLAWSEAT_ROOT")
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
-  [[ -n "$brief_path" ]] && cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
+  cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool claude --auth "$auth_mode" --dir "$cwd" --session "$session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
   [[ "$DRY_RUN" == "1" ]] && cmd+=(--dry-run)
@@ -1066,9 +1396,9 @@ main() {
   fi
   if [[ "$DRY_RUN" != "1" ]]; then
     note "Step 9.5: auto-send Phase-A kickoff prompt"
-    sleep 12
-    local kickoff="读 $BRIEF_PATH 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
-    bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" ancestor "$kickoff" >/dev/null 2>&1 || true
+    local kickoff=""
+    kickoff="$(phase_a_kickoff_prompt)"
+    auto_send_phase_a_kickoff "$kickoff" || true
   fi
   write_operator_guide
   print_operator_banner

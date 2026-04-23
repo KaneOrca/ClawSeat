@@ -4,7 +4,7 @@
 
 ### A 级：主控（优先）
 - `docs/INSTALL.md`（高）  
-  - v0.5 安装/重入 playbook、ancestor 拉起、`tmux` 与权限故障修复文案。
+  - v0.7 安装/重入 playbook、`scripts/install.sh` 主链路、`tmux` 与权限故障修复文案。
 - `core/scripts/agent_admin_window.py`（高）  
   - iTerm 打开/重连命令、`env -u TMUX`、重试、失败即停、监控布局回滚。
 - `core/shell-scripts/send-and-verify.sh`（高）  
@@ -83,5 +83,6 @@
 - `TMUX_CAPTURE_FAILED`：pane 不可读，优先确认会话是否存活、pane 是否在前端阻塞。  
 
 ## 5. 与安装 / 重入入口的衔接
-- v0.5 主链路默认走 `docs/INSTALL.md` 与 `scripts/launch_ancestor.sh`：先拉起 `ancestor`，再由 ancestor 接手后续席位。  
+- v0.7 主链路默认走 `docs/INSTALL.md` 与 `scripts/install.sh`：预检、环境扫描、ancestor 拉起、六宫格与 memory 窗口由 install.sh 完成，然后交给 ancestor 接手后续席位。  
+- `scripts/launch_ancestor.sh` 只应视为 legacy helper / test fixture，不是 fresh install 的 canonical 入口。  
 - 若链路失败，当前实现会给出可执行修复建议，不做非阻断 GUI 降级。  

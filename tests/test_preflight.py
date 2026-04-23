@@ -152,6 +152,57 @@ def test_iterm2_python_module_uses_real_home_in_subprocess_env(monkeypatch, tmp_
     assert recorded["env"]["PATH"] == os.environ["PATH"]
 
 
+def test_check_python_uses_current_interpreter_before_bare_python3(monkeypatch, tmp_path):
+    recorded: dict[str, object] = {}
+    chosen_python = tmp_path / "python3.12"
+    chosen_python.write_text("", encoding="utf-8")
+
+    class _Result:
+        stdout = "(3, 12)\n"
+
+    monkeypatch.setattr(pf.sys, "executable", str(chosen_python))
+    monkeypatch.setattr(
+        pf.shutil,
+        "which",
+        lambda name: "/usr/bin/python3" if name == "python3" else None,
+    )
+
+    def _fake_run(cmd, text, capture_output, check):
+        recorded["cmd"] = cmd
+        return _Result()
+
+    monkeypatch.setattr(pf.subprocess, "run", _fake_run)
+
+    item = pf._check_python()
+
+    assert item.status == pf.PreflightStatus.PASS
+    assert recorded["cmd"] == [str(chosen_python), "-c", "import sys; print(sys.version_info[:2])"]
+    assert "3.12" in item.message
+
+
+def test_check_python_falls_back_to_python_bin_env_when_sys_executable_missing(monkeypatch):
+    recorded: dict[str, object] = {}
+
+    class _Result:
+        stdout = "(3, 11)\n"
+
+    monkeypatch.setattr(pf.sys, "executable", "")
+    monkeypatch.setenv("PYTHON_BIN", "/opt/homebrew/bin/python3.11")
+    monkeypatch.setattr(pf.shutil, "which", lambda name: None)
+
+    def _fake_run(cmd, text, capture_output, check):
+        recorded["cmd"] = cmd
+        return _Result()
+
+    monkeypatch.setattr(pf.subprocess, "run", _fake_run)
+
+    item = pf._check_python()
+
+    assert item.status == pf.PreflightStatus.PASS
+    assert recorded["cmd"] == ["/opt/homebrew/bin/python3.11", "-c", "import sys; print(sys.version_info[:2])"]
+    assert "/opt/homebrew/bin/python3.11" in item.message
+
+
 def test_main_returns_nonzero_when_hard_blocked(monkeypatch, capsys):
     result = pf.PreflightResult(
         all_pass=False,

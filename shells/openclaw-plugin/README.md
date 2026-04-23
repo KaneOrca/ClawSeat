@@ -77,8 +77,8 @@ openclaw plugins install clawseat --marketplace "$CLAWSEAT_ROOT"
 
 After the plugin is available, the user should interact with OpenClaw by
 saying "安装 ClawSeat" or "启动 ClawSeat". OpenClaw should load `clawseat` as
-the product entry, and the runtime should follow the v0.5 playbook rather than
-manual workspace-overlay scripts.
+the product entry, and the runtime should follow the v0.7 `scripts/install.sh`
+playbook rather than manual workspace-overlay scripts.
 
 ## Environment Variables
 

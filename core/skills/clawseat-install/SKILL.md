@@ -28,31 +28,29 @@ for install.
    incomplete. Do not reach for the retired TUI helpers from older
    install generations.
 
-## The one command you actually run
+## Canonical execution path
 
-Somewhere inside `docs/INSTALL.md` is a launch step that calls:
+The canonical fresh-install command is:
 
 ```bash
-scripts/launch_ancestor.sh --project <name> \
-  --tool claude \
-  --auth-mode oauth|oauth_token|api \
-  --provider <exact-runtime-matrix-provider> \
-  [--model <model-id>]
+bash scripts/install.sh
 ```
 
-That script is small (<120 lines) and only does one thing — it
-materializes the ancestor seat's `session.toml` and starts the tmux
-session via the existing `agent_admin.py` helpers. You pass it the
-runtime choices the user picked in the env-scan step.
+For non-default cases, follow the playbook and pass only the flags it
+documents, for example `--project`, `--provider`, `--base-url`, `--api-key`,
+`--model`, or `--reinstall`.
 
 Important:
-- `auth_mode` + `provider` must stay on the exact runtime-matrix names emitted
-  by `scripts/env_scan.py` / recorded in `runtime-selection.json`.
-- `--model` is optional and currently only applies to `--tool claude`.
+- `scripts/install.sh` is the L1 user-facing entrypoint. Do not replace it
+  with `scripts/launch_ancestor.sh`, direct `agent-launcher.sh`, or ad-hoc
+  `tmux` commands for fresh installs.
+- When the provider menu appears in a non-interactive or CI-style run, use the
+  documented `--provider 1` / `CLAWSEAT_INSTALL_PROVIDER=1` path from
+  `docs/INSTALL.md`.
+- `--model` is only meaningful when the documented provider path supports it.
 
-After that, the **ancestor CC takes over**. You (the invoking agent)
-report back to the user that ancestor is live and step out of the
-orchestrator role.
+After `install.sh` finishes, the **ancestor CC takes over**. The installer does
+not manually recreate the ancestor launch sequence.
 
 ## Runtime topology (what ancestor brings up)
 
@@ -74,23 +72,17 @@ Frontstage identity depends on runtime:
 - **Feishu / OpenClaw path** → ancestor remains the CLI frontstage;
   `koder` is only an optional post-install reverse-channel overlay
 
-## Subagent mode (encouraged, across all seats)
+## Orchestration boundary
 
-Every seat should fan out independent subtasks via sub-agents rather
-than serializing. Examples:
-- Ancestor parallelizes seat startup (memory → then planner/builder/
-  reviewer/qa/designer in parallel).
-- Planner fans out review lanes across reviewer + qa concurrently.
-- Builder spawns focused subagents per file/module when the diff
-  touches many unrelated files.
+Follow the runtime boundaries in `docs/INSTALL.md` and `docs/ARCHITECTURE.md`:
 
-When you read `docs/INSTALL.md` and it lists a step with independent
-substeps, prefer a subagent-per-substep pattern unless the doc says
-otherwise.
-
-For the five engineer seats, provider clarification must be done
-one-by-one via CLI prompt before any fan-out. Never use a Feishu
-delegate report as the provider-clarification channel.
+- `install.sh` handles host bootstrap, machine scan, provider selection,
+  ancestor launch, grid open, and memory launch.
+- Once ancestor is prompt-ready, ancestor owns Phase-A and later seat
+  lifecycle.
+- Do not parallelize B3.5 engineer bring-up. Provider clarification is
+  intentionally one-by-one via CLI prompt.
+- Do not use Feishu delegation reports as the provider-clarification channel.
 
 ## What to NOT do
 
@@ -98,12 +90,13 @@ delegate report as the provider-clarification channel.
   releases.
 - Do **not** rely on the old batch flags from the removed installer
   surface.
+- Do **not** call `scripts/launch_ancestor.sh` for fresh install. That is a
+  legacy helper, not the canonical v0.7 bootstrap path.
 - Do **not** invoke `/cs` for fresh installs — `/cs` is a separate
   resumer skill for "ancestor crashed, come back up"; it does not
   replace the v0.7 playbook.
-- Do **not** describe your work using the retired numbered runbook
-  terminology. v0.7 is: env-scan → seat-infra → launch-ancestor →
-  handoff.
+- Do **not** describe your work using retired launch choreography from older
+  install generations.
 - Do **not** write v1 profiles. v2 schema only (`core/lib/profile_validator.py`).
 - Do **not** edit `openclaw/` source to fix an install problem. Use
   ClawSeat config or the OpenClaw plugin shell only.
@@ -125,9 +118,9 @@ stopped. Typically:
 ## References
 
 - [`docs/INSTALL.md`](../../../docs/INSTALL.md) — **the playbook you execute**
-- [`scripts/launch_ancestor.sh`](../../../scripts/launch_ancestor.sh) — one-call ancestor launch
+- [`scripts/install.sh`](../../../scripts/install.sh) — canonical fresh-install entrypoint
 - [`core/lib/profile_validator.py`](../../lib/profile_validator.py) — v2 schema validator (still authoritative)
-- [`core/launchers/agent-launcher.sh`](../../launchers/agent-launcher.sh) — low-level seat launcher (used by `launch_ancestor.sh`)
+- [`core/launchers/agent-launcher.sh`](../../launchers/agent-launcher.sh) — low-level seat launcher used internally by `install.sh` / `agent_admin`
 - [`core/scripts/agent_admin.py`](../../scripts/agent_admin.py) — session lifecycle CLI
 - [`core/skills/clawseat-ancestor/SKILL.md`](../clawseat-ancestor/SKILL.md) — ancestor's own skill, owns everything post-launch
 - [`core/skills/cs/SKILL.md`](../cs/SKILL.md) — `/cs` resumer (separate from fresh install)

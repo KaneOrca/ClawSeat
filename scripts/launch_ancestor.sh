@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# launch_ancestor.sh — v0.5 frontstage: pull up the ancestor CC session.
+# launch_ancestor.sh — legacy helper for direct ancestor relaunch/testing.
+# Canonical fresh install goes through scripts/install.sh (v0.7).
 #
 # Reuses:
 #   agent-launcher.sh         — credential verification + headless seat launch
@@ -149,7 +150,7 @@ session_name="${PROJECT}-ancestor-${TOOL}"
 
 # ── inject ancestor bootstrap prompt ────────────────────────────────────
 
-prompt="You are the install frontstage for this ClawSeat v0.5 install. Read $ANCESTOR_SKILL, bring up the memory seat next, then the six-pane grid."
+prompt="Legacy ancestor relaunch path. Read $ANCESTOR_SKILL, verify current project state, and continue from the existing install flow instead of re-running fresh bootstrap."
 
 # 3-Enter flush contract via send-and-verify.sh (sleep-based).
 if [[ -x "$SEND_AND_VERIFY" ]]; then

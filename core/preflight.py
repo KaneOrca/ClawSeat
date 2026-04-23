@@ -145,8 +145,26 @@ def _check_clawseat_root() -> PreflightItem:
 
 
 def _check_python() -> PreflightItem:
-    """Check python3 >= 3.11 is available (tomllib is stdlib from 3.11)."""
-    python = shutil.which("python3") or shutil.which("python")
+    """Check the active Python interpreter is >= 3.11.
+
+    Fresh install runs preflight through the interpreter selected by
+    scripts/install.sh. Preflight must validate that same interpreter, not a
+    separate bare `python3` found later on PATH, otherwise install can print
+    "Using Python 3.12 ..." and still fail Step 1 against `/usr/bin/python3`.
+    """
+    python = sys.executable or ""
+    if python:
+        python_path = Path(python)
+        if not python_path.is_absolute() or not python_path.exists():
+            python = ""
+
+    if not python:
+        override = os.environ.get("PYTHON_BIN", "").strip()
+        if override:
+            python = override
+        else:
+            python = shutil.which("python3") or shutil.which("python") or ""
+
     if not python:
         return PreflightItem(
             name="python3",
@@ -156,7 +174,7 @@ def _check_python() -> PreflightItem:
         )
     try:
         result = subprocess.run(
-            ["python3", "-c", "import sys; print(sys.version_info[:2])"],
+            [python, "-c", "import sys; print(sys.version_info[:2])"],
             text=True,
             capture_output=True,
             check=True,

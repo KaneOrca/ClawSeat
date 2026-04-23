@@ -7,7 +7,7 @@
 # See docs/ARCHITECTURE.md §3z for the full contract.
 # If you find yourself calling this script directly from a TODO or doc,
 # reconsider — L1 or L2 should already cover your case.
-# Unified launcher for Claude Code, Codex, and Gemini CLI with iTerm + tmux.
+# Unified deterministic launcher for Claude Code, Codex, and Gemini CLI.
 #
 # Merged into clawseat from ~/Desktop/agent-launcher.command.
 # All intra-launcher paths are now self-relative so this file can live in
@@ -18,9 +18,11 @@ set -euo pipefail
 
 REAL_HOME="$HOME"
 LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAUNCHER_REPO_ROOT="$(cd "$LAUNCHER_DIR/../.." && pwd)"
+LAUNCHER_PYTHON_BIN="${PYTHON_BIN:-python3}"
 HELPER="$LAUNCHER_DIR/agent-launcher-common.sh"
 DISCOVER_HELPER="$LAUNCHER_DIR/agent-launcher-discover.py"
-# Export so common.sh / discover can locate the picker without hard-coding.
+# Export so launcher helpers can resolve sibling files self-relatively.
 export AGENT_LAUNCHER_DIR="$LAUNCHER_DIR"
 # User preset storage — default to XDG config, fall back to legacy desktop path
 # if it exists (seamless upgrade for users migrating from the desktop-only era).
@@ -30,7 +32,6 @@ elif [[ -f "$REAL_HOME/Desktop/.agent-launcher-custom-presets.json" ]]; then
   CUSTOM_PRESET_STORE="$REAL_HOME/Desktop/.agent-launcher-custom-presets.json"
 else
   CUSTOM_PRESET_STORE="$REAL_HOME/.config/clawseat/launcher-custom-presets.json"
-  mkdir -p "$(dirname "$CUSTOM_PRESET_STORE")"
 fi
 
 if [[ ! -f "$HELPER" ]]; then
@@ -41,20 +42,55 @@ fi
 # shellcheck source=./agent-launcher-common.sh
 source "$HELPER"
 
+launcher_config_value() {
+  local query="$1"
+  local tool="${2:-}"
+  local provider="${3:-}"
+  "$LAUNCHER_PYTHON_BIN" - "$LAUNCHER_REPO_ROOT" "$query" "$tool" "$provider" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+query = sys.argv[2]
+tool = sys.argv[3]
+provider = sys.argv[4]
+sys.path.insert(0, str(repo_root / "core" / "scripts"))
+
+from agent_admin_config import provider_default_base_url, tool_default_base_url
+
+value = ""
+if query == "tool-default-base-url":
+    value = tool_default_base_url(tool) or ""
+elif query == "provider-default-base-url":
+    value = provider_default_base_url(tool, provider) or ""
+print(value)
+PY
+}
+
+launcher_tool_default_base_url() {
+  launcher_config_value "tool-default-base-url" "$1"
+}
+
+launcher_provider_default_base_url() {
+  launcher_config_value "provider-default-base-url" "$1" "$2"
+}
+
 TOOL_NAME=""
 SESSION_NAME=""
 AUTH_MODE=""
 WORKDIR=""
 EXEC_MODE=""
 CUSTOM_ENV_FILE=""
+GENERATED_CUSTOM_ENV_FILE="0"
 HEADLESS="0"
 DRY_RUN="0"
-PROMPT_AUTH_TOOL=""        # set by --prompt-auth <tool>; triggers early dispatch
 CHECK_SECRETS_TOOL=""      # set by --check-secrets <tool> (needs --auth too)
 
 print_help() {
   cat <<'EOF'
-Usage: agent-launcher.command [options]
+Usage: agent-launcher.sh [options]
 
 Options:
   --tool <claude|codex|gemini>   Agent CLI to launch
@@ -62,11 +98,16 @@ Options:
   --dir <path>                   Startup directory
   --session <name>               tmux session name
   --custom-env-file <path>       Internal one-shot custom API env file
-  --headless                     Do not open iTerm/Terminal; manage tmux only
+  --headless                     Compatibility flag; launcher is tmux-only
   --dry-run                      Print resolved launch config and exit
   --exec-agent                   Internal flag used inside tmux
+  --check-secrets <tool>         Report secret-file readiness as JSON
   -h, --help                     Show this help
 EOF
+}
+
+uppercase_ascii() {
+  printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -79,10 +120,6 @@ while [[ $# -gt 0 ]]; do
     --headless) HEADLESS="1"; shift ;;
     --dry-run) DRY_RUN="1"; shift ;;
     --exec-agent) EXEC_MODE="1"; shift ;;
-    # Sub-command for ClawSeat install helpers: pop the AppleScript auth
-    # picker for <tool> and print the user's chosen auth value to stdout.
-    # Exits 0 on selection, 1 on cancel, 2 on bad tool name.
-    --prompt-auth) PROMPT_AUTH_TOOL="$2"; shift 2 ;;
     # Preflight hook: agent-launcher.sh --check-secrets <tool> --auth <mode>
     # prints one JSON line saying whether the auth's secret file/key is ready.
     --check-secrets) CHECK_SECRETS_TOOL="$2"; shift 2 ;;
@@ -91,436 +128,65 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-prompt_tool_name() {
-  local choice
-  choice="$(launcher_choose_from_list \
-    "选择要启动的 AI CLI" \
-    "Claude Code" \
-    "Claude Code" \
-    "Codex" \
-    "Gemini CLI")"
-
-  case "$choice" in
-    "__CANCEL__") return 1 ;;
-    "Claude Code") printf '%s\n' "claude" ;;
-    "Codex") printf '%s\n' "codex" ;;
-    "Gemini CLI") printf '%s\n' "gemini" ;;
-    *) return 1 ;;
-  esac
-}
-
-prompt_auth_mode() {
+validate_tool_name() {
   case "$1" in
-    claude)
-      local choice=""
-      choice="$(launcher_choose_from_list \
-        "选择 Claude Code 认证方式" \
-        "OAuth token (setup-token, recommended)" \
-        "OAuth token (setup-token, recommended)" \
-        "Anthropic Console API" \
-        "MiniMax API" \
-        "Xcode API" \
-        "Custom API (key + URL)" \
-        "Legacy Keychain OAuth")"
-      case "$choice" in
-        "__CANCEL__") return 1 ;;
-        "OAuth token (setup-token, recommended)") printf '%s\n' "oauth_token" ;;
-        "Anthropic Console API") printf '%s\n' "anthropic-console" ;;
-        "MiniMax API") printf '%s\n' "minimax" ;;
-        "Xcode API") printf '%s\n' "xcode" ;;
-        "Custom API (key + URL)") printf '%s\n' "custom" ;;
-        "Legacy Keychain OAuth") printf '%s\n' "oauth" ;;
-        *) return 1 ;;
-      esac
-      ;;
-    codex)
-      local choice=""
-      choice="$(launcher_choose_from_list \
-        "选择 Codex 认证方式" \
-        "ChatGPT login (existing)" \
-        "ChatGPT login (existing)" \
-        "OpenAI API key (xcode)" \
-        "Custom API (key + URL)")"
-      case "$choice" in
-        "__CANCEL__") return 1 ;;
-        "ChatGPT login (existing)") printf '%s\n' "chatgpt" ;;
-        "OpenAI API key (xcode)") printf '%s\n' "xcode" ;;
-        "Custom API (key + URL)") printf '%s\n' "custom" ;;
-        *) return 1 ;;
-      esac
-      ;;
-    gemini)
-      local choice=""
-      choice="$(launcher_choose_from_list \
-        "选择 Gemini CLI 认证方式" \
-        "Google OAuth (existing login)" \
-        "Google OAuth (existing login)" \
-        "Gemini API key (primary)" \
-        "Custom API (key + URL)")"
-      case "$choice" in
-        "__CANCEL__") return 1 ;;
-        "Google OAuth (existing login)") printf '%s\n' "oauth" ;;
-        "Gemini API key (primary)") printf '%s\n' "primary" ;;
-        "Custom API (key + URL)") printf '%s\n' "custom" ;;
-        *) return 1 ;;
-      esac
-      ;;
+    claude|codex|gemini) return 0 ;;
     *)
-      return 1
-      ;;
-  esac
-}
-
-# ── --prompt-auth dispatch ─────────────────────────────────────────────
-# When the wizard wants the user to pick an auth via launcher's
-# AppleScript dialog, it shells out as `agent-launcher.sh --prompt-auth claude`.
-# We answer + exit immediately, before any further launcher logic runs.
-if [[ -n "$PROMPT_AUTH_TOOL" ]]; then
-  case "$PROMPT_AUTH_TOOL" in
-    claude|codex|gemini)
-      _picked="$(prompt_auth_mode "$PROMPT_AUTH_TOOL" || echo "__CANCEL__")"
-      if [[ "$_picked" == "__CANCEL__" || -z "$_picked" ]]; then
-        exit 1
-      fi
-      printf '%s\n' "$_picked"
-      exit 0
-      ;;
-    *)
-      echo "error: --prompt-auth tool must be claude|codex|gemini, got '$PROMPT_AUTH_TOOL'" >&2
+      echo "error: --tool must be claude|codex|gemini, got '$1'" >&2
       exit 2
       ;;
   esac
-fi
-
-
-format_custom_choice_label() {
-  local kind="$1"
-  local name="$2"
-  local base_url="$3"
-  local model="$4"
-  local detail="$base_url"
-  if [[ -n "$model" ]]; then
-    detail="$detail · $model"
-  fi
-  printf '%s: %s — %s\n' "$kind" "$name" "$detail"
 }
 
-lookup_custom_choice() {
-  local tool="$1"
-  local label="$2"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" "$label" <<'PY'
-import json
-import os
-import sys
-
-store_path, tool, label = sys.argv[1:4]
-if not os.path.exists(store_path):
-    raise SystemExit(1)
-with open(store_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-def emit(kind, name, base_url, model):
-    detail = base_url
-    if model:
-        detail = f"{detail} · {model}"
-    expected = f"{kind}: {name} — {detail}"
-    if expected == label:
-        print(base_url)
-        print(model or "")
-        raise SystemExit(0)
-
-for preset in data.get("presets", []):
-    if preset.get("tool") == tool:
-        emit("Preset", preset.get("name", ""), preset.get("base_url", ""), preset.get("model", ""))
-
-for idx, recent in enumerate(data.get("recent_custom", []), start=1):
-    if recent.get("tool") == tool:
-        emit("Recent", recent.get("name", f"#{idx}"), recent.get("base_url", ""), recent.get("model", ""))
-
-raise SystemExit(1)
-PY
+validate_auth_mode() {
+  local tool="$1" auth="$2"
+  case "$tool:$auth" in
+    claude:oauth|claude:oauth_token|claude:anthropic-console|claude:minimax|claude:xcode|claude:custom|\
+    codex:chatgpt|codex:xcode|codex:custom|\
+    gemini:oauth|gemini:primary|gemini:custom)
+      return 0
+      ;;
+    *)
+      echo "error: unsupported auth '$auth' for tool '$tool'" >&2
+      exit 2
+      ;;
+  esac
 }
 
-list_custom_choices() {
-  local tool="$1"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" <<'PY'
-import json
-import os
-import sys
-
-store_path, tool = sys.argv[1:3]
-if not os.path.exists(store_path):
-    raise SystemExit(0)
-with open(store_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-for preset in data.get("presets", []):
-    if preset.get("tool") != tool:
-        continue
-    detail = preset.get("base_url", "")
-    model = preset.get("model", "")
-    if model:
-        detail = f"{detail} · {model}"
-    print(f"Preset: {preset.get('name', 'unnamed')} — {detail}")
-
-for idx, recent in enumerate(data.get("recent_custom", []), start=1):
-    if recent.get("tool") != tool:
-        continue
-    detail = recent.get("base_url", "")
-    model = recent.get("model", "")
-    if model:
-        detail = f"{detail} · {model}"
-    print(f"Recent: {recent.get('name', f'#{idx}')} — {detail}")
-PY
-}
-
-list_discovered_choices() {
-  local tool="$1"
-  local workdir="${2:-}"
-  if [[ ! -f "$DISCOVER_HELPER" ]]; then
+resolve_launcher_workdir() {
+  local raw_path="${1:-}"
+  if [[ -z "$raw_path" ]]; then
+    pwd -P
     return 0
   fi
-  python3 "$DISCOVER_HELPER" --mode list --tool "$tool" --workdir "$workdir"
+  launcher_resolve_directory_path "$raw_path" 2>/dev/null || {
+    echo "error: startup directory does not exist: $raw_path" >&2
+    exit 1
+  }
 }
 
-lookup_discovered_choice() {
-  local tool="$1"
-  local label="$2"
-  local workdir="${3:-}"
-  if [[ ! -f "$DISCOVER_HELPER" ]]; then
-    return 1
+default_session_name() {
+  local tool="$1" auth="$2" workdir="$3"
+  printf '%s\n' "${tool}-${auth}-$(launcher_slugify "$(basename "$workdir")")"
+}
+
+validate_top_level_inputs() {
+  if [[ -z "$TOOL_NAME" ]]; then
+    echo "error: --tool is required" >&2
+    exit 2
   fi
-  python3 "$DISCOVER_HELPER" --mode lookup --tool "$tool" --workdir "$workdir" --label "$label"
+  validate_tool_name "$TOOL_NAME"
+
+  if [[ -z "$AUTH_MODE" ]]; then
+    echo "error: --auth is required" >&2
+    exit 2
+  fi
+  validate_auth_mode "$TOOL_NAME" "$AUTH_MODE"
+
+  WORKDIR="$(resolve_launcher_workdir "$WORKDIR")"
+  [[ -n "$SESSION_NAME" ]] || SESSION_NAME="$(default_session_name "$TOOL_NAME" "$AUTH_MODE" "$WORKDIR")"
 }
 
-list_custom_presets() {
-  local tool="$1"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" <<'PY'
-import json
-import os
-import sys
-
-store_path, tool = sys.argv[1:3]
-if not os.path.exists(store_path):
-    raise SystemExit(0)
-with open(store_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-for preset in data.get("presets", []):
-    if preset.get("tool") != tool:
-        continue
-    detail = preset.get("base_url", "")
-    model = preset.get("model", "")
-    if model:
-        detail = f"{detail} · {model}"
-    print(f"Preset: {preset.get('name', 'unnamed')} — {detail}")
-PY
-}
-
-lookup_custom_preset_name() {
-  local tool="$1"
-  local label="$2"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" "$label" <<'PY'
-import json
-import os
-import sys
-
-store_path, tool, label = sys.argv[1:4]
-if not os.path.exists(store_path):
-    raise SystemExit(1)
-with open(store_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-for preset in data.get("presets", []):
-    if preset.get("tool") != tool:
-        continue
-    detail = preset.get("base_url", "")
-    model = preset.get("model", "")
-    if model:
-        detail = f"{detail} · {model}"
-    expected = f"Preset: {preset.get('name', 'unnamed')} — {detail}"
-    if expected == label:
-        print(preset.get("name", ""))
-        raise SystemExit(0)
-
-raise SystemExit(1)
-PY
-}
-
-rename_custom_preset() {
-  local tool="$1"
-  local old_name="$2"
-  local new_name="$3"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" "$old_name" "$new_name" <<'PY'
-import json
-import os
-import sys
-
-store_path, tool, old_name, new_name = sys.argv[1:5]
-if not os.path.exists(store_path):
-    raise SystemExit(1)
-
-with open(store_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-updated = False
-presets = []
-for preset in data.get("presets", []):
-    if preset.get("tool") == tool and preset.get("name") == old_name:
-        preset = dict(preset)
-        preset["name"] = new_name
-        updated = True
-    presets.append(preset)
-
-if not updated:
-    raise SystemExit(1)
-
-data["presets"] = presets
-with open(store_path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, ensure_ascii=False, indent=2)
-PY
-}
-
-delete_custom_preset() {
-  local tool="$1"
-  local name="$2"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" "$name" <<'PY'
-import json
-import os
-import sys
-
-store_path, tool, name = sys.argv[1:4]
-if not os.path.exists(store_path):
-    raise SystemExit(1)
-
-with open(store_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-before = len(data.get("presets", []))
-data["presets"] = [
-    preset
-    for preset in data.get("presets", [])
-    if not (preset.get("tool") == tool and preset.get("name") == name)
-]
-
-if len(data["presets"]) == before:
-    raise SystemExit(1)
-
-with open(store_path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, ensure_ascii=False, indent=2)
-PY
-}
-
-remember_custom_target() {
-  local tool="$1"
-  local name="$2"
-  local base_url="$3"
-  local model="$4"
-  local kind="${5:-recent}"
-  python3 - "$CUSTOM_PRESET_STORE" "$tool" "$name" "$base_url" "$model" "$kind" <<'PY'
-import json
-import os
-import sys
-from datetime import datetime, timezone
-
-store_path, tool, name, base_url, model, kind = sys.argv[1:7]
-payload = {
-    "name": name,
-    "tool": tool,
-    "base_url": base_url,
-    "model": model,
-    "updated_at": datetime.now(timezone.utc).isoformat(),
-}
-
-data = {"presets": [], "recent_custom": []}
-if os.path.exists(store_path):
-    try:
-        with open(store_path, "r", encoding="utf-8") as handle:
-            loaded = json.load(handle)
-            if isinstance(loaded, dict):
-                data.update(loaded)
-    except Exception:
-        pass
-
-if kind == "preset":
-    presets = [item for item in data.get("presets", []) if not (item.get("tool") == tool and item.get("name") == name)]
-    presets.insert(0, payload)
-    data["presets"] = presets[:20]
-else:
-    recents = [
-        item
-        for item in data.get("recent_custom", [])
-        if not (
-            item.get("tool") == tool
-            and item.get("base_url") == base_url
-            and item.get("model", "") == model
-        )
-    ]
-    recents.insert(0, payload)
-    data["recent_custom"] = recents[:20]
-
-with open(store_path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, ensure_ascii=False, indent=2)
-PY
-}
-
-manage_custom_presets() {
-  local tool="$1"
-
-  while true; do
-    local -a preset_choices=()
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && preset_choices+=("$line")
-    done < <(list_custom_presets "$tool")
-
-    if [[ ${#preset_choices[@]} -eq 0 ]]; then
-      launcher_show_message "暂无预设" "这个工具当前还没有已保存的自定义 API 预设。"
-      return 0
-    fi
-
-    local pick=""
-    pick="$(launcher_choose_from_list \
-      "选择要管理的自定义 API 预设" \
-      "${preset_choices[0]}" \
-      "${preset_choices[@]}" \
-      "Back")" || return 0
-
-    if [[ "$pick" == "__CANCEL__" || "$pick" == "Back" ]]; then
-      return 0
-    fi
-
-    local preset_name=""
-    preset_name="$(lookup_custom_preset_name "$tool" "$pick")" || continue
-
-    local action=""
-    action="$(launcher_choose_from_list \
-      "管理预设：$preset_name" \
-      "Rename preset" \
-      "Rename preset" \
-      "Delete preset" \
-      "Back")" || return 0
-
-    case "$action" in
-      "Rename preset")
-        local new_name=""
-        new_name="$(launcher_prompt_text "输入新的预设名称" "$preset_name")" || continue
-        if [[ -z "$new_name" || "$new_name" == "__CANCEL__" || "$new_name" == "$preset_name" ]]; then
-          continue
-        fi
-        rename_custom_preset "$tool" "$preset_name" "$new_name" && \
-          launcher_show_message "已重命名" "预设已从“$preset_name”重命名为“$new_name”。"
-        ;;
-      "Delete preset")
-        if launcher_prompt_yes_no "确认删除预设“$preset_name”？（不会影响最近记录）" "否"; then
-          delete_custom_preset "$tool" "$preset_name" && \
-            launcher_show_message "已删除" "预设“$preset_name”已删除。"
-        fi
-        ;;
-      *)
-        ;;
-    esac
-  done
-}
 
 write_custom_env_file() {
   local api_key="$1"
@@ -660,140 +326,32 @@ if [[ -n "$CHECK_SECRETS_TOOL" ]]; then
   exit 0
 fi
 
-
-prompt_custom_api_env() {
-  local tool="$1"
-  local workdir="${2:-}"
-  local key_prompt url_prompt default_url model_prompt default_model
-
-  case "$tool" in
-    claude)
-      key_prompt="输入 Claude 兼容 API Key（仅本次会话使用）"
-      url_prompt="输入 Claude 兼容 Base URL（可留空使用默认）"
-      default_url="https://api.anthropic.com"
-      model_prompt="输入 Claude 模型名（可留空使用 CLI 默认）"
-      default_model=""
-      ;;
-    codex)
-      key_prompt="输入 OpenAI 兼容 API Key（仅本次会话使用）"
-      url_prompt="输入 OpenAI 兼容 Base URL（可留空使用默认）"
-      default_url="https://api.openai.com/v1"
-      model_prompt="输入 Codex 模型名（可留空使用默认，例如 gpt-5.4）"
-      default_model=""
-      ;;
-    gemini)
-      key_prompt="输入 Gemini API Key（仅本次会话使用）"
-      url_prompt="输入 Gemini Base URL（可留空使用默认）"
-      default_url="https://generativelanguage.googleapis.com"
-      model_prompt="输入 Gemini 模型名（可留空使用 CLI 默认）"
-      default_model=""
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-
-  local -a saved_choices=()
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && saved_choices+=("$line")
-  done < <(list_custom_choices "$tool")
-
-  local -a preset_choices=()
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && preset_choices+=("$line")
-  done < <(list_custom_presets "$tool")
-
-  local -a discovered_choices=()
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && discovered_choices+=("$line")
-  done < <(list_discovered_choices "$tool" "$workdir")
-
-  if [[ ${#saved_choices[@]} -gt 0 || ${#preset_choices[@]} -gt 0 || ${#discovered_choices[@]} -gt 0 ]]; then
-    local -a quick_options=("Create new custom API config")
-    if [[ ${#preset_choices[@]} -gt 0 ]]; then
-      quick_options+=("Manage saved presets...")
-    fi
-    if [[ ${#discovered_choices[@]} -gt 0 ]]; then
-      quick_options+=("${discovered_choices[@]}")
-    fi
-    if [[ ${#saved_choices[@]} -gt 0 ]]; then
-      quick_options+=("${saved_choices[@]}")
-    fi
-
-    local quick_choice=""
-    quick_choice="$(launcher_choose_from_list \
-      "选择已有自定义配置，或新建一个" \
-      "Create new custom API config" \
-      "${quick_options[@]}")" || return 1
-    if [[ "$quick_choice" == "Manage saved presets..." ]]; then
-      manage_custom_presets "$tool"
-      prompt_custom_api_env "$tool" "$workdir"
-      return $?
-    fi
-    if [[ "$quick_choice" == Discovered:* ]]; then
-      local discovered=""
-      if discovered="$(lookup_discovered_choice "$tool" "$quick_choice" "$workdir")"; then
-        local api_key_found="" base_url_found="" model_found="" source_found=""
-        api_key_found="$(printf '%s\n' "$discovered" | sed -n '1p')"
-        base_url_found="$(printf '%s\n' "$discovered" | sed -n '2p')"
-        model_found="$(printf '%s\n' "$discovered" | sed -n '3p')"
-        source_found="$(printf '%s\n' "$discovered" | sed -n '4p')"
-        remember_custom_target "$tool" "recent" "$base_url_found" "$model_found" "recent"
-        if launcher_prompt_yes_no "是否把这个发现到的配置保存成预设？来源：$source_found" "否"; then
-          local discovered_name=""
-          discovered_name="$(launcher_prompt_text "给这个发现到的配置取个名字" "$tool-discovered")" || true
-          if [[ -n "$discovered_name" && "$discovered_name" != "__CANCEL__" ]]; then
-            remember_custom_target "$tool" "$discovered_name" "$base_url_found" "$model_found" "preset"
-          fi
-        fi
-        write_custom_env_file "$api_key_found" "$base_url_found" "$model_found"
-        return 0
-      fi
-    fi
-    if [[ "$quick_choice" != "Create new custom API config" ]]; then
-      local looked_up=""
-      if looked_up="$(lookup_custom_choice "$tool" "$quick_choice")"; then
-        local base_url_saved="" model_saved=""
-        base_url_saved="$(printf '%s\n' "$looked_up" | sed -n '1p')"
-        model_saved="$(printf '%s\n' "$looked_up" | sed -n '2p')"
-        local api_key_saved=""
-        api_key_saved="$(launcher_prompt_secret "$key_prompt")" || return 1
-        if [[ "$api_key_saved" == "__CANCEL__" || -z "$api_key_saved" ]]; then
-          return 1
-        fi
-        remember_custom_target "$tool" "recent" "$base_url_saved" "$model_saved" "recent"
-        write_custom_env_file "$api_key_saved" "$base_url_saved" "$model_saved"
-        return 0
-      fi
-    fi
+ensure_custom_env_file_for_auth() {
+  if [[ "$AUTH_MODE" != "custom" ]]; then
+    return 0
   fi
-
-  local api_key base_url model
-  api_key="$(launcher_prompt_secret "$key_prompt")" || return 1
-  if [[ "$api_key" == "__CANCEL__" || -z "$api_key" ]]; then
-    return 1
-  fi
-
-  base_url="$(launcher_prompt_text "$url_prompt" "$default_url")" || return 1
-  if [[ "$base_url" == "__CANCEL__" ]]; then
-    return 1
-  fi
-
-  model="$(launcher_prompt_text "$model_prompt" "$default_model")" || return 1
-  if [[ "$model" == "__CANCEL__" ]]; then
-    return 1
-  fi
-
-  remember_custom_target "$tool" "recent" "$base_url" "$model" "recent"
-  if launcher_prompt_yes_no "是否保存这个自定义 API 预设（仅保存 URL 和模型，不保存 API Key）？" "否"; then
-    local preset_name=""
-    preset_name="$(launcher_prompt_text "给这个预设取个名字" "$tool-custom")" || true
-    if [[ -n "$preset_name" && "$preset_name" != "__CANCEL__" ]]; then
-      remember_custom_target "$tool" "$preset_name" "$base_url" "$model" "preset"
+  if [[ -n "$CUSTOM_ENV_FILE" ]]; then
+    if [[ ! -f "$CUSTOM_ENV_FILE" ]]; then
+      echo "error: missing custom env file: $CUSTOM_ENV_FILE" >&2
+      exit 2
     fi
+    return 0
   fi
+  if [[ -z "${LAUNCHER_CUSTOM_API_KEY:-}" ]]; then
+    echo "error: --auth custom requires --custom-env-file or LAUNCHER_CUSTOM_API_KEY in env" >&2
+    exit 2
+  fi
+  CUSTOM_ENV_FILE="$(write_custom_env_file \
+    "${LAUNCHER_CUSTOM_API_KEY:-}" \
+    "${LAUNCHER_CUSTOM_BASE_URL:-}" \
+    "${LAUNCHER_CUSTOM_MODEL:-}")"
+  GENERATED_CUSTOM_ENV_FILE="1"
+}
 
-  write_custom_env_file "$api_key" "$base_url" "$model"
+cleanup_generated_custom_env_file() {
+  if [[ "$GENERATED_CUSTOM_ENV_FILE" == "1" && -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
+    rm -f "$CUSTOM_ENV_FILE"
+  fi
 }
 
 load_custom_env() {
@@ -880,14 +438,20 @@ show_claude_auth_setup_hint() {
   local auth_mode="$1"
   case "$auth_mode" in
     oauth_token)
-      launcher_show_message \
-        "缺少 Claude OAuth token" \
-        "未找到可用的 CLAUDE_CODE_OAUTH_TOKEN。\n\n请先在终端运行：\nclaude setup-token\n\n然后把结果写入：\n~/.agents/.env.global\n\n例如：\nexport CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..."
+      cat >&2 <<'EOF'
+hint: missing Claude OAuth token
+  run: claude setup-token
+  then write the result into: ~/.agents/.env.global
+  example: export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+EOF
       ;;
     anthropic-console)
-      launcher_show_message \
-        "缺少 Anthropic Console API Key" \
-        "未找到可用的 ANTHROPIC_API_KEY。\n\n请先在 Anthropic Console 创建 Claude Code scoped key，然后写入：\n~/.agents/secrets/claude/anthropic-console.env\n\n例如：\nANTHROPIC_API_KEY=sk-ant-api03-..."
+      cat >&2 <<'EOF'
+hint: missing Anthropic Console API key
+  create a Claude Code scoped key in Anthropic Console
+  then write it into: ~/.agents/secrets/claude/anthropic-console.env
+  example: ANTHROPIC_API_KEY=sk-ant-api03-...
+EOF
       ;;
   esac
 }
@@ -980,44 +544,80 @@ PY
 
 prepare_claude_home() {
   # Seed Claude Code's isolated HOME so onboarding doesn't fire for every
-  # seat launch. Claude checks `~/.claude.json.hasCompletedOnboarding`
-  # (and related flags) on every start; if the isolated HOME has none,
-  # Claude blocks on the onboarding screen even when API keys are live
-  # in the environment — breaks every API-mode launch and every
-  # programmatic spawn (B4-launch-pending-seats).
-  #
-  # Symlink `~/.claude.json` from the real HOME iff the seat wants shared
-  # UI state (default); otherwise seed a minimal stub. We default to
-  # symlink because the real `.claude.json` is append-only for onboarding
-  # flags, and per-seat projects/history live under `~/.claude/projects/`
-  # keyed by workdir — seats don't collide.
+  # seat launch. Keep Claude on an explicit white-list model: share a
+  # small set of user-level config/definition paths, but leave runtime
+  # state such as projects/history/tasks isolated per seat.
   local runtime_home="$1"
-  mkdir -p "$runtime_home/.claude"
+  local runtime_claude="$runtime_home/.claude"
+  local source_claude="$REAL_HOME/.claude"
+  local source_claude_json="$REAL_HOME/.claude.json"
+  local runtime_claude_json="$runtime_home/.claude.json"
+  local existing_runtime_claude_json=""
+  mkdir -p "$runtime_claude"
 
-  if [[ -f "$REAL_HOME/.claude.json" && ! -e "$runtime_home/.claude.json" ]]; then
-    ln -s "$REAL_HOME/.claude.json" "$runtime_home/.claude.json"
-  elif [[ ! -f "$runtime_home/.claude.json" ]]; then
-    # Fallback: real user hasn't run claude yet, seed minimal flags so
-    # onboarding doesn't block the automated seat.
-    cat > "$runtime_home/.claude.json" <<'JSON'
-{
-  "hasCompletedOnboarding": true,
-  "lastOnboardingVersion": "99.99.99",
-  "hasSeenWelcome": true
-}
-JSON
+  # Always materialize a runtime-local .claude.json for isolated API seats.
+  # The real host file may carry an unfinished onboarding state that forces
+  # Claude Code back into the login picker even when API auth env is already
+  # present. Keep useful host/runtime fields, but force onboarding complete.
+  if [[ -f "$runtime_claude_json" && ! -L "$runtime_claude_json" ]]; then
+    existing_runtime_claude_json="$runtime_claude_json"
   fi
+  if [[ -L "$runtime_claude_json" ]]; then
+    rm -f "$runtime_claude_json"
+  fi
+  python3 - "$source_claude_json" "$existing_runtime_claude_json" "$runtime_claude_json" <<'PY'
+from __future__ import annotations
 
-  # Carry over statsig / settings / projects listing from real HOME so
-  # first-run analytics + theme pickers don't show either.
-  local shared_items=(
+import json
+import sys
+from pathlib import Path
+
+source_path = Path(sys.argv[1])
+existing_runtime_path = Path(sys.argv[2]) if sys.argv[2] else None
+target_path = Path(sys.argv[3])
+data: dict[str, object] = {}
+
+for candidate in (source_path, existing_runtime_path):
+    if candidate is None or not candidate.exists():
+        continue
+    try:
+        loaded = json.loads(candidate.read_text(encoding="utf-8"))
+    except Exception:
+        loaded = {}
+    if isinstance(loaded, dict):
+        data.update(loaded)
+
+data["hasCompletedOnboarding"] = True
+data["hasSeenWelcome"] = True
+version = data.get("lastOnboardingVersion")
+if not isinstance(version, str) or not version.strip():
+    data["lastOnboardingVersion"] = "99.99.99"
+
+target_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+
+  # Preserve existing compatibility behavior for settings / onboarding
+  # caches, then add user-authored definition directories that Claude
+  # should see inside isolated runtimes.
+  local compat_items=(
     "settings.json"
     "statsig"
   )
   local item
+  for item in "${compat_items[@]}"; do
+    if [[ -e "$source_claude/$item" && ! -e "$runtime_claude/$item" ]]; then
+      ln -s "$source_claude/$item" "$runtime_claude/$item"
+    fi
+  done
+
+  local shared_items=(
+    "skills"
+    "commands"
+    "agents"
+  )
   for item in "${shared_items[@]}"; do
-    if [[ -e "$REAL_HOME/.claude/$item" && ! -e "$runtime_home/.claude/$item" ]]; then
-      ln -s "$REAL_HOME/.claude/$item" "$runtime_home/.claude/$item"
+    if [[ -e "$source_claude/$item" && ! -e "$runtime_claude/$item" ]]; then
+      ln -s "$source_claude/$item" "$runtime_claude/$item"
     fi
   done
 }
@@ -1184,7 +784,7 @@ run_codex_runtime() {
   if [[ "$auth_mode" == "custom" ]]; then
     load_custom_env "$CUSTOM_ENV_FILE"
     rm -f "$CODEX_HOME/config.toml"
-    python3 - "$CODEX_HOME/config.toml" "${LAUNCHER_CUSTOM_MODEL:-gpt-5.4}" "${LAUNCHER_CUSTOM_BASE_URL:-https://api.openai.com/v1}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
+    python3 - "$CODEX_HOME/config.toml" "${LAUNCHER_CUSTOM_MODEL:-gpt-5.4}" "${LAUNCHER_CUSTOM_BASE_URL:-$(launcher_tool_default_base_url codex)}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
 import json
 import sys
 
@@ -1201,6 +801,13 @@ PY
     set -a
     source "$secret_file"
     set +a
+    if [[ -z "${OPENAI_BASE_URL:-}" && -z "${OPENAI_API_BASE:-}" ]]; then
+      case "${CLAWSEAT_PROVIDER:-}" in
+        xcode-best)
+          export OPENAI_BASE_URL="$(launcher_provider_default_base_url codex xcode-best)"
+          ;;
+      esac
+    fi
     if [[ ! -f "$CODEX_HOME/auth.json" ]]; then
       printf '%s' "${OPENAI_API_KEY:-}" | HOME="$HOME" CODEX_HOME="$CODEX_HOME" codex login --with-api-key >/dev/null
     fi
@@ -1208,7 +815,7 @@ PY
 
   cd "$workdir"
   echo "────────────────────────────────────────"
-  echo " Codex · ${auth_mode^^} API"
+  echo " Codex · $(uppercase_ascii "$auth_mode") API"
   echo " Session:    $session_name"
   echo " Directory:  $workdir"
   echo " HOME:       $HOME"
@@ -1282,7 +889,7 @@ run_gemini_runtime() {
 
   cd "$workdir"
   echo "────────────────────────────────────────"
-  echo " Gemini CLI · ${auth_mode^^} API"
+  echo " Gemini CLI · $(uppercase_ascii "$auth_mode") API"
   echo " Session:    $session_name"
   echo " Directory:  $workdir"
   echo " HOME:       $HOME"
@@ -1292,6 +899,21 @@ run_gemini_runtime() {
     exec gemini -m "${LAUNCHER_CUSTOM_MODEL}"
   fi
   exec gemini
+}
+
+exec_agent_shell_command() {
+  local -a cmd=(bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
+  if [[ -n "$CUSTOM_ENV_FILE" ]]; then
+    cmd+=(--custom-env-file "$CUSTOM_ENV_FILE")
+  fi
+  printf '%q ' "${cmd[@]}"
+}
+
+exec_inline_agent() {
+  if [[ -n "$CUSTOM_ENV_FILE" ]]; then
+    exec "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --custom-env-file "$CUSTOM_ENV_FILE" --exec-agent
+  fi
+  exec "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent
 }
 
 run_selected_tool() {
@@ -1308,30 +930,8 @@ if [[ "${CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY:-}" == "1" ]]; then
 fi
 
 if [[ -z "$EXEC_MODE" ]]; then
-  if [[ -z "$TOOL_NAME" ]]; then
-    TOOL_NAME="$(prompt_tool_name)" || exit 130
-  fi
-
-  if [[ -z "$AUTH_MODE" ]]; then
-    AUTH_MODE="$(prompt_auth_mode "$TOOL_NAME")" || exit 130
-  fi
-
-  if [[ -z "$WORKDIR" ]]; then
-    WORKDIR="$(launcher_choose_start_dir)" || exit 130
-  fi
-
-  if [[ "$AUTH_MODE" == "custom" && -z "$CUSTOM_ENV_FILE" ]]; then
-    CUSTOM_ENV_FILE="$(prompt_custom_api_env "$TOOL_NAME" "$WORKDIR")" || exit 130
-  fi
-
-  if [[ ! -d "$WORKDIR" ]]; then
-    echo "error: startup directory does not exist: $WORKDIR" >&2
-    exit 1
-  fi
-
-  if [[ -z "$SESSION_NAME" ]]; then
-    SESSION_NAME="${TOOL_NAME}-${AUTH_MODE}-$(launcher_slugify "$(basename "$WORKDIR")")"
-  fi
+  validate_top_level_inputs
+  ensure_custom_env_file_for_auth
 
   if [[ "$DRY_RUN" == "1" ]]; then
     cat <<EOF
@@ -1343,36 +943,28 @@ Unified launcher dry-run
   custom:   $([[ -n "$CUSTOM_ENV_FILE" ]] && printf yes || printf no)
   headless: $HEADLESS
 EOF
-    if [[ -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
-      rm -f "$CUSTOM_ENV_FILE"
-    fi
+    cleanup_generated_custom_env_file
     exit 0
   fi
 
   if ! command -v tmux >/dev/null 2>&1; then
     echo "warn: tmux not found — falling back to inline $TOOL_NAME" >&2
     launcher_remember_recent_dir "$WORKDIR"
-    exec "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent
+    exec_inline_agent
   fi
 
   if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     echo "reusing existing tmux session '$SESSION_NAME'"
     tmux set-option -t "$SESSION_NAME" detach-on-destroy off
-    if [[ -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
-      rm -f "$CUSTOM_ENV_FILE"
-    fi
+    cleanup_generated_custom_env_file
   else
     tmux new-session -d -s "$SESSION_NAME" -x 220 -y 60 \
-      "bash \"$0\" --tool \"$TOOL_NAME\" --session \"$SESSION_NAME\" --auth \"$AUTH_MODE\" --dir \"$WORKDIR\" --custom-env-file \"$CUSTOM_ENV_FILE\" --exec-agent" \
+      "$(exec_agent_shell_command)" \
       \; set-option -t "$SESSION_NAME" detach-on-destroy off
     echo "launched tmux session '$SESSION_NAME'"
   fi
 
   launcher_remember_recent_dir "$WORKDIR"
-
-  if [[ "$HEADLESS" != "1" ]]; then
-    launcher_attach_tmux_session "$SESSION_NAME" "$SESSION_NAME (${TOOL_NAME})"
-  fi
 
   # bash 3.2 on macOS has no ${VAR^} uppercase-first operator; use awk
   # (top-level scope here, so no `local` — that's a bash syntax error
@@ -1384,6 +976,7 @@ ${_tool_title} session ready
   auth:     $AUTH_MODE
   dir:      $WORKDIR
   tmux:     $SESSION_NAME
+  mode:     tmux-only deterministic launcher
 
 Manual attach:
   tmux attach -t $SESSION_NAME
@@ -1392,14 +985,10 @@ Kill session:
   tmux kill-session -t $SESSION_NAME
 
 EOF
-
-  launcher_close_invoking_terminal_window
   exit 0
 fi
 
-if [[ -z "$TOOL_NAME" || -z "$AUTH_MODE" || -z "$WORKDIR" || -z "$SESSION_NAME" ]]; then
-  echo "error: --exec-agent requires --tool, --auth, --dir, and --session" >&2
-  exit 2
-fi
+validate_top_level_inputs
+ensure_custom_env_file_for_auth
 
 run_selected_tool "$TOOL_NAME" "$AUTH_MODE" "$WORKDIR" "$SESSION_NAME"

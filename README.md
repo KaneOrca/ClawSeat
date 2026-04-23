@@ -7,7 +7,7 @@ Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core s
 
 ## Install
 
-v0.5 install is agent-driven. The single source of truth is
+v0.7 install is agent-driven. The single source of truth is
 [`docs/INSTALL.md`](docs/INSTALL.md). There is no separate TUI bootstrap
 binary to memorize.
 
@@ -27,10 +27,10 @@ Tell the invoking runtime (Claude Code, Codex, or OpenClaw) to read
 [`docs/INSTALL.md`](docs/INSTALL.md) and execute it end-to-end. The playbook:
 
 1. scans the machine and credential state
-2. records the runtime selection the user wants
-3. materializes validated project/profile/binding state
-4. launches the ancestor via [`scripts/launch_ancestor.sh`](scripts/launch_ancestor.sh)
-5. hands control to ancestor for seat bring-up and patrol
+2. materializes validated project/profile/binding state
+3. launches the ancestor via [`scripts/install.sh`](scripts/install.sh)
+4. opens the six-pane grid and memory window
+5. hands control to ancestor for Phase-A and patrol
 
 ### Resume / re-entry
 
@@ -53,7 +53,7 @@ API secrets (`~/.agent-runtime/secrets/`), gstack, and lark-cli OAuth. It
 deletes ClawSeat-installed skill symlinks, `~/.agents/`, and sandbox residue.
 See the script header for the full preserve/delete list.
 
-### Legacy profiles (pre-v0.5)
+### Legacy profiles (pre-v0.7)
 
 The old v1 profile templates are no longer shipped in-tree. New installs should
 follow [`docs/INSTALL.md`](docs/INSTALL.md) and write validated v2 profiles
@@ -69,15 +69,15 @@ Externally, ClawSeat should be understood as an installable skill/plugin
 product:
 
 - in OpenClaw or Feishu environments, let the runtime load the `clawseat`
-  skill/plugin and route into the same v0.5 install playbook
+  skill/plugin and route into the same v0.7 install playbook
 - in Claude Code or Codex, install the ClawSeat entry skills locally and treat
   `clawseat` as the fresh-install entry
 - treat `/cs` only as a local re-entry shorthand after install state already
   exists
 - fresh install writes validated state, launches `ancestor`, and hands project
   runtime ownership to `ancestor`
-- `koder` is the tenant-side Feishu/OpenClaw frontstage when bound; it is not
-  the local install frontstage and not a tmux seat
+- `koder` is an optional tenant-side Feishu/OpenClaw reverse channel; it is not
+  the install frontstage and not a tmux seat
 
 For OpenClaw, the repo root is now also a marketplace source. That means
 OpenClaw can install ClawSeat directly from the repo URL as a Claude-compatible
@@ -95,7 +95,7 @@ ClawSeat provides:
 - transport helpers for seat-to-seat notification
 - adapters for consumer projects
 
-For v0.5, the default visible project roster is the fixed six-pane monitor:
+For v0.7, the default visible project roster is the fixed six-pane monitor:
 
 - `ancestor`
 - `planner`
@@ -105,9 +105,9 @@ For v0.5, the default visible project roster is the fixed six-pane monitor:
 - `designer`
 
 The machine-level `memory` singleton stays off-grid. `koder` also stays
-off-grid as the tenant frontstage. Extra numbered sessions such as `builder-1`
+off-grid as the optional reverse channel. Extra numbered sessions such as `builder-1`
 or `reviewer-1` are explicit fan-out or compatibility paths, not the default
-v0.5 story. Fresh installs bootstrap `ancestor` first; ancestor then brings up
+v0.7 story. Fresh installs bootstrap `ancestor` first; ancestor then brings up
 the rest of the monitor and patrol flow. Legacy `engineer-*` seats remain
 available through `compat_legacy_seats = true` for migrated projects.
 

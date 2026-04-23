@@ -1,13 +1,20 @@
 # Ancestor Bootstrap Brief — Schema v0.1
 
-> **Status**: Provisional. TUI engineer draft; architect review required
-> before v1.0.
+> **Status**: Legacy reference for `core/tui/ancestor_brief.py`, not the v0.7
+> install SSOT.
 > **Consumer**: ancestor seat (via `clawseat-ancestor` skill)
-> **Producer**: `core/tui/ancestor_brief.py` (invoked by the v0.5 install
-> playbook before ancestor handoff)
+> **Producer**: historical `core/tui/ancestor_brief.py` renderer. The current
+> v0.7 install path renders `core/templates/ancestor-brief.template.md` from
+> `scripts/install.sh`.
 > **Format**: Markdown with a leading fenced YAML metadata block so both
 > humans and the ancestor skill can parse deterministically.
 > **Location**: `~/.agents/tasks/<project>/patrol/handoffs/ancestor-bootstrap.md`
+
+When this file conflicts with [`docs/INSTALL.md`](../INSTALL.md),
+[`core/skills/clawseat-ancestor/SKILL.md`](../../core/skills/clawseat-ancestor/SKILL.md),
+or [`core/templates/ancestor-brief.template.md`](../../core/templates/ancestor-brief.template.md),
+the v0.7 install playbook and current template win. Some examples below retain
+pre-v0.7 assumptions for legacy renderer coverage and historical context.
 
 ## Why a brief
 

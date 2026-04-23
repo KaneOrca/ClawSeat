@@ -57,7 +57,7 @@ role_details = [
 skills = [
     "{CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md",       # self: identity, Phase-A/B, lifecycle hard rules
     "{CLAWSEAT_ROOT}/core/skills/clawseat/SKILL.md",                # ClawSeat product identity / version
-    "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",        # v0.5 install playbook + resume contract
+    "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",        # v0.7 install boundary + resume contract
     "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",          # multi-seat dispatch / handoff / send-and-verify protocol
     "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",             # tmux session ops; send-keys; capture-pane
     "{CLAWSEAT_ROOT}/core/skills/lark-shared/SKILL.md",             # lark-cli config / auth / identity

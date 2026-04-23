@@ -1,18 +1,25 @@
 # ClawSeat agent launchers
 
-Unified launcher for Claude Code, Codex, and Gemini CLI with iTerm + tmux
-integration. Originally lived on `~/Desktop/`; merged into ClawSeat so
-every install has a consistent entry point and operators don't have to
-keep personal copies in sync.
+Deterministic tmux-first launchers for Claude Code, Codex, and Gemini CLI.
+The launcher layer is now agent-friendly by default:
+
+- no AppleScript
+- no GUI window management
+- no interactive prompts
+- explicit CLI args in, reproducible tmux/runtime state out
+
+The code originally lived on `~/Desktop/`; merged into ClawSeat so every
+install has a consistent entry point and operators do not have to keep
+personal copies in sync.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `agent-launcher.sh` | Main unified launcher — handles tool selection, auth resolution, tmux session creation, iTerm window opening, and runtime isolation (XDG / HOME redirects). |
-| `agent-launcher-common.sh` | Shared bash helpers: choice UI (osascript dialogs + fuzzy picker fallback), state/preset storage, directory resolution. |
+| `agent-launcher.sh` | Main unified launcher — validates explicit CLI inputs, creates/reuses tmux sessions, and prepares isolated runtime homes. |
+| `agent-launcher-common.sh` | Shared deterministic helpers: launcher state path, recent-dir tracking, directory normalization, slug generation. |
 | `agent-launcher-discover.py` | API-key discovery across env vars / secret files for claude / codex / gemini. |
-| `agent-launcher-fuzzy.py` | curses-based fuzzy directory picker + favorites menu (with env-driven roots). |
+| `agent-launcher-fuzzy.py` | Deterministic matcher utility for directory / choice ranking (kept for compatibility helpers and env-driven roots). |
 | `claude.sh` | Thin wrapper → `agent-launcher.sh --tool claude`. |
 | `codex.sh` | Thin wrapper → `agent-launcher.sh --tool codex`. |
 | `gemini.sh` | Thin wrapper → `agent-launcher.sh --tool gemini`. |
@@ -21,10 +28,16 @@ keep personal copies in sync.
 
 ```bash
 # Via wrapper (common case)
-"$HOME/ClawSeat"/core/launchers/claude.sh --session install-planner-claude --dir "$HOME/ClawSeat"
+"$HOME/ClawSeat"/core/launchers/claude.sh \
+    --auth oauth_token \
+    --session install-planner-claude \
+    --dir "$HOME/ClawSeat"
 
 # Via repo-local root shim (standalone checkout)
-"$HOME/ClawSeat"/claude-minimax.command --session install-planner-claude --dir "$HOME/ClawSeat"
+"$HOME/ClawSeat"/claude-minimax.command \
+    --auth oauth_token \
+    --session install-planner-claude \
+    --dir "$HOME/ClawSeat"
 
 # Directly
 "$HOME/ClawSeat"/core/launchers/agent-launcher.sh \
@@ -33,36 +46,72 @@ keep personal copies in sync.
     --session install-builder-1-claude \
     --dir ~/.clawseat
 
-# Headless (build tmux session, skip opening an iTerm window)
-~/.clawseat/core/launchers/agent-launcher.sh --tool claude --session X --headless
+# tmux-only (the launcher no longer opens iTerm/Terminal windows)
+~/.clawseat/core/launchers/agent-launcher.sh \
+    --tool claude \
+    --auth oauth_token \
+    --session X \
+    --dir "$HOME/ClawSeat" \
+    --headless
 
 # Dry-run (print resolved launch config, do not spawn)
-~/.clawseat/core/launchers/agent-launcher.sh --tool claude --dry-run
+~/.clawseat/core/launchers/agent-launcher.sh \
+    --tool claude \
+    --auth oauth_token \
+    --dir "$HOME/ClawSeat" \
+    --dry-run
 ```
 
-`--headless` is important for the v0.5 install playbook and re-entry path:
-[`scripts/launch_ancestor.sh`](../../scripts/launch_ancestor.sh) uses it to
-spawn the ancestor tmux session, then the runtime opens or reattaches the
-visible window separately. This keeps tmux creation and iTerm window policy
-independent.
+`--headless` is retained as a compatibility flag for existing callers, but
+the launcher is tmux-only regardless. `scripts/install.sh` and `agent_admin`
+already treat the launcher as an internal L3 primitive and open or focus
+visible panes separately when needed. `scripts/launch_ancestor.sh` remains a
+legacy compatibility helper, not the canonical fresh-install entry.
 
 ## Configuration (env vars)
 
-The merged launcher is portable — no hard-coded `/Users/...` paths. User-specific
-bookmarks are env-driven:
+The launcher is portable — no hard-coded `/Users/...` paths. Some legacy matcher
+and compatibility settings remain env-driven:
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `CLAWSEAT_LAUNCHER_ROOTS` | `~/coding:5, ~/Desktop/work:4, ~/Desktop:3, ~/Documents:3` | Directory roots + weights for fuzzy search (`PATH:weight`, comma-separated) |
-| `CLAWSEAT_LAUNCHER_FAVORITES` | `~/coding/cartooner, ~/coding/openclaw, ~/Desktop/work, ~/Desktop, ~/Documents, ~` | Favorite directories shown first in the fuzzy picker |
-| `AGENT_LAUNCHER_CUSTOM_PRESET_STORE` | `~/.config/clawseat/launcher-custom-presets.json` | Where custom launch presets are saved |
+| `CLAWSEAT_LAUNCHER_ROOTS` | `~/coding:5, ~/Desktop/work:4, ~/Desktop:3, ~/Documents:3` | Compatibility roots for the deterministic matcher utility |
+| `CLAWSEAT_LAUNCHER_FAVORITES` | `~/coding/cartooner, ~/coding/openclaw, ~/Desktop/work, ~/Desktop, ~/Documents, ~` | Compatibility favorites for the deterministic matcher utility |
+| `AGENT_LAUNCHER_CUSTOM_PRESET_STORE` | `~/.config/clawseat/launcher-custom-presets.json` | Legacy custom preset store path; preserved for migration compatibility |
 | `LAUNCHER_STATE_STORE` | `~/.config/clawseat/launcher-state.json` | Recent-directory / selection history |
 | `AGENT_LAUNCHER_DISCOVER_HOME` | `$HOME` | Alternate home for key discovery (useful for runtime isolation testing) |
+
+## Deterministic Contract
+
+The launcher no longer prompts for missing inputs. Callers must provide:
+
+- `--tool`
+- `--auth`
+- `--dir` or rely on the current working directory
+- `--session` or accept the deterministic default `<tool>-<auth>-<basename(dir)>`
+
+For `--auth custom`, callers must provide either:
+
+- `--custom-env-file <path>`
+- or `LAUNCHER_CUSTOM_API_KEY` in the environment, with optional
+  `LAUNCHER_CUSTOM_BASE_URL` / `LAUNCHER_CUSTOM_MODEL`
+
+The launcher always:
+
+- creates or reuses the tmux session
+- prepares the isolated runtime home
+- prints manual `tmux attach` instructions
+
+It never:
+
+- opens iTerm / Terminal
+- pops auth or directory dialogs
+- reads interactive input
 
 ## Migration from `~/Desktop/` version
 
 The desktop scripts (`~/Desktop/agent-launcher.command` etc.) continue to work
-until you delete them. The clawseat version is authoritative going forward.
+until you delete them. The ClawSeat version is authoritative going forward.
 To migrate cleanly:
 
 ```bash
@@ -93,7 +142,8 @@ instead of routing through `~/.clawseat`.
 
 ## Related
 
-- `core/scripts/iterm_panes_driver.py` — the iTerm Python API driver that
-  opens multi-pane monitor windows once seats are running.
-- `docs/INSTALL.md` — the v0.5 install playbook that drives ancestor launch.
+- `core/scripts/iterm_panes_driver.py` — window layout driver used by higher
+  layers that choose to open visible panes after tmux seats are running.
+- `docs/INSTALL.md` — the v0.7 install playbook that routes fresh install
+  through `scripts/install.sh`.
 - `core/skills/clawseat-install/SKILL.md` — the install contract for agents.

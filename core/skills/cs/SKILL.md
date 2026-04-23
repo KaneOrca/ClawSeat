@@ -1,11 +1,11 @@
 ---
 name: cs
-description: Local ClawSeat re-entry helper. `/cs` is the shorthand for the v0.5 Resume / Re-entry contract in docs/INSTALL.md; use it only after install state already exists.
+description: Local ClawSeat re-entry helper. `/cs` is the shorthand for the v0.7 Resume / Re-entry contract in docs/INSTALL.md; use it only after install state already exists.
 ---
 
 # ClawSeat `/cs` — local re-entry entrypoint
 
-`/cs` is the thin local shortcut for operators who already have valid v0.5
+`/cs` is the thin local shortcut for operators who already have valid v0.7
 install state and want to re-enter that runtime quickly. It is NOT the
 bootstrap path for a fresh machine, and it does not synthesize the `install`
 project on its own.
@@ -18,7 +18,7 @@ The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 | State | Behavior |
 |-------|----------|
 | Existing `install` state with valid profile + binding + runtime metadata | Resume the existing runtime; ancestor remains the project frontstage owner |
-| Existing install state but ancestor session is missing | Relaunch ancestor via `scripts/launch_ancestor.sh`, then return control to ancestor |
+| Existing install state but ancestor session is missing | Relaunch ancestor via the canonical recorded project/session state (`agent_admin session start-engineer ancestor --project <name>` or equivalent L2 path), then return control to ancestor |
 | Missing or invalid install state | **Refuse** — point operator at `docs/INSTALL.md` fresh-install path |
 
 `/cs` will NEVER:
@@ -67,7 +67,7 @@ playbook in [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 ## References
 
 - `{CLAWSEAT_ROOT}/docs/INSTALL.md` — fresh install + resume playbook
-- `{CLAWSEAT_ROOT}/scripts/launch_ancestor.sh` — ancestor relaunch path
+- `{CLAWSEAT_ROOT}/scripts/install.sh` — canonical bootstrap / rebuild path
 - `{CLAWSEAT_ROOT}/core/launchers/agent-launcher.sh` — seat launcher
 - `{CLAWSEAT_ROOT}/core/scripts/agent_admin.py` — session lifecycle
 - `{CLAWSEAT_ROOT}/core/lib/profile_validator.py` — v2 schema validator

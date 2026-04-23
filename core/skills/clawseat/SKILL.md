@@ -1,6 +1,6 @@
 ---
 name: clawseat
-description: Canonical product entrypoint for ClawSeat. Use this skill when OpenClaw, Feishu, Claude Code, or Codex should load ClawSeat as an installable workflow and route to the v0.5 install playbook.
+description: Canonical product entrypoint for ClawSeat. Use this skill when OpenClaw, Feishu, Claude Code, or Codex should load ClawSeat as an installable workflow and route to the v0.7 `scripts/install.sh` playbook.
 ---
 
 # ClawSeat
@@ -29,9 +29,9 @@ Treat `clawseat` as the product-level entrypoint.
    - local re-entry -> `/cs`
    - OpenClaw bootstrap -> plugin wrapper + same playbook
 5. Keep frontstage semantics consistent:
-   - local CLI install -> `ancestor` becomes the install frontstage after launch
-   - Feishu / OpenClaw tenant path -> `koder` remains the tenant frontstage and
-     `ancestor` runs behind it
+   - fresh install -> `ancestor` is the runtime frontstage after `install.sh`
+   - Feishu / OpenClaw path -> `koder` is only an optional reverse-channel
+     overlay; it is not a replacement for the `ancestor` install frontstage
 6. Once ancestor is prompt-ready, treat ancestor as the runtime owner for seat
    lifecycle and patrol. Do not invent parallel bootstrap paths.
 
@@ -55,17 +55,16 @@ component.
 - Correct: `git clone <url>` in any user-level directory (e.g. home dir, projects dir)
 - Wrong: `git clone <url> ~/.openclaw/workspace-clawseat` or anywhere inside `~/.openclaw/`
 
-Then follow [`docs/INSTALL.md`](../../../docs/INSTALL.md). The playbook scans
-the machine, records runtime selection, materializes validated state, launches
-ancestor, and hands off the rest of seat bring-up to ancestor. Do not resurrect
-retired manual bootstrap paths.
+Then follow [`docs/INSTALL.md`](../../../docs/INSTALL.md). The canonical fresh
+install path is `bash scripts/install.sh`, which performs preflight, machine
+scan, provider selection, ancestor launch, grid bring-up, memory launch, and
+handoff to ancestor. Do not resurrect retired manual bootstrap paths.
 
-**Critical: OpenClaw tenant frontstage**
+**Critical: OpenClaw reverse-channel path**
 
-In the OpenClaw / Feishu path, the user-facing tenant frontstage is `koder`.
-If this skill is already running inside that tenant-facing agent, treat the
-current runtime as the existing `koder` frontstage instead of trying to spawn
-another one.
+If this skill is already running inside an OpenClaw-side `koder` overlay,
+treat the current runtime as the optional reverse-channel bridge. Do not try to
+spawn another `koder`, and do not rewrite the install flow around it.
 
 - Do NOT run `start_seat.py --seat koder` — that creates a redundant tmux session
 - Do NOT bootstrap a project named after yourself (e.g. `koder-frontstage`)
@@ -73,6 +72,7 @@ another one.
 - The tmux-backed project grid is still `ancestor`, `planner`, `builder`,
   `reviewer`, `qa`, `designer`
 - Once ancestor is prompt-ready, seat lifecycle and patrol belong to ancestor
+- `koder` is not the install frontstage and is not part of the six-pane grid
 
 ## Local Runtime Contract
 
