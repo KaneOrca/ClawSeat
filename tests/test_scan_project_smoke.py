@@ -3,7 +3,7 @@ Smoke tests for scan_project.py using real repositories.
 
 These smoke tests enforce SPEC §5.3.1/§5.3.2 real-repo hard gate. The hard
 gate fires for any developer running on a box where the canonical repos
-(`/Users/ywf/.clawseat`, `/Users/ywf/coding/cartooner`) are installed —
+(`this ClawSeat checkout`, `/Users/ywf/coding/cartooner`) are installed —
 running the suite there without the repos present is a bug in setup.
 
 CI runners don't have those user-scoped paths and never will (they live
@@ -37,7 +37,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "core/skills/memory-oracl
 SCAN_SCRIPT = SCRIPTS_DIR / "scan_project.py"
 QUERY_SCRIPT = SCRIPTS_DIR / "query_memory.py"
 
-CLAWSEAT_REPO = Path("/Users/ywf/.clawseat")
+CLAWSEAT_REPO = Path(__file__).resolve().parents[1]
 CARTOONER_REPO = Path("/Users/ywf/coding/cartooner")
 
 

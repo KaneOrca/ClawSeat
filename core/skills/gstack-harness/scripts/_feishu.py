@@ -454,9 +454,12 @@ def _lark_cli_real_home() -> str:
 
 
 def _lark_cli_env() -> dict[str, str]:
+    # NOTE: do NOT pass OPENCLAW_HOME to lark-cli. Lark-cli manages its own
+    # config at ~/.lark-cli/config.json (anchored to the real user HOME) and
+    # setting OPENCLAW_HOME causes it to mis-resolve its config directory,
+    # breaking auth checks even when a valid bot token exists.
     return {
         "HOME": _lark_cli_real_home(),
-        "OPENCLAW_HOME": str(OPENCLAW_HOME),
     }
 
 
@@ -522,6 +525,15 @@ def _read_lark_auth_status(
         cwd=str(OPENCLAW_HOME),
         env=_lark_cli_env(),
     )
+    # Workaround for lark-cli versions that don't support `--as bot/user`.
+    # If the flag is unknown, retry without it — lark-cli will default to bot.
+    if result.returncode != 0 and normalized != "auto" and "unknown flag" in result.stderr.lower():
+        fallback_cmd = [lark_cli, "auth", "status"]
+        result = run_command_with_env(
+            fallback_cmd,
+            cwd=str(OPENCLAW_HOME),
+            env=_lark_cli_env(),
+        )
     if result.returncode != 0:
         return None, {
             "status": "error",

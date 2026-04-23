@@ -548,6 +548,7 @@ prepare_claude_home() {
   # small set of user-level compatibility paths, but materialize the
   # sandbox's settings/skills from the seat-specific .claude-template.
   local runtime_home="$1"
+  local session_name="${2:-}"
   local runtime_claude="$runtime_home/.claude"
   local source_claude="$REAL_HOME/.claude"
   local source_claude_json="$REAL_HOME/.claude.json"
@@ -619,6 +620,20 @@ PY
   done
 
   local seat_id="${CLAWSEAT_SEAT:-${CLAWSEAT_ENGINEER_ID:-}}"
+  # Fallback: infer seat_id from session_name when env not passed.
+  # session_name formats: "<project>-<seat>-<tool>" or "<project>-ancestor" or "machine-memory-<tool>"
+  if [[ -z "$seat_id" && -n "$session_name" ]]; then
+    local _project="${CLAWSEAT_PROJECT:-}"
+    local _candidate="$session_name"
+    [[ -n "$_project" ]] && _candidate="${_candidate#${_project}-}"
+    _candidate="${_candidate#machine-}"
+    _candidate="${_candidate%-claude}"
+    _candidate="${_candidate%-codex}"
+    _candidate="${_candidate%-gemini}"
+    if [[ -d "${AGENTS_ROOT:-$REAL_HOME/.agents}/engineers/$_candidate" ]]; then
+      seat_id="$_candidate"
+    fi
+  fi
   local runtime_settings="$runtime_claude/settings.json"
   local runtime_skills="$runtime_claude/skills"
   if [[ -n "$seat_id" ]]; then

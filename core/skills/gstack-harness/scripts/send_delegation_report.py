@@ -99,6 +99,15 @@ def _read_lark_auth_status(
         cwd=str(OPENCLAW_HOME),
         env=_lark_cli_env(),
     )
+    # Workaround for lark-cli versions that don't support `--as bot/user`.
+    # If the flag is unknown, retry without it — lark-cli will default to bot.
+    if result.returncode != 0 and identity != "auto" and "unknown flag" in result.stderr.lower():
+        fallback_cmd = [lark_cli, "auth", "status"]
+        result = run_command_with_env(
+            fallback_cmd,
+            cwd=str(OPENCLAW_HOME),
+            env=_lark_cli_env(),
+        )
     if result.returncode != 0:
         return None, {
             "status": "error",
@@ -179,6 +188,15 @@ def _check_lark_auth(identity: str) -> dict[str, str]:
             "identity": auth_identity,
             "requested_as": identity,
         }
+    # Bot identity may not report tokenStatus at all; treat unknown as valid
+    # when a confirmed bot identity is present.
+    if auth_identity == "bot" and token_status == "unknown":
+        return {
+            "status": "ok",
+            "reason": "bot identity confirmed (tokenStatus not applicable for bot)",
+            "identity": auth_identity,
+            "requested_as": identity,
+        }
     return {
         "status": "error",
         "reason": f"unexpected token status: {token_status}",
@@ -245,6 +263,15 @@ def _send_feishu_message(
         cwd=str(OPENCLAW_HOME),
         env=_lark_cli_env(),
     )
+    # Workaround for lark-cli versions that don't support `--as bot/user`.
+    # If the flag is unknown, retry without it — lark-cli will default to bot.
+    if result.returncode != 0 and identity != "auto" and "unknown flag" in result.stderr.lower():
+        fallback_cmd = [lark_cli, "im", "+messages-send", "--chat-id", resolved_group_id, "--text", message]
+        result = run_command_with_env(
+            fallback_cmd,
+            cwd=str(OPENCLAW_HOME),
+            env=_lark_cli_env(),
+        )
     payload["transport"] = f"lark-cli-{identity}"
     payload["returncode"] = str(result.returncode)
     if result.stdout.strip():
