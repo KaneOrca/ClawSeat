@@ -285,6 +285,19 @@ parse_args() {
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
+      --reset-harness-memory)
+        "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/core/scripts")
+from seat_harness_memory import reset_all_harness_memory
+removed = reset_all_harness_memory()
+if removed:
+    print("reset harness memory for: " + ", ".join(sorted(removed)))
+else:
+    print("no harness memory files found")
+PY
+        exit 0
+        ;;
       --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--dry-run]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac

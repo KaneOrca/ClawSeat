@@ -213,6 +213,17 @@ class SwitchHandlers:
         self.hooks.ensure_dir(Path(new_session.runtime_dir))
         print(f"switched {new_session.engineer_id} in {project.name}: {old_session.session} -> {new_session.session}")
         print(f"run: agent-admin session start-engineer {new_session.engineer_id} --project {project.name}")
+        try:
+            from seat_harness_memory import save_last_harness
+            save_last_harness(
+                new_session.engineer_id,
+                new_session.tool,
+                new_session.auth_mode,
+                new_session.provider,
+                model=getattr(new_session, "_template_model", "") or "",
+            )
+        except Exception:
+            pass
         return 0
 
     def session_switch_auth(self, args: Any) -> int:
