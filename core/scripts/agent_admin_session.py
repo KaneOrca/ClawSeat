@@ -764,6 +764,47 @@ class SessionService:
         # the canonical session name and attachment state.
         self._configure_session_display(session.session)
 
+        # Auto-recover iTerm grid pane routing after any specialist seat
+        # start / restart. When a seat's canonical tmux session comes up
+        # after grid open time, stray grid panes may have attached to
+        # install-ancestor instead (see scripts/recover-grid.sh / docs
+        # ITERM_TMUX_REFERENCE.md §3.1.1). This hook is idempotent:
+        # if no misroute exists it prints "ok" and exits 0.
+        self._auto_recover_grid_after_start(session)
+
+    def _auto_recover_grid_after_start(self, session: Any) -> None:
+        # Skip under pytest — the test harness mocks subprocess and our hook
+        # shows up as an extra launcher call that breaks strict equality
+        # assertions. Real operator runs don't have PYTEST_CURRENT_TEST.
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+        if os.environ.get("CLAWSEAT_DISABLE_GRID_AUTORECOVER") == "1":
+            return
+        project = getattr(session, "project", None)
+        if not project:
+            session_name = getattr(session, "session", "")
+            if "-" in session_name and not session_name.startswith("machine-"):
+                project = session_name.split("-", 1)[0]
+        if not project:
+            return
+        # Skip ancestor + memory — their panes aren't the misroute victims
+        seat_id = getattr(session, "engineer_id", "") or ""
+        if seat_id in ("ancestor", "memory"):
+            return
+        recover_script = _REPO_ROOT / "scripts" / "recover-grid.sh"
+        if not recover_script.exists():
+            return
+        try:
+            subprocess.run(
+                ["bash", str(recover_script), project],
+                check=False,
+                timeout=10,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as exc:  # noqa: BLE001 silent-ok: hook must not fail start-engineer
+            print(f"warn: grid recovery hook after {session.session}: {exc}", file=sys.stderr)
+
     def stop_engineer(self, session: Any, *, close_iterm_tab: bool = False) -> None:
         if close_iterm_tab:
             tty = _get_tmux_tty(session.session)

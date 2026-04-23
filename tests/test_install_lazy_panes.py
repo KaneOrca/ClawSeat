@@ -21,6 +21,17 @@ _read_jsonl = _HELPERS._read_jsonl
 _write_executable = _HELPERS._write_executable
 
 
+def _write_engineer_profile(tmp_path: Path, seat: str, default_tool: str) -> Path:
+    home = tmp_path / "home"
+    engineer_dir = home / ".agents" / "engineers" / seat
+    engineer_dir.mkdir(parents=True, exist_ok=True)
+    (engineer_dir / "engineer.toml").write_text(
+        f'id = "{seat}"\ndefault_tool = "{default_tool}"\n',
+        encoding="utf-8",
+    )
+    return home
+
+
 def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_path: Path) -> None:
     root, home, _, _, py_stubs = _fake_install_root(tmp_path)
     result = subprocess.run(
@@ -515,6 +526,7 @@ fi
 
 def test_wait_for_seat_falls_back_to_fixed_tool_suffix_after_primary_budget(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
+    home = _write_engineer_profile(tmp_path, "planner", "gemini")
     sleep_count_file = tmp_path / "sleep-count.txt"
     attach_log = tmp_path / "attach.log"
     agentctl = tmp_path / "agentctl.sh"
@@ -569,6 +581,8 @@ exit 0
         env={
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
             "AGENTCTL_BIN": str(agentctl),
             "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
             "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "1",
@@ -588,6 +602,7 @@ exit 0
 
 def test_wait_for_seat_does_not_fallback_to_base_session_without_canonical_resolution(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
+    home = _write_engineer_profile(tmp_path, "planner", "gemini")
     sleep_count_file = tmp_path / "sleep-count.txt"
     attach_log = tmp_path / "attach.log"
     agentctl = tmp_path / "agentctl.sh"
@@ -642,6 +657,8 @@ exit 0
         env={
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
             "AGENTCTL_BIN": str(agentctl),
             "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
             "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "1",
@@ -658,6 +675,7 @@ exit 0
 
 def test_wait_for_seat_warns_periodically_when_primary_and_suffix_fallbacks_fail(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
+    home = _write_engineer_profile(tmp_path, "planner", "gemini")
     sleep_count_file = tmp_path / "sleep-count.txt"
     attach_log = tmp_path / "attach.log"
     agentctl = tmp_path / "agentctl.sh"
@@ -709,6 +727,8 @@ exit 0
         env={
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
             "AGENTCTL_BIN": str(agentctl),
             "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
             "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "2",
