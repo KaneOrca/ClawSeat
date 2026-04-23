@@ -22,11 +22,33 @@ set -euo pipefail
 
 PROJECT="${1:-install}"
 ANCESTOR_SESSION="${PROJECT}-ancestor"
+WINDOW_TITLE="clawseat-${PROJECT}"
 
 if ! env -u TMUX tmux has-session -t "=$ANCESTOR_SESSION" 2>/dev/null; then
   echo "error: no tmux session named '$ANCESTOR_SESSION'" >&2
   echo "hint: is the ancestor seat running? check \`tmux list-sessions\`" >&2
   exit 1
+fi
+
+# Step 1: if the iTerm 6-pane window has been closed entirely (distinct
+# from "pane is misrouted inside the window"), reopen it and exit —
+# open-grid creates a fresh window with correctly-wired panes, so the
+# detach-client dance below is not needed.
+if command -v osascript >/dev/null 2>&1; then
+  window_count="$(osascript -e "tell application \"iTerm2\" to count of (windows whose name is \"$WINDOW_TITLE\")" 2>/dev/null || echo 0)"
+  if [[ "${window_count:-0}" -eq 0 ]]; then
+    echo "iTerm window '$WINDOW_TITLE' missing — invoking window open-grid ..."
+    agent_admin_bin="$(cd "$(dirname "$0")/.." && pwd)/core/scripts/agent_admin.py"
+    if [[ -f "$agent_admin_bin" ]]; then
+      python3 "$agent_admin_bin" window open-grid "$PROJECT" >/dev/null 2>&1 && {
+        echo "recovered: opened new iTerm grid for $PROJECT"
+        exit 0
+      }
+      echo "warn: agent_admin.py window open-grid failed; falling through to client cleanup" >&2
+    else
+      echo "warn: agent_admin.py not found at $agent_admin_bin; skipping window open" >&2
+    fi
+  fi
 fi
 
 clients="$(env -u TMUX tmux list-clients -t "=$ANCESTOR_SESSION" -F '#{client_tty}' 2>/dev/null || true)"
