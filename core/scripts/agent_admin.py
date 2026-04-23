@@ -74,7 +74,7 @@ from agent_admin_runtime import (
     write_env_file,
 )
 from agent_admin_resolve import ResolveHandlers, ResolveHooks
-from agent_admin_session import SessionHooks, SessionService
+from agent_admin_session import SessionHooks, SessionService, SessionStartError
 from agent_admin_store import StoreHandlers, StoreHooks
 from agent_admin_switch import SwitchHandlers, SwitchHooks
 from agent_admin_template import TemplateHandlers, TemplateHooks
@@ -1355,7 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(remaining)
     try:
         return args.func(args)
-    except (AgentAdminError, AgentAdminWindowError) as exc:
+    except (AgentAdminError, AgentAdminWindowError, SessionStartError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 

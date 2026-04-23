@@ -12,5 +12,5 @@ def test_ancestor_brief_warns_against_repeated_start_engineer_calls() -> None:
 
     assert "每个 seat 只调用一次 `agent_admin session start-engineer`" in text
     assert "不要反复 `start-engineer` 触发 retry" in text
-    assert "agent_admin session list" in text
+    assert "agent_admin session status" in text
     assert "tmux has-session" in text

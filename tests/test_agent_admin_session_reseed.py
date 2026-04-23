@@ -57,7 +57,7 @@ def test_start_engineer_reseeds_existing_sandbox_home_before_launcher(
     svc, hooks = _make_service(tmp_path, session)
 
     runtime_home = (
-        fake_home
+        real_home
         / ".agent-runtime"
         / "identities"
         / "claude"

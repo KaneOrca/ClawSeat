@@ -28,12 +28,12 @@
 - memory iterm window: `machine-memory-claude`
 - seats 待拉起: planner, builder, reviewer, qa, designer
   - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template clawseat-default --local ...` 建好 project + engineer/session records
-  - 这 5 个 pane 当前都在跑 `scripts/wait-for-seat.sh`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
+  - 这 5 个 pane 当前都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
 
 ## Seat TUI 生命周期（强制理解）
 
 1. install.sh Step 7 首次打开的 `clawseat-${PROJECT_NAME}` 六宫格，就是这个项目所有 seat 的持久 TUI 展示窗口。
-2. 除 ancestor 外，每个 pane 都在跑 `scripts/wait-for-seat.sh <project-seat>`：轮询 tmux session，出现即 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
+2. 除 ancestor 外，每个 pane 都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`：只支持这个 2 参数接口，不再支持旧的单参数 `<project-seat>`；它先通过 `agent_admin.py session-name` 解析 canonical session，再 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
 3. 不要手动 `tmux attach -t ${PROJECT_NAME}-<seat>` 去“救”某个 pane；这会污染 `wait-for-seat.sh` 所在 pane，把它从 canonical re-attach loop 里拽出来。
 4. 真正需要人工恢复的是六宫格窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
 
@@ -150,12 +150,14 @@ if ! python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT
 fi
 ```
 
-每个 seat 只调用一次 `agent_admin session start-engineer`。启动后如果 seat 仍在 onboarding，先用 `agent_admin session list` / `tmux has-session` 查状态，不要反复 `start-engineer` 触发 retry。
+每个 seat 只调用一次 `agent_admin session start-engineer`。启动后如果 seat 仍在 onboarding，先用 `agent_admin session status` / `tmux has-session` 查状态，不要反复 `start-engineer` 触发 retry。
 
 for seat in [planner, builder, reviewer, qa, designer]:
 1. 向用户交互："`${seat}` 用 bootstrapped default，还是切到 codex / gemini / 自定义 provider？"
    - 如需看当前默认，先跑：`python3 core/scripts/agent_admin.py show ${seat} --project ${PROJECT_NAME}`
 2. 如果用户改了 default，先重绑 session（不要直接调 launcher）：
+   - 自然语言别名先规范化再落 CLI：`claude code oauth` => `--tool claude --mode oauth --provider anthropic`；`codex xcode-best api` => `--tool codex --mode api --provider xcode-best`；`gemini cli oauth` => `--tool gemini --mode oauth --provider google`
+   - `provider` 字段只填 canonical provider token；不要把 `claude-code` / `gemini-cli` / “xcode-best api” 这种品牌或短语直接塞进 `--provider`
    - `python3 core/scripts/agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer ${seat} --tool <claude|codex|gemini> --mode <oauth|oauth_token|api> --provider <provider> [--model <model>]`
    - 若是 API seat，再按需补 secret：`python3 core/scripts/agent_admin.py engineer secret-set --project ${PROJECT_NAME} ${seat} <KEY> <VALUE>`
 3. spawn seat：
@@ -380,13 +382,14 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 |------|------|
 | 首次 spawn / 重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
 | 切换 seat harness（claude→codex 等）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer <seat> --tool <claude\|codex\|gemini> --mode <oauth\|oauth_token\|api> --provider <provider>` |
-| 强制 reset 重启（kill+relaunch）| 同上 + `--reset` flag |
-| 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session list --project ${PROJECT_NAME}` |
-| 检查单个 tmux session 是否存活 | `tmux has-session -t '${PROJECT_NAME}-<seat>'` |
+| 强制 reset 重启（stop+relaunch）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session stop-engineer <seat> --project ${PROJECT_NAME}` 然后 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session status --project ${PROJECT_NAME}` |
+| 检查单个 tmux session 是否存活 | `SEAT_SESSION="$(python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session-name <seat> --project ${PROJECT_NAME})"; tmux has-session -t "=${SEAT_SESSION}"` |
+| pane 重新回 canonical session | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window reseed-pane <seat> --project ${PROJECT_NAME}` |
 
 补充规则：
 
-- `wait-for-seat.sh` 会把重启后的 seat 自动 re-attach 回原来的 iTerm pane。
+- `wait-for-seat.sh` 会先解析当前 canonical session，再把重启后的 seat 自动 re-attach 回原来的 iTerm pane。
 - 不要手动 `tmux attach` 抢占这 5 个 wait-for-seat pane；手动 attach 只会让 pane 状态混乱。
 - 六宫格窗口本身丢失时，用 `agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` 恢复。
 

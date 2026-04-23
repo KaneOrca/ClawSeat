@@ -15,6 +15,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True, help="Memory Claude workspace root.")
     parser.add_argument(
+        "--settings-path",
+        default="",
+        help="Explicit settings.json path to update. Overrides --workspace target when set.",
+    )
+    parser.add_argument(
         "--clawseat-root",
         default=str(DEFAULT_CLAWSEAT_ROOT),
         help="Absolute path to the ClawSeat checkout used to resolve the default hook script.",
@@ -38,8 +43,7 @@ def _wanted_command(hook_script: Path) -> str:
     return f"bash {hook_script}"
 
 
-def install_memory_hook(workspace: Path, hook_script: Path) -> tuple[Path, dict, bool]:
-    settings_path = workspace / ".claude" / "settings.json"
+def install_memory_hook_at(settings_path: Path, hook_script: Path) -> tuple[Path, dict, bool]:
     settings = _load_settings(settings_path)
     hooks = settings.get("hooks")
     if not isinstance(hooks, dict):
@@ -91,6 +95,10 @@ def install_memory_hook(workspace: Path, hook_script: Path) -> tuple[Path, dict,
     return settings_path, settings, changed
 
 
+def install_memory_hook(workspace: Path, hook_script: Path) -> tuple[Path, dict, bool]:
+    return install_memory_hook_at(workspace / ".claude" / "settings.json", hook_script)
+
+
 def main() -> int:
     args = parse_args()
     workspace = Path(args.workspace).expanduser().resolve()
@@ -104,7 +112,12 @@ def main() -> int:
         print(f"error: hook script not found: {hook_script}")
         return 2
 
-    settings_path, settings, changed = install_memory_hook(workspace, hook_script)
+    target_settings = (
+        Path(args.settings_path).expanduser().resolve()
+        if args.settings_path
+        else workspace / ".claude" / "settings.json"
+    )
+    settings_path, settings, changed = install_memory_hook_at(target_settings, hook_script)
     rendered = json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
     if args.dry_run:
         print(f"target: {settings_path}")

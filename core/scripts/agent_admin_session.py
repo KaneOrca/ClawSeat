@@ -18,6 +18,7 @@ if _CORE_LIB not in sys.path:
 
 from project_binding import load_binding  # noqa: E402
 from project_tool_root import project_tool_root  # noqa: E402
+from real_home import real_user_home  # noqa: E402
 
 
 TMUX_COMMAND_RETRIES = 2
@@ -120,12 +121,11 @@ _SANDBOX_TOOL_SEED_SUBPATHS = (
 
 
 def _real_home_for_tool_seeding() -> Path:
-    real_home_str = (
-        os.environ.get("CLAWSEAT_REAL_HOME")
-        or os.environ.get("AGENT_HOME")
-        or str(Path.home())
-    )
-    return Path(real_home_str).expanduser()
+    return real_user_home()
+
+
+def _engineer_profile_path(engineer_id: str) -> Path:
+    return _real_home_for_tool_seeding() / ".agents" / "engineers" / engineer_id / "engineer.toml"
 
 
 def _project_tool_source_home(project_name: str | None, real_home: Path) -> Path:
@@ -379,6 +379,8 @@ class SessionService:
             if session.auth_mode == "oauth":
                 return "chatgpt"
             if session.auth_mode == "api":
+                if session.provider == "xcode-best":
+                    return "xcode"
                 return "custom"
         if session.tool == "gemini":
             if session.auth_mode == "oauth":
@@ -393,7 +395,7 @@ class SessionService:
         )
 
     def _launcher_secret_target(self, session: Any, launcher_auth: str) -> Path | None:
-        operator_home = Path.home()
+        operator_home = real_user_home()
         if session.tool == "claude":
             if launcher_auth == "oauth_token":
                 return operator_home / ".agents" / ".env.global"
@@ -526,7 +528,7 @@ class SessionService:
         return handle.name
 
     def _launcher_runtime_dir(self, session: Any, launcher_auth: str) -> Path | None:
-        operator_home = Path.home()
+        operator_home = real_user_home()
         if session.tool == "claude":
             if launcher_auth == "oauth":
                 return None
@@ -623,6 +625,9 @@ class SessionService:
                 env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
                 env["CLAWSEAT_PROJECT"] = session.project
                 env["CLAWSEAT_PROVIDER"] = session.provider
+                env["CLAWSEAT_SEAT"] = session.engineer_id
+                env["CLAWSEAT_ENGINEER_ID"] = session.engineer_id
+                env["CLAWSEAT_ENGINEER_PROFILE"] = str(_engineer_profile_path(session.engineer_id))
                 env["CLAWSEAT_TOOLS_ISOLATION"] = tools_isolation
                 if tools_isolation == "per-project":
                     env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
@@ -632,6 +637,14 @@ class SessionService:
                     ancestor_brief = self._ancestor_brief_path(session.project)
                     if ancestor_brief.is_file():
                         env["CLAWSEAT_ANCESTOR_BRIEF"] = str(ancestor_brief)
+                print(
+                    "start_engineer_launch: "
+                    f"session={session.session} "
+                    f"cmd={shlex.join(cmd)} "
+                    f"provider={session.provider} "
+                    f"engineer={session.engineer_id}",
+                    file=sys.stderr,
+                )
                 result = subprocess.run(
                     cmd,
                     check=False,

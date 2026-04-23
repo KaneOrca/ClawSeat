@@ -18,3 +18,5 @@ def test_ancestor_skill_and_patrol_plist_use_send_and_verify_for_project_seat_me
     assert "tmux send-keys -t '=<project>-ancestor-<tool>' \"/patrol-tick\" Enter" not in skill
     assert "send-and-verify.sh" in plist
     assert "tmux send-keys -t '={PROJECT}-ancestor-{TOOL}'" not in plist
+    assert "agentctl.sh' session-name ancestor --project '{PROJECT}'" in plist
+    assert "={PROJECT}-ancestor-{TOOL}" not in plist

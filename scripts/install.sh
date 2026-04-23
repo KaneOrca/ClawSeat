@@ -10,6 +10,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
 CALLER_HOME="${HOME:-}"
 
+# HOME is intentionally rebound once for the whole script: keep CALLER_HOME only
+# for diagnostics, and use exported HOME for all persisted user state paths.
 # Resolve real user $HOME. install.sh writes user-level state under
 # ~/.agents/... and reads user-level python user-site (iterm2 etc).
 # When invoked from inside a sandboxed seat (minimax smoke tests),
@@ -32,7 +34,9 @@ SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
 ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
 ITERM_DRIVER_TIMEOUT_SECONDS=30
 TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
+ANCESTOR_PATROL_TEMPLATE="$REPO_ROOT/core/templates/ancestor-patrol.plist.in"
 MEMORY_HOOK_INSTALLER="$REPO_ROOT/core/skills/memory-oracle/scripts/install_memory_hook.py"
+SEAT_CLAUDE_TEMPLATE_SCRIPT="$REPO_ROOT/core/scripts/seat_claude_template.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
@@ -41,6 +45,9 @@ MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
 GUIDE_FILE=""
+ANCESTOR_PATROL_PLIST_LABEL=""
+ANCESTOR_PATROL_PLIST_PATH=""
+ANCESTOR_PATROL_LOG_DIR=""
 PROVIDER_MODE=""
 PROVIDER_KEY=""
 PROVIDER_BASE=""
@@ -296,6 +303,9 @@ parse_args() {
   PROJECT_LOCAL_TOML="$HOME/.agents/tasks/$PROJECT/project-local.toml"
   PROJECT_RECORD_PATH="$HOME/.agents/projects/$PROJECT/project.toml"
   GUIDE_FILE="$HOME/.agents/tasks/$PROJECT/OPERATOR-START-HERE.md"
+  ANCESTOR_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.ancestor-patrol"
+  ANCESTOR_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${ANCESTOR_PATROL_PLIST_LABEL}.plist"
+  ANCESTOR_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
 }
 
 normalize_provider_choice() {
@@ -939,6 +949,70 @@ PY
   fi
 }
 
+ancestor_patrol_cadence_seconds() {
+  local cadence_minutes="${CLAWSEAT_ANCESTOR_PATROL_CADENCE_MINUTES:-30}"
+  if [[ ! "$cadence_minutes" =~ ^[0-9]+$ ]] || (( cadence_minutes <= 0 )); then
+    cadence_minutes=30
+  fi
+  printf '%s\n' "$((cadence_minutes * 60))"
+}
+
+install_ancestor_patrol_plist() {
+  note "Step 6: install ancestor patrol LaunchAgent"
+  [[ -f "$ANCESTOR_PATROL_TEMPLATE" || "$DRY_RUN" == "1" ]] || die 31 ANCESTOR_PATROL_TEMPLATE_MISSING "missing patrol plist template: $ANCESTOR_PATROL_TEMPLATE"
+
+  local cadence_seconds="" launchd_domain=""
+  cadence_seconds="$(ancestor_patrol_cadence_seconds)"
+  launchd_domain="gui/$(id -u)"
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] mkdir -p %q %q\n' "$(dirname "$ANCESTOR_PATROL_PLIST_PATH")" "$ANCESTOR_PATROL_LOG_DIR"
+    printf '[dry-run] render %s -> %s\n' "$ANCESTOR_PATROL_TEMPLATE" "$ANCESTOR_PATROL_PLIST_PATH"
+    printf '[dry-run] launchctl bootout %s/%s 2>/dev/null || true\n' "$launchd_domain" "$ANCESTOR_PATROL_PLIST_LABEL"
+    printf '[dry-run] launchctl bootstrap %s %q\n' "$launchd_domain" "$ANCESTOR_PATROL_PLIST_PATH"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$ANCESTOR_PATROL_PLIST_PATH")" "$ANCESTOR_PATROL_LOG_DIR" \
+    || die 31 ANCESTOR_PATROL_DIR_FAILED "unable to create patrol plist/log directories"
+
+  sed \
+    -e "s|{PROJECT}|${PROJECT}|g" \
+    -e "s|{CADENCE_SECONDS}|${cadence_seconds}|g" \
+    -e "s|{CLAWSEAT_ROOT}|${CLAWSEAT_ROOT}|g" \
+    -e "s|{LOG_DIR}|${ANCESTOR_PATROL_LOG_DIR}|g" \
+    "$ANCESTOR_PATROL_TEMPLATE" > "$ANCESTOR_PATROL_PLIST_PATH" \
+    || die 31 ANCESTOR_PATROL_RENDER_FAILED "unable to render $ANCESTOR_PATROL_PLIST_PATH"
+  chmod 644 "$ANCESTOR_PATROL_PLIST_PATH" \
+    || die 31 ANCESTOR_PATROL_CHMOD_FAILED "unable to chmod $ANCESTOR_PATROL_PLIST_PATH"
+
+  if command -v plutil >/dev/null 2>&1; then
+    plutil -lint "$ANCESTOR_PATROL_PLIST_PATH" >/dev/null 2>&1 \
+      || die 31 ANCESTOR_PATROL_INVALID "rendered patrol plist is not valid XML: $ANCESTOR_PATROL_PLIST_PATH"
+  fi
+
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    warn "Skipping launchctl bootstrap for ancestor patrol on non-macOS host."
+    return 0
+  fi
+  if ! command -v launchctl >/dev/null 2>&1; then
+    if is_sandbox_install; then
+      warn "Skipping launchctl bootstrap for ancestor patrol in sandbox/headless install: launchctl missing."
+      return 0
+    fi
+    die 31 ANCESTOR_PATROL_LAUNCHCTL_MISSING "launchctl is required to bootstrap $ANCESTOR_PATROL_PLIST_PATH"
+  fi
+
+  launchctl bootout "${launchd_domain}/${ANCESTOR_PATROL_PLIST_LABEL}" 2>/dev/null || true
+  if ! launchctl bootstrap "$launchd_domain" "$ANCESTOR_PATROL_PLIST_PATH" 2>/dev/null; then
+    if is_sandbox_install; then
+      warn "Skipping launchctl bootstrap for ancestor patrol in sandbox/headless install."
+      return 0
+    fi
+    die 31 ANCESTOR_PATROL_BOOTSTRAP_FAILED "failed to bootstrap $ANCESTOR_PATROL_PLIST_PATH"
+  fi
+}
+
 write_operator_guide() {
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] write %s\n' "$GUIDE_FILE"
@@ -1014,10 +1088,13 @@ ancestor_pane_waiting_on_operator() {
 ancestor_pane_shows_active_response() {
   local pane_text="$1"
   case "$pane_text" in
-    *"Thinking..."*|*"Shell awaiting input"*)
+    *"Thinking..."*|*"Shell awaiting input"*|*"✶ "*|*"✻ "*|*"✢ "*|*"✳ "*|*"✽ "*|*"⏺ "*)
       return 0
       ;;
   esac
+  if printf '%s\n' "$pane_text" | grep -Eq '(^|[[:space:]])Read [0-9]+ files?'; then
+    return 0
+  fi
   return 1
 }
 
@@ -1178,7 +1255,7 @@ ensure_tmux_session_alive() {
 }
 
 launch_seat() {
-  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" auth_mode="" custom_env_file=""
+  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file=""
   auth_mode="$(launcher_auth_for_provider)"
   custom_env_file="$(launcher_custom_env_file_for_session "$session")"
 
@@ -1192,6 +1269,7 @@ launch_seat() {
   local -a cmd=(env "CLAWSEAT_ROOT=$CLAWSEAT_ROOT")
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
   cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
+  [[ -n "$seat_id" ]] && cmd+=("CLAWSEAT_SEAT=$seat_id")
   cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool claude --auth "$auth_mode" --dir "$cwd" --session "$session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
   [[ "$DRY_RUN" == "1" ]] && cmd+=(--dry-run)
@@ -1212,13 +1290,18 @@ launch_seat() {
 
 install_memory_hook() {
   note "Step 7.5: install memory Stop-hook"
+  local engineers_root="$HOME/.agents/engineers"
+  local template_settings="$engineers_root/memory/.claude-template/settings.json"
   if [[ "$DRY_RUN" == "1" ]]; then
-    run "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --clawseat-root "$CLAWSEAT_ROOT" --dry-run
+    run "$PYTHON_BIN" "$SEAT_CLAUDE_TEMPLATE_SCRIPT" --seat memory --engineers-root "$engineers_root" --clawseat-root "$CLAWSEAT_ROOT"
+    run "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --settings-path "$template_settings" --clawseat-root "$CLAWSEAT_ROOT" --dry-run
     return 0
   fi
   mkdir -p "$MEMORY_WORKSPACE" || die 32 MEMORY_WORKSPACE_CREATE_FAILED "unable to create memory workspace: $MEMORY_WORKSPACE"
-  "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --clawseat-root "$CLAWSEAT_ROOT" \
-    || die 32 MEMORY_HOOK_INSTALL_FAILED "failed to install memory Stop-hook into $MEMORY_WORKSPACE"
+  "$PYTHON_BIN" "$SEAT_CLAUDE_TEMPLATE_SCRIPT" --seat memory --engineers-root "$engineers_root" --clawseat-root "$CLAWSEAT_ROOT" \
+    || die 32 MEMORY_TEMPLATE_PREP_FAILED "failed to prepare Claude template for memory seat"
+  "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --settings-path "$template_settings" --clawseat-root "$CLAWSEAT_ROOT" \
+    || die 32 MEMORY_HOOK_INSTALL_FAILED "failed to install memory Stop-hook into $template_settings"
 }
 
 check_iterm_window_exists() {
@@ -1354,7 +1437,9 @@ for seat in ("planner", "builder", "reviewer", "qa", "designer"):
             "command": "bash "
             + shlex.quote(wait_script)
             + " "
-            + shlex.quote(f"{project}-{seat}"),
+            + shlex.quote(project)
+            + " "
+            + shlex.quote(seat),
         }
     )
 print(json.dumps({"title": f"clawseat-{project}", "panes": panes}, ensure_ascii=False))
@@ -1366,13 +1451,14 @@ main() {
   local memory_window_id=""
   parse_args "$@"; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
-  launch_seat "$PROJECT-ancestor" "$REPO_ROOT" "$BRIEF_PATH"
+  launch_seat "$PROJECT-ancestor" "$REPO_ROOT" "$BRIEF_PATH" "ancestor"
   bootstrap_project_profile
+  install_ancestor_patrol_plist
   note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
   note "Step 8: ensure memory singleton daemon"
   if [[ "$DRY_RUN" == "1" ]]; then
     install_memory_hook
-    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE"
+    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
     open_iterm_window "$(memory_payload)" memory_window_id
   elif tmux has-session -t '=machine-memory-claude' 2>/dev/null; then
     printf 'memory seat already running (machine-memory-claude), reusing.\n'
@@ -1384,7 +1470,7 @@ main() {
     fi
   else
     install_memory_hook
-    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE"
+    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
     open_iterm_window "$(memory_payload)" memory_window_id
   fi
   note "Step 9: focus ancestor and persist operator guide"

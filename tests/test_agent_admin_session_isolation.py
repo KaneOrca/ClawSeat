@@ -90,7 +90,7 @@ def test_start_engineer_source_no_longer_contains_tmux_new_session():
         ("claude", "api", "minimax", "custom"),
         ("claude", "api", "xcode-best", "custom"),
         ("codex", "oauth", "openai", "chatgpt"),
-        ("codex", "api", "xcode-best", "custom"),
+        ("codex", "api", "xcode-best", "xcode"),
         ("gemini", "oauth", "google", "oauth"),
         ("gemini", "api", "google-api-key", "primary"),
     ],
@@ -141,9 +141,9 @@ def test_launcher_auth_mapping_matrix(
             "xcode-best",
             "reviewer-1",
             "OPENAI_API_KEY=codex-xcode-token\n",
-            "custom",
-            ".agent-runtime/identities/codex/api/custom-install-reviewer-1-codex",
-            True,
+            "xcode",
+            ".agent-runtime/identities/codex/api/xcode-install-reviewer-1-codex",
+            False,
         ),
         (
             "gemini",
@@ -169,9 +169,12 @@ def test_start_engineer_invokes_launcher_and_updates_runtime_dir(
     expected_runtime: str,
     expect_custom_env: bool,
 ):
-    fake_home = tmp_path / "home"
+    fake_home = tmp_path / "sandbox-home"
+    real_home = tmp_path / "real-home"
     fake_home.mkdir(parents=True, exist_ok=True)
+    real_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(aas.Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(aas, "real_user_home", lambda: real_home)
 
     session = _make_session(
         tmp_path,
@@ -214,7 +217,7 @@ def test_start_engineer_invokes_launcher_and_updates_runtime_dir(
     assert ("--custom-env-file" in cmd) is expect_custom_env
     assert env["CLAWSEAT_ROOT"] == str(Path(hooks.launcher_path).resolve().parents[2])
     assert env["CLAWSEAT_PROVIDER"] == provider
-    assert session.runtime_dir == str(fake_home / expected_runtime)
+    assert session.runtime_dir == str(real_home / expected_runtime)
     hooks.write_session.assert_called_once_with(session)
     hooks.apply_template.assert_called_with(session, hooks.load_project.return_value)
     title_cmds = [call.args[0] for call in mock_tmux.call_args_list]
@@ -265,7 +268,7 @@ def test_start_engineer_passes_custom_env_file_and_launcher_removes_it(
     assert not Path(captured["path"]).exists()
 
 
-def test_start_engineer_codex_xcode_best_uses_custom_env_to_preserve_endpoint(
+def test_start_engineer_codex_xcode_best_uses_xcode_auth_without_custom_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -283,12 +286,11 @@ def test_start_engineer_codex_xcode_best_uses_custom_env_to_preserve_endpoint(
         template_model="gpt-5.4",
     )
     svc, _ = _make_service(tmp_path, session)
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     def fake_run(cmd, **kwargs):
-        idx = cmd.index("--custom-env-file")
-        env_file = Path(cmd[idx + 1])
-        captured["content"] = env_file.read_text(encoding="utf-8")
+        captured["cmd"] = list(cmd)
+        captured["env"] = dict(kwargs.get("env", {}))
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(aas.subprocess, "run", fake_run)
@@ -299,9 +301,9 @@ def test_start_engineer_codex_xcode_best_uses_custom_env_to_preserve_endpoint(
     ):
         svc.start_engineer(session)
 
-    assert "export LAUNCHER_CUSTOM_API_KEY=codex-xcode-token" in captured["content"]
-    assert "export LAUNCHER_CUSTOM_BASE_URL=https://api.xcode.best/v1" in captured["content"]
-    assert "export LAUNCHER_CUSTOM_MODEL=gpt-5.4" in captured["content"]
+    assert "--custom-env-file" not in captured["cmd"]
+    assert captured["cmd"][6] == "xcode"
+    assert captured["env"]["CLAWSEAT_PROVIDER"] == "xcode-best"
 
 
 def test_start_engineer_reset_kills_session_before_launcher(

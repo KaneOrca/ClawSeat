@@ -170,10 +170,11 @@ restart-dead-seats) so unconditionally entering it after B7 is safe.
 ## Phase-B patrol semantics
 
 Phase B is triggered by **external `launchd` plist** (template at
-`core/templates/ancestor-patrol.plist.in`, installed by the launcher).
-Every `checklist_phase_b_cadence_minutes` minutes, the plist runs
-`tmux send-keys -t '=<project>-ancestor-claude' "/patrol-tick" Enter` —
-ancestor skill recognizes the `/patrol-tick` marker and executes
+`core/templates/ancestor-patrol.plist.in`, installed by `scripts/install.sh`).
+Every `checklist_phase_b_cadence_minutes` minutes, the plist resolves the
+canonical ancestor session via `agentctl.sh session-name ancestor --project
+<project>` and sends `/patrol-tick` through `send-and-verify.sh` — ancestor
+skill recognizes the marker and executes
 P1..P7 from the responsibility matrix §3.2 in that one turn. Phase B
 runs until the project is archived (ancestor never retires on its own).
 

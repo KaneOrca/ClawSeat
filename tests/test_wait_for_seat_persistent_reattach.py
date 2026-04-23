@@ -59,14 +59,25 @@ fi
 exit 0
 """,
     )
+    agentctl = tmp_path / "agentctl.sh"
+    _write_executable(
+        agentctl,
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "session-name" ]]; then
+  printf '%s\\n' "${TMUX_MATCH_SESSION:?}"
+fi
+""",
+    )
 
     result = subprocess.run(
-        ["bash", str(_WAIT_FOR_SEAT), "spawn49-planner"],
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49", "planner"],
         capture_output=True,
         text=True,
         env={
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "AGENTCTL_BIN": str(agentctl),
             "TMUX_MATCH_SESSION": "spawn49-planner",
             "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
             "WAIT_FOR_SEAT_RECONNECT_PAUSE": "0.01",
@@ -81,3 +92,17 @@ exit 0
     assert attach_lines[0] == "attach -t =spawn49-planner"
     assert attach_lines[1] == "attach -t =spawn49-planner"
     assert "DETACHED from spawn49-planner" in result.stdout
+
+
+def test_wait_for_seat_rejects_retired_single_arg_interface(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49-planner"],
+        capture_output=True,
+        text=True,
+        env=os.environ,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 2
+    assert "error: 1-arg form is retired; rerun as:" in result.stderr

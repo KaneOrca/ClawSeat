@@ -468,7 +468,7 @@ def main() -> int:
             raise RuntimeError("planner closeout unexpectedly touched the legacy Feishu group broadcast path")
         if feishu_send_log.exists() and feishu_send_log.read_text(encoding="utf-8").strip():
             raise RuntimeError("legacy Feishu broadcast hook should be disabled by default")
-        if not lark_cli_log.exists() or "im +messages-send --as user" not in lark_cli_log.read_text(encoding="utf-8"):
+        if not lark_cli_log.exists() or "--as user im +messages-send" not in lark_cli_log.read_text(encoding="utf-8"):
             raise RuntimeError("user-identity Feishu report did not invoke lark-cli as expected")
 
         run(

@@ -1,30 +1,96 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENTCTL="${AGENTCTL_BIN:-$REPO_ROOT/core/shell-scripts/agentctl.sh}"
+
 usage() {
-  printf 'Usage: %s <project-seat> | <project> <seat>\n' "$0" >&2
+  printf 'Usage: %s <project> <seat>\n' "$0" >&2
   exit 2
 }
 
+PROJECT_SCOPE="${CLAWSEAT_PROJECT:-}"
+SEAT_ID=""
+BASE_SESSION=""
 if [[ $# -eq 1 ]]; then
-  BASE_SESSION="$1"
+  printf 'error: 1-arg form is retired; rerun as: %s <project> <seat>\n' "$0" >&2
+  exit 2
 elif [[ $# -eq 2 ]]; then
-  BASE_SESSION="$1-$2"
+  PROJECT_SCOPE="$1"
+  SEAT_ID="$2"
+  BASE_SESSION="$PROJECT_SCOPE-$SEAT_ID"
 else
   usage
 fi
 
-POLL_SECONDS="${WAIT_FOR_SEAT_POLL_SECONDS:-5}"
+POLL_SECONDS="${WAIT_FOR_SEAT_POLL_SECONDS:-2}"
 RECONNECT_PAUSE="${WAIT_FOR_SEAT_RECONNECT_PAUSE:-2}"
+PRIMARY_FAILURE_BUDGET="${WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET:-10}"
+DEGRADED_WARN_EVERY_POLLS="${WAIT_FOR_SEAT_DEGRADED_WARN_EVERY_POLLS:-15}"
+PRIMARY_FAILURE_COUNT=0
+TARGET_SESSION=""
 
-resolve_session() {
-  local base="$1" candidate=""
-  for candidate in "$base" "$base-claude" "$base-codex" "$base-gemini"; do
+resolve_via_agentctl() {
+  local resolved=""
+  [[ -x "$AGENTCTL" ]] || return 1
+  resolved="$("$AGENTCTL" session-name "$SEAT_ID" --project "$PROJECT_SCOPE" 2>/dev/null || true)"
+  [[ -n "$resolved" ]] || return 1
+  printf '%s\n' "$resolved"
+}
+
+fallback_session_prefix() {
+  printf '%s-%s\n' "$PROJECT_SCOPE" "$SEAT_ID"
+}
+
+warn_fallback_attach() {
+  local attempt_count="$1"
+  local session_name="$2"
+  printf "WARN: agentctl resolution failed after %s attempts; falling back to '%s'\n" \
+    "$attempt_count" "$session_name" >&2
+}
+
+warn_degraded_wait() {
+  local attempt_count="$1"
+  printf "WARN: agentctl resolution still degraded for %s after %s attempts; waiting for canonical session or fixed suffix fallback\n" \
+    "$BASE_SESSION" "$attempt_count" >&2
+}
+
+resolve_via_fixed_suffix_fallback() {
+  local prefix="" suffix="" candidate=""
+  prefix="$(fallback_session_prefix || true)"
+  [[ -n "$prefix" ]] || return 1
+  for suffix in claude codex gemini; do
+    candidate="${prefix}-${suffix}"
     if tmux has-session -t "=$candidate" 2>/dev/null; then
+      warn_fallback_attach "$PRIMARY_FAILURE_COUNT" "$candidate"
       printf '%s\n' "$candidate"
       return 0
     fi
   done
+  return 1
+}
+
+resolve_session() {
+  local base="$1" resolved=""
+  TARGET_SESSION=""
+  resolved="$(resolve_via_agentctl || true)"
+  if [[ -n "$resolved" ]] && tmux has-session -t "=$resolved" 2>/dev/null; then
+    PRIMARY_FAILURE_COUNT=0
+    TARGET_SESSION="$resolved"
+    return 0
+  fi
+  PRIMARY_FAILURE_COUNT=$((PRIMARY_FAILURE_COUNT + 1))
+  if (( PRIMARY_FAILURE_COUNT >= PRIMARY_FAILURE_BUDGET )); then
+    if resolved="$(resolve_via_fixed_suffix_fallback)"; then
+      TARGET_SESSION="$resolved"
+      return 0
+    fi
+    if (( PRIMARY_FAILURE_COUNT == PRIMARY_FAILURE_BUDGET )) || \
+       (( DEGRADED_WARN_EVERY_POLLS > 0 && PRIMARY_FAILURE_COUNT % DEGRADED_WARN_EVERY_POLLS == 0 )); then
+      warn_degraded_wait "$PRIMARY_FAILURE_COUNT"
+    fi
+  fi
   return 1
 }
 
@@ -59,7 +125,7 @@ detect_trust_prompt() {
 }
 
 while true; do
-  if TARGET_SESSION="$(resolve_session "$BASE_SESSION")"; then
+  if resolve_session "$BASE_SESSION"; then
     if tmux attach -t "=$TARGET_SESSION"; then
       print_reconnecting "$TARGET_SESSION"
     else

@@ -2,14 +2,19 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.lib.real_home import real_user_home
+
 
 def _home() -> Path:
-    return Path(
-        os.environ.get("REAL_HOME", os.environ.get("HOME", str(Path.home())))
-    ).expanduser()
+    return Path(os.environ.get("REAL_HOME", str(real_user_home()))).expanduser()
 
 
 def _roots_from_env_or_defaults() -> list[tuple[Path, int]]:

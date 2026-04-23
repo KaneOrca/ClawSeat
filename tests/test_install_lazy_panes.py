@@ -53,7 +53,7 @@ def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_pat
     assert "machine-memory-claude" in output
     assert "project bootstrap --template clawseat-default --local" in output
     for seat in ("planner", "builder", "reviewer", "qa", "designer"):
-        assert f"bash {root}/scripts/wait-for-seat.sh spawn49-{seat}" in output
+        assert f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}" in output
 
 
 def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     commands = {pane["label"]: pane["command"] for pane in grid_payload["panes"]}
     assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor'"
     for seat in ("planner", "builder", "reviewer", "qa", "designer"):
-        assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49-{seat}"
+        assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}"
 
     for seat in ("planner", "builder", "reviewer", "qa", "designer"):
         secret_path = home / ".agents" / "secrets" / "claude" / "minimax" / f"{seat}.env"
@@ -423,7 +423,6 @@ for name in ("network", "openclaw", "github", "current_context"):
 @pytest.mark.parametrize(
     "matched_session",
     [
-        "spawn49-planner",
         "spawn49-planner-claude",
         "spawn49-planner-codex",
         "spawn49-planner-gemini",
@@ -434,6 +433,7 @@ def test_wait_for_seat_attaches_when_matching_session_appears(tmp_path: Path, ma
     count_file = tmp_path / "count.txt"
     sleep_count_file = tmp_path / "sleep-count.txt"
     attach_log = tmp_path / "attach.log"
+    agentctl = tmp_path / "agentctl.sh"
     _write_executable(
         bin_dir / "tmux",
         """#!/usr/bin/env bash
@@ -476,15 +476,25 @@ fi
 exit 0
 """,
     )
+    _write_executable(
+        agentctl,
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "session-name" ]]; then
+  printf '%s\\n' "${TMUX_MATCH_SESSION:?}"
+fi
+""",
+    )
 
     result = subprocess.run(
-        ["bash", str(_WAIT_FOR_SEAT), "spawn49-planner"],
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49", "planner"],
         capture_output=True,
         text=True,
         timeout=5,
         env={
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "AGENTCTL_BIN": str(agentctl),
             "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
             "TMUX_COUNT_FILE": str(count_file),
             "TMUX_ATTACH_LOG": str(attach_log),
@@ -495,8 +505,223 @@ exit 0
     )
 
     assert result.returncode != 0
+    assert "WARN:" not in result.stderr
     assert f"DETACHED from {matched_session}" in result.stdout
     assert "reconnecting in 2s" in result.stdout
     attach_lines = attach_log.read_text(encoding="utf-8").splitlines()
     assert attach_lines
     assert all(line == f"attach -t ={matched_session}" for line in attach_lines)
+
+
+def test_wait_for_seat_falls_back_to_fixed_tool_suffix_after_primary_budget(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    sleep_count_file = tmp_path / "sleep-count.txt"
+    attach_log = tmp_path / "attach.log"
+    agentctl = tmp_path / "agentctl.sh"
+    _write_executable(
+        bin_dir / "tmux",
+        """#!/usr/bin/env bash
+set -euo pipefail
+attach_log="${TMUX_ATTACH_LOG:?}"
+case "$1" in
+  has-session)
+    if [[ "$3" == "=spawn49-planner-gemini" ]]; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  attach)
+    printf '%s\\n' "$*" >> "$attach_log"
+    ;;
+esac
+""",
+    )
+    _write_executable(
+        agentctl,
+        """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+""",
+    )
+    _write_executable(
+        bin_dir / "sleep",
+        """#!/usr/bin/env bash
+set -euo pipefail
+count_file="${SLEEP_COUNT_FILE:?}"
+count=0
+if [[ -f "$count_file" ]]; then
+  count="$(cat "$count_file")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "$count_file"
+if [[ "$count" -ge 2 ]]; then
+  kill -TERM "$PPID"
+fi
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49", "planner"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "AGENTCTL_BIN": str(agentctl),
+            "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
+            "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "1",
+            "TMUX_ATTACH_LOG": str(attach_log),
+            "SLEEP_COUNT_FILE": str(sleep_count_file),
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "WARN: agentctl resolution failed after 1 attempts; falling back to 'spawn49-planner-gemini'" in result.stderr
+    assert "DETACHED from spawn49-planner-gemini" in result.stdout
+    attach_lines = attach_log.read_text(encoding="utf-8").splitlines()
+    assert attach_lines
+    assert all(line == "attach -t =spawn49-planner-gemini" for line in attach_lines)
+
+
+def test_wait_for_seat_does_not_fallback_to_base_session_without_canonical_resolution(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    sleep_count_file = tmp_path / "sleep-count.txt"
+    attach_log = tmp_path / "attach.log"
+    agentctl = tmp_path / "agentctl.sh"
+    _write_executable(
+        bin_dir / "tmux",
+        """#!/usr/bin/env bash
+set -euo pipefail
+attach_log="${TMUX_ATTACH_LOG:?}"
+case "$1" in
+  has-session)
+    if [[ "$3" == "=spawn49-planner" ]]; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  attach)
+    printf '%s\\n' "$*" >> "$attach_log"
+    ;;
+esac
+""",
+    )
+    _write_executable(
+        agentctl,
+        """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+""",
+    )
+    _write_executable(
+        bin_dir / "sleep",
+        """#!/usr/bin/env bash
+set -euo pipefail
+count_file="${SLEEP_COUNT_FILE:?}"
+count=0
+if [[ -f "$count_file" ]]; then
+  count="$(cat "$count_file")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "$count_file"
+if [[ "$count" -ge 2 ]]; then
+  kill -TERM "$PPID"
+fi
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49", "planner"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "AGENTCTL_BIN": str(agentctl),
+            "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
+            "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "1",
+            "TMUX_ATTACH_LOG": str(attach_log),
+            "SLEEP_COUNT_FILE": str(sleep_count_file),
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "pane is waiting for spawn49-planner" in result.stdout
+    assert not attach_log.exists()
+
+
+def test_wait_for_seat_warns_periodically_when_primary_and_suffix_fallbacks_fail(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    sleep_count_file = tmp_path / "sleep-count.txt"
+    attach_log = tmp_path / "attach.log"
+    agentctl = tmp_path / "agentctl.sh"
+    _write_executable(
+        bin_dir / "tmux",
+        """#!/usr/bin/env bash
+set -euo pipefail
+attach_log="${TMUX_ATTACH_LOG:?}"
+case "$1" in
+  has-session)
+    exit 1
+    ;;
+  attach)
+    printf '%s\\n' "$*" >> "$attach_log"
+    ;;
+esac
+""",
+    )
+    _write_executable(
+        agentctl,
+        """#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+""",
+    )
+    _write_executable(
+        bin_dir / "sleep",
+        """#!/usr/bin/env bash
+set -euo pipefail
+count_file="${SLEEP_COUNT_FILE:?}"
+count=0
+if [[ -f "$count_file" ]]; then
+  count="$(cat "$count_file")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "$count_file"
+if [[ "$count" -ge 4 ]]; then
+  kill -TERM "$PPID"
+fi
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49", "planner"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "AGENTCTL_BIN": str(agentctl),
+            "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
+            "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "2",
+            "WAIT_FOR_SEAT_DEGRADED_WARN_EVERY_POLLS": "2",
+            "TMUX_ATTACH_LOG": str(attach_log),
+            "SLEEP_COUNT_FILE": str(sleep_count_file),
+        },
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "pane is waiting for spawn49-planner" in result.stdout
+    assert not attach_log.exists()
+    assert result.stderr.count(
+        "WARN: agentctl resolution still degraded for spawn49-planner"
+    ) >= 2

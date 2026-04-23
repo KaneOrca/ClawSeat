@@ -29,7 +29,7 @@ def _seed_claude_home(real_home: Path) -> Path:
     return claude_home
 
 
-def test_prepare_claude_home_symlinks_whitelisted_definition_dirs(tmp_path: Path) -> None:
+def test_prepare_claude_home_materializes_local_settings_and_skills_dirs(tmp_path: Path) -> None:
     real_home = tmp_path / "real_home"
     runtime_home = tmp_path / "runtime_home"
     real_home.mkdir(parents=True)
@@ -46,7 +46,19 @@ def test_prepare_claude_home_symlinks_whitelisted_definition_dirs(tmp_path: Path
     runtime_data = json.loads(runtime_claude_json.read_text(encoding="utf-8"))
     assert runtime_data["hasCompletedOnboarding"] is True
 
-    for item in ("settings.json", "statsig", "skills", "commands", "agents"):
+    runtime_settings = runtime_home / ".claude" / "settings.json"
+    runtime_skills = runtime_home / ".claude" / "skills"
+    assert runtime_settings.is_file()
+    assert not runtime_settings.is_symlink()
+    assert json.loads(runtime_settings.read_text(encoding="utf-8")) == {
+        "hooks": {},
+        "permissions": {},
+    }
+    assert runtime_skills.is_dir()
+    assert not runtime_skills.is_symlink()
+    assert list(runtime_skills.iterdir()) == []
+
+    for item in ("statsig", "commands", "agents"):
         link = runtime_home / ".claude" / item
         assert link.is_symlink()
         assert link.readlink() == claude_home / item

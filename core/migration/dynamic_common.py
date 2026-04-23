@@ -21,6 +21,8 @@ except ModuleNotFoundError:  # pragma: no cover
 # Resolve ORIGINAL_COMMON relative to this file — no hardcoded maintainer path needed.
 _MIGRATION_DIR = Path(__file__).resolve().parent  # .../ClawSeat/core/migration
 _CLAWSEAT_ROOT_FOR_COMMON = _MIGRATION_DIR.parent.parent  # .../ClawSeat
+if str(_CLAWSEAT_ROOT_FOR_COMMON) not in sys.path:
+    sys.path.insert(0, str(_CLAWSEAT_ROOT_FOR_COMMON))
 _HARNESS_SCRIPTS_DIR = _CLAWSEAT_ROOT_FOR_COMMON / "core" / "skills" / "gstack-harness" / "scripts"
 ORIGINAL_COMMON = _HARNESS_SCRIPTS_DIR / "_common.py"
 
@@ -33,6 +35,8 @@ ORIGINAL_COMMON = _HARNESS_SCRIPTS_DIR / "_common.py"
 # locks this in.
 if str(_HARNESS_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_HARNESS_SCRIPTS_DIR))
+
+from core.lib.real_home import real_user_home
 
 SPEC = importlib.util.spec_from_file_location("gstack_harness_common_dynamic", ORIGINAL_COMMON)
 if SPEC is None or SPEC.loader is None:
@@ -292,7 +296,7 @@ def load_profile(path: str | Path) -> HarnessProfile:
     }
     legacy_seats = [str(item) for item in data.get("legacy_seats", list(legacy_roles.keys()))]
     top_level_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items()}
-    session_root = Path(str(dynamic.get("session_root", str(Path.home() / ".agents" / "sessions")))).expanduser()
+    session_root = Path(str(dynamic.get("session_root", str(real_user_home() / ".agents" / "sessions")))).expanduser()
     heartbeat_owner = str(data["heartbeat_owner"])
     heartbeat_transport = str(data.get("heartbeat_transport", "tmux")).strip().lower() or "tmux"
     declared_seats = [str(item) for item in data.get("seats", [heartbeat_owner])]

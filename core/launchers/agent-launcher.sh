@@ -545,8 +545,8 @@ PY
 prepare_claude_home() {
   # Seed Claude Code's isolated HOME so onboarding doesn't fire for every
   # seat launch. Keep Claude on an explicit white-list model: share a
-  # small set of user-level config/definition paths, but leave runtime
-  # state such as projects/history/tasks isolated per seat.
+  # small set of user-level compatibility paths, but materialize the
+  # sandbox's settings/skills from the seat-specific .claude-template.
   local runtime_home="$1"
   local runtime_claude="$runtime_home/.claude"
   local source_claude="$REAL_HOME/.claude"
@@ -596,11 +596,9 @@ if not isinstance(version, str) or not version.strip():
 target_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 PY
 
-  # Preserve existing compatibility behavior for settings / onboarding
-  # caches, then add user-authored definition directories that Claude
-  # should see inside isolated runtimes.
+  # Preserve compatibility caches and definition directories that remain
+  # intentionally shared across sandboxes.
   local compat_items=(
-    "settings.json"
     "statsig"
   )
   local item
@@ -611,7 +609,6 @@ PY
   done
 
   local shared_items=(
-    "skills"
     "commands"
     "agents"
   )
@@ -620,6 +617,65 @@ PY
       ln -s "$source_claude/$item" "$runtime_claude/$item"
     fi
   done
+
+  local seat_id="${CLAWSEAT_SEAT:-${CLAWSEAT_ENGINEER_ID:-}}"
+  local runtime_settings="$runtime_claude/settings.json"
+  local runtime_skills="$runtime_claude/skills"
+  if [[ -n "$seat_id" ]]; then
+    "$LAUNCHER_PYTHON_BIN" - "$LAUNCHER_REPO_ROOT" "${AGENTS_ROOT:-$REAL_HOME/.agents}" "$seat_id" "$runtime_claude" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+agents_root = Path(sys.argv[2])
+seat_id = sys.argv[3]
+runtime_claude_root = Path(sys.argv[4])
+sys.path.insert(0, str(repo_root / "core" / "scripts"))
+
+from seat_claude_template import copy_seat_claude_template_to_runtime
+
+copy_seat_claude_template_to_runtime(
+    agents_root / "engineers",
+    seat_id,
+    runtime_claude_root,
+    clawseat_root=repo_root,
+)
+PY
+    return 0
+  fi
+
+  if [[ -L "$runtime_settings" ]]; then
+    rm -f "$runtime_settings"
+  fi
+  if [[ -L "$runtime_skills" ]]; then
+    rm -f "$runtime_skills"
+  fi
+  mkdir -p "$runtime_skills"
+  "$LAUNCHER_PYTHON_BIN" - "$runtime_settings" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+data: dict[str, object] = {}
+if target_path.exists():
+    try:
+        loaded = json.loads(target_path.read_text(encoding="utf-8"))
+    except Exception:
+        loaded = {}
+    if isinstance(loaded, dict):
+        data.update(loaded)
+if not isinstance(data.get("hooks"), dict):
+    data["hooks"] = {}
+if not isinstance(data.get("permissions"), dict):
+    data["permissions"] = {}
+target_path.parent.mkdir(parents=True, exist_ok=True)
+target_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
 }
 
 run_claude_runtime() {
@@ -730,7 +786,7 @@ run_claude_runtime() {
   seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
   # Skip Claude onboarding in the isolated HOME. Without this the seat
   # blocks on the welcome + auth pages even when API keys are live in env.
-  prepare_claude_home "$HOME"
+  prepare_claude_home "$HOME" "$session_name"
 
   cd "$workdir"
   echo "────────────────────────────────────────"
@@ -761,7 +817,7 @@ run_codex_runtime() {
     echo " Directory:  $workdir"
     echo " CODEX_HOME: $CODEX_HOME"
     echo "────────────────────────────────────────"
-    exec codex -C "$workdir"
+    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir"
   fi
 
   local secret_file="" runtime_dir
@@ -801,6 +857,7 @@ PY
     set -a
     source "$secret_file"
     set +a
+    rm -f "$CODEX_HOME/config.toml"
     if [[ -z "${OPENAI_BASE_URL:-}" && -z "${OPENAI_API_BASE:-}" ]]; then
       case "${CLAWSEAT_PROVIDER:-}" in
         xcode-best)
@@ -808,6 +865,20 @@ PY
           ;;
       esac
     fi
+    python3 - "$CODEX_HOME/config.toml" "${OPENAI_BASE_URL:-${OPENAI_API_BASE:-$(launcher_provider_default_base_url codex xcode-best)}}" "${OPENAI_API_KEY:-}" <<'PY'
+import json
+import sys
+
+config_path, base_url, api_key = sys.argv[1:4]
+with open(config_path, "w", encoding="utf-8") as handle:
+    handle.write('model_provider = "xcodeapi"\n')
+    handle.write('model = "gpt-5.4"\n')
+    handle.write("[model_providers.xcodeapi]\n")
+    handle.write('name = "xcodeapi"\n')
+    handle.write(f"base_url = {json.dumps(base_url)}\n")
+    handle.write('wire_api = "responses"\n')
+    handle.write(f"experimental_bearer_token = {json.dumps(api_key)}\n")
+PY
     if [[ ! -f "$CODEX_HOME/auth.json" ]]; then
       printf '%s' "${OPENAI_API_KEY:-}" | HOME="$HOME" CODEX_HOME="$CODEX_HOME" codex login --with-api-key >/dev/null
     fi
@@ -823,11 +894,11 @@ PY
   echo "────────────────────────────────────────"
   if [[ "$auth_mode" == "custom" ]]; then
     if [[ -n "${LAUNCHER_CUSTOM_MODEL:-}" ]]; then
-      exec codex -C "$workdir" -c model_provider=customapi -m "${LAUNCHER_CUSTOM_MODEL}"
+      exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi -m "${LAUNCHER_CUSTOM_MODEL}"
     fi
-    exec codex -C "$workdir" -c model_provider=customapi
+    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi
   fi
-  exec codex -C "$workdir"
+  exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir"
 }
 
 run_gemini_runtime() {

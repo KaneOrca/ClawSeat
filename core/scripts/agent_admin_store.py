@@ -4,6 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+try:
+    from seat_claude_template import ensure_seat_claude_template
+except ModuleNotFoundError:  # pragma: no cover
+    from .seat_claude_template import ensure_seat_claude_template
+
 
 @dataclass
 class StoreHooks:
@@ -403,6 +408,12 @@ class StoreHandlers:
         )
         lines.append("")
         self.hooks.write_text(path, "\n".join(lines), None)
+        try:
+            ensure_seat_claude_template(self.hooks.engineers_root, engineer.engineer_id)
+        except Exception as exc:
+            raise self.hooks.error_cls(
+                f"failed to prepare Claude template for {engineer.engineer_id}: {exc}"
+            ) from exc
 
     def write_session(self, session: Any) -> None:
         path = self.session_path(session.project, session.engineer_id)

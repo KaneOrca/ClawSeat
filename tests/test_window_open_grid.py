@@ -75,7 +75,7 @@ def test_build_grid_payload_uses_project_roster_and_wait_for_seat_commands() -> 
     assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor'"
     assert "koder" not in commands
     for seat in ("planner", "builder", "reviewer", "qa", "designer"):
-        assert commands[seat] == f"bash {_REPO / 'scripts' / 'wait-for-seat.sh'} spawn49-{seat}"
+        assert commands[seat] == f"bash {_REPO / 'scripts' / 'wait-for-seat.sh'} spawn49 {seat}"
 
 
 def test_open_grid_recover_skips_driver_when_window_exists(monkeypatch: pytest.MonkeyPatch) -> None:

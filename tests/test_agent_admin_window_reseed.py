@@ -86,7 +86,7 @@ def test_reseed_pane_sends_interrupt_detach_and_wait_command(monkeypatch: pytest
     assert reviewer.sent_text == [
         "\x03",
         "\x02d",
-        f"bash {agent_admin_window._WAIT_FOR_SEAT_SCRIPT} install-reviewer\n",
+        f"bash {agent_admin_window._WAIT_FOR_SEAT_SCRIPT} install reviewer\n",
     ]
 
 

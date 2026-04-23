@@ -513,9 +513,10 @@ def _read_lark_auth_status(
 ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
     """Run `lark-cli auth status` once. Return (auth_info, error_payload)."""
     normalized = _normalize_lark_identity(identity)
-    cmd = [lark_cli, "auth", "status"]
+    cmd = [lark_cli]
     if normalized != "auto":
         cmd.extend(["--as", normalized])
+    cmd.extend(["auth", "status"])
     result = run_command_with_env(
         cmd,
         cwd=str(OPENCLAW_HOME),
@@ -715,9 +716,10 @@ def send_feishu_user_message(
             payload["fix"] = auth.get("fix", "lark-cli auth login")
             payload["auth_detail"] = auth.get("reason", "")
             return payload
-    send_cmd = [lark_cli, "im", "+messages-send"]
+    send_cmd = [lark_cli]
     if normalized != "auto":
         send_cmd.extend(["--as", normalized])
+    send_cmd.extend(["im", "+messages-send"])
     send_cmd.extend(["--chat-id", resolved_group_id, "--text", message])
     result = run_command_with_env(
         send_cmd,

@@ -41,6 +41,7 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     (root / "core" / "lib").mkdir(parents=True, exist_ok=True)
     (root / "core" / "scripts").mkdir(parents=True, exist_ok=True)
     (root / "core" / "shell-scripts").mkdir(parents=True, exist_ok=True)
+    (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
     shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
@@ -48,6 +49,14 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     shutil.copy2(
         _REPO / "core" / "scripts" / "agent_admin_config.py",
         root / "core" / "scripts" / "agent_admin_config.py",
+    )
+    shutil.copy2(
+        _REPO / "core" / "scripts" / "seat_skill_mapping.py",
+        root / "core" / "scripts" / "seat_skill_mapping.py",
+    )
+    shutil.copy2(
+        _REPO / "core" / "scripts" / "seat_claude_template.py",
+        root / "core" / "scripts" / "seat_claude_template.py",
     )
     shutil.copy2(
         _REPO / "core" / "lib" / "real_home.py",
@@ -58,6 +67,10 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
         root / "core" / "shell-scripts" / "send-and-verify.sh",
     )
     (root / "core" / "shell-scripts" / "send-and-verify.sh").chmod(0o755)
+    shutil.copy2(
+        _REPO / "core" / "templates" / "ancestor-patrol.plist.in",
+        root / "core" / "templates" / "ancestor-patrol.plist.in",
+    )
 
     _write_executable(
         root / "core" / "preflight.py",
@@ -96,6 +109,10 @@ import sys
 raise SystemExit(0)
 """,
     )
+    for skill_name in ("clawseat", "gstack-harness", "tmux-basics", "memory-oracle"):
+        skill_dir = root / "core" / "skills" / skill_name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(f"# {skill_name}\n", encoding="utf-8")
     _write_executable(
         root / "core" / "scripts" / "iterm_panes_driver.py",
         """#!/usr/bin/env python3
@@ -154,7 +171,6 @@ fi
 exit 0
 """,
     )
-    (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
     (root / "core" / "templates" / "ancestor-brief.template.md").write_text(
         "\n".join(
             [
@@ -288,6 +304,26 @@ if [[ "${1:-}" == "capture-pane" ]]; then
   exit 0
 fi
 printf '%s\\n' "$*" >> "${TMUX_LOG_FILE:?}"
+""",
+    )
+    _write_executable(
+        bin_dir / "launchctl",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${LAUNCHCTL_LOG_FILE:-}" ]]; then
+  printf '%s\\n' "$*" >> "${LAUNCHCTL_LOG_FILE:?}"
+fi
+exit 0
+""",
+    )
+    _write_executable(
+        bin_dir / "plutil",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${PLUTIL_LOG_FILE:-}" ]]; then
+  printf '%s\\n' "$*" >> "${PLUTIL_LOG_FILE:?}"
+fi
+exit 0
 """,
     )
     _write_executable(

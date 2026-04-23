@@ -3,12 +3,11 @@
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Ancestor Phase-B patrol beacon. Installed by
-  core/launchers/agent-launcher.sh ancestor-preflight at project setup time.
+  scripts/install.sh at project setup time.
 
   Substitutions performed at install time:
     {PROJECT}          → project name (e.g. install)
-    {TOOL}             → ancestor tool (e.g. claude)
-    {CADENCE_SECONDS}  → patrol cadence, seconds (profile.patrol.cadence_minutes * 60)
+    {CADENCE_SECONDS}  → patrol cadence, seconds (install default 1800 / 30min, overridable)
     {CLAWSEAT_ROOT}    → absolute path to ClawSeat (e.g. /Users/ywf/.clawseat)
     {LOG_DIR}          → directory for stdout/err logs (e.g. ~/.agents/tasks/<project>/patrol/logs)
 
@@ -38,7 +37,7 @@
     <array>
         <string>/bin/bash</string>
         <string>-lc</string>
-        <string>tmux has-session -t '={PROJECT}-ancestor-{TOOL}' 2&gt;/dev/null &amp;&amp; '{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh' --project '{PROJECT}' ancestor '/patrol-tick' &gt;/dev/null 2&gt;&amp;1 || true</string>
+        <string>SESSION="$('{CLAWSEAT_ROOT}/core/shell-scripts/agentctl.sh' session-name ancestor --project '{PROJECT}' 2&gt;/dev/null || true)"; [[ -n "$SESSION" ]] &amp;&amp; tmux has-session -t "=$SESSION" 2&gt;/dev/null &amp;&amp; '{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh' --project '{PROJECT}' ancestor '/patrol-tick' &gt;/dev/null 2&gt;&amp;1 || true</string>
     </array>
 
     <key>StartInterval</key>

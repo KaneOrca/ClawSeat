@@ -219,7 +219,9 @@ def build_grid_payload(project: Any, *, wait_for_seat_script: Path | None = None
                     "bash "
                     + shlex.quote(str(wait_script))
                     + " "
-                    + shlex.quote(f"{project.name}-{seat_id}")
+                    + shlex.quote(project.name)
+                    + " "
+                    + shlex.quote(seat_id)
                 ),
             }
         )
@@ -437,7 +439,9 @@ async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -
         "bash "
         + shlex.quote(str(_WAIT_FOR_SEAT_SCRIPT))
         + " "
-        + shlex.quote(f"{project_name}-{seat_id}")
+        + shlex.quote(project_name)
+        + " "
+        + shlex.quote(seat_id)
         + "\n"
     )
     for payload in ("\x03", "\x02d", wait_command):

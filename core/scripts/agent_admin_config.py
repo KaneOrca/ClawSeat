@@ -1,3 +1,20 @@
+"""Canonical session/runtime auth configuration for ClawSeat.
+
+This module defines the persisted session-level `(tool, auth_mode, provider)`
+contract used by engineer profiles, session records, templates, migration code,
+and validation. These `auth_mode` values are canonical state values, not the
+lower-level execution labels accepted by `core/launchers/agent-launcher.sh`.
+
+Launcher translation happens at the execution boundary in
+`SessionService._launcher_auth_for()` and compatible shell entry points. For
+example:
+
+- `codex/oauth/openai` launches as `--auth chatgpt`
+- `gemini/api/google-api-key` launches as `--auth primary`
+- `claude/api/ark` launches as `--auth custom` (live path)
+- `claude/ccr/ccr-local` launches as `--auth custom` (live path)
+"""
+
 from __future__ import annotations
 
 import os
@@ -476,9 +493,22 @@ def parse_codex_provider_config(data: dict[str, Any]) -> CodexProviderConfig:
     return CodexProviderConfig(**data)
 
 
+# Canonical session-level matrix. These `auth_mode` values are persisted in
+# session/profile/template state and validated by agent_admin_* entry points.
+# Do not replace them with launcher execution labels such as `chatgpt`,
+# `primary`, `xcode`, or `custom`.
+#
+# Translation to launcher `--auth` happens at the execution boundary in
+# `SessionService._launcher_auth_for()`. That live bridge includes
+# `claude/api/ark -> custom` and `claude/ccr/ccr-local -> custom`, even though
+# raw launcher case labels do not mention `ark` or `ccr`.
 SUPPORTED_RUNTIME_MATRIX = {
     "claude": {
+        # Legacy Keychain OAuth; maps 1:1 to launcher `--auth oauth`.
         "oauth": ("anthropic",),
+        # Canonical Claude API providers. Current agent_admin startup routes
+        # these through launcher `--auth custom`; legacy shell callers may
+        # still use direct `anthropic-console|minimax|xcode` launcher labels.
         "api": ("xcode-best", "minimax", "ark", "anthropic-console"),
         # C5: long-lived token from `claude setup-token` (valid ~1 year).
         # Skips macOS Keychain entirely — avoids the per-seat popup storm

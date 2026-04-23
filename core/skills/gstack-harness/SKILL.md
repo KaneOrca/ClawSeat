@@ -46,6 +46,8 @@ Do not load every reference by default. Start from the project profile under
   - [Feishu delegation report](references/feishu-delegation-report.md) only when a
     Feishu-side async sink or koder overlay is active; otherwise CLI-only flow
     stays on handoff JSON + state.db events
+- parallel execution of independent sub-tasks
+  - [Sub-agent fan-out](references/sub-agent-fan-out.md)
 - console / patrol / reminder review
   - [Console model](references/console-model.md)
   - [Heartbeat policy](references/heartbeat-policy.md)
@@ -144,6 +146,13 @@ Keep those under:
   broadcasts, and koder-facing envelopes all sit on top of the same receipt
   trail
 - `gstack` specialist skills stay in place; this skill only orchestrates them.
+- Sub-agent fan-out is the default for tasks with independent sub-goals. If a
+  dispatched task has two or more sub-parts that touch disjoint files, run
+  disjoint tests, or investigate disjoint code paths, the receiving seat must
+  fan them out via its agent-dispatch primitive (Claude Code `Agent` tool,
+  Codex subagent, Gemini subagent) and only serialize the final cross-check /
+  delivery step. See [Sub-agent fan-out](references/sub-agent-fan-out.md) for
+  the trigger rules, pattern, and anti-patterns.
 - Treat dynamic-roster fields as separate concerns:
   - `seats` = canonical roster
   - `materialized_seats` = seats that get precreated workspace/task scaffolding

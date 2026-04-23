@@ -36,7 +36,7 @@ message="${message//\{ts\}/$ts}"
 lark_cli="${LARK_CLI_OVERRIDE:-lark-cli}"
 
 # Send via lark-cli. Log errors but exit non-zero so launchd captures failures.
-if ! "$lark_cli" im +messages-send --as user --chat-id "$group_id" --text "$message"; then
+if ! "$lark_cli" --as user im +messages-send --chat-id "$group_id" --text "$message"; then
     echo "heartbeat_beacon: send failed for $project @ $(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
     exit 1
 fi

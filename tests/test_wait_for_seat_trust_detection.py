@@ -20,6 +20,16 @@ def _run_wait_for_seat(tmp_path: Path, tmux_script: str, *, env: dict[str, str])
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     _write_executable(bin_dir / "tmux", tmux_script)
+    agentctl = tmp_path / "agentctl.sh"
+    _write_executable(
+        agentctl,
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "session-name" ]]; then
+  printf '%s\\n' "${TMUX_MATCH_SESSION:?}"
+fi
+""",
+    )
     _write_executable(
         bin_dir / "sleep",
         """#!/usr/bin/env bash
@@ -32,12 +42,13 @@ exit 0
     run_env = {
         **os.environ,
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "AGENTCTL_BIN": str(agentctl),
         "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
         "WAIT_FOR_SEAT_RECONNECT_PAUSE": "0.01",
         **env,
     }
     return subprocess.run(
-        ["bash", str(_WAIT_FOR_SEAT), "spawn49-planner"],
+        ["bash", str(_WAIT_FOR_SEAT), "spawn49", "planner"],
         capture_output=True,
         text=True,
         env=run_env,

@@ -90,9 +90,10 @@ def _read_lark_auth_status(
     *,
     identity: str,
 ) -> tuple[dict[str, str] | None, dict[str, str] | None]:
-    cmd = [lark_cli, "auth", "status"]
+    cmd = [lark_cli]
     if identity != "auto":
         cmd.extend(["--as", identity])
+    cmd.extend(["auth", "status"])
     result = run_command_with_env(
         cmd,
         cwd=str(OPENCLAW_HOME),
@@ -234,9 +235,10 @@ def _send_feishu_message(
             payload["requested_as"] = identity
             return payload
 
-    cmd = [lark_cli, "im", "+messages-send"]
+    cmd = [lark_cli]
     if identity != "auto":
         cmd.extend(["--as", identity])
+    cmd.extend(["im", "+messages-send"])
     cmd.extend(["--chat-id", resolved_group_id, "--text", message])
     result = run_command_with_env(
         cmd,

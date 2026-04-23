@@ -38,5 +38,9 @@ def test_spawn49_brief_uses_agent_admin_session_start_engineer() -> None:
     assert "agent_admin.py session start-engineer ${seat} --project ${PROJECT_NAME}" in text
     assert "agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer ${seat}" in text
     assert "agent_admin.py session-name ${seat} --project ${PROJECT_NAME}" in text
+    assert "window reseed-pane <seat> --project ${PROJECT_NAME}" in text
+    assert "claude code oauth" in text
+    assert "codex xcode-best api" in text
+    assert "gemini cli oauth" in text
     assert "agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]" in text
     assert "agent-launcher.sh --headless --engineer ${seat} --project ${PROJECT_NAME}" not in text

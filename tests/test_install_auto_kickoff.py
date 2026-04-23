@@ -157,3 +157,22 @@ def test_install_keeps_manual_fallback_when_auto_send_times_out(tmp_path: Path) 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "capture-pane -t =kickoff50-ancestor" in tmux_output
     assert "send-keys -l -t kickoff50-ancestor" not in tmux_output
+
+
+def test_install_accepts_claude_spinner_as_active_kickoff_response(tmp_path: Path) -> None:
+    result, _, tmux_log, _, _ = _run_install(
+        tmp_path,
+        dry_run=False,
+        pane_snapshots=["Type your message"],
+        steady_pane_text="✶ Whisking…",
+    )
+
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 0, result.stderr
+    assert "Step 9.5: auto-send Phase-A kickoff prompt" in combined
+    assert "Phase-A kickoff submitted to kickoff50-ancestor" in combined
+    assert "Auto-send could not verify kickoff delivery" not in combined
+
+    tmux_output = tmux_log.read_text(encoding="utf-8")
+    assert "send-keys -l -t kickoff50-ancestor" in tmux_output

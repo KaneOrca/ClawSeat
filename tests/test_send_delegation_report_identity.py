@@ -17,20 +17,17 @@ def _write_lark_cli_stub(bin_dir: Path, log_file: Path, *, auth_identity: str) -
         f"""#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "$*" >> "${{LARK_LOG_FILE:?}}"
-case "$1 $2" in
-  "auth status")
+cmd="$*"
+if [[ "$cmd" == "auth status" || "$cmd" == "--as user auth status" || "$cmd" == "--as bot auth status" ]]; then
     cat <<'JSON'
 {{"identity":"{auth_identity}","tokenStatus":"valid","userName":"Tester"}}
 JSON
-    ;;
-  "im +messages-send")
+elif [[ "$cmd" == "im +messages-send --chat-id "* ]] || [[ "$cmd" == "--as user im +messages-send --chat-id "* ]] || [[ "$cmd" == "--as bot im +messages-send --chat-id "* ]]; then
     printf 'sent\\n'
-    ;;
-  *)
+else
     echo "unexpected command: $*" >&2
     exit 1
-    ;;
-esac
+fi
 """,
         encoding="utf-8",
     )
@@ -103,16 +100,16 @@ def test_send_report_user_mode_passes_user_identity(tmp_path: Path) -> None:
     result, commands = _run_report(tmp_path, identity="user", auth_identity="user")
 
     assert result.returncode == 0, result.stderr
-    assert commands[0] == "auth status --as user"
-    assert any(line.startswith("im +messages-send --as user") for line in commands)
+    assert commands[0] == "--as user auth status"
+    assert any(line.startswith("--as user im +messages-send") for line in commands)
 
 
 def test_send_report_bot_mode_passes_bot_identity(tmp_path: Path) -> None:
     result, commands = _run_report(tmp_path, identity="bot", auth_identity="bot")
 
     assert result.returncode == 0, result.stderr
-    assert commands[0] == "auth status --as bot"
-    assert any(line.startswith("im +messages-send --as bot") for line in commands)
+    assert commands[0] == "--as bot auth status"
+    assert any(line.startswith("--as bot im +messages-send") for line in commands)
 
 
 def test_send_report_auto_omits_as_flag(tmp_path: Path) -> None:
@@ -132,6 +129,17 @@ def test_check_auth_uses_requested_identity(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert commands == ["auth status --as bot"]
+    assert commands == ["--as bot auth status"]
     assert '"requested_as": "bot"' in result.stdout
     assert '"status": "ok"' in result.stdout
+
+
+def test_send_report_places_as_before_subcommand_for_all_identity_calls(tmp_path: Path) -> None:
+    result, commands = _run_report(tmp_path, identity="user", auth_identity="user")
+
+    assert result.returncode == 0, result.stderr
+    assert commands
+    assert all(not line.startswith("auth status --as") for line in commands)
+    assert all(not line.startswith("im +messages-send --as") for line in commands)
+    assert commands[0].startswith("--as user auth status")
+    assert any(line.startswith("--as user im +messages-send") for line in commands)

@@ -46,6 +46,24 @@ legacy path is opt-in, not the default control packet for koder-facing routing.
 That release broadcast is only group-visible telemetry. Do not use it as the
 control packet that `koder` parses for automated routing.
 
+## Fan-out hint for multi-part tasks
+
+When a `planner -> specialist` task has 2+ independent sub-parts, the
+dispatch `--objective` (or the linked task file body) must explicitly include
+a fan-out hint. This tells the specialist to parallelize via sub-agents
+instead of serializing.
+
+Template line to include in the objective or task body:
+
+> "This task has <N> independent sub-parts (Part A: <scope>; Part B: <scope>
+> [...]). Fan them out to sub-agents using your agent-dispatch primitive
+> (Claude `Agent` tool, Codex subagent, Gemini subagent). Serialize only the
+> final cross-check and single DELIVERY write-up. See
+> [references/sub-agent-fan-out.md] for the full pattern."
+
+See [Sub-agent fan-out](sub-agent-fan-out.md) for the trigger rules and
+anti-patterns.
+
 ## Specialist -> planner completion
 
 ```bash

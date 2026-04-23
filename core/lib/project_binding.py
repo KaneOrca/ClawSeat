@@ -377,7 +377,7 @@ def fetch_chat_metadata(group_id: str) -> tuple[str, bool]:
         return ("", False)
     try:
         result = subprocess.run(
-            [lark_cli, "im", "chats", "list", "--as", "user",
+            [lark_cli, "--as", "user", "im", "chats", "list",
              "--format", "json", "--page-all"],
             capture_output=True, text=True, timeout=30,
             env={**os.environ, "HOME": str(real_user_home())},

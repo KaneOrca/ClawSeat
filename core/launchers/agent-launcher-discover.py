@@ -8,11 +8,14 @@ from pathlib import Path
 from typing import Iterable
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 _CORE_SCRIPTS = str(_REPO_ROOT / "core" / "scripts")
 if _CORE_SCRIPTS not in sys.path:
     sys.path.insert(0, _CORE_SCRIPTS)
 
 from agent_admin_config import tool_default_base_url
+from core.lib.real_home import real_user_home
 
 
 TOOL_KEYS = {
@@ -43,7 +46,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def discover_home() -> Path:
-    return Path(os.environ.get("AGENT_LAUNCHER_DISCOVER_HOME", str(Path.home()))).expanduser()
+    return Path(os.environ.get("AGENT_LAUNCHER_DISCOVER_HOME", str(real_user_home()))).expanduser()
 
 
 def candidate_files(tool: str, workdir: str) -> list[Path]:

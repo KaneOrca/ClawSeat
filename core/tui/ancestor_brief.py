@@ -27,6 +27,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from core.lib.real_home import real_user_home
+
 try:
     import tomllib
 except ImportError:  # Python <3.11
@@ -126,7 +128,7 @@ def _render_path(p: Path | None) -> str:
     if p is None:
         return "null"
     s = str(p)
-    home = str(Path.home())
+    home = str(real_user_home())
     if s.startswith(home):
         return "~" + s[len(home):]
     return s
@@ -165,7 +167,7 @@ def load_context_from_profile(
     if not tenant:
         raise ValueError("profile missing openclaw_frontstage_agent")
 
-    home = Path.home()
+    home = real_user_home()
     tenant_ws = home / ".openclaw" / f"workspace-{tenant}"
 
     seats_raw = raw.get("seats", [])
@@ -332,7 +334,7 @@ def render_brief(ctx: BriefContext) -> str:
 
 def write_brief(ctx: BriefContext, out_path: Path | None = None) -> Path:
     if out_path is None:
-        home = Path.home()
+        home = real_user_home()
         out_path = home / ".agents" / "tasks" / ctx.project / "patrol" / "handoffs" / "ancestor-bootstrap.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(render_brief(ctx), encoding="utf-8")
@@ -353,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json-context", action="store_true", help="print the parsed context as JSON (for debugging)")
     args = parser.parse_args(argv)
 
-    home = Path.home()
+    home = real_user_home()
     profile_path = args.profile or (home / ".agents" / "profiles" / f"{args.project}-profile-dynamic.toml")
     if not profile_path.is_file():
         print(f"error: profile not found: {profile_path}", file=sys.stderr)
