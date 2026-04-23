@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lane",
         required=False,
+        default="planning",
         help="Delegation lane: planning | builder | reviewer | qa | designer | frontstage.",
     )
     parser.add_argument("--task-id", required=False, help="Task id.")
@@ -42,24 +43,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--report-status",
         required=False,
+        default="in_progress",
         help="in_progress | done | needs_decision | blocked",
     )
     parser.add_argument(
         "--decision-hint",
         required=False,
+        default="proceed",
+        choices=["hold", "proceed", "ask_user", "retry", "escalate", "close"],
         help="hold | proceed | ask_user | retry | escalate | close",
     )
     parser.add_argument(
         "--user-gate",
         required=False,
+        default="none",
         help="none | optional | required",
     )
     parser.add_argument(
         "--next-action",
         required=False,
+        default="consume_closeout",
         help="wait | consume_closeout | ask_user | retry_current_lane | surface_blocker | finalize_chain",
     )
-    parser.add_argument("--summary", required=False, help="Single-line machine-readable summary.")
+    parser.add_argument("--summary", required=False, default="(no summary)", help="Single-line machine-readable summary.")
     parser.add_argument(
         "--human-summary",
         help="Optional human-readable tail shown after the structured envelope.",
@@ -297,11 +303,10 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         return 0 if result.get("status") == "ok" else 1
 
-    # Normal send mode — require the delegation fields.
-    for field in ("project", "lane", "task_id", "report_status", "decision_hint", "user_gate", "next_action", "summary"):
-        if not getattr(args, field.replace("-", "_"), None):
-            print(f"error: --{field.replace('_', '-')} is required when sending a delegation report", flush=True)
-            return 2
+    # Normal send mode — only --project is required; all other fields have argparse defaults.
+    if not args.project:
+        print("error: --project is required when sending a delegation report", flush=True)
+        return 2
 
     dispatch_nonce = args.dispatch_nonce or stable_dispatch_nonce(
         args.project,

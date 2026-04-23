@@ -574,7 +574,11 @@ def validate_runtime_combo(
         return
     provider_text = ", ".join(supported_providers(tool, auth_mode)) or "none"
     prefix = f"{context}: " if context else ""
+    # If the provider exists under a different mode for the same tool, add a hint.
+    tool_map = SUPPORTED_RUNTIME_MATRIX.get(tool, {})
+    alt_modes = [m for m, providers in tool_map.items() if m != auth_mode and provider in providers]
+    hint = f" (`{provider}` is valid for {tool}/{', '.join(alt_modes)} — rerun with --mode {alt_modes[0]})" if alt_modes else ""
     raise error_cls(
         f"{prefix}unsupported runtime combination `{tool}/{auth_mode}/{provider}`. "
-        f"Supported providers for `{tool}/{auth_mode}`: {provider_text}."
+        f"Supported providers for `{tool}/{auth_mode}`: {provider_text}.{hint}"
     )
