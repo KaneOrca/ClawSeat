@@ -1,18 +1,23 @@
 """Canonical session/runtime auth configuration for ClawSeat.
 
-This module defines the persisted session-level `(tool, auth_mode, provider)`
-contract used by engineer profiles, session records, templates, migration code,
-and validation. These `auth_mode` values are canonical state values, not the
-lower-level execution labels accepted by `core/launchers/agent-launcher.sh`.
+This module is the SSOT for:
 
-Launcher translation happens at the execution boundary in
-`SessionService._launcher_auth_for()` and compatible shell entry points. For
-example:
+1. Session-level `(tool, auth_mode, provider)` state — used by engineer
+   profiles, session records, templates, migration, and validation.
+   These `auth_mode` values are canonical state values, not the lower-level
+   execution labels accepted by `core/launchers/agent-launcher.sh`.
 
-- `codex/oauth/openai` launches as `--auth chatgpt`
-- `gemini/api/google-api-key` launches as `--auth primary`
-- `claude/api/ark` launches as `--auth custom` (live path)
-- `claude/ccr/ccr-local` launches as `--auth custom` (live path)
+2. Launcher auth translation — `LAUNCHER_AUTH_MAP` and `resolve_launcher_auth()`
+   map each `(tool, auth_mode, provider)` triple to the launcher `--auth` label.
+   Examples:
+   - `codex/oauth/openai` → `--auth chatgpt`
+   - `gemini/api/google-api-key` → `--auth primary`
+   - `claude/api/ark` → `--auth custom` (live path)
+   - `claude/ccr/ccr-local` → `--auth custom` (live path)
+
+3. Launcher secret-file targets — `LAUNCHER_SECRET_TARGETS` and
+   `resolve_launcher_secret_target()` map `(tool, launcher_auth)` to the
+   operator-home-relative secret file path that must be seeded before launch.
 """
 
 from __future__ import annotations
@@ -582,3 +587,63 @@ def validate_runtime_combo(
         f"{prefix}unsupported runtime combination `{tool}/{auth_mode}/{provider}`. "
         f"Supported providers for `{tool}/{auth_mode}`: {provider_text}.{hint}"
     )
+
+
+# ── Launcher auth translation (SSOT) ─────────────────────────────────────────
+#
+# Maps canonical (tool, auth_mode, provider) → launcher --auth label.
+# Provider-specific entries take precedence; (tool, auth_mode, None) is the
+# catch-all for a given mode. Resolution order in resolve_launcher_auth():
+#   1. exact (tool, auth_mode, provider) key
+#   2. (tool, auth_mode, None) fallback
+#   3. raise error_cls
+LAUNCHER_AUTH_MAP: dict[tuple[str, str, str | None], str] = {
+    ("claude", "oauth",       None):            "oauth",
+    ("claude", "oauth_token", None):            "oauth_token",
+    ("claude", "ccr",         None):            "custom",
+    ("claude", "api",         None):            "custom",
+    ("codex",  "oauth",       None):            "chatgpt",
+    ("codex",  "api",         "xcode-best"):    "xcode",
+    ("codex",  "api",         None):            "custom",
+    ("gemini", "oauth",       None):            "oauth",
+    ("gemini", "api",         "google-api-key"): "primary",
+    ("gemini", "api",         None):            "custom",
+}
+
+# Maps (tool, launcher_auth) → path relative to real operator home that must
+# be seeded with credentials before the launcher starts.
+LAUNCHER_SECRET_TARGETS: dict[tuple[str, str], str] = {
+    ("claude", "oauth_token"): ".agents/.env.global",
+    ("gemini", "primary"):     ".agent-runtime/secrets/gemini/primary.env",
+}
+
+
+def resolve_launcher_auth(
+    tool: str,
+    auth_mode: str,
+    provider: str,
+    *,
+    error_cls: type[Exception] = ValueError,
+) -> str:
+    label = LAUNCHER_AUTH_MAP.get((tool, auth_mode, provider)) or LAUNCHER_AUTH_MAP.get(
+        (tool, auth_mode, None)
+    )
+    if label is not None:
+        return label
+    raise error_cls(
+        f"unsupported launcher auth mapping for tool={tool!r} auth_mode={auth_mode!r} "
+        f"provider={provider!r}"
+    )
+
+
+def resolve_launcher_secret_target(
+    tool: str,
+    launcher_auth: str,
+    *,
+    real_home: "Path | None" = None,
+) -> "Path | None":
+    rel = LAUNCHER_SECRET_TARGETS.get((tool, launcher_auth))
+    if rel is None:
+        return None
+    home = real_home if real_home is not None else _real_user_home()
+    return home / rel

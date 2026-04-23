@@ -13,7 +13,14 @@ _LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from agent_admin_config import SUPPORTED_RUNTIME_MATRIX  # noqa: E402
+import pytest  # noqa: E402
+
+from agent_admin_config import (  # noqa: E402
+    LAUNCHER_AUTH_MAP,
+    LAUNCHER_SECRET_TARGETS,
+    SUPPORTED_RUNTIME_MATRIX,
+    resolve_launcher_auth,
+)
 import agent_admin_session as aas  # noqa: E402
 
 
@@ -80,4 +87,53 @@ def test_canonical_matrix_modes_remain_distinct_from_launcher_only_labels() -> N
     assert ("codex", "chatgpt") not in matrix_tool_auth_pairs
     assert ("gemini", "primary") not in matrix_tool_auth_pairs
     assert ("claude", "custom") not in matrix_tool_auth_pairs
+
+
+# ── resolve_launcher_auth parity tests ───────────────────────────────────────
+
+def _matrix_tuples() -> list[tuple[str, str, str]]:
+    return [
+        (tool, auth_mode, provider)
+        for tool, auth_map in SUPPORTED_RUNTIME_MATRIX.items()
+        for auth_mode, providers in auth_map.items()
+        for provider in providers
+    ]
+
+
+@pytest.mark.parametrize("tool,auth_mode,provider", _matrix_tuples())
+def test_resolve_launcher_auth_matches_session_service(tool: str, auth_mode: str, provider: str) -> None:
+    config_result = resolve_launcher_auth(tool, auth_mode, provider)
+    session_result = _launcher_auth_for(tool, auth_mode, provider)
+    assert config_result == session_result, (
+        f"resolve_launcher_auth({tool!r}, {auth_mode!r}, {provider!r}) = {config_result!r} "
+        f"but SessionService._launcher_auth_for = {session_result!r}"
+    )
+
+
+@pytest.mark.parametrize("tool,auth_mode,provider", _matrix_tuples())
+def test_resolve_launcher_auth_output_accepted_by_launcher(tool: str, auth_mode: str, provider: str) -> None:
+    accepted = _accepted_launcher_auth_pairs()
+    label = resolve_launcher_auth(tool, auth_mode, provider)
+    assert (tool, label) in accepted, (
+        f"resolve_launcher_auth({tool!r}, {auth_mode!r}, {provider!r}) = {label!r} "
+        f"not in validate_auth_mode accepted pairs"
+    )
+
+
+def test_launcher_auth_map_covers_all_matrix_tool_auth_modes() -> None:
+    map_tool_auth_modes = {(tool, auth_mode) for (tool, auth_mode, _) in LAUNCHER_AUTH_MAP}
+    for tool, auth_map in SUPPORTED_RUNTIME_MATRIX.items():
+        for auth_mode in auth_map:
+            assert (tool, auth_mode) in map_tool_auth_modes, (
+                f"LAUNCHER_AUTH_MAP missing catch-all for {tool}/{auth_mode}"
+            )
+
+
+def test_launcher_secret_targets_keys_are_valid_tool_auth_pairs() -> None:
+    accepted = _accepted_launcher_auth_pairs()
+    for tool, launcher_auth in LAUNCHER_SECRET_TARGETS:
+        assert (tool, launcher_auth) in accepted, (
+            f"LAUNCHER_SECRET_TARGETS key ({tool!r}, {launcher_auth!r}) is not "
+            f"a valid launcher auth pair"
+        )
 

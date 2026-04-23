@@ -170,16 +170,36 @@ default_session_name() {
   printf '%s\n' "${tool}-${auth}-$(launcher_slugify "$(basename "$workdir")")"
 }
 
+prompt_tool_and_auth_interactive() {
+  # Only prompt when stdin is a TTY and not running headless.
+  if [[ ! -t 0 ]] || [[ "$HEADLESS" == "1" ]]; then
+    return 1
+  fi
+  if [[ -z "$TOOL_NAME" ]]; then
+    printf 'Tool [claude/codex/gemini]: ' >&2
+    read -r TOOL_NAME
+  fi
+  if [[ -z "$AUTH_MODE" ]]; then
+    printf 'Auth mode [oauth/oauth_token/api/custom/...]: ' >&2
+    read -r AUTH_MODE
+  fi
+  return 0
+}
+
 validate_top_level_inputs() {
   if [[ -z "$TOOL_NAME" ]]; then
-    echo "error: --tool is required" >&2
-    exit 2
+    if ! prompt_tool_and_auth_interactive; then
+      echo "error: --tool is required" >&2
+      exit 2
+    fi
   fi
   validate_tool_name "$TOOL_NAME"
 
   if [[ -z "$AUTH_MODE" ]]; then
-    echo "error: --auth is required" >&2
-    exit 2
+    if ! prompt_tool_and_auth_interactive; then
+      echo "error: --auth is required" >&2
+      exit 2
+    fi
   fi
   validate_auth_mode "$TOOL_NAME" "$AUTH_MODE"
 

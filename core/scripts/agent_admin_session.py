@@ -363,45 +363,14 @@ class SessionService:
         return values
 
     def _launcher_auth_for(self, session: Any) -> str:
-        if session.tool == "claude":
-            if session.auth_mode == "oauth":
-                return "oauth"
-            if session.auth_mode == "oauth_token":
-                return "oauth_token"
-            if session.auth_mode == "ccr":
-                return "custom"
-            if session.auth_mode == "api":
-                # Keep Claude API seats aligned with install.sh: all non-oauth
-                # Claude providers land in the same launcher "custom" sandbox
-                # namespace, keyed by session name rather than provider label.
-                return "custom"
-        if session.tool == "codex":
-            if session.auth_mode == "oauth":
-                return "chatgpt"
-            if session.auth_mode == "api":
-                if session.provider == "xcode-best":
-                    return "xcode"
-                return "custom"
-        if session.tool == "gemini":
-            if session.auth_mode == "oauth":
-                return "oauth"
-            if session.auth_mode == "api":
-                return {
-                    "google-api-key": "primary",
-                }.get(session.provider, "custom")
-        raise SessionStartError(
-            f"unsupported launcher auth mapping for {session.engineer_id}: "
-            f"tool={session.tool} auth_mode={session.auth_mode} provider={session.provider}"
+        from agent_admin_config import resolve_launcher_auth
+        return resolve_launcher_auth(
+            session.tool, session.auth_mode, session.provider, error_cls=SessionStartError
         )
 
     def _launcher_secret_target(self, session: Any, launcher_auth: str) -> Path | None:
-        operator_home = real_user_home()
-        if session.tool == "claude":
-            if launcher_auth == "oauth_token":
-                return operator_home / ".agents" / ".env.global"
-        if session.tool == "gemini" and launcher_auth == "primary":
-            return operator_home / ".agent-runtime" / "secrets" / "gemini" / "primary.env"
-        return None
+        from agent_admin_config import resolve_launcher_secret_target
+        return resolve_launcher_secret_target(session.tool, launcher_auth, real_home=real_user_home())
 
     def _sync_launcher_secret_file(self, session: Any, launcher_auth: str) -> None:
         if not session.secret_file:

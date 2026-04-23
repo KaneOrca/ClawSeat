@@ -211,6 +211,20 @@ print(value)
 PY
 }
 
+install_provider_default_model() {
+  local provider="$1"
+  "$PYTHON_BIN" - "$REPO_ROOT" "$provider" <<'PY'
+from __future__ import annotations
+import sys
+from pathlib import Path
+repo_root = Path(sys.argv[1])
+provider = sys.argv[2]
+sys.path.insert(0, str(repo_root / "core" / "scripts"))
+from agent_admin_config import provider_default_model
+print(provider_default_model('claude', provider) or '')
+PY
+}
+
 CLAUDE_DEFAULTS_LOADED=0
 CLAUDE_DEFAULT_BASE_URL=""
 CLAUDE_MINIMAX_DEFAULT_BASE_URL=""
@@ -496,8 +510,8 @@ select_provider_candidate() {
 
   IFS=$'\t' read -r mode label key base <<<"${candidates[$((choice-1))]}"
   case "$mode" in
-    minimax) remember_provider_selection minimax "$key" "$base" "MiniMax-M2.7-highspeed" ;;
-    ark) remember_provider_selection ark "$key" "$base" "ark-code-latest" ;;
+    minimax) remember_provider_selection minimax "$key" "$base" "$(install_provider_default_model minimax)" ;;
+    ark) remember_provider_selection ark "$key" "$base" "$(install_provider_default_model ark)" ;;
     xcode-best) remember_provider_selection xcode-best "$key" "$base" "$FORCE_MODEL" ;;
     *) remember_provider_selection "$mode" "$key" "$base" ;;
   esac
@@ -595,8 +609,8 @@ select_provider() {
       fi
       forced_found=1
       case "$mode" in
-        minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
-        ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
+        minimax) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model "$mode")" ;;
+        ark) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model "$mode")" ;;
         xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
@@ -614,8 +628,8 @@ select_provider() {
     fi
     if [[ "$DRY_RUN" == "1" && ${#candidates[@]} -eq 0 ]]; then
       case "$FORCE_PROVIDER" in
-        minimax) remember_provider_selection minimax "dry-run-placeholder-key" "$(provider_base_or_default minimax)" "MiniMax-M2.7-highspeed" ;;
-        ark) remember_provider_selection ark "dry-run-placeholder-key" "$(provider_base_or_default ark)" "ark-code-latest" ;;
+        minimax) remember_provider_selection minimax "dry-run-placeholder-key" "$(provider_base_or_default minimax)" "$(install_provider_default_model minimax)" ;;
+        ark) remember_provider_selection ark "dry-run-placeholder-key" "$(provider_base_or_default ark)" "$(install_provider_default_model ark)" ;;
         xcode-best) remember_provider_selection xcode-best "dry-run-placeholder-key" "$(provider_base_or_default xcode-best)" "$FORCE_MODEL" ;;
         custom_api) remember_provider_selection custom_api "dry-run-placeholder-key" "$(claude_tool_default_base_url)" "$FORCE_MODEL" ;;
         anthropic_console) remember_provider_selection anthropic_console "dry-run-placeholder-key" ;;
@@ -630,13 +644,14 @@ select_provider() {
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
+    printf 'Project: %s\n' "$PROJECT"
     if [[ ${#candidates[@]} -eq 0 ]]; then
       remember_provider_selection custom_api "dry-run-placeholder-key" "$(claude_tool_default_base_url)"
     else
       IFS=$'\t' read -r mode label key base <<<"${candidates[0]}"
       case "$mode" in
-        minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
-        ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
+        minimax) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model minimax)" ;;
+        ark) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model ark)" ;;
         xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
@@ -646,14 +661,24 @@ select_provider() {
   fi
 
   if [[ ${#candidates[@]} -gt 0 ]]; then
+    printf 'Project: %s\n' "$PROJECT"
     printf 'Detected %d Claude Code provider candidate(s) on this host:\n' "${#candidates[@]}"
-    local i=1 c m l _k _b
+    local i=1 c m l _k _b mdl
     for c in "${candidates[@]}"; do
       IFS=$'\t' read -r m l _k _b <<<"$c"
+      mdl="$(install_provider_default_model "$m" 2>/dev/null || true)"
       if [[ $i -eq 1 ]]; then
-        printf '  [%d] %s   (recommended)\n' "$i" "$l"
+        if [[ -n "$mdl" ]]; then
+          printf '  [%d] %s  (model: %s)  (recommended)\n' "$i" "$l" "$mdl"
+        else
+          printf '  [%d] %s   (recommended)\n' "$i" "$l"
+        fi
       else
-        printf '  [%d] %s\n' "$i" "$l"
+        if [[ -n "$mdl" ]]; then
+          printf '  [%d] %s  (model: %s)\n' "$i" "$l" "$mdl"
+        else
+          printf '  [%d] %s\n' "$i" "$l"
+        fi
       fi
       i=$((i+1))
     done
@@ -663,8 +688,8 @@ select_provider() {
     if [[ "$reply" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= ${#candidates[@]} )); then
       IFS=$'\t' read -r mode label key base <<<"${candidates[$((reply-1))]}"
       case "$mode" in
-        minimax) remember_provider_selection "$mode" "$key" "$base" "MiniMax-M2.7-highspeed" ;;
-        ark) remember_provider_selection "$mode" "$key" "$base" "ark-code-latest" ;;
+        minimax) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model minimax)" ;;
+        ark) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model ark)" ;;
         xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
       esac
