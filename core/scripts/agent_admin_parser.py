@@ -31,6 +31,8 @@ class ParserHooks:
     cmd_project_binding_show: Callable[[Any], int]
     cmd_project_binding_list: Callable[[Any], int]
     cmd_project_unbind: Callable[[Any], int]
+    cmd_project_init_tools: Callable[[Any], int]
+    cmd_project_switch_identity: Callable[[Any], int]
     cmd_session_start_engineer: Callable[[Any], int]
     cmd_session_reseed_sandbox: Callable[[Any], int]
     cmd_session_batch_start_engineer: Callable[[Any], int]
@@ -249,6 +251,50 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     project_unbind_nested.add_argument("project")
     project_unbind_nested.set_defaults(func=hooks.cmd_project_unbind)
+
+    project_init_tools_nested = project_sub.add_parser(
+        "init-tools",
+        help="Initialize per-project tool state under ~/.agent-runtime/projects/<project>.",
+    )
+    project_init_tools_nested.add_argument("project")
+    project_init_tools_nested.add_argument(
+        "--from",
+        dest="from_source",
+        choices=["real-home", "empty"],
+        default="real-home",
+        help="Copy from real HOME or create empty tool dirs.",
+    )
+    project_init_tools_nested.add_argument(
+        "--source-project",
+        default="",
+        help="Optional project name to copy tool state from instead of real HOME.",
+    )
+    project_init_tools_nested.add_argument(
+        "--tools",
+        default="",
+        help="Comma-separated tool seed list: lark-cli, gemini, codex, iterm2.",
+    )
+    project_init_tools_nested.add_argument("--dry-run", action="store_true")
+    project_init_tools_nested.set_defaults(func=hooks.cmd_project_init_tools)
+
+    project_switch_identity_nested = project_sub.add_parser(
+        "switch-identity",
+        help="Switch a project's Feishu/Gemini/Codex identity and reseed its seats.",
+    )
+    project_switch_identity_nested.add_argument("project")
+    project_switch_identity_nested.add_argument(
+        "--tool",
+        required=True,
+        choices=["feishu", "gemini", "codex"],
+        help="Which project identity to switch.",
+    )
+    project_switch_identity_nested.add_argument(
+        "--identity",
+        required=True,
+        help="New identity value (Feishu app id, Gemini email, or Codex email).",
+    )
+    project_switch_identity_nested.add_argument("--dry-run", action="store_true")
+    project_switch_identity_nested.set_defaults(func=hooks.cmd_project_switch_identity)
 
     # P1 layered-model: project koder-bind / seat list / validate (§3-§5).
     project_koder_bind_nested = project_sub.add_parser(

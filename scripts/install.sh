@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT:-$REPO_ROOT}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+FORCE_REINSTALL=0
+CALLER_HOME="${HOME:-}"
 
 # Resolve real user $HOME. install.sh writes user-level state under
 # ~/.agents/... and reads user-level python user-site (iterm2 etc).
@@ -27,6 +29,7 @@ fi
 export HOME="$REAL_HOME"
 SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
 ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
+ITERM_DRIVER_TIMEOUT_SECONDS=30
 TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
 MEMORY_HOOK_INSTALLER="$REPO_ROOT/core/skills/memory-oracle/scripts/install_memory_hook.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
@@ -42,9 +45,11 @@ PROVIDER_KEY=""
 PROVIDER_BASE=""
 PROVIDER_MODEL=""
 FORCE_PROVIDER=""
+FORCE_PROVIDER_CHOICE="${CLAWSEAT_INSTALL_PROVIDER:-}"
 FORCE_BASE_URL=""
 FORCE_API_KEY=""
 FORCE_MODEL=""
+STATUS_FILE=""
 PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
 AGENTS_TEMPLATES_ROOT="$HOME/.agents/templates"
@@ -54,6 +59,7 @@ BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
 PENDING_SEATS=(planner builder reviewer qa designer)
 
 die() { local n="$1" code="$2" msg="$3"; printf '%s\nERR_CODE: %s\n' "$msg" "$code" >&2; exit "$n"; }
+warn() { printf 'WARN: %s\n' "$*" >&2; }
 note() { printf '==> %s\n' "$*"; }
 run() {
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -81,7 +87,8 @@ parse_args() {
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--dry-run]\n'; exit 0 ;;
+      --reinstall|--force) FORCE_REINSTALL=1; shift ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--dry-run]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -107,6 +114,7 @@ parse_args() {
       die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|ark + --api-key"
     fi
   fi
+  STATUS_FILE="$HOME/.agents/tasks/$PROJECT/STATUS.md"
   PROVIDER_ENV="$HOME/.agents/tasks/$PROJECT/ancestor-provider.env"
   BRIEF_PATH="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/ancestor-bootstrap.md"
   MEMORY_WORKSPACE="$HOME/.agents/workspaces/$PROJECT/memory"
@@ -115,8 +123,23 @@ parse_args() {
   GUIDE_FILE="$HOME/.agents/tasks/$PROJECT/OPERATOR-START-HERE.md"
 }
 
+normalize_provider_choice() {
+  if [[ "$FORCE_PROVIDER" =~ ^[0-9]+$ ]]; then
+    FORCE_PROVIDER_CHOICE="$FORCE_PROVIDER"
+    FORCE_PROVIDER=""
+  fi
+  if [[ -n "$FORCE_PROVIDER_CHOICE" && ! "$FORCE_PROVIDER_CHOICE" =~ ^[0-9]+$ ]]; then
+    FORCE_PROVIDER_CHOICE=""
+  fi
+}
+
 ensure_host_deps() {
   note "Step 1: preflight"
+  if [[ "$FORCE_REINSTALL" != "1" && -f "$STATUS_FILE" ]] && grep -q '^phase=ready$' "$STATUS_FILE"; then
+    printf 'Project %s already installed (phase=ready) at %s.\n' "$PROJECT" "$STATUS_FILE"
+    printf 'Use --reinstall or --force to rebuild.\n'
+    exit 0
+  fi
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] %q %q --project %q --phase bootstrap\n' \
       "$PYTHON_BIN" "$REPO_ROOT/core/preflight.py" "$PROJECT"
@@ -254,6 +277,34 @@ write_provider_env() {
   chmod 600 "$PROVIDER_ENV" || die 22 PROVIDER_ENV_CHMOD_FAILED "unable to chmod $PROVIDER_ENV"
 }
 
+select_provider_candidate() {
+  local choice="$1"
+  shift
+  local -a candidates=("$@")
+  local mode label key base
+
+  if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
+    die 22 INVALID_PROVIDER_CHOICE "invalid provider choice: $choice"
+  fi
+  if (( choice < 1 || choice > ${#candidates[@]} )); then
+    die 22 PROVIDER_NOT_FOUND "requested provider choice $choice but only ${#candidates[@]} candidate(s) were detected"
+  fi
+
+  IFS=$'\t' read -r mode label key base <<<"${candidates[$((choice-1))]}"
+  case "$mode" in
+    minimax) remember_provider_selection minimax "$key" "$base" "MiniMax-M2.7-highspeed" ;;
+    ark) remember_provider_selection ark "$key" "$base" "ark-code-latest" ;;
+    *) remember_provider_selection "$mode" "$key" "$base" ;;
+  esac
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] choose provider #%s via %s and write %s\n' "$choice" "$label" "$PROVIDER_ENV"
+  else
+    write_provider_env "$mode" "$key" "$base"
+    printf 'Using selected provider candidate #%s: %s\n' "$choice" "$label"
+  fi
+}
+
 select_provider() {
   note "Step 3: ancestor provider"
   local mode="" label="" key="" base="" reply=""
@@ -310,6 +361,11 @@ select_provider() {
   while IFS= read -r line; do
     [[ -n "$line" ]] && candidates+=("$line")
   done < <(detect_provider 2>/dev/null || true)
+
+  if [[ -n "$FORCE_PROVIDER_CHOICE" ]]; then
+    select_provider_candidate "$FORCE_PROVIDER_CHOICE" "${candidates[@]}"
+    return
+  fi
 
   if [[ -n "$FORCE_PROVIDER" ]]; then
     local c forced_found=0
@@ -692,7 +748,7 @@ ancestor 在每个 B 步开始前会先跑 `${CLAWSEAT_ROOT}/scripts/ancestor-br
 推荐处理：
 
 1. \`tmux kill-session -t ${PROJECT}-ancestor\`
-2. 重新启动 ancestor（建议重跑 \`scripts/install.sh --project ${PROJECT}\`，或按同样的 \`agent-launcher.sh\` 参数重起）
+2. 重新启动 ancestor（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
 3. 让 ancestor 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
 
 如果你暂时不 restart，也可以继续按旧 brief 跑，但它不会自动感知后续改动。
@@ -774,11 +830,21 @@ launcher_custom_env_file_for_session() {
 
 configure_tmux_session_display() {
   local session="$1"
-  run tmux set-option -t "=$session" detach-on-destroy off
-  run tmux set-option -t "=$session" status on
-  run tmux set-option -t "=$session" status-left "[#{session_name}] "
-  run tmux set-option -t "=$session" status-right "#{?client_attached,ATTACHED,WAITING} | %H:%M"
-  run tmux set-option -t "=$session" status-style "fg=white,bg=blue,bold"
+  # tmux accepts `=name` for exact matching in has-session, but set-option
+  # rejects that target form on this host. Use the plain session name here.
+  run tmux set-option -t "$session" detach-on-destroy off
+  run tmux set-option -t "$session" status on
+  run tmux set-option -t "$session" status-left "[#{session_name}] "
+  run tmux set-option -t "$session" status-right "#{?client_attached,ATTACHED,WAITING} | %H:%M"
+  run tmux set-option -t "$session" status-style "fg=white,bg=blue,bold"
+}
+
+ensure_tmux_session_alive() {
+  local session="$1"
+  if tmux has-session -t "=$session" 2>/dev/null; then
+    return 0
+  fi
+  die 31 TMUX_SESSION_DIED_AFTER_LAUNCH "tmux session vanished before display configuration: $session"
 }
 
 launch_seat() {
@@ -794,6 +860,7 @@ launch_seat() {
   fi
 
   local -a cmd=(env "CLAWSEAT_ROOT=$CLAWSEAT_ROOT")
+  cmd+=("CLAWSEAT_PROJECT=$PROJECT")
   [[ -n "$brief_path" ]] && cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool claude --auth "$auth_mode" --dir "$cwd" --session "$session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
@@ -809,6 +876,7 @@ launch_seat() {
     [[ -n "$custom_env_file" && -f "$custom_env_file" ]] && rm -f "$custom_env_file"
     die 31 TMUX_SESSION_CREATE_FAILED "unable to launch tmux session via agent-launcher: $session"
   fi
+  ensure_tmux_session_alive "$session"
   configure_tmux_session_display "$session"
 }
 
@@ -846,16 +914,73 @@ end run
 APPLESCRIPT
 }
 
+is_sandbox_install() {
+  if PYTHONPATH="$REPO_ROOT/core/lib${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - "$CALLER_HOME" <<'PY' >/dev/null 2>&1
+import sys
+from pathlib import Path
+
+from real_home import is_sandbox_home, real_user_home
+
+caller_home = Path(sys.argv[1]).expanduser()
+real_home = real_user_home()
+raise SystemExit(0 if is_sandbox_home(caller_home) or caller_home != real_home else 1)
+PY
+  then
+    return 0
+  fi
+
+  case "$CALLER_HOME" in
+    *"/.agents/runtime/identities/"*|*"/.agent-runtime/identities/"*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 open_iterm_window() {
   local payload="$1" target_var="$2" err_file out status
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] %q %q <<JSON\n%s\nJSON\n' "$PYTHON_BIN" "$ITERM_DRIVER" "$payload"
     printf -v "$target_var" '%s' "dry-run-$target_var"; return
   fi
-  [[ "$(uname -s)" == "Darwin" ]] || die 40 ITERM_MACOS_ONLY "native iTerm panes require macOS."
-  "$PYTHON_BIN" -c 'import iterm2' >/dev/null 2>&1 || die 40 ITERM2_PYTHON_MISSING "missing iterm2 module; install with: pip3 install --user --break-system-packages iterm2"
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    if is_sandbox_install; then
+      warn "Skipping iTerm window open in sandbox/headless install: native iTerm panes require macOS."
+      printf -v "$target_var" '%s' ""
+      return 0
+    fi
+    die 40 ITERM_MACOS_ONLY "native iTerm panes require macOS."
+  fi
+  if ! "$PYTHON_BIN" -c 'import iterm2' >/dev/null 2>&1; then
+    if is_sandbox_install; then
+      warn "Skipping iTerm window open in sandbox/headless install: missing iterm2 module."
+      printf -v "$target_var" '%s' ""
+      return 0
+    fi
+    die 40 ITERM2_PYTHON_MISSING "missing iterm2 module; install with: pip3 install --user --break-system-packages iterm2"
+  fi
   err_file="$(mktemp)"
-  out="$(printf '%s' "$payload" | "$PYTHON_BIN" "$ITERM_DRIVER" 2>"$err_file")" || { cat "$err_file" >&2; rm -f "$err_file"; die 40 ITERM_DRIVER_FAILED "iTerm pane driver execution failed."; }
+  out="$(
+    printf '%s' "$payload" | timeout "${ITERM_DRIVER_TIMEOUT_SECONDS}s" "$PYTHON_BIN" "$ITERM_DRIVER" 2>"$err_file"
+  )" || {
+    status=$?
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    if [[ "$status" == "124" ]]; then
+      if is_sandbox_install; then
+        warn "Skipping iTerm window open in sandbox/headless install: iTerm pane driver timed out after ${ITERM_DRIVER_TIMEOUT_SECONDS}s."
+        printf -v "$target_var" '%s' ""
+        return 0
+      fi
+      die 40 ITERM_DRIVER_FAILED "iTerm pane driver timed out after ${ITERM_DRIVER_TIMEOUT_SECONDS}s."
+    fi
+    if is_sandbox_install; then
+      warn "Skipping iTerm window open in sandbox/headless install: iTerm pane driver execution failed."
+      printf -v "$target_var" '%s' ""
+      return 0
+    fi
+    die 40 ITERM_DRIVER_FAILED "iTerm pane driver execution failed."
+  }
   [[ ! -s "$err_file" ]] || cat "$err_file" >&2; rm -f "$err_file"
   status="$(printf '%s' "$out" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
   [[ "$status" == "ok" ]] || die 40 ITERM_LAYOUT_FAILED "$(printf '%s' "$out" | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin).get("reason","driver returned non-ok status"))' 2>/dev/null || echo "driver returned non-ok status")"
@@ -909,7 +1034,7 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  parse_args "$@"; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
   launch_seat "$PROJECT-ancestor" "$REPO_ROOT" "$BRIEF_PATH"
   bootstrap_project_profile
@@ -933,7 +1058,12 @@ main() {
     open_iterm_window "$(memory_payload)" memory_window_id
   fi
   note "Step 9: focus ancestor and persist operator guide"
-  run sleep 3; focus_iterm_window "$GRID_WINDOW_ID" "ancestor"
+  if [[ -n "$GRID_WINDOW_ID" ]]; then
+    run sleep 3
+    focus_iterm_window "$GRID_WINDOW_ID" "ancestor"
+  else
+    warn "Skipping ancestor focus because no iTerm grid window was opened."
+  fi
   if [[ "$DRY_RUN" != "1" ]]; then
     note "Step 9.5: auto-send Phase-A kickoff prompt"
     sleep 12

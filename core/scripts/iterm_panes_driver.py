@@ -280,4 +280,7 @@ async def _main(connection):
 
 
 if __name__ == "__main__":
-    iterm2.run_until_complete(_main)
+    # iTerm's API server can take a moment to accept the first connection
+    # after app launch or preference changes. Retry inside the SDK, but the
+    # caller still wraps us in a wall-clock timeout so we never hang forever.
+    iterm2.run_until_complete(_main, retry=True)

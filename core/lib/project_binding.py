@@ -20,9 +20,9 @@ Why this file (and not WORKSPACE_CONTRACT.toml):
    what is bound where, and makes drift (bindings without a project,
    stale bindings after project delete) trivially detectable.
 
-Schema (v2):
+Schema (v3):
 
-    version = 2
+    version = 3
     project = "install"
     feishu_group_id = "oc_b0386423ec11582696a3079ab2ab89ba"
     feishu_group_name = "ClawSeat Squad"   # enriched from lark-cli chats list
@@ -30,6 +30,9 @@ Schema (v2):
     feishu_sender_app_id = "cli_a96abcca2e78dbc2"
     feishu_sender_mode = "user"
     openclaw_koder_agent = "yu"
+    tools_isolation = "shared-real-home"
+    gemini_account_email = ""
+    codex_account_email = ""
     require_mention = false
     bound_at = "2026-04-21T16:45:16+00:00"
     bound_by = "koder"         # optional — seat that wrote the binding
@@ -37,7 +40,7 @@ Schema (v2):
 Unknown fields are preserved on rewrite so future schema extensions
 don't silently drop operator-authored metadata.
 Legacy ``feishu_bot_account`` is accepted on read and mapped to the new
-v2 fields when a binding is rewritten.
+v3 fields when a binding is rewritten.
 """
 from __future__ import annotations
 
@@ -58,7 +61,7 @@ try:  # Python 3.11+ has tomllib in stdlib; fall back to `tomli` for older.
 except ImportError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
-BINDING_SCHEMA_VERSION = 2
+BINDING_SCHEMA_VERSION = 3
 BINDING_FILE_NAME = "PROJECT_BINDING.toml"
 
 _BINDING_KNOWN_FIELDS = {
@@ -71,6 +74,9 @@ _BINDING_KNOWN_FIELDS = {
     "feishu_sender_mode",
     "openclaw_koder_agent",
     "feishu_bot_account",
+    "tools_isolation",
+    "gemini_account_email",
+    "codex_account_email",
     "require_mention",
     "bound_at",
     "bound_by",
@@ -97,6 +103,9 @@ class ProjectBinding:
     feishu_sender_mode: str = "auto"  # user | bot | auto
     openclaw_koder_agent: str = ""    # OpenClaw agent that gets koder overlay
     feishu_bot_account: str = ""      # legacy alias; kept for compat only
+    tools_isolation: str = "shared-real-home"  # shared-real-home | per-project
+    gemini_account_email: str = ""
+    codex_account_email: str = ""
     require_mention: bool = False
     bound_at: str = ""
     bound_by: str = ""
@@ -116,6 +125,9 @@ class ProjectBinding:
         self.feishu_sender_mode = _normalize_sender_mode(self.feishu_sender_mode)
         self.openclaw_koder_agent = self.openclaw_koder_agent.strip()
         self.feishu_bot_account = self.feishu_bot_account.strip()
+        self.tools_isolation = _normalize_tools_isolation(self.tools_isolation)
+        self.gemini_account_email = self.gemini_account_email.strip()
+        self.codex_account_email = self.codex_account_email.strip()
         if self.feishu_bot_account and not (self.feishu_sender_app_id or self.openclaw_koder_agent):
             if self.feishu_bot_account.startswith("cli_"):
                 self.feishu_sender_app_id = self.feishu_bot_account
@@ -139,6 +151,9 @@ class ProjectBinding:
             f'feishu_sender_app_id = "{_escape(self.feishu_sender_app_id)}"',
             f'feishu_sender_mode = "{_escape(self.feishu_sender_mode)}"',
             f'openclaw_koder_agent = "{_escape(self.openclaw_koder_agent)}"',
+            f'tools_isolation = "{_escape(self.tools_isolation)}"',
+            f'gemini_account_email = "{_escape(self.gemini_account_email)}"',
+            f'codex_account_email = "{_escape(self.codex_account_email)}"',
             f"require_mention = {'true' if self.require_mention else 'false'}",
             f'bound_at = "{_escape(self.bound_at)}"',
         ]
@@ -173,6 +188,9 @@ class ProjectBinding:
             feishu_sender_mode=str(raw.get("feishu_sender_mode", "auto")).strip() or "auto",
             openclaw_koder_agent=str(raw.get("openclaw_koder_agent", "")).strip(),
             feishu_bot_account=legacy,
+            tools_isolation=str(raw.get("tools_isolation", "shared-real-home")).strip() or "shared-real-home",
+            gemini_account_email=str(raw.get("gemini_account_email", "")).strip(),
+            codex_account_email=str(raw.get("codex_account_email", "")).strip(),
             require_mention=bool(raw.get("require_mention", False)),
             bound_at=str(raw.get("bound_at", "")).strip(),
             bound_by=str(raw.get("bound_by", "")).strip(),
@@ -208,6 +226,17 @@ def _normalize_sender_mode(mode: str) -> str:
             f"invalid feishu_sender_mode {mode!r}: must be one of user, bot, auto"
         )
     return value
+
+
+def _normalize_tools_isolation(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return "shared-real-home"
+    if normalized not in {"shared-real-home", "per-project"}:
+        raise ProjectBindingError(
+            f"invalid tools_isolation {value!r}: must be one of shared-real-home, per-project"
+        )
+    return normalized
 
 
 def validate_feishu_group_id(group_id: str) -> str:
@@ -311,6 +340,9 @@ def bind_project(
     feishu_sender_mode: str = "auto",
     openclaw_koder_agent: str = "",
     feishu_bot_account: str = "",
+    tools_isolation: str = "shared-real-home",
+    gemini_account_email: str = "",
+    codex_account_email: str = "",
     require_mention: bool = False,
     bound_by: str = "",
     home: Path | None = None,
@@ -325,6 +357,9 @@ def bind_project(
         feishu_sender_mode=feishu_sender_mode,
         openclaw_koder_agent=openclaw_koder_agent.strip(),
         feishu_bot_account=feishu_bot_account.strip(),
+        tools_isolation=tools_isolation,
+        gemini_account_email=gemini_account_email.strip(),
+        codex_account_email=codex_account_email.strip(),
         require_mention=require_mention,
         bound_by=bound_by.strip(),
     )

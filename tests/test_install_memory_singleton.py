@@ -26,7 +26,12 @@ def _write_tmux_stub(bin_dir: Path, *, has_memory_session: bool) -> None:
 set -euo pipefail
 if [[ "${{1:-}}" == "has-session" ]]; then
   target="${{3:-}}"
-  if [[ "$target" == "=machine-memory-claude" ]]; then
+  target="${{target#=}}"
+  registry="${{TMUX_LOG_FILE:-}}.sessions"
+  if [[ -n "${{TMUX_LOG_FILE:-}}" && -f "$registry" ]] && grep -Fxq "$target" "$registry"; then
+    exit 0
+  fi
+  if [[ "$target" == "machine-memory-claude" ]]; then
     exit {"0" if has_memory_session else "1"}
   fi
   exit 1

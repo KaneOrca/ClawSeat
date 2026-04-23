@@ -30,6 +30,13 @@
   - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template clawseat-default --local ...` 建好 project + engineer/session records
   - 这 5 个 pane 当前都在跑 `scripts/wait-for-seat.sh`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
 
+## Seat TUI 生命周期（强制理解）
+
+1. install.sh Step 7 首次打开的 `clawseat-${PROJECT_NAME}` 六宫格，就是这个项目所有 seat 的持久 TUI 展示窗口。
+2. 除 ancestor 外，每个 pane 都在跑 `scripts/wait-for-seat.sh <project-seat>`：轮询 tmux session，出现即 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
+3. 不要手动 `tmux attach -t ${PROJECT_NAME}-<seat>` 去“救”某个 pane；这会污染 `wait-for-seat.sh` 所在 pane，把它从 canonical re-attach loop 里拽出来。
+4. 真正需要人工恢复的是六宫格窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
+
 ## Phase-A Steps
 
 ### B0 — env_scan LLM 分析（必须向用户汇报）
@@ -363,6 +370,12 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 | 强制 reset 重启（kill+relaunch）| 同上 + `--reset` flag |
 | 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session list --project ${PROJECT_NAME}` |
 | 检查单个 tmux session 是否存活 | `tmux has-session -t '${PROJECT_NAME}-<seat>'` |
+
+补充规则：
+
+- `wait-for-seat.sh` 会把重启后的 seat 自动 re-attach 回原来的 iTerm pane。
+- 不要手动 `tmux attach` 抢占这 5 个 wait-for-seat pane；手动 attach 只会让 pane 状态混乱。
+- 六宫格窗口本身丢失时，用 `agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` 恢复。
 
 ### Sandbox HOME / lark-cli
 

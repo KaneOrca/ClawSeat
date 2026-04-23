@@ -23,6 +23,9 @@ keep personal copies in sync.
 # Via wrapper (common case)
 "$HOME/ClawSeat"/core/launchers/claude.sh --session install-planner-claude --dir "$HOME/ClawSeat"
 
+# Via repo-local root shim (standalone checkout)
+"$HOME/ClawSeat"/claude-minimax.command --session install-planner-claude --dir "$HOME/ClawSeat"
+
 # Directly
 "$HOME/ClawSeat"/core/launchers/agent-launcher.sh \
     --tool claude \
@@ -81,6 +84,12 @@ chmod +x ~/Desktop/agent-launcher.command
 Not doing the migration is OK — the legacy desktop store paths
 (`~/Desktop/.agent-launcher-{state,custom-presets}.json`) are honored as a
 fallback so no state is lost.
+
+For standalone testing against a specific checkout such as `$HOME/ClawSeat`,
+you can also point the desktop shims at the repo-local root wrappers
+(`$HOME/ClawSeat/agent-launcher.command`, `$HOME/ClawSeat/codex.command`,
+`$HOME/ClawSeat/gemini.command`, `$HOME/ClawSeat/claude-minimax.command`)
+instead of routing through `~/.clawseat`.
 
 ## Related
 

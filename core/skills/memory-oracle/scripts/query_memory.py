@@ -560,7 +560,8 @@ def cmd_list(
         results.extend(_load_jsonl(memory_dir / "events.log"))
 
     results.extend(note_map.values())
-    results = [r for r in results if _matches_list_filters(r, project=project, kind=kind, since=since)]
+    project_filter = None if kind == "event" else project
+    results = [r for r in results if _matches_list_filters(r, project=project_filter, kind=kind, since=since)]
     results.sort(key=_result_sort_key)
 
     print(json.dumps(results, indent=2, ensure_ascii=False))
@@ -576,7 +577,7 @@ def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
         "warning: --ask is deprecated; use --project/--kind listing or memory_deliver.py",
         file=sys.stderr,
     )
-    return 1
+    return 2
 
 
 def verify_claims(response: dict, memory_dir: Path) -> dict:
@@ -686,7 +687,7 @@ Examples (v1 backward-compatible):
     group.add_argument("--key", help="Dotted path, e.g. credentials.keys.MINIMAX_API_KEY")
     group.add_argument("--file", help="Dump a single memory file (e.g. openclaw)")
     group.add_argument("--search", help="Case-insensitive search across all files")
-    group.add_argument("--ask", help="Deprecated compatibility flag; returns rc=1 and does not dispatch")
+    group.add_argument("--ask", help="Deprecated compatibility flag; returns rc=2 and does not dispatch")
     group.add_argument("--status", action="store_true", help="Show memory DB status")
 
     p.add_argument("--section", help="With --file: dotted sub-path to extract")

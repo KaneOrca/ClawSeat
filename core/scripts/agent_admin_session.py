@@ -11,6 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
+
+from project_binding import load_binding  # noqa: E402
+from project_tool_root import project_tool_root  # noqa: E402
+
 
 TMUX_COMMAND_RETRIES = 2
 TMUX_COMMAND_TIMEOUT_SECONDS = 8.0
@@ -120,7 +128,20 @@ def _real_home_for_tool_seeding() -> Path:
     return Path(real_home_str).expanduser()
 
 
-def seed_user_tool_dirs(runtime_home: Path, real_home: Path | None = None) -> list[str]:
+def _project_tool_source_home(project_name: str | None, real_home: Path) -> Path:
+    if not project_name:
+        return real_home
+    binding = load_binding(project_name)
+    if binding is None or binding.tools_isolation != "per-project":
+        return real_home
+    return project_tool_root(project_name, home=real_home)
+
+
+def seed_user_tool_dirs(
+    runtime_home: Path,
+    real_home: Path | None = None,
+    project_name: str | None = None,
+) -> list[str]:
     """Link user-level tool dirs/files from the real HOME into a runtime HOME.
 
     Existing sandbox-owned copies are backed up under
@@ -128,6 +149,7 @@ def seed_user_tool_dirs(runtime_home: Path, real_home: Path | None = None) -> li
     """
     runtime_home = Path(runtime_home)
     real_home = Path(real_home) if real_home is not None else _real_home_for_tool_seeding()
+    source_home = _project_tool_source_home(project_name, real_home)
     try:
         if runtime_home.resolve() == real_home.resolve():
             return []
@@ -138,7 +160,7 @@ def seed_user_tool_dirs(runtime_home: Path, real_home: Path | None = None) -> li
     backup_base = runtime_home / ".sandbox-pre-seed-backup"
 
     for subpath in _SANDBOX_TOOL_SEED_SUBPATHS:
-        src = real_home / subpath
+        src = source_home / subpath
         tgt = runtime_home / subpath
         if not src.exists():
             continue
@@ -531,7 +553,7 @@ class SessionService:
         runtime_dir = self._launcher_runtime_dir(session, launcher_auth)
         if runtime_dir is None:
             return []
-        return seed_user_tool_dirs(Path(runtime_dir) / "home")
+        return seed_user_tool_dirs(Path(runtime_dir) / "home", project_name=session.project)
 
     def build_engineer_exec(self, session: Any) -> list[str]:
         if session.wrapper:
@@ -559,6 +581,16 @@ class SessionService:
             session.runtime_dir = str(runtime_dir)
             self.hooks.write_session(session)
             self.hooks.apply_template(session, project)
+        binding = load_binding(session.project)
+        tools_isolation = binding.tools_isolation if binding is not None else "shared-real-home"
+        if tools_isolation == "per-project":
+            project_root = project_tool_root(session.project, home=_real_home_for_tool_seeding())
+            if not project_root.exists():
+                print(
+                    f"warn: project tool root missing for {session.project}: {project_root} "
+                    f"— run `agent_admin project init-tools {session.project} --from real-home`",
+                    file=sys.stderr,
+                )
         if runtime_dir is not None:
             try:
                 self.reseed_sandbox_user_tool_dirs(session)
@@ -589,6 +621,12 @@ class SessionService:
                     cmd.extend(["--custom-env-file", custom_env_file])
                 env = dict(os.environ)
                 env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
+                env["CLAWSEAT_PROJECT"] = session.project
+                env["CLAWSEAT_TOOLS_ISOLATION"] = tools_isolation
+                if tools_isolation == "per-project":
+                    env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
+                        project_tool_root(session.project, home=_real_home_for_tool_seeding())
+                    )
                 if session.engineer_id == "ancestor":
                     ancestor_brief = self._ancestor_brief_path(session.project)
                     if ancestor_brief.is_file():

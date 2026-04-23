@@ -179,6 +179,8 @@ Ancestor executes Phase-A in order:
 | B6-smoke | If `feishu_group_id` set, ancestor triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, ancestor runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<ancestor + 5 seats + memory>`. |
 
+If the provider menu appears in smoke / CI / sandbox runs, use `--provider 1` or `CLAWSEAT_INSTALL_PROVIDER=1` to select the first detected candidate without a tty. `--provider minimax|ark|anthropic_console|custom_api` still forces a specific mode when you already know the answer.
+
 Rules for ancestor:
 
 - Do not rewrite the machine scan artifacts or the tmux/iTerm layout that Step 2 created.
@@ -195,6 +197,25 @@ for s in install-ancestor install-planner install-builder install-reviewer insta
   tmux has-session -t "$s" || echo "MISSING $s"
 done
 ```
+
+If `~/.agents/tasks/<project>/STATUS.md` already contains `phase=ready`, `scripts/install.sh` exits 0 instead of rebuilding. Pass `--reinstall` (alias `--force`) only when you intentionally want a rebuild.
+
+Sandbox/headless installs:
+
+- `scripts/install.sh` still writes project state under `real_user_home()`, not the caller's sandbox `HOME`.
+- If the caller started install from a seat sandbox or another headless runtime, the Step 7/8 iTerm open is now best-effort: macOS / `iterm2` import / driver bootstrap failures emit `WARN:` and continue.
+- `ITERM_LAYOUT_FAILED` remains a hard failure. If the driver already started returning a non-`ok` layout payload, that is treated as a real GUI problem, not a sandbox skip.
+- Recovering or reopening the window after a sandbox install still goes through the canonical path: `agent_admin window open-grid <project> [--recover] [--open-memory]`.
+
+Project tool isolation:
+
+- `agent_admin project init-tools <project> --from real-home|empty [--source-project <project>] [--tools ...]` creates or refreshes `~/.agent-runtime/projects/<project>/...`.
+- `agent_admin project switch-identity <project> --tool feishu|gemini|codex --identity ...` only updates `PROJECT_BINDING.toml` and reseeds existing seat sandboxes.
+- `switch-identity` does not call native login CLIs and does not migrate credential payloads such as `~/.agent-runtime/projects/<project>/.gemini/oauth_creds.json` or `.codex/auth.json`.
+- Recommended workflow:
+  1. `agent_admin project init-tools <project> --from real-home` or `--source-project <other-project>`
+  2. Manually place or verify the desired credential inside `~/.agent-runtime/projects/<project>/...`
+  3. Run `agent_admin project switch-identity ...`
 
 Failure:
 

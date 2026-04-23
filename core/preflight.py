@@ -337,6 +337,7 @@ def _check_iterm2_python_module() -> PreflightItem:
                 message="iterm2 module importable",
             )
     except (subprocess.TimeoutExpired, OSError):
+        # silent-ok: import probe failures degrade to HARD_BLOCKED below.
         pass
     return PreflightItem(
         name="iterm2_python",

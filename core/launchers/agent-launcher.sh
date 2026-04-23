@@ -821,8 +821,14 @@ seed_user_tool_dirs() {
   # .sandbox-pre-seed-backup/ and replace it with a symlink so we can
   # retroactively heal old runtimes.
   local runtime_home="$1"
+  local project_name="${2:-${CLAWSEAT_PROJECT:-}}"
   if [[ "$runtime_home" == "$REAL_HOME" ]]; then
     return 0
+  fi
+  local source_home="$REAL_HOME"
+  if [[ "${CLAWSEAT_TOOLS_ISOLATION:-shared-real-home}" == "per-project" && -n "$project_name" ]]; then
+    source_home="${CLAWSEAT_PROJECT_TOOL_ROOT:-${AGENT_HOME:-$REAL_HOME}/.agent-runtime/projects/$project_name}"
+    [[ -d "$source_home" ]] || return 0
   fi
   local seeds=(
     ".lark-cli"
@@ -837,7 +843,7 @@ seed_user_tool_dirs() {
   local subpath src tgt backup_base backup_path current_target
   backup_base="$runtime_home/.sandbox-pre-seed-backup"
   for subpath in "${seeds[@]}"; do
-    src="$REAL_HOME/$subpath"
+    src="$source_home/$subpath"
     tgt="$runtime_home/$subpath"
     [[ -e "$src" ]] || continue
 
@@ -888,6 +894,7 @@ show_claude_auth_setup_hint() {
 
 prepare_codex_home() {
   local codex_home="$1"
+  local source_home="${2:-$HOME}"
   mkdir -p "$codex_home"
 
   local shared_items=(
@@ -900,8 +907,8 @@ prepare_codex_home() {
 
   local item
   for item in "${shared_items[@]}"; do
-    if [[ -e "$REAL_HOME/.codex/$item" && ! -e "$codex_home/$item" ]]; then
-      ln -s "$REAL_HOME/.codex/$item" "$codex_home/$item"
+    if [[ -e "$source_home/.codex/$item" && ! -e "$codex_home/$item" ]]; then
+      ln -s "$source_home/.codex/$item" "$codex_home/$item"
     fi
   done
 }
@@ -909,24 +916,43 @@ prepare_codex_home() {
 prepare_gemini_home() {
   local runtime_home="$1"
   local workdir="${2:-${WORKDIR:-}}"
+  local project_name="${3:-${CLAWSEAT_PROJECT:-}}"
+  local source_home="$REAL_HOME"
+  if [[ "${CLAWSEAT_TOOLS_ISOLATION:-shared-real-home}" == "per-project" && -n "$project_name" ]]; then
+    source_home="${CLAWSEAT_PROJECT_TOOL_ROOT:-${AGENT_HOME:-$REAL_HOME}/.agent-runtime/projects/$project_name}"
+    [[ -d "$source_home" ]] || source_home="$REAL_HOME"
+  fi
   local gemini_home="$runtime_home/.gemini"
+  local source_gemini_home="$source_home/.gemini"
+  local current_target=""
   mkdir -p "$gemini_home"
 
-  local shared_items=(
-    "settings.json"
-    "installation_id"
-    "skills"
-  )
-
-  local item
-  for item in "${shared_items[@]}"; do
-    if [[ -e "$REAL_HOME/.gemini/$item" && ! -e "$gemini_home/$item" ]]; then
-      ln -s "$REAL_HOME/.gemini/$item" "$gemini_home/$item"
+  if [[ -L "$gemini_home" ]]; then
+    current_target="$(readlink "$gemini_home" 2>/dev/null || true)"
+    if [[ "$current_target" == "$source_gemini_home" ]]; then
+      rm -f "$gemini_home"
+      mkdir -p "$gemini_home"
     fi
-  done
+  fi
+
+  if [[ -d "$source_gemini_home" ]]; then
+    local item item_name
+    shopt -s nullglob
+    for item in "$source_gemini_home"/*; do
+      item_name="${item##*/}"
+      [[ "$item_name" == "trustedFolders.json" ]] && continue
+      if [[ ! -e "$gemini_home/$item_name" ]]; then
+        ln -s "$item" "$gemini_home/$item_name"
+      fi
+    done
+    shopt -u nullglob
+  fi
 
   if [[ -n "$workdir" ]]; then
-    python3 - "$REAL_HOME/.gemini/trustedFolders.json" "$gemini_home/trustedFolders.json" "$workdir" <<'PY'
+    if [[ -L "$gemini_home/trustedFolders.json" ]]; then
+      rm -f "$gemini_home/trustedFolders.json"
+    fi
+    python3 - "$source_gemini_home/trustedFolders.json" "$gemini_home/trustedFolders.json" "$workdir" <<'PY'
 from __future__ import annotations
 
 import json
@@ -1005,7 +1031,7 @@ run_claude_runtime() {
   if [[ "$auth_mode" == "oauth" ]]; then
     unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
     export HOME="$REAL_HOME"
-    seed_user_tool_dirs "$HOME"
+    seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Claude Code · Legacy OAuth"
@@ -1101,7 +1127,7 @@ run_claude_runtime() {
   export XDG_CACHE_HOME="$runtime_dir/xdg/cache"
   export XDG_STATE_HOME="$runtime_dir/xdg/state"
 
-  seed_user_tool_dirs "$HOME"
+  seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
   # Skip Claude onboarding in the isolated HOME. Without this the seat
   # blocks on the welcome + auth pages even when API keys are live in env.
   prepare_claude_home "$HOME"
@@ -1127,7 +1153,7 @@ run_codex_runtime() {
   if [[ "$auth_mode" == "chatgpt" ]]; then
     export HOME="$REAL_HOME"
     export CODEX_HOME="$REAL_HOME/.codex"
-    seed_user_tool_dirs "$HOME"
+    seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Codex · ChatGPT login"
@@ -1152,8 +1178,8 @@ run_codex_runtime() {
 
   export HOME="$runtime_dir/home"
   export CODEX_HOME="$runtime_dir/codex-home"
-  seed_user_tool_dirs "$HOME"
-  prepare_codex_home "$CODEX_HOME"
+  seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
+  prepare_codex_home "$CODEX_HOME" "$HOME"
 
   if [[ "$auth_mode" == "custom" ]]; then
     load_custom_env "$CUSTOM_ENV_FILE"
@@ -1205,7 +1231,7 @@ run_gemini_runtime() {
   if [[ "$auth_mode" == "oauth" ]]; then
     unset GEMINI_API_KEY GOOGLE_API_KEY
     export HOME="$REAL_HOME"
-    seed_user_tool_dirs "$HOME"
+    seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
     prepare_gemini_home "$HOME" "$workdir"
     cd "$workdir"
     echo "────────────────────────────────────────"
@@ -1239,7 +1265,7 @@ run_gemini_runtime() {
   export XDG_DATA_HOME="$runtime_dir/xdg/data"
   export XDG_CACHE_HOME="$runtime_dir/xdg/cache"
   export XDG_STATE_HOME="$runtime_dir/xdg/state"
-  seed_user_tool_dirs "$HOME"
+  seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
   prepare_gemini_home "$HOME" "$workdir"
 
   if [[ "$auth_mode" == "custom" ]]; then
@@ -1331,12 +1357,14 @@ EOF
 
   if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     echo "reusing existing tmux session '$SESSION_NAME'"
+    tmux set-option -t "$SESSION_NAME" detach-on-destroy off
     if [[ -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
       rm -f "$CUSTOM_ENV_FILE"
     fi
   else
     tmux new-session -d -s "$SESSION_NAME" -x 220 -y 60 \
-      "bash \"$0\" --tool \"$TOOL_NAME\" --session \"$SESSION_NAME\" --auth \"$AUTH_MODE\" --dir \"$WORKDIR\" --custom-env-file \"$CUSTOM_ENV_FILE\" --exec-agent"
+      "bash \"$0\" --tool \"$TOOL_NAME\" --session \"$SESSION_NAME\" --auth \"$AUTH_MODE\" --dir \"$WORKDIR\" --custom-env-file \"$CUSTOM_ENV_FILE\" --exec-agent" \
+      \; set-option -t "$SESSION_NAME" detach-on-destroy off
     echo "launched tmux session '$SESSION_NAME'"
   fi
 

@@ -833,6 +833,14 @@ def cmd_project_delete(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.project_delete(args)
 
 
+def cmd_project_init_tools(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_init_tools(args)
+
+
+def cmd_project_switch_identity(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.project_switch_identity(args)
+
+
 # ── C2: per-project binding SSOT ──────────────────────────────────────
 #
 # `agent_admin project bind --project X --group oc_...` writes
@@ -880,6 +888,9 @@ def cmd_project_bind(args: argparse.Namespace) -> int:
             feishu_sender_mode=sender_mode,
             openclaw_koder_agent=koder_agent,
             feishu_bot_account="" if legacy_account is None else str(legacy_account),
+            tools_isolation="" if existing is None else existing.tools_isolation,
+            gemini_account_email="" if existing is None else existing.gemini_account_email,
+            codex_account_email="" if existing is None else existing.codex_account_email,
             require_mention=bool(args.require_mention),
             bound_by=args.bound_by,
         )
@@ -935,6 +946,9 @@ def cmd_project_binding_list(args: argparse.Namespace) -> int:
             f"sender_app_id={binding.feishu_sender_app_id or '-'}  "
             f"sender_mode={binding.feishu_sender_mode}  "
             f"koder_agent={binding.openclaw_koder_agent or '-'}  "
+            f"tools_isolation={binding.tools_isolation}  "
+            f"gemini_account_email={binding.gemini_account_email or '-'}  "
+            f"codex_account_email={binding.codex_account_email or '-'}  "
             f"require_mention={'true' if binding.require_mention else 'false'}"
         )
     return 0
@@ -1249,6 +1263,8 @@ PARSER_HOOKS = ParserHooks(
     cmd_project_binding_show=cmd_project_binding_show,
     cmd_project_binding_list=cmd_project_binding_list,
     cmd_project_unbind=cmd_project_unbind,
+    cmd_project_init_tools=cmd_project_init_tools,
+    cmd_project_switch_identity=cmd_project_switch_identity,
     cmd_session_start_engineer=cmd_session_start_engineer,
     cmd_session_reseed_sandbox=cmd_session_reseed_sandbox,
     cmd_session_batch_start_engineer=cmd_session_batch_start_engineer,

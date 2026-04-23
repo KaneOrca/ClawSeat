@@ -236,11 +236,12 @@ PY
 set -euo pipefail
 if [[ "${1:-}" == "has-session" ]]; then
   target="${3:-}"
+  target="${target#=}"
   registry="${TMUX_LOG_FILE:-}.sessions"
   if [[ -n "${TMUX_LOG_FILE:-}" && -f "$registry" ]] && grep -Fxq "$target" "$registry"; then
     exit 0
   fi
-  if [[ "$target" == "=machine-memory-claude" ]]; then
+  if [[ "$target" == "machine-memory-claude" ]]; then
     exit "${TMUX_HAS_MEMORY_SESSION_RC:-1}"
   fi
   exit 1

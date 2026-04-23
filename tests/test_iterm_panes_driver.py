@@ -466,6 +466,10 @@ class TestTmuxSafety:
                 "must never do this; commands are sent INTO panes only"
             )
 
+    def test_driver_entrypoint_retries_iterm_connection(self):
+        src = Path(driver.__file__).read_text()
+        assert "iterm2.run_until_complete(_main, retry=True)" in src
+
     def test_full_build_does_not_invoke_tmux(self, no_tmux_calls):
         """Live: build a 6-pane layout and confirm no tmux subprocess fires."""
         payload = {

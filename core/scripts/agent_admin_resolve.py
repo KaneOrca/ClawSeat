@@ -10,8 +10,13 @@ from typing import Any, Callable
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+_CORE_LIB = _REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
 from core.lib.real_home import real_user_home
 from core.lib.runtime_home_links import ensure_runtime_home_links
+from project_binding import load_binding
+from project_tool_root import project_tool_root
 
 
 @dataclass
@@ -43,6 +48,8 @@ class ResolveHandlers:
         binary = session.bin_path
         env = self.hooks.common_env()
         shared_agent_home = Path(os.environ.get("AGENT_HOME", str(real_user_home()))).expanduser()
+        binding = load_binding(session.project)
+        tools_isolation = binding.tools_isolation if binding is not None else "shared-real-home"
 
         home = runtime_dir / "home"
         xdg_config = runtime_dir / "xdg" / "config"
@@ -71,6 +78,8 @@ class ResolveHandlers:
             {
                 "AGENT_HOME": str(shared_agent_home),
                 "AGENTS_ROOT": str(shared_agent_home / ".agents"),
+                "CLAWSEAT_PROJECT": session.project,
+                "CLAWSEAT_TOOLS_ISOLATION": tools_isolation,
                 "HOME": str(home),
                 "XDG_CONFIG_HOME": str(xdg_config),
                 "XDG_DATA_HOME": str(xdg_data),
@@ -78,6 +87,8 @@ class ResolveHandlers:
                 "XDG_STATE_HOME": str(xdg_state),
             }
         )
+        if tools_isolation == "per-project":
+            env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(project_tool_root(session.project, home=shared_agent_home))
 
         codex_home = None
         if tool == "codex":
