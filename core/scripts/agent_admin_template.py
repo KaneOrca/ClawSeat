@@ -328,6 +328,12 @@ class TemplateHandlers:
             },
             "claude": {
                 "AGENTS.md": "\n".join(claude_lines) + "\n",
+                # Claude Code reads CLAUDE.md in the project root as the
+                # primary system-prompt file; AGENTS.md is only a fallback
+                # (and version-dependent). Emitting both means the seat
+                # sees its role contract regardless of which one Claude
+                # Code picks up on this version.
+                "CLAUDE.md": "\n".join(claude_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
@@ -339,6 +345,10 @@ class TemplateHandlers:
             },
             "gemini": {
                 "AGENTS.md": "\n".join(gemini_lines) + "\n",
+                # Gemini CLI similarly prefers GEMINI.md; write both so
+                # the role SKILL is picked up regardless of the CLI
+                # version's auto-discovery rules.
+                "GEMINI.md": "\n".join(gemini_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
                     project,
