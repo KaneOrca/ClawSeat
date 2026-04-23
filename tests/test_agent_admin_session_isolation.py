@@ -83,7 +83,6 @@ def test_start_engineer_source_no_longer_contains_tmux_new_session():
 @pytest.mark.parametrize(
     ("tool", "auth_mode", "provider", "expected"),
     [
-        ("claude", "oauth", "anthropic", "oauth"),
         ("claude", "oauth_token", "anthropic", "oauth_token"),
         ("claude", "ccr", "ccr-local", "custom"),
         ("claude", "api", "anthropic-console", "custom"),
@@ -221,7 +220,8 @@ def test_start_engineer_invokes_launcher_and_updates_runtime_dir(
     hooks.write_session.assert_called_once_with(session)
     hooks.apply_template.assert_called_with(session, hooks.load_project.return_value)
     title_cmds = [call.args[0] for call in mock_tmux.call_args_list]
-    assert title_cmds[:2] == [
+    assert title_cmds[0] == ["list-sessions", "-F", "#{session_name}"]
+    assert title_cmds[1:3] == [
         ["set", "-g", "set-titles", "on"],
         ["set", "-g", "set-titles-string", "#{session_name}"],
     ]
@@ -343,7 +343,8 @@ def test_start_engineer_reset_kills_session_before_launcher(
         svc.start_engineer(session, reset=True)
 
     assert events[0] == f"tmux:kill-session -t {session.session}"
-    assert events[1] == "launcher"
+    assert events[1] == "tmux:list-sessions -F #{session_name}"
+    assert events[2] == "launcher"
 
 
 def test_stop_engineer_still_kills_tmux_session(tmp_path: Path):

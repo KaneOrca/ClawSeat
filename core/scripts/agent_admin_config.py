@@ -504,8 +504,13 @@ def parse_codex_provider_config(data: dict[str, Any]) -> CodexProviderConfig:
 # raw launcher case labels do not mention `ark` or `ccr`.
 SUPPORTED_RUNTIME_MATRIX = {
     "claude": {
-        # Legacy Keychain OAuth; maps 1:1 to launcher `--auth oauth`.
-        "oauth": ("anthropic",),
+        # NOTE: `claude + oauth + anthropic` (legacy macOS Keychain OAuth) is
+        # REMOVED as of 2026-04-24. Root cause: each sandbox HOME has its own
+        # `.claude/credentials.json` and keychain entries are per-identity; the
+        # OAuth login flow is forced every fresh seat start, which is hostile
+        # for a multi-seat install. Use `oauth_token` (long-lived token from
+        # `claude setup-token` / `CLAUDE_CODE_OAUTH_TOKEN` secret file) or
+        # `api` (`ANTHROPIC_AUTH_TOKEN` with any supported provider) instead.
         # Canonical Claude API providers. Current agent_admin startup routes
         # these through launcher `--auth custom`; legacy shell callers may
         # still use direct `anthropic-console|minimax|xcode` launcher labels.

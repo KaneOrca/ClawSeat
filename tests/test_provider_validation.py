@@ -52,8 +52,8 @@ def test_anthropix_is_not_a_valid_provider():
     'anthropix' as an alias of 'anthropic' in the matrix, this test will
     scream so the operator can ask 'are you sure this is intentional?'
     """
-    assert not is_supported_runtime_combo("claude", "oauth", "anthropix")
-    assert is_supported_runtime_combo("claude", "oauth", "anthropic")
+    assert not is_supported_runtime_combo("claude", "oauth_token", "anthropix")
+    assert is_supported_runtime_combo("claude", "oauth_token", "anthropic")
 
 
 def test_minimaxi_is_not_a_valid_provider():
@@ -68,7 +68,7 @@ def test_matrix_has_every_triple_we_rely_on_in_docs():
     guidance.
     """
     expected = {
-        ("claude", "oauth", "anthropic"),
+        ("claude", "oauth_token", "anthropic"),
         ("claude", "api", "xcode-best"),
         ("claude", "api", "minimax"),
         ("codex", "oauth", "openai"),
@@ -260,7 +260,7 @@ def test_env_scan_emits_only_supported_runtime_combos(tmp_path: Path):
 def test_validate_rejects_anthropix_with_helpful_error():
     with pytest.raises(RuntimeError) as excinfo:
         validate_runtime_combo(
-            "claude", "oauth", "anthropix",
+            "claude", "oauth_token", "anthropix",
             error_cls=RuntimeError,
             context="test",
         )
@@ -269,7 +269,7 @@ def test_validate_rejects_anthropix_with_helpful_error():
     # 1. the bad value (so operator sees what they typed wrong)
     assert "anthropix" in msg
     # 2. the tool + auth_mode for disambiguation
-    assert "claude/oauth" in msg
+    assert "claude/oauth_token" in msg
     # 3. the ACTUAL valid provider(s)
     assert "anthropic" in msg
     # 4. the caller-supplied context so operator knows which command failed
@@ -278,7 +278,7 @@ def test_validate_rejects_anthropix_with_helpful_error():
 
 def test_validate_accepts_anthropic():
     # Must not raise for valid triples.
-    validate_runtime_combo("claude", "oauth", "anthropic")
+    validate_runtime_combo("claude", "oauth_token", "anthropic")
     validate_runtime_combo("codex", "oauth", "openai")
     validate_runtime_combo("gemini", "oauth", "google")
     validate_runtime_combo("claude", "api", "minimax")
@@ -289,7 +289,7 @@ def test_validate_rejects_unknown_tool():
     # argparse `choices` should prevent this, but our defence-in-depth
     # still reports it cleanly instead of KeyErroring.
     with pytest.raises(ValueError) as excinfo:
-        validate_runtime_combo("claud", "oauth", "anthropic")
+        validate_runtime_combo("claud", "oauth_token", "anthropic")
     assert "claud" in str(excinfo.value)
 
 

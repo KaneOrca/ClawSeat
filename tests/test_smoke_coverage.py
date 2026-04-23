@@ -140,13 +140,20 @@ def test_skill_manager_cli_help_runs() -> None:
 
 def test_agent_admin_config_supported_matrix_complete() -> None:
     """SUPPORTED_RUNTIME_MATRIX must cover every known backend CLI so
-    provider validation never accidentally drops one."""
+    provider validation never accidentally drops one. Each tool must still
+    expose at least one non-API auth_mode for identity-based flows.
+    (claude/oauth was retired 2026-04-24; claude now uses oauth_token.)"""
     import agent_admin_config as cfg
-    for tool in ("claude", "codex", "gemini"):
+    identity_auth_per_tool = {
+        "claude": "oauth_token",
+        "codex": "oauth",
+        "gemini": "oauth",
+    }
+    for tool, identity_auth in identity_auth_per_tool.items():
         assert tool in cfg.SUPPORTED_RUNTIME_MATRIX, tool
         tool_map = cfg.SUPPORTED_RUNTIME_MATRIX[tool]
-        assert "oauth" in tool_map, f"{tool} should support oauth"
-        assert tool_map["oauth"], f"{tool} oauth should have at least one provider"
+        assert identity_auth in tool_map, f"{tool} should support {identity_auth}"
+        assert tool_map[identity_auth], f"{tool} {identity_auth} should have at least one provider"
 
 
 def test_agent_admin_store_load_toml_roundtrip(tmp_path: Path) -> None:
