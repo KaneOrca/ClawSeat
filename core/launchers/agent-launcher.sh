@@ -700,15 +700,35 @@ run_claude_runtime() {
   local mode_label="Claude Code"
 
   if [[ "$auth_mode" == "oauth" ]]; then
+    # "oauth" in ClawSeat is not "launcher does OAuth" — it's "reuse the
+    # host's existing Claude Code login state" (OAuth handled by Claude
+    # Code itself, not us). To make that work we must:
+    #   1. route HOME + every XDG base dir back to REAL_HOME so Claude
+    #      finds its own ~/.claude, ~/.claude.json, keychain session,
+    #      and XDG cache/state (credentials, project history)
+    #   2. drop all agent-launcher-provided token env vars so Claude
+    #      doesn't prefer a stale token/API-mode path over its own
+    #      native login flow
+    # Reference: /Users/ywf/coding/agent-launcher (launcher_runtime.sh:201,
+    # launcher_data.py:124) has the canonical recipe; ClawSeat used to
+    # only restore HOME (missed XDG + CLAUDE_CODE_OAUTH_TOKEN), which
+    # left Claude looking at sandbox XDG dirs and picking up whatever
+    # stale token env we inherited — the real "re-auth every start" bug.
     unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
+    unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_SUBSCRIBER_SUBSCRIPTION_ID
     export HOME="$REAL_HOME"
+    export XDG_CONFIG_HOME="$REAL_HOME/.config"
+    export XDG_DATA_HOME="$REAL_HOME/.local/share"
+    export XDG_CACHE_HOME="$REAL_HOME/.cache"
+    export XDG_STATE_HOME="$REAL_HOME/.local/state"
     seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
     cd "$workdir"
     echo "────────────────────────────────────────"
-    echo " Claude Code · Legacy OAuth"
+    echo " Claude Code · Host OAuth (reuse)"
     echo " Session:    $session_name"
     echo " Directory:  $workdir"
     echo " HOME:       $HOME"
+    echo " XDG_*:      \$REAL_HOME/{config,cache,state,local/share}"
     echo "────────────────────────────────────────"
     exec claude --dangerously-skip-permissions
   fi
