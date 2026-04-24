@@ -184,7 +184,9 @@ def test_feishu_disabled_env_skips_all_checks(_clean_env, monkeypatch):
     assert result.ok
     assert len(result.checks) == 3
     names = {c.name for c in result.checks}
-    assert names == {"group_resolution", "lark_cli_auth", "envelope_renders"}
+    # Schema parity with the normal path — see _check_envelope_renders()
+    # which emits check name "envelope_render" (singular).
+    assert names == {"group_resolution", "lark_cli_auth", "envelope_render"}
     for check in result.checks:
         assert check.ok
         assert "CLAWSEAT_FEISHU_ENABLED=0" in check.detail

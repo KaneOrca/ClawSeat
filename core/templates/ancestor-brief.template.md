@@ -59,12 +59,15 @@
 `install.sh` 在 Step 3（`select_provider`）+ `bootstrap_project_profile` 已把 operator 的 provider 选择写进 `project-local.toml`，每个 seat 都有一条 `[[overrides]]`。B0 不应重新跑一遍 env_scan LLM 分析让 operator 再选一次——先读已有决策，展示给 operator 确认（Enter 沿用 / 输入覆盖）：
 
 ```bash
+# 注意：ancestor 运行在 sandbox HOME（launcher 导的 $HOME != real home）；
+# project-local.toml 由 install.sh 写在 operator 真实 home 下，要读 $AGENT_HOME。
 python3 - <<'PY'
-import sys, tomllib
+import os, sys, tomllib
 from pathlib import Path
-p = Path.home() / ".agents" / "tasks" / "${PROJECT_NAME}" / "project-local.toml"
+agent_home = os.environ.get("AGENT_HOME") or os.path.expanduser("~")
+p = Path(agent_home) / ".agents" / "tasks" / "${PROJECT_NAME}" / "project-local.toml"
 if not p.exists():
-    print("B0_PRE: project-local.toml missing — fall through to B0.0 env_scan")
+    print(f"B0_PRE: project-local.toml missing at {p} — fall through to B0.0 env_scan")
     sys.exit(0)
 data = tomllib.loads(p.read_text())
 overrides = data.get("overrides", [])

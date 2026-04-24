@@ -262,7 +262,9 @@ def run_bridge_preflight(
     result = PreflightResult(project=project, seat=seat)
     if _feishu_disabled():
         skip_detail = f"skipped: {_FEISHU_DISABLED_ENV}=0"
-        for name in ("group_resolution", "lark_cli_auth", "envelope_renders"):
+        # Names must match the normal-path check names exactly so callers
+        # that key off PreflightCheck.name don't see mode-dependent schema.
+        for name in ("group_resolution", "lark_cli_auth", "envelope_render"):
             result.checks.append(
                 PreflightCheck(name=name, ok=True, detail=skip_detail)
             )

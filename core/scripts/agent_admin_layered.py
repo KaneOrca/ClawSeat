@@ -149,50 +149,98 @@ def _koder_bind_recovery_hint(tenant: str, cfg: Any, err: str) -> str:
         except Exception:
             expected = None
 
-    # Look for same-directory backups named `<basename>*backup*`.
-    backups: list[Path] = []
+    # ClawSeat backs up workspaces in two places:
+    #   (a) sibling directories — operator-initiated `mv workspace workspace.pre-*-backup.<ts>`
+    #       preserves the *entire* old workspace next to the expected path
+    #   (b) in-workspace `.backup-<ts>/` — managed backups written by
+    #       clawseat-install/init_koder.py + _seat_bootstrap.py (partial
+    #       snapshot, not a whole-workspace restore)
+    # List both, newest first by mtime (not lexicographic).
+    sibling_backups: list[Path] = []
+    inner_backups: list[Path] = []
     if expected is not None:
         parent = expected.parent
         stem = expected.name
         if parent.is_dir():
             try:
-                backups = sorted(
+                siblings = [
                     p
                     for p in parent.iterdir()
                     if p.is_dir()
+                    and p.name != stem
                     and p.name.startswith(stem)
                     and "backup" in p.name.lower()
+                ]
+                sibling_backups = sorted(
+                    siblings,
+                    key=lambda p: _safe_mtime(p),
+                    reverse=True,
                 )
             except OSError:
-                backups = []
+                sibling_backups = []
+        if expected.is_dir():
+            try:
+                inners = [
+                    p
+                    for p in expected.iterdir()
+                    if p.is_dir() and p.name.startswith(".backup-")
+                ]
+                inner_backups = sorted(
+                    inners,
+                    key=lambda p: _safe_mtime(p),
+                    reverse=True,
+                )
+            except OSError:
+                inner_backups = []
 
     lines = [
         "",
         "",
         "Recovery options / 恢复选项:",
     ]
-    if backups:
+    step = 1
+    if sibling_backups:
         lines.append(
-            f"  (1) Restore from backup / 从备份恢复 "
-            f"(found {len(backups)} candidate(s)):"
+            f"  ({step}) Restore whole-workspace backup (operator-initiated) / "
+            f"从整个 workspace 备份恢复 — {len(sibling_backups)} candidate(s), newest first:"
         )
-        for b in backups[-3:]:  # show at most 3 most recent
+        for b in sibling_backups[:3]:
             lines.append(f"        mv {b} {expected}")
-    else:
+        step += 1
+    if inner_backups:
         lines.append(
-            "  (1) No backup directory found nearby. Create or restore the "
-            f"workspace manually at / 手工创建或恢复 workspace 到: {expected}"
+            f"  ({step}) In-workspace managed backup found (.backup-*) — do NOT mv the whole "
+            f"workspace; use clawseat-install's recovery flow / 使用 clawseat-install 的恢复流程:"
         )
+        lines.append(
+            f"        python3 {Path.home()}/clawseat/core/skills/clawseat-install/scripts/init_koder.py "
+            "# inspect .backup-* and restore the specific files it manages"
+        )
+        step += 1
+    if not sibling_backups and not inner_backups:
+        lines.append(
+            f"  ({step}) No backup found at {expected} or alongside it. "
+            f"Create or restore the workspace manually / 手工创建或恢复 workspace."
+        )
+        step += 1
     lines.append(
-        "  (2) Re-initialize the tenant workspace via OpenClaw side / 通过 "
+        f"  ({step}) Re-initialize the tenant workspace via OpenClaw side / 通过 "
         "OpenClaw 重新初始化该 tenant workspace, then retry koder-bind."
     )
+    step += 1
     lines.append(
-        "  (3) Skip the koder overlay for this install / 本次安装跳过 koder "
-        "overlay (omit the koder-bind step; cartooner / other projects can "
-        "run without koder until you are ready)."
+        f"  ({step}) Skip the koder overlay for this install / 本次安装跳过 koder "
+        "overlay (omit the koder-bind step; projects can run without koder "
+        "until you are ready)."
     )
     return "\n".join(lines)
+
+
+def _safe_mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def do_koder_bind(

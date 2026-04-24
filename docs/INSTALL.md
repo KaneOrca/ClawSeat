@@ -73,10 +73,19 @@ You are invoked to install ClawSeat on this machine.
            cat ~/.agents/tasks/<PROJECT_NAME>/OPERATOR-START-HERE.md
        If the operator reads Chinese, relay its Chinese instructions directly.
 
-   (c) VERIFY THE ANCESTOR PANE IS READY to receive input:
+   (c) CAPTURE the ancestor pane and classify its state:
            tmux capture-pane -t '<PROJECT_NAME>-ancestor' -p | tail -15
-       If the pane shows any of these, it is NOT ready — walk the operator
-       through clearing the screen, then re-capture:
+
+       Three possible states — classify before doing anything:
+
+       State A — PHASE-A ALREADY RUNNING (Step 9.5 auto-send succeeded):
+         Pane shows "B0" / "已读取 brief" / "env_scan" / Claude Code is
+         actively processing. DO NOT paste again — pasting duplicates the
+         kickoff and creates double-input. SKIP step (d), go to (e).
+
+       State B — BLOCKED ON A CONFIRMATION SCREEN (pane NOT ready; auto-send
+       was intentionally skipped by `ancestor_pane_waiting_on_operator` detector):
+         Pane shows any of —
          - "WARNING: Claude Code running in Bypass Permissions mode"
              → operator presses Enter to select "2. Yes, I accept"
          - "Do you trust the files in this folder" / "Trust folder"
@@ -85,15 +94,25 @@ You are invoked to install ClawSeat on this machine.
              → operator completes OAuth in browser
          - "OAuth error:" / "Login successful. Press Enter to continue"
              → operator presses Enter
-       (If the pane shows a plain input prompt like `> ` or `❯ `, it is ready.)
+         - "Accessing workspace:" / "Quick safety check:"
+             → operator presses Enter / confirms per the Claude Code prompt
+         After clearing, re-capture and re-classify.
 
-   (d) ONCE READY, operator must paste the Phase-A kickoff prompt (shown at the
-       bottom of the banner) into the ancestor pane. Walk them through
-       copy-paste — don't assume. After paste + Enter, re-capture the pane to
-       confirm Phase-A has started (look for "B0" or similar in the output).
+       State C — IDLE INPUT PROMPT (`> ` or `❯ ` with no recent activity):
+         Pane is ready but kickoff was not delivered (auto-send failure).
+         Proceed to step (d) to paste manually.
 
-   (e) Only after Phase-A is observably running should you proceed to optional
-       steps (koder overlay, additional projects) or the final report.
+   (d) PASTE MANUALLY (only if step (c) classified as State C):
+       Operator must paste the Phase-A kickoff prompt (shown at the bottom of
+       the banner) into the ancestor pane. Walk them through copy-paste — don't
+       assume. After paste + Enter, re-capture the pane to confirm Phase-A has
+       started (look for "B0" / "已读取 brief" in the output).
+
+   (e) VERIFY Phase-A is observably running (works for all three states):
+       tmux capture-pane -t '<PROJECT_NAME>-ancestor' -p | tail -10 should show
+       ancestor actively processing B0 (env scan / overrides read / provider
+       table). Only then proceed to optional steps (koder overlay, additional
+       projects) or the final report.
 
 6. On completion (Phase-A observably running), report to the operator:
    - install.sh exit status
