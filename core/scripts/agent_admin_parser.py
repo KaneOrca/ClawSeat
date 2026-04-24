@@ -160,7 +160,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_create_nested.set_defaults(func=hooks.cmd_project_create)
 
     project_bootstrap_nested = project_sub.add_parser("bootstrap")
-    project_bootstrap_nested.add_argument("--template", required=True)
+    project_bootstrap_nested.add_argument("--template", required=True, help="Template name (clawseat-default | clawseat-engineering | clawseat-creative)")
     project_bootstrap_nested.add_argument(
         "--local",
         required=True,
