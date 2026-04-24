@@ -218,7 +218,7 @@ for s in $SESSIONS; do
   fi
 
   # === 3. plan mode / decision-needed ===
-  if printf '%s\n' "$RAW" | grep -q "plan mode on"; then
+  if printf '%s\n' "$RAW_TAIL5" | grep -q "plan mode on"; then
     CTX_INFO=""
     [ -n "$CTX" ] && CTX_INFO=", $CTX"
     echo "$s: DECISION_NEEDED (plan mode${CTX_INFO})"
@@ -328,16 +328,6 @@ for s in $SESSIONS; do
   fi
 
   # === 8. idle prompt 检测（优先于 diff fallback）===
-  # Codex idle prompt — 纯 prompt，无其他输出
-  if echo "$LAST_LINE" | grep -qE "^› "; then
-    case "$MAILBOX" in
-      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
-      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (idle prompt, has TODO=${ACTIVE_TODO_ID})" ;;
-      EMPTY) echo "$s: IDLE (no task)" ;;
-    esac
-    continue
-  fi
-
   # Codex idle variant with trailing suggestion
   if echo "$RAW_TAIL20" | grep -q "› Improve documentation" || echo "$SECOND_FROM_LAST" | grep -q "^›"; then
     case "$MAILBOX" in
@@ -361,6 +351,15 @@ for s in $SESSIONS; do
   # === 8.7 Claude Code 空闲：过滤噪音后最后一行是 ❯
   SNAP=$(printf '%s\n' "$RAW" | grep -v "\[°°\]" | grep -v "Pickle" | grep -v "bypass permissions" | grep -v "accept edits" | grep -v "─────" | grep -v "^[[:space:]]*$" | grep -v "ctrl+t to hide" | grep -v "● high")
   LAST_LINE=$(echo "$SNAP" | tail -1)
+  # Codex idle prompt — 纯 prompt，无其他输出（需在 LAST_LINE 赋值后检测）
+  if echo "$LAST_LINE" | grep -qE "^› "; then
+    case "$MAILBOX" in
+      DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
+      HAS_TODO:*|ACTIVE:*) echo "$s: STALLED (idle prompt, has TODO=${ACTIVE_TODO_ID})" ;;
+      EMPTY) echo "$s: IDLE (no task)" ;;
+    esac
+    continue
+  fi
   if echo "$LAST_LINE" | grep -qE "^❯"; then
     case "$MAILBOX" in
       DELIVERED:*) echo "$s: DELIVERED (${MAILBOX#DELIVERED:})" ;;
