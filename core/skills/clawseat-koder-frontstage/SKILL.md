@@ -77,3 +77,97 @@ Heartbeat handling depends on overlay mode:
 - overlay off: write the ack through `state.db` / CLI receipt path instead of
   Feishu
 - drift always stays visible to the operator path; do not block the patrol loop
+
+## Risk-based autonomous routing
+
+Koder no longer blind-trusts `frontstage_disposition`. On every planner
+closeout, koder performs an independent risk assessment and holds final
+routing authority. The planner's disposition is a strong signal and audit
+input — not an unconditional execute order.
+
+### Ultra-high risk whitelist (koder must escalate regardless of disposition)
+
+Any closeout whose `summary`, `diff`, or `next_action` matches an entry
+below is classified ultra-high risk. Koder escalates to the operator and
+does **not** auto-advance, even if `frontstage_disposition: AUTO_ADVANCE`.
+
+**Code / repository**
+
+- `git push --force` / `git push -f` / any force push to `main`, `master`,
+  `release/*`
+- `git reset --hard`
+- `git branch -D` on an unmerged branch
+- PR creation, merge, or close via API
+- Merging into `main` / `master` / `production` / `release` branches
+- `rm -rf` on non-scratch directories
+- Commit containing `.env`, credentials, or private keys
+
+**Infrastructure / seat lifecycle**
+
+- Any invocation of `start_seat.py` / `launch_ancestor.sh` /
+  `agent-launcher.sh` / `install.sh` without `--dry-run`
+- Modification of `PROJECT_BINDING.toml` / `machine.toml` / `profile.toml`
+- Deletion of a workspace or project record
+- `tmux kill-session` or `tmux rename-session` on a live seat
+
+**External services / accounts**
+
+- Write operations to external services (Slack, email, webhook, third-party
+  API sends)
+- Credential addition, rotation, or export of OAuth tokens / API keys
+- Feishu group membership addition, removal, or permission change
+- Package publishing (`npm publish`, `pip upload`, container image push)
+
+**Data / financial**
+
+- Database migration `apply` (generation phase is not covered)
+- Any decision involving monetary amounts, account identifiers, or private
+  personal data fields
+
+**Semantic (koder self-judges)**
+
+- User-taste / preference A/B options that are functionally equivalent from
+  an engineering standpoint
+- Repeat of a class of issue the operator has explicitly reversed or
+  flagged in recent history
+
+### Bidirectional override flow
+
+```
+planner closeout received
+  │
+  ├─ read summary + diff + next_action
+  │
+  ├─ WHITELIST MATCH or koder judges ultra-high?
+  │     YES → escalate to operator (regardless of disposition)
+  │           write state.db: planner_disposition=<X>, koder_risk_level=ultra,
+  │                           koder_decision=escalate, notified_at=<ts>
+  │           stop; do not auto-advance
+  │
+  ├─ No whitelist match; koder judges medium risk?
+  │     YES → self-decide + send Feishu message:
+  │           「我替你决了：<action in one sentence>。
+  │             原因：<one line>。
+  │             原 planner disposition: <frontstage_disposition>」
+  │           write state.db: planner_disposition=<X>, koder_risk_level=medium,
+  │                           koder_decision=<action>, notified_at=<ts>
+  │           proceed with decided action
+  │
+  └─ koder judges low risk?
+        YES → silent prune (consume ACK only)
+              write state.db: planner_disposition=<X>, koder_risk_level=low,
+                              koder_decision=auto_advance, notified_at=null
+```
+
+### Key invariants
+
+1. **Planner still emits `frontstage_disposition`** — it remains the primary
+   signal and provides the audit trail for every closeout.
+2. **Koder has final routing authority** — koder's risk judgment overrides
+   planner's disposition in both directions (escalate up or self-decide down).
+3. **All overrides are traceable** — `state.db` records both
+   `planner_disposition` and `koder_decision` on every non-trivial routing
+   event.
+4. **Whitelist is exhaustive by category, not by substring** — koder applies
+   semantic judgment within each category; the list is illustrative, not
+   regex-matched.
