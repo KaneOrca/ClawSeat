@@ -13,6 +13,7 @@ description: Workflow design and execution skill. DESIGN mode: collaborative dia
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `mode` | `"design"` | ✓ | 固定值，区分模式 |
 | `user_brief` | string / path | ✓ | 用户业务需求（自然语言） |
 | `research_report` | path | optional | 前期调研报告（如 RESEARCH-HERMES-B.md），用于启发工具选择 |
 | `capability_catalog_ref` | path | optional | capability-catalog.md 路径，默认 `{CLAWSEAT_ROOT}/core/skills/cs-workflow/capability-catalog.md` |
@@ -46,6 +47,7 @@ description: Workflow design and execution skill. DESIGN mode: collaborative dia
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `mode` | `"execute"` | ✓ | 固定值，区分模式 |
 | `workflow_name` | string | ✓ | 工作流名称（对应 workflows/<name>.md） |
 | `project_params` | dict | ✓ | 执行参数（`brief_path`, `output_dir` 等，按各 step 的 input 需求） |
 

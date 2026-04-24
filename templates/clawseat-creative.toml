@@ -65,7 +65,7 @@ skills = [
 ]
 role_details = [
   "creative planner: produces world-building docs, character bios, and story/episode outlines",
-  "dispatches creative-builder (codex) to execute atomic skills (cs-classify/cs-write/cs-score)",
+  "dispatches creative-builder (codex) to execute generation skills (cs-classify/cs-write)",
   "dispatches creative-designer (gemini) for creative review after builder delivers",
   "does NOT execute atomic tools itself — owns structure and coordination",
   "can fan-out multiple builder instances for parallel unit execution",
@@ -94,14 +94,13 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/creative-builder/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/cs-classify/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/cs-write/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/cs-score/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
   "creative execution seat powered by Codex (OpenAI OAuth)",
-  "executes all atomic skills: cs-classify / cs-write / cs-score",
+  "executes cs-classify / cs-write — content generation only",
   "receives TODO from planner, executes, delivers to designer for review via complete_handoff",
-  "does NOT plan, does NOT dispatch other specialists",
+  "does NOT score — scoring is designer's responsibility",
 ]
 
 [[engineers]]
@@ -126,11 +125,12 @@ design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-designer/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-score/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
   "creative review seat powered by Gemini (Google OAuth)",
-  "receives builder's deliverables and reviews content quality, style, requirement alignment",
+  "receives builder's deliverables, runs cs-score for rubric-based scoring",
   "issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts",
   "does NOT execute atomic tools — only reviews and returns verdict to planner",
 ]
