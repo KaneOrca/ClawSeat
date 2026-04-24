@@ -239,8 +239,8 @@ Three built-in project templates in `templates/`:
 
 **Creative template seat responsibilities:**
 - `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure
-- `builder` (codex/oauth): executes all atomic skills — cs-classify, cs-write, cs-score, OpenClaw tools
-- `designer` (gemini/oauth): creative review — issues APPROVED / CHANGES_REQUESTED verdicts on builder deliverables
+- `builder` (codex/oauth): workflow classification — cs-classify / cs-classify-short; delivers classification to designer
+- `designer` (gemini/oauth): long-form writing (cs-write) + rubric scoring (cs-score) + review — issues APPROVED / CHANGES_REQUESTED verdicts to planner
 
 **Capability skill layer** (`core/skills/cs-*/`): tool-agnostic interface contracts (WHAT, not HOW). cs-classify routes long-form vs short-form; cs-structure runs the Hollywood Writers Room (Agent Teams); cs-write executes long-form content; cs-score applies rubric-based scoring. Workflow composition is the planner's responsibility, not the skills'.
 

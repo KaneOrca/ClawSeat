@@ -196,6 +196,33 @@ def test_real_repo_creative_seats_load_correct_skill_via_role_hint(
     assert not body.startswith("---\n"), "frontmatter must be stripped"
 
 
+def test_real_repo_creative_designer_skill_covers_write_and_score() -> None:
+    """creative-designer now executes cs-write AND cs-score — both must appear in its SKILL.md body."""
+    info = agent_admin_template._load_role_skill_content(_REPO, "designer", role_hint="creative-designer")
+    assert info is not None
+    _, body = info
+    assert "cs-write" in body, "creative-designer SKILL.md must mention cs-write (designer executes writing)"
+    assert "cs-score" in body, "creative-designer SKILL.md must mention cs-score (designer executes scoring)"
+
+
+def test_real_repo_creative_builder_skill_has_classify_not_write() -> None:
+    """creative-builder owns classification only — cs-write must not appear as an execution claim."""
+    info = agent_admin_template._load_role_skill_content(_REPO, "builder", role_hint="creative-builder")
+    assert info is not None
+    _, body = info
+    assert "cs-classify" in body, "creative-builder SKILL.md must mention cs-classify"
+    # Verify builder doesn't positively claim cs-write execution (negation phrases like
+    # "不执行 cs-write" are expected; positive execution claims are the bug to catch).
+    lines_claiming_write = [
+        ln for ln in body.splitlines()
+        if "cs-write" in ln and "不执行" not in ln and "designer" not in ln
+        and "Anti" not in ln and "自己执行" not in ln and "cs-score" not in ln
+    ]
+    assert not lines_claiming_write, (
+        f"creative-builder SKILL.md should not positively claim cs-write execution: {lines_claiming_write}"
+    )
+
+
 def test_real_repo_role_skill_section_for_qa_includes_contract_marker() -> None:
     """Pin a distinctive QA SKILL.md marker so deleting the contract fails this test."""
     lines = agent_admin_template._role_skill_section_lines(_REPO, "qa")

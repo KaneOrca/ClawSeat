@@ -449,8 +449,8 @@ For fiction, screenplay, or other creative work — uses a 4-seat roster
 |------|------|------|
 | ancestor | claude/oauth | lifecycle ops, patrol |
 | planner | claude/oauth | planning, workflow orchestration, unit decomposition |
-| builder | codex/oauth | executes all atomic skills (cs-classify / cs-write / cs-score / OpenClaw) |
-| designer | gemini/oauth | reviews builder deliverables, creative quality judgment (APPROVED / CHANGES_REQUESTED) |
+| builder | codex/oauth | workflow classification (cs-classify / cs-classify-short) |
+| designer | gemini/oauth | long-form writing (cs-write), rubric scoring (cs-score), creative review (APPROVED / CHANGES_REQUESTED) |
 
 ```bash
 # Via install.sh (bootstraps and starts ancestor):
