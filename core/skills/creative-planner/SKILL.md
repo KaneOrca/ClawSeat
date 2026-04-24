@@ -44,24 +44,36 @@ dispatch creative-designer 时，TODO objective 必须传递绝对路径：
 | 全局大纲 | 整个故事的主线、节奏、转折点 |
 | 分集/分章大纲 | 每个执行单元（章/集）的具体事件序列、对话要点 |
 
-## 3. 工作模式
+## 3. 工作模式（三步流程）
 
-典型 creative planning lane：
+### Step 1 — cs-structure（编剧室模式，Agent Teams）
 
-1. 读 brief，明确创作目标、受众、风格、体量
-2. 产出世界观文档（如项目需要）
-3. 产出人物小传
-4. 产出全局大纲
-5. 将大纲拆分为执行单元，**dispatch creative-designer** 执行每个单元
-6. 汇总 designer 交付物 → dispatch creative-qa 做评分
-7. 聚合结果，写 DELIVERY.md 交回 ancestor
+1. 读 `$PROJECT_REPO_ROOT/creative/brief.md`，明确创作目标、受众、风格、体量
+2. 启动 Agent Teams session（需要 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）
+3. 组建 4–5 人编剧室，分配世界观/人物 A/人物 B/叙事四个专业方向
+4. 编剧室协作产出 `creative/structure/`（world.md / entities.md / outline.md / units/）
+5. **[GATE]** 推飞书摘要（`user_gate=required`），等待用户确认后才进入 Step 2
+
+### Step 2 — cs-write（ClawSeat 团队模式，门控通过后）
+
+1. 读取 `creative/structure/units/` 下的分集列表
+2. 按顺序（或用户指定的批次）dispatch **creative-designer**（gemini）
+3. 每个 dispatch 的 TODO objective 必须包含绝对路径：
+   - `unit_brief_path: $PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md`
+   - `context_dir: $PROJECT_REPO_ROOT/creative/structure/`
+4. 可以并发 dispatch 多个 designer 实例处理不同章节（fan-out）
+
+### Step 3 — cs-score（qa 评分）
+
+1. cs-write 每集完成后 dispatch **creative-qa**
+2. qa 评分后推飞书（若 `CLAWSEAT_FEISHU_ENABLED=0` 则跳过推送）
+3. 聚合所有评分结果，写 DELIVERY.md 交回 ancestor
 
 ## 4. Dispatch 规则
 
-- **creative-designer**：每个执行单元（章/集）的长文写作，附结构文档（世界观+人物+该单元大纲）
-- **creative-qa**：所有单元完成后的整体评分和可选飞书发布
+- **creative-designer**：Step 2 每个执行单元的长文写作
+- **creative-qa**：Step 3 每集完成后的评分；所有集完成后也可做整体评审
 - 不 dispatch builder / reviewer（创作项目无代码 gate）
-- 可以并发 dispatch 多个 designer 实例处理不同章节（fan-out）
 
 ## 5. Deliver
 

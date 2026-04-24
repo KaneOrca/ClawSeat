@@ -46,6 +46,61 @@ The executor (creative-planner, engineering planner, etc.) adapts this contract 
   → 产出 outline.md（全局大纲）
   → 拆分为 units/N-title.md（每单元独立执行简报）
   → 写 DELIVERY.md（列全部路径 + units 表格）
+  → [GATE] 推飞书摘要，等待用户确认
+```
+
+## EXECUTION MODEL: Hollywood Writers Room (Agent Teams)
+
+cs-structure 通过 Claude Code Agent Teams 模式执行，模拟好莱坞编剧室协作：
+
+**Team composition（建议 4–5 人）**
+
+```
+Lead: creative-planner
+  - 协调整个编剧室，解决世界观/人物设计冲突
+  - 合并各 teammate 产出，写入 creative/structure/
+
+Teammate: 世界观架构师
+  - 时代背景、世界规则、地理格局、势力分布
+  - 与人物设计师协商规则对人物的影响
+
+Teammate: 人物设计师 A
+  - 主角及核心配角的完整小传
+  - 响应叙事设计师的弧线需求，调整人物设定
+
+Teammate: 人物设计师 B
+  - 反派及次要角色的完整小传
+  - 与人物设计师 A 协调角色间关系和张力
+
+Teammate: 叙事设计师
+  - 全局故事弧线、主题、分集节奏设计
+  - 向人物设计师提出弧线需求
+  - 产出 outline.md + units/ 骨架
+```
+
+**跨 teammate 协调机制**：Teammate 通过 Agent Teams inter-agent messaging 互发消息，世界观规则和人物设定在同一 session 内协商，避免矛盾；Lead 在最终合并前做一致性审查。
+
+**启动要求**：creative-planner 的运行环境需设置 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`。
+
+## GATE: 用户确认门控
+
+cs-structure 完成后，**暂停等待用户确认**，不自动进入 cs-write：
+
+1. 产出 `creative/structure/`（world.md / entities.md / outline.md / units/）
+2. 调用 `send_delegation_report.py` 推送摘要到飞书：
+   - world.md 摘要（前 500 字）
+   - entities.md 主要人物列表
+   - outline.md 大纲骨架
+   - units/ 分集列表
+3. `user_gate=required`，等待用户回复确认后 creative-planner 才 dispatch cs-write
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
+  --project <project> \
+  --report-status done \
+  --decision-hint ask_user \
+  --user-gate required \
+  --human-summary "编剧室完成。大纲: <outline_summary>。分集: <units_list>。请确认后继续执行 cs-write。"
 ```
 
 ## PATH CONVENTIONS
