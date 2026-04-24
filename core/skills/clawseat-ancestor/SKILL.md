@@ -296,6 +296,122 @@ bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
 - ✅ 这个 wrapper 会先解析 canonical session，再做 Enter flush，避免 TUI 吞消息
 - ✅ 正式任务派发用 `core/skills/gstack-harness/scripts/dispatch_task.py`
 
+### 5.3 Seat Coordination Canon（**"找 skill 之前先看这里"**）
+
+> 反复观察到的 failure mode：ancestor 想给 planner 发消息 / 派任务时，
+> grep 全仓找 "coordination skill"，误中上游 gstack 的 `project-manager`
+> / `task-supervisor`（那是 `.agent/projects/` 体系，不是 ClawSeat 的），
+> 或者尝试自己创建新 skill。**不要。** ClawSeat 的协调 skill 已存在，
+> 就在本段列出的路径。
+
+#### 5.3.1 快速动作卡（可复制）
+
+**场景 A — 给 specialist seat 发短消息 / 提问 / 通知**（无 lifecycle，不要回执）:
+
+```bash
+bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
+  --project ${PROJECT_NAME} \
+  planner \
+  "你的消息文本"
+```
+
+**场景 B — 给 specialist seat 派结构化任务**（要回执、写 TODO.md、DELIVERY 闭环）:
+
+```bash
+python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py \
+  --project ${PROJECT_NAME} \
+  --source ancestor \
+  --target <planner|builder|reviewer|qa|designer> \
+  --task-id <slug-with-date-suffix> \
+  --description "<任务摘要>" \
+  [--skill-refs path/to/relevant/SKILL.md] \
+  [--intent <intent-key>]
+```
+
+会自动写 `~/.agents/tasks/${PROJECT_NAME}/<target>/TODO.md` 的 `[pending]` 条目 + 设 `reply_to=ancestor`，完成后 DELIVERY 回执。
+
+#### 5.3.2 Seat id 硬规则
+
+| 何时用什么 ID | 用哪个形式 |
+|--------------|----------|
+| 给 `send-and-verify.sh` 的 seat 参数 | **role id 单词**：`planner` / `builder` / `reviewer` / `qa` / `designer` / `memory` / `ancestor` |
+| 给 `dispatch_task.py --target` | 同上 role id |
+| 给 `agent_admin session start-engineer <seat>` | 同上 role id |
+| `~/.agents/workspaces/<project>/<seat>/` 目录 | 同上 role id |
+| tmux session（只用来 `capture-pane` 观察；**不要** `send-keys` 进去） | `<project>-<role>-<tool>`（e.g. `cartooner-planner-claude`） |
+
+**反例（常见错误）**：
+
+- ❌ `send-and-verify.sh --project cartooner planner-claude "..."` — tool 后缀是 tmux 层概念，不是 seat id；`agentctl session-name` 不认
+- ❌ `tmux send-keys -t cartooner-planner-claude "..." Enter` — 裸 send-keys 绕过 Enter flush，TUI 可能吞回车
+- ❌ `send-and-verify.sh cartooner-planner "..."` — 少了 `--project` flag
+
+canonical session 解析逻辑：`agentctl session-name <role> --project <p>` 读 `project.toml::overrides.<role>.tool` 推导出 `<p>-<role>-<tool>` 形式。只传 role id，tool 自动补。
+
+#### 5.3.3 ancestor 桌面 ≈ koder frontstage（operator-facing）
+
+ancestor 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"operator 前台"，只是 transport 不同（koder=Feishu，ancestor=CLI）。operator 问问题、派需求、要决策，都打 ancestor；koder 只在 Feishu overlay 开启时出现。
+
+所以 ancestor 应该懂 **koder-frontstage 的语义契约**，即使这个 skill 当前没 embed 到你的 system prompt（Round-9 会修 template 机制）：
+
+- **`frontstage_disposition`** 三态：
+  - `ok` — 下游 seat 自行完成、无需 operator 介入 → ancestor 可直接 relay 摘要给 operator
+  - `needs_decision` — 下游 seat 需要 operator 决策的硬 gate → **不要** auto-advance；ancestor 必须把结构化问题**完整**问 operator，等答复
+  - `blocked` — 下游 seat 卡住需要 operator 解锁 → ancestor 列出 blocker + 建议 unblock 动作
+- **`user_gate: true`** — 无论其他字段如何，**必须** operator 明确授权才放行下一步
+- **`decision_hint`** — ancestor 用它组织给 operator 的问题，但不代替 operator 答复
+- **`OC_DELEGATION_REPORT_V1`** envelope（Feishu 侧用）— ancestor 在 CLI 直接拿到自然语言不需要 parse 这个 envelope，但要认出对应字段的语义
+
+完整 frontstage 契约参考 `${CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md`。你**现在**就可以 Read 它，不需要等 template 修好。
+
+#### 5.3.4 反模式 — 不要创建重复 skill
+
+遇到"我需要一个 ClawSeat 协调 skill"的想法时，先检查**已存在的**：
+
+| 已存在 | 你以为要建的 | 备注 |
+|--------|------------|------|
+| `core/skills/gstack-harness/SKILL.md` | "ClawSeat 协调 skill" / "seat dispatch skill" | 就是它 — dispatch / handoff / ACK / heartbeat 全在这 |
+| `core/skills/clawseat-koder-frontstage/SKILL.md` | "frontstage skill" / "operator 交互 skill" | 就是它 |
+| `core/skills/clawseat-ancestor/SKILL.md` | "ancestor 职责 skill" | 就是你正在读的 |
+| `core/skills/planner/SKILL.md` | "planner 职责 skill" | 就是它 |
+
+**不要**自己建新 skill 直到你 Read 了上述 4 份并确认真没覆盖到你的需求。
+
+#### 5.3.5 Legacy skill 警告（**不要用**）
+
+上游 gstack 有些老 skill 在 `.agent/skills/` 或全局位置，grep 会命中但**不适用** ClawSeat：
+
+| 上游 skill | 为什么不适用 |
+|------------|------------|
+| `project-manager` | 面向 `.agent/projects/` 长线项目追踪，不是 ClawSeat seat 协调 |
+| `task-supervisor` | 面向 `.tasks/` 信箱系统（工程师 A-E 老编制），v0.7 ClawSeat 已 retire |
+| `tmux-iterm-mastery` | 通用 tmux/iTerm，非 ClawSeat 特化；ClawSeat 有更高层 wrapper (`recover-grid.sh` / `agent_admin window`) |
+| `openclaw-communication-layer` | OpenClaw 侧通信，不是 seat-to-seat |
+
+看到这些名字，默认 **skip 它们**。ClawSeat seat 协调的真源是上一段那 4 份。
+
+#### 5.3.6 dispatch 前置 checklist（避免把活派错 seat）
+
+派任何结构化任务前，先 Read **项目 seat roster**：
+
+```bash
+# Real roster（install.sh 写入的实际 harness 决策）:
+python3 - <<'PY'
+import tomllib, os
+from pathlib import Path
+p = Path(os.environ.get("AGENT_HOME", os.path.expanduser("~"))) / ".agents" / "tasks" / "${PROJECT_NAME}" / "project-local.toml"
+if p.exists():
+    data = tomllib.loads(p.read_text())
+    for o in data.get("overrides", []):
+        print(f"  {o.get('id'):10s}  {o.get('tool')} / {o.get('auth_mode')} / {o.get('provider')} / {o.get('model', '')}")
+PY
+
+# Canonical role 职责（repo-level CLAUDE.md，如果业务仓库有）:
+head -60 $(git rev-parse --show-toplevel)/CLAUDE.md 2>/dev/null | grep -E "seat|职责|role" | head -20
+```
+
+然后按真实 roster 决定 `--target`（不要靠记忆或常识推断）。
+
 ### 5.1 memory 交互工具（直接脚本，不走 tmux）
 
 ancestor 需要查 memory 时，优先直接读；需要写学习笔记时，直接落盘。不要把 memory 当成可被 `tmux send-keys` 驱动的 TUI。
