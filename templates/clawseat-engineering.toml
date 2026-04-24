@@ -1,0 +1,184 @@
+version = 1
+template_name = "clawseat-engineering"
+description = "Engineering-optimized roster: ancestor + planner/builder/reviewer/qa/designer with production-ready harness (codex builder, gemini designer)"
+
+[defaults]
+window_mode = "tabs-1up"
+monitor_max_panes = 5
+open_detail_windows = false
+workspace_tools = [
+  "TOOLS/memory.md",
+]
+
+[[engineers]]
+id = "ancestor"
+display_name = "ancestor"
+role = "ancestor"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = true
+unblock_authority = true
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-install/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md",
+]
+role_details = [
+  "project ancestor; owns seat lifecycle, patrol, and Phase-A execution",
+]
+
+[[engineers]]
+id = "planner"
+display_name = "planner"
+role = "planner-dispatcher"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+monitor = true
+human_facing = false
+active_loop_owner = true
+dispatch_authority = true
+patrol_authority = false
+unblock_authority = false
+escalation_authority = true
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/planner/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "engineering planner: owns task planning, dispatch to builder/reviewer/qa/designer, and chain-level delivery",
+  "dispatches builder for implementation, reviewer for code review, qa for test execution, designer for visual work",
+]
+
+[[engineers]]
+id = "builder"
+display_name = "builder"
+role = "builder"
+tool = "codex"
+auth_mode = "oauth"
+provider = "openai"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "implementation seat powered by Codex (OpenAI OAuth); best for code, scripts, and structured changes",
+  "receives TODO from planner, implements, writes tests, returns DELIVERY.md to planner",
+]
+
+[[engineers]]
+id = "reviewer"
+display_name = "reviewer"
+role = "reviewer"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = true
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/reviewer/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "independent code review gate; emits canonical Verdict before delivery reaches planner",
+  "uses VALID_VERDICTS from complete_handoff.py; never approves without checking acceptance criteria",
+]
+
+[[engineers]]
+id = "qa"
+display_name = "qa"
+role = "qa"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = true
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/qa/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "test-execution seat; runs pytest/smoke/e2e, reports pass/fail, does not modify code",
+  "highspeed model suitable for test-heavy verification loops",
+]
+
+[[engineers]]
+id = "designer"
+display_name = "designer"
+role = "designer"
+tool = "gemini"
+auth_mode = "oauth"
+provider = "google"
+monitor = true
+optional = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = true
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-design-review/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-design-shotgun/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-design-html/SKILL.md",
+]
+role_details = [
+  "visual design seat powered by Gemini (Google OAuth); handles UI/UX design tasks",
+  "design-driven prototypes and visual shells; not production wiring",
+]
