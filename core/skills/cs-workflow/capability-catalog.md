@@ -11,21 +11,21 @@
 
 ### cs-classify
 - **场景**：判断创作需求是长文（>3000字/多单元/世界观需求）还是短文，输出路由决策
-- **执行 seat_role**: `creative-planner`
+- **执行 seat_role**: `creative-builder`（Codex，分类决策）
 - **输入**: `brief`
 - **输出**: `classification.json`（type / reasoning / estimated_words / estimated_units）
 - **关键词触发**: 连载/系列/全本/剧本 → long-form；推文/文案/单篇 → short-form
 
 ### cs-classify-short
 - **场景**：短文角度选择——确定核心角度/主旨/受众/风格，生成轻量角度简报
-- **执行 seat_role**: `creative-planner`
+- **执行 seat_role**: `creative-builder`（Codex，分类决策）
 - **输入**: `brief`，可选 `quick_mode`（跳过角度确认门控）
 - **输出**: `angle.md`（≤200字，角度选项/核心论点/受众/风格）
 - **gate**: 若 `quick_mode=false` → 推飞书等确认角度
 
 ### cs-structure
 - **场景**：长文世界观/架构/大纲/分集简报——好莱坞编剧室模式（Agent Teams）
-- **执行 seat_role**: `creative-planner`（启动 Agent Teams，4-5 人编剧室）
+- **执行 seat_role**: `ancestor`（Claude Code，启动 Agent Teams，4-5 人编剧室）
 - **输入**: `brief_path`, `output_dir`（默认 `creative/structure/`）
 - **输出**: `world.md`, `entities.md`, `outline.md`, `units/<n>-<title>.md`
 - **gate**: GATE 1（世界观+人物确认）→ GATE 2（分集大纲确认）→ 进入 cs-write
@@ -33,7 +33,7 @@
 
 ### cs-write
 - **场景**：长文执行（章节/集数正文写作）或短文直接执行
-- **执行 seat_role**: `creative-builder`（Codex，长上下文生成）
+- **执行 seat_role**: `creative-designer`（Gemini，长文写作）
 - **输入**: `unit_brief_path`（来自 cs-structure 的 units/），`context_dir`，可选 `state_summary_path`（滚动上下文）
 - **输出**: `content.md`，`meta.json`（word_count / format / completed_at）
 - **路径**: 写入 `creative/content/<unit_id>.md`
@@ -73,10 +73,10 @@
 
 | 业务需求 | 推荐工具 | seat_role |
 |---------|---------|-----------|
-| 判断长文 vs 短文 | cs-classify | creative-planner |
-| 短文角度确认 | cs-classify-short | creative-planner |
-| 长文世界观+大纲 | cs-structure | creative-planner |
-| 章节/集数写作 | cs-write | creative-builder |
+| 判断长文 vs 短文 | cs-classify | creative-builder |
+| 短文角度确认 | cs-classify-short | creative-builder |
+| 长文世界观+大纲 | cs-structure | ancestor |
+| 章节/集数写作 | cs-write | creative-designer |
 | 内容评分 | cs-score | creative-designer |
 | 代码/PR 发布 | ship（gstack） | builder |
 | Bug 根因分析 | investigate（gstack） | builder |

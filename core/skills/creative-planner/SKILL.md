@@ -119,7 +119,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 自己写长文章节（那是 designer 的职责）
 - 在大纲里写具体对话（大纲是结构，不是台本）
 - 等 designer 全部完成才汇总（应随时聚合完成的章节）
-- 把 cs-write 派给 builder（builder 只做分类，不做写作）
+- 把 cs-write 或 cs-score 派给 builder（builder 只执行 cs-classify / cs-classify-short，不做写作也不做评分）
 
 ## Capability Skill Refs
 
