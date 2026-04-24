@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 
@@ -297,6 +298,10 @@ def _send_feishu_message(
 def main() -> int:
     args = parse_args()
 
+    if os.environ.get("CLAWSEAT_FEISHU_ENABLED", "1") == "0":
+        print(json.dumps({"status": "skipped", "reason": "CLAWSEAT_FEISHU_ENABLED=0"}, ensure_ascii=False), flush=True)
+        return 0
+
     # Auth-check-only mode: verify lark-cli is available and auth is valid.
     if args.check_auth:
         result = _check_lark_auth(args.identity)
@@ -355,7 +360,7 @@ def main() -> int:
         group_id=resolved_group_id,
         project=args.project,
         identity=args.identity,
-        pre_check_auth=True,
+        pre_check_auth=False,
     )
     # silent-ok audit: status≠sent returns exit 1, caller surfaces failure via return code
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

@@ -144,6 +144,7 @@ main() {
   group_id="$(read_group_id "$binding_path")"
   [[ -n "$group_id" ]] || { echo "[planner-hook] no feishu_group_id; skip" >&2; exit 0; }
 
+  [[ "${CLAWSEAT_FEISHU_ENABLED:-1}" == "0" ]] && { echo "[planner-hook] CLAWSEAT_FEISHU_ENABLED=0; skip" >&2; exit 0; }
   command -v lark-cli >/dev/null 2>&1 || { echo "[planner-hook] lark-cli not installed; skip" >&2; exit 0; }
 
   send_broadcast "$project" "$group_id" "${PLANNER_HOOK_TEXT:-}" || true

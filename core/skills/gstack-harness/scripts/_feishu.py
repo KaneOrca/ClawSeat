@@ -691,6 +691,8 @@ def send_feishu_user_message(
     pre_check_auth: bool = False,
     identity: str = "user",
 ) -> dict[str, str]:
+    if os.environ.get("CLAWSEAT_FEISHU_ENABLED", "1") == "0":
+        return {"status": "skipped", "reason": "CLAWSEAT_FEISHU_ENABLED=0"}
     # Allow override via env var for smoke/one-shot dispatch
     identity = os.environ.get("FEISHU_SENDER_MODE", identity)
     normalized = _normalize_lark_identity(identity)
@@ -769,6 +771,8 @@ def broadcast_feishu_group_message(
     group_id: str | None = None,
     project: str | None = None,
 ) -> dict[str, str]:
+    if os.environ.get("CLAWSEAT_FEISHU_ENABLED", "1") == "0":
+        return {"status": "skipped", "reason": "CLAWSEAT_FEISHU_ENABLED=0"}
     payload: dict[str, str] = {"message": message.strip()}
     resolved_source = "explicit:group_id" if group_id else ""
     resolved_group_id = (group_id or "").strip()

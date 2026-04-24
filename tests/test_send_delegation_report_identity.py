@@ -100,7 +100,7 @@ def test_send_report_user_mode_passes_user_identity(tmp_path: Path) -> None:
     result, commands = _run_report(tmp_path, identity="user", auth_identity="user")
 
     assert result.returncode == 0, result.stderr
-    assert commands[0] == "--as user auth status"
+    # pre_check_auth=False: no auth-status pre-call; only the send command
     assert any(line.startswith("--as user im +messages-send") for line in commands)
 
 
@@ -108,7 +108,7 @@ def test_send_report_bot_mode_passes_bot_identity(tmp_path: Path) -> None:
     result, commands = _run_report(tmp_path, identity="bot", auth_identity="bot")
 
     assert result.returncode == 0, result.stderr
-    assert commands[0] == "--as bot auth status"
+    # pre_check_auth=False: no auth-status pre-call; only the send command
     assert any(line.startswith("--as bot im +messages-send") for line in commands)
 
 
@@ -116,7 +116,7 @@ def test_send_report_auto_omits_as_flag(tmp_path: Path) -> None:
     result, commands = _run_report(tmp_path, identity="auto", auth_identity="bot")
 
     assert result.returncode == 0, result.stderr
-    assert commands[0] == "auth status"
+    # pre_check_auth=False: no auth-status pre-call
     assert any(line.startswith("im +messages-send") and "--as" not in line for line in commands)
 
 
@@ -139,7 +139,8 @@ def test_send_report_places_as_before_subcommand_for_all_identity_calls(tmp_path
 
     assert result.returncode == 0, result.stderr
     assert commands
+    # --as must precede the subcommand, not follow it
     assert all(not line.startswith("auth status --as") for line in commands)
     assert all(not line.startswith("im +messages-send --as") for line in commands)
-    assert commands[0].startswith("--as user auth status")
+    # pre_check_auth=False: first command is the send, not auth status
     assert any(line.startswith("--as user im +messages-send") for line in commands)
