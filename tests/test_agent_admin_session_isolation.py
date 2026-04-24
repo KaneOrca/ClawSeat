@@ -220,7 +220,10 @@ def test_start_engineer_invokes_launcher_and_updates_runtime_dir(
     assert session.runtime_dir == str(real_home / expected_runtime)
     hooks.write_session.assert_called_once_with(session)
     hooks.apply_template.assert_called_with(session, hooks.load_project.return_value)
-    title_cmds = [call.args[0] for call in mock_tmux.call_args_list]
+    # Filter out list-sessions (stale-tool cleanup probe) — it runs before
+    # display setup but has no side effects when no stale sessions exist.
+    title_cmds = [call.args[0] for call in mock_tmux.call_args_list
+                  if call.args[0][0] != "list-sessions"]
     assert title_cmds[:2] == [
         ["set", "-g", "set-titles", "on"],
         ["set", "-g", "set-titles-string", "#{session_name}"],
@@ -343,7 +346,9 @@ def test_start_engineer_reset_kills_session_before_launcher(
         svc.start_engineer(session, reset=True)
 
     assert events[0] == f"tmux:kill-session -t {session.session}"
-    assert events[1] == "launcher"
+    # stale-tool cleanup probe (list-sessions returns empty → no kill)
+    assert events[1] == "tmux:list-sessions -F #{session_name}"
+    assert events[2] == "launcher"
 
 
 def test_stop_engineer_still_kills_tmux_session(tmp_path: Path):

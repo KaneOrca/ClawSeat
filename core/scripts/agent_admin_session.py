@@ -545,6 +545,7 @@ class SessionService:
             self._assert_session_running(session, operation=f"start_engineer idempotent check for {session.session}")
             self._configure_session_display(session.session)
             return
+        self._cleanup_stale_tool_variants(session)
         launcher_auth = self._launcher_auth_for(session)
         runtime_dir = self._launcher_runtime_dir(session, launcher_auth)
         if runtime_dir is not None and session.runtime_dir != str(runtime_dir):
@@ -673,6 +674,60 @@ class SessionService:
         # ITERM_TMUX_REFERENCE.md §3.1.1). This hook is idempotent:
         # if no misroute exists it prints "ok" and exits 0.
         self._auto_recover_grid_after_start(session)
+
+    def _stale_tool_variant_sessions(self, session: Any) -> list[str]:
+        project_name = str(getattr(session, "project", "") or "").strip()
+        engineer_id = str(getattr(session, "engineer_id", "") or "").strip()
+        session_name = str(getattr(session, "session", "") or "").strip()
+        current_tool = str(getattr(session, "tool", "") or "").strip()
+        if not project_name or not engineer_id or not session_name or not current_tool:
+            return []
+        result = self._run_tmux_with_retry(
+            ["list-sessions", "-F", "#{session_name}"],
+            reason=f"enumerate same-seat session variants for {session_name}",
+            check=False,
+        )
+        returncode = getattr(result, "returncode", None)
+        stdout = getattr(result, "stdout", "")
+        if not isinstance(returncode, int) or returncode != 0:
+            return []
+        if not isinstance(stdout, str) or not stdout.strip():
+            return []
+        prefix = f"{project_name}-{engineer_id}-"
+        stale_sessions: list[str] = []
+        for raw_name in stdout.splitlines():
+            tmux_session = raw_name.strip()
+            if not tmux_session or tmux_session == session_name or not tmux_session.startswith(prefix):
+                continue
+            tool_suffix = tmux_session[len(prefix):]
+            if tool_suffix and tool_suffix != current_tool:
+                stale_sessions.append(tmux_session)
+        return stale_sessions
+
+    def _cleanup_stale_tool_variants(self, session: Any) -> None:
+        for stale_session in self._stale_tool_variant_sessions(session):
+            result = self._run_tmux_with_retry(
+                ["kill-session", "-t", stale_session],
+                reason=f"cleanup stale-tool session {stale_session}",
+                check=False,
+            )
+            returncode = getattr(result, "returncode", None)
+            stderr = getattr(result, "stderr", "")
+            stdout = getattr(result, "stdout", "")
+            if isinstance(returncode, int) and returncode == 0:
+                print(f"start-engineer: killed stale-tool session {stale_session}", file=sys.stderr)
+                continue
+            detail = ""
+            if isinstance(stderr, str) and stderr.strip():
+                detail = stderr.strip().lower()
+            elif isinstance(stdout, str) and stdout.strip():
+                detail = stdout.strip().lower()
+            if "can't find session" in detail or "no such session" in detail:
+                continue
+            raise SessionStartError(
+                f"cleanup stale-tool session {stale_session} failed, "
+                f"exit={returncode}, detail={detail or '<empty>'}"
+            )
 
     def _auto_recover_grid_after_start(self, session: Any) -> None:
         # Skip under pytest — the test harness mocks subprocess and our hook
