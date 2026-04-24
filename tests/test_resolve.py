@@ -15,22 +15,22 @@ _SANDBOX_HOME_LOOKING = (
 )
 
 
-def test_resolve_finds_repo():
+def test_resolve_finds_repo(monkeypatch):
     """With CLAWSEAT_ROOT set, resolution should return that path."""
-    os.environ["CLAWSEAT_ROOT"] = str(_REPO)
+    monkeypatch.setenv("CLAWSEAT_ROOT", str(_REPO))
     result = resolve_clawseat_root()
     assert result == _REPO
 
 
-def test_try_resolve_returns_path():
-    os.environ["CLAWSEAT_ROOT"] = str(_REPO)
+def test_try_resolve_returns_path(monkeypatch):
+    monkeypatch.setenv("CLAWSEAT_ROOT", str(_REPO))
     result = try_resolve_clawseat_root()
     assert result is not None
     assert result == _REPO
 
 
-def test_try_resolve_returns_none_on_bad_path(tmp_path):
-    os.environ["CLAWSEAT_ROOT"] = str(tmp_path / "nonexistent")
+def test_try_resolve_returns_none_on_bad_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAWSEAT_ROOT", str(tmp_path / "nonexistent"))
     # resolve_clawseat_root trusts env var even for non-existent paths
     # (designed for remote/future setups), so try_resolve returns that path
     result = try_resolve_clawseat_root()
