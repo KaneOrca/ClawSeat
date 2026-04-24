@@ -194,7 +194,7 @@ Owns:
 
 Examples:
 
-- `adapters/projects/cartooner/`
+- `adapters/projects/myproject/`
 - `adapters/projects/openclaw/`
 
 ### 5. Sample / Fixture Layer
@@ -216,7 +216,7 @@ Already inside ClawSeat:
 - harness adapter interface + tmux-cli implementation (`core/harness_adapter.py`, `adapters/harness/tmux-cli/`)
 - shared shell shim base (`shells/_shim_base.py`; each bundle under `shells/*/adapter_shim.py` is a thin wrapper — audit M1)
 - memory-oracle skill (`core/skills/memory-oracle/`, introduced in upstream T7/T22)
-- Cartooner adapter (`adapters/projects/cartooner/`)
+- Project adapter (`adapters/projects/<project>/`)
 
 Recent structural changes:
 
@@ -246,7 +246,7 @@ Three built-in project templates in `templates/`:
 
 Still outside ClawSeat by design:
 
-- the full `cartooner` product source tree
+- the full product source tree for any consumer project
 - the full `openclaw` product source tree
 
 ## §3b — state.db: Single-Source-of-Truth Ledger (C8)
@@ -793,7 +793,7 @@ that automation cannot dismiss (upstream issue
 | install | planner | oauth_token | anthropic |
 | install | builder-1 | oauth_token | anthropic |
 | install | builder-2 | api | anthropic-console |
-| cartooner | planner | oauth_token | anthropic |
+| myproject | planner | oauth_token | anthropic |
 | audit | builder-1 | api | anthropic-console |
 
 `oauth_token` uses a 1-year Keychain-free token from `claude setup-token`
@@ -902,7 +902,7 @@ exact fix: `agent-admin project koder-bind --project X --tenant Y`.
 
 ### Out of scope (deferred to Phase 2)
 
-- Migrating the real `install` / `cartooner` / `audit` profiles.
+- Migrating existing project profiles to the new schema.
 - Creating `~/.clawseat/machine.toml` on operator machines (still
   auto-discovered + written on first load by `machine_config.load_machine`).
 - TUI / interactive wizard — consumes the validator seam per §9.
@@ -914,6 +914,6 @@ ClawSeat should not contain the product source trees of its consumers.
 
 These stay out of the framework repo:
 
-- full `cartooner` app source
+- full consumer product source trees
 - full `openclaw` source
 - unrelated workspace artifacts

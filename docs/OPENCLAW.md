@@ -96,11 +96,11 @@ ClawSeat 每个项目的单文件 SSOT，住在 `~/.agents/tasks/<project>/PROJE
 
 ```toml
 version = 3
-project = "cartooner"
-feishu_group_id = "oc_0e1305956760980a9728cb427375c3b3"
+project = "myproject"
+feishu_group_id = "oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 feishu_group_name = ""
 feishu_external = false
-feishu_sender_app_id = "cli_a96abcca2e78dbc2"
+feishu_sender_app_id = "cli_xxxxxxxxxxxxxxxx"
 feishu_sender_mode = "bot"              # 或 "user"
 openclaw_koder_agent = "koder"          # 绑 OpenClaw 哪个 agent 做反向信道
 tools_isolation = "shared-real-home"    # 或 "per-project"
