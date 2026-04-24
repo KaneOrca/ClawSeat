@@ -359,11 +359,17 @@ ClawSeat 区分**三种**标识符，搞错一个就走死链：
 **engineer id vs role id 判别法**：
 
 ```bash
-# 看本项目的 engineer 列表
-python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py engineer list --project ${PROJECT_NAME}
+# 看本项目的 engineer 列表（注意：`engineer list` 是**全局**的，没有 --project flag；
+# 要按项目看，用 `project show` 读 project record 里的 engineers 字段）
+python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT_NAME}
+#   name = cartooner
+#   ...
+#   engineers = planner, memory, builder-1, reviewer-1, ...
 ```
 
 如果输出有 `builder-1`、`reviewer-1` 这类后缀形式 → 是多实例项目，`dispatch_task.py --target` 必须传后缀形式；`--target-role builder` 才能自动挑 seat。
+
+**authoritative source** 仍然是 `profile.seats`（§5.3.6），`project show` 只是快速人眼扫描。
 
 **反例（常见错误）**：
 
@@ -421,16 +427,22 @@ ancestor 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"op
 
 **1. Authoritative：harness profile `profile.seats`**（`dispatch_task.py` 真正校验的那个）
 
+⚠️ **必须用 `load_profile()` 展开后的 seats，不是裸 `data["seats"]`**。dispatch_task.py 在 `[dynamic_roster]` 项目里会把 `materialized_seats` / legacy_seats / heartbeat owner / discovered_sessions 一起并入真实 seat set；裸 TOML 只看到 `seats=` 字面量会少一大截。
+
 ```bash
 # PROJECT_NAME 必须先 export 或替换为实际值（heredoc 里 $ 不展开时 Python 拿不到）：
 export PROJECT_NAME=cartooner   # 换成你当前项目
 
 python3 - "$PROJECT_NAME" <<'PY'
-import sys, tomllib, os
+import sys, os
 from pathlib import Path
 
 project = sys.argv[1]
 agent_home = Path(os.environ.get("AGENT_HOME") or os.path.expanduser("~"))
+clawseat_root = Path(os.environ.get("CLAWSEAT_ROOT") or agent_home / "clawseat")
+# Import gstack-harness loader so we mirror dispatch_task.py's exact validation.
+sys.path.insert(0, str(clawseat_root / "core" / "skills" / "gstack-harness" / "scripts"))
+
 candidates = [
     agent_home / ".agents" / "profiles" / f"{project}-profile-dynamic.toml",  # primary
     Path(f"/tmp/{project}-profile-dynamic.toml"),                              # legacy fallback
@@ -441,15 +453,25 @@ if profile is None:
     print("若 planner 已起，可以用 $PLANNER_PROFILE env var 直接拿")
     sys.exit(2)
 print(f"profile: {profile}")
-data = tomllib.loads(profile.read_text())
-seats = data.get("seats", [])
-print(f"profile.seats (authoritative for dispatch_task.py --target):")
-for s in seats:
+
+try:
+    from _common import load_profile  # type: ignore
+except ModuleNotFoundError as exc:
+    print(f"cannot import gstack-harness loader from {clawseat_root}: {exc}")
+    print("export CLAWSEAT_ROOT=/path/to/clawseat if env var missing")
+    sys.exit(3)
+
+profile_obj = load_profile(str(profile))
+print("profile.seats (authoritative for dispatch_task.py --target, post dynamic_roster expansion):")
+for s in profile_obj.seats:
     print(f"  - {s}")
+
 # Optional: peek legacy_seat_roles 帮助理解 role → seat id 映射
+import tomllib
+data = tomllib.loads(Path(profile).read_text())
 roles = data.get("legacy_seat_roles", {})
 if roles:
-    print("role → seat-id hint:")
+    print("role → seat-id hint (from legacy_seat_roles):")
     for sid, role in sorted(roles.items()):
         print(f"  {sid:16s}  (role={role})")
 PY
