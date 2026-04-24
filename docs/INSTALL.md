@@ -297,9 +297,22 @@ hood, so the same lazy-spawn install flow works for additional projects too.
 ### Create a creative project (clawseat-creative template)
 
 For fiction, screenplay, or other creative work — uses a 4-seat roster
-(ancestor / creative-planner / creative-designer / creative-qa):
+(ancestor / planner:claude / builder:codex / designer:gemini):
+
+| Seat | Tool | Role |
+|------|------|------|
+| ancestor | claude/oauth | lifecycle ops, patrol |
+| planner | claude/oauth | planning, workflow orchestration, unit decomposition |
+| builder | codex/oauth | executes all atomic skills (cs-classify / cs-write / cs-score / OpenClaw) |
+| designer | gemini/oauth | reviews builder deliverables, creative quality judgment (APPROVED / CHANGES_REQUESTED) |
 
 ```bash
+# Via install.sh (bootstraps and starts ancestor):
+bash scripts/install.sh --project myproject \
+  --repo-root /path/to/myproject \
+  --template clawseat-creative
+
+# Or directly via agent_admin:
 # 1. Create local config file
 cat > /tmp/myproject-local.toml << 'EOF'
 project_name = "myproject"
