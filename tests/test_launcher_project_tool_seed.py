@@ -85,3 +85,108 @@ def test_seed_user_tool_dirs_prefers_project_root_when_explicitly_isolated(tmp_p
     (runtime_home / ".lark-cli" / "roundtrip.txt").write_text("lark-write", encoding="utf-8")
     assert (project_root / ".lark-cli" / "roundtrip.txt").read_text(encoding="utf-8") == "lark-write"
 
+
+# ── wrapper-seed branch coverage (iter-14, reviewer 3b0ce9e nit) ─────────
+
+
+def test_seed_user_tool_dirs_wrapper_block_noops_when_clawseat_root_unset(
+    tmp_path: Path,
+) -> None:
+    """With CLAWSEAT_ROOT unset (e.g. test/library callers under set -u),
+    the wrapper-seed block must no-op cleanly: no `$runtime_home/bin/lark-cli`
+    is created and the primary seed loop completes. Pins the gate added
+    in iter-13 3b0ce9e."""
+    runtime_home = tmp_path / "runtime" / "home"
+    project_root = tmp_path / "real_home" / ".agent-runtime" / "projects" / "smoke01"
+    runtime_home.mkdir(parents=True)
+    project_root.mkdir(parents=True)
+    _seed_project_root(project_root)
+
+    # _run_seed_helper's env inherits os.environ but doesn't set CLAWSEAT_ROOT,
+    # exercising exactly the unset path.
+    assert "CLAWSEAT_ROOT" not in os.environ or not os.environ.get("CLAWSEAT_ROOT"), (
+        "test precondition: ambient CLAWSEAT_ROOT must not leak in"
+    )
+    _run_seed_helper(runtime_home, "smoke01", project_root)
+
+    # Primary seed loop succeeded → .lark-cli symlink exists (from primary
+    # loop, not from wrapper-seed).
+    assert (runtime_home / ".lark-cli").is_symlink()
+    # Wrapper-seed block must have been skipped entirely.
+    wrapper_tgt = runtime_home / "bin" / "lark-cli"
+    assert not wrapper_tgt.exists() and not wrapper_tgt.is_symlink(), (
+        f"wrapper-seed leaked under unset CLAWSEAT_ROOT: {wrapper_tgt}"
+    )
+
+
+def _run_seed_helper_with_root(
+    runtime_home: Path,
+    project_name: str,
+    project_root: Path,
+    clawseat_root: Path,
+) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "HOME": str(runtime_home.parent.parent),
+        "CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY": "1",
+        "CLAWSEAT_PROJECT": project_name,
+        "CLAWSEAT_TOOLS_ISOLATION": "per-project",
+        "CLAWSEAT_PROJECT_TOOL_ROOT": str(project_root),
+        "CLAWSEAT_ROOT": str(clawseat_root),
+    }
+    snippet = "\n".join(
+        [
+            "set -euo pipefail",
+            f"source {shlex.quote(str(LAUNCHER))}",
+            f"seed_user_tool_dirs {shlex.quote(str(runtime_home))} {shlex.quote(project_name)}",
+        ]
+    )
+    result = subprocess.run(
+        ["bash", "-c", snippet],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result
+
+
+def test_seed_user_tool_dirs_backs_up_existing_bin_lark_cli(tmp_path: Path) -> None:
+    """When `$runtime_home/bin/lark-cli` already exists (and is not our
+    wrapper symlink), the wrapper-seed block must archive it under
+    `.sandbox-pre-seed-backup/bin/lark-cli.<timestamp>` and replace with
+    a symlink to the canonical wrapper. Pins the replace/backup branch
+    at core/launchers/agent-launcher.sh:462-466."""
+    runtime_home = tmp_path / "runtime" / "home"
+    project_root = tmp_path / "real_home" / ".agent-runtime" / "projects" / "smoke01"
+    runtime_home.mkdir(parents=True)
+    project_root.mkdir(parents=True)
+    _seed_project_root(project_root)
+
+    # Pre-existing non-symlink at wrapper target — must be backed up.
+    bin_dir = runtime_home / "bin"
+    bin_dir.mkdir(parents=True)
+    existing = bin_dir / "lark-cli"
+    existing.write_text("#!/bin/sh\necho legacy-tenant\n", encoding="utf-8")
+    existing.chmod(0o755)
+
+    wrapper_src = REPO_ROOT / "core" / "shell-scripts" / "lark-cli"
+    assert wrapper_src.is_file(), f"test fixture missing: {wrapper_src}"
+
+    _run_seed_helper_with_root(runtime_home, "smoke01", project_root, REPO_ROOT)
+
+    # Target is now a symlink pointing at the canonical wrapper.
+    assert existing.is_symlink(), f"wrapper-seed didn't replace: {existing}"
+    assert existing.readlink() == wrapper_src, (
+        f"wrapper-seed pointed at wrong target: {existing.readlink()}"
+    )
+
+    # Legacy payload archived under .sandbox-pre-seed-backup/bin/lark-cli.*
+    backup_dir = runtime_home / ".sandbox-pre-seed-backup" / "bin"
+    assert backup_dir.is_dir(), f"backup dir missing: {backup_dir}"
+    backups = sorted(backup_dir.glob("lark-cli.*"))
+    assert backups, f"no lark-cli backup found under {backup_dir}"
+    # Legacy payload preserved byte-identical.
+    assert "legacy-tenant" in backups[0].read_text(encoding="utf-8")
+

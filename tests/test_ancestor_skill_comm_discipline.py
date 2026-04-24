@@ -35,3 +35,40 @@ def test_ancestor_skill_and_patrol_plist_use_send_and_verify_for_project_seat_me
     assert "tmux send-keys -t '={PROJECT}-ancestor-{TOOL}'" not in plist
     assert "agentctl.sh' session-name ancestor --project '{PROJECT}'" in plist
     assert "={PROJECT}-ancestor-{TOOL}" not in plist
+
+
+def test_ancestor_skill_53_uses_project_show_not_broken_engineer_list_flag() -> None:
+    """§5.3.2 role-id vs engineer-id diagnostic must use `project show`,
+    not `engineer list --project` (which has no --project flag —
+    reviewer 526525f nit from iter-11 90dfa12 review)."""
+    skill = _ANCESTOR_SKILL.read_text(encoding="utf-8")
+    assert "agent_admin.py project show ${PROJECT_NAME}" in skill, (
+        "§5.3.2 must use `project show` for per-project engineer discovery"
+    )
+    # Revert guard: the broken flag form must not reappear.
+    assert "engineer list --project" not in skill, (
+        "revert detected: `engineer list` has no --project flag "
+        "(see core/scripts/agent_admin_parser.py::engineer_list_nested)"
+    )
+
+
+def test_ancestor_skill_53_dispatch_preflight_uses_load_profile_not_raw_toml() -> None:
+    """§5.3.6 dispatch roster preflight must call `load_profile().seats`
+    to mirror dispatch_task.py's dynamic_roster expansion. Raw
+    `data.get("seats", [])` underreports in dynamic_roster projects
+    (materialized_seats / legacy_seats / heartbeat owner / discovered
+    sessions are merged in by load_profile) — reviewer 526525f nit from
+    iter-11 90dfa12 review."""
+    skill = _ANCESTOR_SKILL.read_text(encoding="utf-8")
+    # Authoritative import + usage must be documented.
+    assert "from _common import load_profile" in skill, (
+        "§5.3.6 must import gstack-harness loader (mirrors dispatch_task.py)"
+    )
+    assert "profile_obj.seats" in skill, (
+        "§5.3.6 must read seats from load_profile's return value"
+    )
+    # Explicit callout that raw-TOML seats lie under dynamic_roster.
+    assert "dynamic_roster" in skill, (
+        "§5.3.6 must explain why raw TOML `data[\"seats\"]` is wrong "
+        "under [dynamic_roster] projects"
+    )
