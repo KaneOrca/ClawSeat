@@ -163,6 +163,39 @@ def test_creative_codex_gemini_seats_have_no_model_override(tmp_path):
     )
 
 
+def test_engineering_qa_seat_gets_template_model(tmp_path):
+    """clawseat-engineering: qa (claude/api/minimax) override must carry model = MiniMax-M2.7-highspeed
+    from the template TOML, not the ancestor's selected model."""
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    _copy_templates(root)
+
+    # Use anthropic provider for ancestor — qa seat should still get its own model.
+    result = _run_install(root, home, launcher_log, tmux_log, py_stubs,
+                          ["--project", "engmodeltest", "--template", "clawseat-engineering"])
+    assert result.returncode == 0, result.stderr
+
+    local_toml = home / ".agents" / "tasks" / "engmodeltest" / "project-local.toml"
+    assert local_toml.exists()
+    content = local_toml.read_text(encoding="utf-8")
+
+    lines = content.splitlines()
+    in_qa = False
+    qa_lines: list[str] = []
+    for line in lines:
+        if "[[overrides]]" in line:
+            in_qa = False
+        if 'id = "qa"' in line:
+            in_qa = True
+        if in_qa:
+            qa_lines.append(line)
+
+    qa_text = "\n".join(qa_lines)
+    assert "MiniMax-M2.7-highspeed" in qa_text, (
+        f"qa override must carry template-specified model MiniMax-M2.7-highspeed:\n{qa_text}"
+        f"\n\nFull TOML:\n{content}"
+    )
+
+
 def test_default_template_seat_order_unchanged(tmp_path):
     """clawseat-default project-local.toml keeps the standard 6-seat order."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)

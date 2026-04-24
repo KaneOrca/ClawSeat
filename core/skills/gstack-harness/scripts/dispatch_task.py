@@ -25,6 +25,7 @@ from _common import (
     build_notify_message,
     load_profile,
     legacy_feishu_group_broadcast_enabled,
+    normalize_role,
     notify,
     require_success,
     resolve_notify,
@@ -361,8 +362,8 @@ def main() -> int:
         )
         return 2
     reply_to = args.reply_to or args.source
-    source_role = profile.seat_roles.get(args.source, "")
-    target_role = profile.seat_roles.get(args.target, "")
+    source_role = normalize_role(profile.seat_roles.get(args.source, ""))
+    target_role = normalize_role(profile.seat_roles.get(args.target, ""))
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     append_task_to_queue(
         todo_path,
