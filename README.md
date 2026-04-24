@@ -1,235 +1,99 @@
 # ClawSeat
 
-ClawSeat is an independent skill-first multi-agent control plane.
+## 一句话，六个 AI 工程师，装进你的 Mac。
 
-It is not `cartooner`, `openclaw`, or any consumer project checkout.
-Those projects can adapt to ClawSeat, but they are not part of ClawSeat's core source tree.
+不上云。不订阅。在你的 Mac 上。
 
-## Install
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](docs/INSTALL.md)
+[![PRs welcome](https://img.shields.io/badge/PRs-%E6%AC%A2%E8%BF%8E-brightgreen)](CONTRIBUTING.md)
 
-v0.7 install is agent-driven. The single source of truth is
-[`docs/INSTALL.md`](docs/INSTALL.md). There is no separate TUI bootstrap
-binary to memorize.
+---
 
-### Step 1 — Clone and set `CLAWSEAT_ROOT`
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│    ancestor     │     planner     │     builder     │
+│    正在统筹     │    正在拆解     │    正在写代码   │
+├─────────────────┼─────────────────┼─────────────────┤
+│    reviewer     │       qa        │    designer     │
+│   正在审 diff   │    正在跑测试   │    正在改 UI    │
+└─────────────────┴─────────────────┴─────────────────┘
+```
+
+---
+
+给你的 Claude 讲一句话：
+
+> Install ClawSeat on my Mac. Clone `https://github.com/KaneOrca/ClawSeat`
+> to `~/ClawSeat`, then read `~/ClawSeat/docs/INSTALL.md` and follow it.
+> Ask me for every choice.
+
+九十秒后，你有六个 agent——在六格 iTerm 里各自跑着，各自住在沙箱里，互相说话。
+
+你看。它们干活。
+
+---
+
+## 三件事让它不一样。
+
+### 你跟它对话，它就装好了。
+
+别家 agent 框架都要 wizard、YAML、云端 console。ClawSeat 只要一句话。
+你的 AI 自己读文档。你的 AI 自己问你要哪家 provider、哪个项目、要不要开飞书。
+你的 AI 自己告诉你装完了。
+
+这才叫 AI 原生。
+
+### 你看见它在干。
+
+不是 dashboard。不是 log 流。是六格活的 TUI，每一格是一个真正在思考的 agent。
+
+你看见 reviewer 否决 builder 的 diff。
+你看见 planner 在 QA 找出 bug 后改方向。
+你看见 designer 和 builder 为一个按钮吵五个来回。
+
+你看见你的团队在工作——因为它们就是你的团队。
+
+### 你掌握每一行。
+
+350 个文件。全是 bash、Python、Markdown。
+
+想让 planner 更凶？改一个 markdown。
+想加一个 seat？`core/scripts/seat_skill_mapping.py` 加一行。
+想 fork 整个系统？MIT 许可，拿走。
+
+没有 Docker。没有 plugin SDK。改源码就是扩展方式。
+
+---
+
+## 装它
 
 ```bash
-git clone https://github.com/KaneOrca/ClawSeat.git "$HOME/ClawSeat"
-export CLAWSEAT_ROOT="$HOME/ClawSeat"
+git clone https://github.com/KaneOrca/ClawSeat ~/ClawSeat
+cd ~/ClawSeat && ./scripts/install.sh --project demo
 ```
 
-> Clone to a user-level directory (NOT inside `~/.openclaw/`). ClawSeat is a
-> standalone project, not an OpenClaw internal component.
+或者，跟你的 AI 说一句话。结果一样。
 
-### Step 2 — Run the playbook
+---
 
-Tell the invoking runtime (Claude Code, Codex, or OpenClaw) to read
-[`docs/INSTALL.md`](docs/INSTALL.md) and execute it end-to-end. The playbook:
+## 这是给谁的
 
-1. scans the machine and credential state
-2. materializes validated project/profile/binding state
-3. launches the ancestor via [`scripts/install.sh`](scripts/install.sh)
-4. opens the six-pane grid and memory window
-5. hands control to ancestor for Phase-A and patrol
+给已经在付 Claude Pro、Codex Plus 或 Gemini Advanced 的人。
+给用 Mac 的人。
+给懂 tmux 的人。
+给不想再学一个云端 console 的人。
 
-### Resume / re-entry
+就是你。
 
-Re-run [`docs/INSTALL.md`](docs/INSTALL.md) and follow its `Resume / Re-entry`
-section. `/cs` is only a local shorthand for that re-entry contract; it is not
-a fresh-install path.
+---
 
-### Starting over / fresh-machine simulation
+## 深入
 
-Reset to a clean baseline (testing the git install on the same machine,
-uninstalling ClawSeat, preparing a CI smoke fixture):
+- [`docs/INSTALL.md`](docs/INSTALL.md) — 你的 AI 会自己读
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 为想拆开看看的人
+- [`docs/HACKING.md`](docs/HACKING.md) — 想改哪就改哪
 
-```bash
-bash scripts/clean-slate.sh         # dry-run: shows what would be deleted
-bash scripts/clean-slate.sh --yes   # actually delete
-```
+## 许可
 
-The script preserves OpenClaw account data (`~/.openclaw/agents/`, `openclaw.json`),
-API secrets (`~/.agent-runtime/secrets/`), gstack, and lark-cli OAuth. It
-deletes ClawSeat-installed skill symlinks, `~/.agents/`, and sandbox residue.
-See the script header for the full preserve/delete list.
-
-### Legacy profiles (pre-v0.7)
-
-The old v1 profile templates are no longer shipped in-tree. New installs should
-follow [`docs/INSTALL.md`](docs/INSTALL.md) and write validated v2 profiles
-instead. If you need to migrate an existing v1 profile, use:
-
-```bash
-python3 core/scripts/migrate_profile_to_v2.py apply --project <name>
-```
-
-## Positioning
-
-Externally, ClawSeat should be understood as an installable skill/plugin
-product:
-
-- in OpenClaw or Feishu environments, let the runtime load the `clawseat`
-  skill/plugin and route into the same v0.7 install playbook
-- in Claude Code or Codex, install the ClawSeat entry skills locally and treat
-  `clawseat` as the fresh-install entry
-- treat `/cs` only as a local re-entry shorthand after install state already
-  exists
-- fresh install writes validated state, launches `ancestor`, and hands project
-  runtime ownership to `ancestor`
-- `koder` is an optional tenant-side Feishu/OpenClaw reverse channel; it is not
-  the install frontstage and not a tmux seat
-
-For OpenClaw, the repo root is now also a marketplace source. That means
-OpenClaw can install ClawSeat directly from the repo URL as a Claude-compatible
-bundle, without asking end users to understand `/cs`, local skill symlinks, or
-the internal repo layout.
-
-Internally, ClawSeat is more than a single skill. It is the framework and
-control plane behind that product-shaped skill/plugin entrypoint.
-
-ClawSeat provides:
-
-- control plane for projects, seats, sessions, runtime, and windows
-- shared runtime contracts for handoff, ACK, closeout, and patrol
-- skill loading and harness orchestration
-- transport helpers for seat-to-seat notification
-- adapters for consumer projects
-
-For v0.7, the default visible project roster is the fixed six-pane monitor:
-
-- `ancestor`
-- `planner`
-- `builder`
-- `reviewer`
-- `qa`
-- `designer`
-
-The machine-level `memory` singleton stays off-grid. `koder` also stays
-off-grid as the optional reverse channel. Extra numbered sessions such as `builder-1`
-or `reviewer-1` are explicit fan-out or compatibility paths, not the default
-v0.7 story. Fresh installs bootstrap `ancestor` first; ancestor then brings up
-the rest of the monitor and patrol flow. Legacy `engineer-*` seats remain
-available through `compat_legacy_seats = true` for migrated projects.
-
-## Boundaries
-
-ClawSeat core should contain only framework concerns:
-
-- `core/scripts/`
-- `core/skills/`
-- `core/templates/`
-- `core/shell-scripts/`
-- `core/harness_adapter.py`
-- `docs/`
-- `adapters/`
-- `shells/`
-- `examples/`
-
-Consumer projects stay separate:
-
-- `cartooner`
-- `openclaw`
-
-## Structure
-
-```text
-ClawSeat/
-├── core/                    # framework-agnostic control plane/runtime code
-│   ├── scripts/             # agent_admin / agentctl Python entrypoints
-│   ├── skills/              # reusable framework skills
-│   ├── templates/           # project / seat template sources
-│   ├── shell-scripts/       # transport/status shell wrappers
-│   └── harness_adapter.py   # adapter interface definition
-├── adapters/                # harness + consumer adapters
-│   ├── harness/
-│   └── projects/
-├── shells/                  # reserved for future shell implementations
-├── examples/                # sample projects / smoke fixtures
-└── docs/                    # architecture and migration docs
-```
-
-## Current State
-
-Already migrated into ClawSeat:
-
-1. control plane: `core/scripts/agent_admin*`
-2. core harness: `core/skills/gstack-harness`
-3. shared transport: `core/shell-scripts/send-and-verify.sh` and related helpers
-4. adapter interface + tmux harness adapter: `core/harness_adapter.py`, `adapters/harness/tmux-cli/`
-5. Cartooner adapter: `adapters/projects/cartooner/`
-
-Still intentionally external:
-
-- the `cartooner` product repo
-- the `openclaw` product repo
-
-## Hand-edited profile fields
-
-If you hand-edit a field in the preservation allowlist (e.g.
-`heartbeat_transport`, `seats`, `seat_overrides`, `seat_roles`,
-`dynamic_roster`), you own it. Bootstrap and reconfigure will preserve
-your value and emit a warning to stderr so you can see what was kept.
-
-Fields in the allowlist are never silently overwritten. If you want to
-fully reset to the factory template, delete the profile file first, then
-run `cs init --refresh-profile`.
-
-## Path Templates
-
-Profile files in this repo may use two portable path forms:
-
-- `{CLAWSEAT_ROOT}` means the absolute filesystem path to the ClawSeat repo root
-- `~` means the current user's home directory
-
-Runtime contract:
-
-- export `CLAWSEAT_ROOT=/path/to/ClawSeat` before running ClawSeat helpers on a new machine
-- `~` is expanded by Python `Path.expanduser()`
-- `{CLAWSEAT_ROOT}` is expanded by the profile loader in
-  `core/skills/gstack-harness/scripts/_common.py`
-
-Setup details and examples live in `docs/INSTALL.md`.
-
-## Activating heartbeat for a project
-
-The heartbeat cron wakes koder via Feishu on a launchd schedule.
-
-1. Configure the heartbeat:
-   ```bash
-   cs heartbeat config set --project install --cadence 10min
-   ```
-2. Render the launchd plist:
-   ```bash
-   cs heartbeat render-plist --project install \
-     --output ~/Library/LaunchAgents/com.clawseat.heartbeat.install.plist
-   ```
-3. Load the launchd agent:
-   ```bash
-   launchctl load ~/Library/LaunchAgents/com.clawseat.heartbeat.install.plist
-   ```
-4. Verify:
-   ```bash
-   tail -f ~/.agents/heartbeat/install.log
-   ```
-
-To disable without unloading: `cs heartbeat config set --project install --enabled false`.
-
-## Activating modal detector
-
-The modal detector watches tmux panes for Claude Code numbered-choice
-modals and emits `seat.blocked_on_modal` events (picked up by the Feishu
-announcer).
-
-```bash
-# Install the launchd agent (writes plist, does NOT load it):
-python3 core/scripts/modal_detector.py --install-launchd
-
-# Load it:
-launchctl load ~/Library/LaunchAgents/com.clawseat.modal-detector.plist
-
-# Verify:
-tail -f ~/.agents/logs/modal-detector.log
-
-# One-shot test (dry-run, no DB writes):
-python3 core/scripts/modal_detector.py --once --dry-run
-```
+MIT。
