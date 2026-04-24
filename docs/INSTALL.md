@@ -9,6 +9,7 @@
 
 | Step | Executor | What happens |
 |------|---------|--------------|
+| 0 Agent kickoff | operator | paste the kickoff prompt (§0) into a fresh Claude Code / Codex / Gemini session |
 | 1 Prerequisites | operator | `git clone` + `cd ~/ClawSeat` |
 | 2 `install.sh` | script (auto) | host deps, env scan, provider pick, six-pane grid, memory window, bypass flush |
 | 3 Phase-A | ancestor CLI | B0–B7 interactive bootstrap |
@@ -23,6 +24,151 @@
 > the system internally calls `agent-launcher.sh` (you do not). See
 > [docs/ARCHITECTURE.md §3z](ARCHITECTURE.md#seat-lifecycle-entry-points-v07-pyramid)
 > for the full layering.
+
+## 0. Agent kickoff prompt
+
+Paste the prompt below into a fresh Claude Code / Codex / Gemini session to
+kick off a ClawSeat install. The prompt is intentionally minimal — it tells
+the agent *where* to find the playbook and *which preferences to surface*,
+not how to execute each step. Every step belongs to this document
+(`docs/INSTALL.md`), not the prompt.
+
+~~~text
+ClawSeat install — Agent kickoff prompt
+
+You are invoked to install ClawSeat on this machine.
+
+1. Read <CLAWSEAT_ROOT>/docs/INSTALL.md (default: ~/ClawSeat/docs/INSTALL.md) and
+   execute it end-to-end.
+
+2. Install preferences (operator fills these in before running):
+   - Project name:           <PROJECT_NAME>       (e.g. "install" for first-time setup)
+   - Repo root for seat cwd: <REPO_ROOT>          (default: CLAWSEAT_ROOT)
+   - Seat harness:           <HARNESS_PREF>       (e.g. "default", "all seats claude+api+minimax")
+   - Feishu mode:            <FEISHU_MODE>        ("enabled" | "disabled via CLAWSEAT_FEISHU_ENABLED=0")
+   - Koder overlay:          <KODER_OVERLAY>      ("skip" | "apply tenant=<name>")
+
+3. Consent & capability disclosure. The install playbook reads sensitive local
+   state: shell environment, credential files (~/.claude/*, ~/.codex/*, macOS
+   keychain entries, lark-cli session), provider API keys, and writes host
+   artifacts under ~/.agents and ~/.openclaw. You are explicitly authorized to
+   use platform capabilities — Bash, file Read/Write, `request_access`,
+   `WebFetch`, MCP servers — as the playbook requires. Before first invoking
+   each *new category* of access (first shell command, first credential read,
+   first network fetch, first MCP/app grant), tell the operator in one short
+   line what you are about to access and why. If the operator declines, stop
+   and ask for an alternative path — do not skip silently.
+
+4. Stop and ask the operator whenever a step is unclear, a prompt looks
+   unfamiliar, or a command fails. Do NOT silently work around undocumented
+   edge cases — every friction point is a signal the playbook must improve.
+
+5. After install.sh exits, DO NOT end your session. Hand off Phase-A manually:
+
+   (a) RELAY THE BANNER. install.sh ends with a "ClawSeat install complete"
+       banner. Copy it verbatim to the operator. install.sh's zero exit code is
+       NOT the final completion signal — the banner is. Never skip this.
+
+   (b) READ THE OPERATOR GUIDE the banner points to:
+           cat ~/.agents/tasks/<PROJECT_NAME>/OPERATOR-START-HERE.md
+       If the operator reads Chinese, relay its Chinese instructions directly.
+
+   (c) CAPTURE the ancestor pane and classify its state:
+           tmux capture-pane -t '<PROJECT_NAME>-ancestor' -p | tail -15
+
+       Three possible states — classify before doing anything:
+
+       State A — PHASE-A ALREADY RUNNING or KICKOFF IN-FLIGHT
+       (Step 9.5 auto-send succeeded):
+
+         A1. Phase-A has produced visible reply content:
+               - "B0" / "已读取 brief" / env_scan output
+             (Ancestor consumed the brief and started Phase-A steps.)
+
+         A2. Claude Code is actively processing the just-delivered kickoff
+             (matches the runtime detector
+             `ancestor_pane_shows_active_response()` in `scripts/install.sh`
+             — this is the detector's exact set):
+               - "Thinking..." / "Shell awaiting input"
+               - spinner glyphs:  ✶  ✻  ✢  ✳  ✽  ⏺
+               - "Read N file" / "Read N files"
+             (Kickoff delivered; response in progress. Don't double-send.)
+
+         If ANY of A1 or A2 is visible, DO NOT paste again — pasting
+         duplicates the kickoff and creates double-input. SKIP step (d),
+         go to (e).
+
+       State B — BLOCKED ON A CONFIRMATION SCREEN (pane NOT ready; auto-send
+       was intentionally skipped by `ancestor_pane_waiting_on_operator` detector):
+         Pane shows any of —
+         - "WARNING: Claude Code running in Bypass Permissions mode"
+             → operator presses Enter to select "2. Yes, I accept"
+         - "Do you trust the files in this folder" / "Trust folder"
+             → operator selects Yes
+         - "Browser didn't open? Use the url below to sign in" / "Paste code here"
+             → operator completes OAuth in browser
+         - "OAuth error:" / "Login successful. Press Enter to continue"
+             → operator presses Enter
+         - "Accessing workspace:" / "Quick safety check:"
+             → operator presses Enter / confirms per the Claude Code prompt
+         After clearing, re-capture and re-classify.
+
+       State C — IDLE INPUT PROMPT (`> ` or `❯ ` with no recent activity):
+         Pane is ready but kickoff was not delivered (auto-send failure).
+         Proceed to step (d) to paste manually.
+
+   (d) PASTE MANUALLY (only if step (c) classified as State C):
+       Operator must paste the Phase-A kickoff prompt (shown at the bottom of
+       the banner) into the ancestor pane. Walk them through copy-paste — don't
+       assume. After paste + Enter, re-capture the pane to confirm Phase-A has
+       started (look for "B0" / "已读取 brief" in the output).
+
+   (e) VERIFY Phase-A is observably running (works for all three states):
+       tmux capture-pane -t '<PROJECT_NAME>-ancestor' -p | tail -10 should show
+       ancestor actively processing B0 (env scan / overrides read / provider
+       table). Only then proceed to optional steps (koder overlay, additional
+       projects) or the final report.
+
+6. On completion (Phase-A observably running), report to the operator:
+   - install.sh exit status
+   - tmux session count (expect 7 for full grid: ancestor + 6 seats + monitor)
+   - ancestor seat cwd (should equal <REPO_ROOT>)
+   - ancestor pane confirmed ready + Phase-A kickoff confirmed received
+   - koder overlay outcome (if requested)
+   - every friction point encountered, with exact command + stderr + the
+     ambiguous doc line
+~~~
+
+### Why consent-first
+
+ClawSeat reads credentials, API keys, and the shell environment to pick the
+right provider and render the ancestor brief. It also writes persistent host
+state under `~/.agents/` (project profiles, sandbox HOMEs, identity tokens),
+touches `~/.openclaw/` (for koder overlay), and optionally installs a macOS
+LaunchAgent for ancestor patrol. An operator installing ClawSeat should see
+*what is scanned* and *what is persisted* before it happens. Consent-first is
+the contract, not an afterthought — every new category of access is declared
+up front, and silent access to credentials or the network is a playbook bug.
+
+### Why manual Phase-A handoff (step 5)
+
+`install.sh` intentionally does not auto-paste the Phase-A kickoff prompt.
+Claude Code v2.1.118+ surfaces a Bypass Permissions confirmation screen, Trust
+Folder prompt, or OAuth flow on first boot — `install.sh` detects these
+(`ancestor_pane_waiting_on_operator`), skips auto-send, and expects the invoking
+agent to walk the operator through the manual handoff. Treating `install.sh`'s
+exit as "done" drops the ancestor on the floor at the Bypass screen and
+Phase-A never starts — the #1 reported install failure mode. Step 5 is
+non-negotiable.
+
+### Why minimal
+
+Every step-by-step detail baked into the prompt is a step the agent stops
+reading in the playbook. A terse kickoff prompt forces the agent to treat
+`docs/INSTALL.md` as the source of truth — which is also the only way surfaces
+like "undocumented friction" and "stale doc line X" can be detected and fixed.
+If the playbook is missing a step that seems essential, that is a doc issue,
+not a prompt issue.
 
 ## Broadcast model (seat-by-seat)
 

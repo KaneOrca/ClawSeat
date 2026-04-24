@@ -14,11 +14,16 @@ The result is returned as a dataclass; callers decide whether to abort.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+
+
+_FEISHU_DISABLED_ENV = "CLAWSEAT_FEISHU_ENABLED"
+_FEISHU_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 @dataclass
@@ -225,6 +230,19 @@ def _check_envelope_renders(project: str, seat: str) -> PreflightCheck:
 # ── Public API ────────────────────────────────────────────────────────
 
 
+def _feishu_disabled() -> bool:
+    """True if operator has opted out of Feishu via env var.
+
+    The bridge preflight validates Feishu group binding + lark-cli auth +
+    envelope schema — all of which are Feishu-specific. When the operator
+    sets ``CLAWSEAT_FEISHU_ENABLED=0`` (or false/no/off) they have
+    explicitly declared "this install does not participate in Feishu,"
+    so blocking seat startup on Feishu readiness is wrong.
+    """
+    raw = os.environ.get(_FEISHU_DISABLED_ENV, "").strip().lower()
+    return raw in _FEISHU_DISABLED_VALUES
+
+
 def run_bridge_preflight(
     *,
     project: str,
@@ -236,8 +254,21 @@ def run_bridge_preflight(
 
     ``skip_auth`` lets tests bypass the lark-cli subprocess. ``auth_checker``
     lets tests inject a fake auth result without touching subprocess at all.
+
+    Short-circuit: if ``CLAWSEAT_FEISHU_ENABLED=0`` (see ``_feishu_disabled``),
+    every check is marked ok + "skipped" and the result is green. No Feishu
+    network I/O is performed.
     """
     result = PreflightResult(project=project, seat=seat)
+    if _feishu_disabled():
+        skip_detail = f"skipped: {_FEISHU_DISABLED_ENV}=0"
+        # Names must match the normal-path check names exactly so callers
+        # that key off PreflightCheck.name don't see mode-dependent schema.
+        for name in ("group_resolution", "lark_cli_auth", "envelope_render"):
+            result.checks.append(
+                PreflightCheck(name=name, ok=True, detail=skip_detail)
+            )
+        return result
     result.checks.append(_check_group_resolution(project))
     if skip_auth:
         result.checks.append(

@@ -53,13 +53,56 @@
 ## Phase-A Steps
 
 ### B0 — env_scan LLM 分析（必须向用户汇报）
+
+**B0.pre — 先读 install.sh 已写入的 harness overrides（强制）**：
+
+`install.sh` 在 Step 3（`select_provider`）+ `bootstrap_project_profile` 已把 operator 的 provider 选择写进 `project-local.toml`，每个 seat 都有一条 `[[overrides]]`。B0 不应重新跑一遍 env_scan LLM 分析让 operator 再选一次——先读已有决策，展示给 operator 确认（Enter 沿用 / 输入覆盖）：
+
+```bash
+# 注意：ancestor 运行在 sandbox HOME（launcher 导的 $HOME != real home）；
+# project-local.toml 由 install.sh 写在 operator 真实 home 下，要读 $AGENT_HOME。
+python3 - <<'PY'
+import os, sys, tomllib
+from pathlib import Path
+agent_home = os.environ.get("AGENT_HOME") or os.path.expanduser("~")
+p = Path(agent_home) / ".agents" / "tasks" / "${PROJECT_NAME}" / "project-local.toml"
+if not p.exists():
+    print(f"B0_PRE: project-local.toml missing at {p} — fall through to B0.0 env_scan")
+    sys.exit(0)
+data = tomllib.loads(p.read_text())
+overrides = data.get("overrides", [])
+if not overrides:
+    print("B0_PRE: overrides empty — fall through to B0.0 env_scan")
+    sys.exit(0)
+print("B0_PRE: install.sh 已为每个 seat 写入 harness override:")
+for o in overrides:
+    print(f"  {o.get('id'):10s}  {o.get('tool')} / {o.get('auth_mode')} / {o.get('provider')} / {o.get('model','')}")
+PY
+```
+
+把脚本输出**原样**贴给 operator，并问：
+
+```
+上述 harness 已由 install.sh 写入 project-local.toml。
+  回车 / y —— 沿用全部（推荐；B0.0 memory query 仍会跑，但跳过 B0.0.1 env_scan 重复扫描）
+  c     —— 自定义，进入 B0.0.1 env_scan + LLM 分析 + 重选
+```
+
+operator 选"沿用"：把 overrides 内容作为 B0 决策写到
+`${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/ancestor-provider-decision.md`，仍跑 B0.0 memory query（强制不变），然后**跳过 B0.0.1**，进 B1。
+
+operator 选"自定义"：继续走完 B0.0 memory query 和 B0.0.1 env_scan 原流程。
+
 **B0.0 — memory query（强制）**：
-先查 memory，再开始读 machine 视图：
+
+无论 B0.pre 选项为何，都先查 memory（为后续决策 / B0.0.1 env_scan 积累上下文）：
 
 ```bash
 python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
   --search "harness provider auth network project ${PROJECT_NAME}"
 ```
+
+**B0.0.1 — env_scan + LLM 分析（仅在 B0.pre 走"自定义"分支或 overrides 不存在时执行）**：
 
 读 `${AGENT_HOME}/.agents/memory/machine/credentials.json` + `network.json` + `openclaw.json`。
 生成分析报告：

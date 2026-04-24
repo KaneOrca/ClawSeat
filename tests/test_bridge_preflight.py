@@ -170,6 +170,48 @@ def test_skip_auth_marks_auth_as_skipped_but_green(_clean_env):
     assert auth_check.ok and "skipped" in auth_check.detail
 
 
+# ── CLAWSEAT_FEISHU_ENABLED=0 short-circuit ──────────────────────────
+
+
+def test_feishu_disabled_env_skips_all_checks(_clean_env, monkeypatch):
+    """Setting CLAWSEAT_FEISHU_ENABLED=0 makes the whole preflight green
+    without touching Feishu binding, lark-cli, or envelope code."""
+    monkeypatch.setenv("CLAWSEAT_FEISHU_ENABLED", "0")
+    bp = _load_bp()
+    # Deliberately do NOT bind install — if the short-circuit is missing,
+    # _check_group_resolution would fail and surface here.
+    result = bp.run_bridge_preflight(project="install", seat="planner")
+    assert result.ok
+    assert len(result.checks) == 3
+    names = {c.name for c in result.checks}
+    # Schema parity with the normal path — see _check_envelope_renders()
+    # which emits check name "envelope_render" (singular).
+    assert names == {"group_resolution", "lark_cli_auth", "envelope_render"}
+    for check in result.checks:
+        assert check.ok
+        assert "CLAWSEAT_FEISHU_ENABLED=0" in check.detail
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "False", "OFF"])
+def test_feishu_disabled_env_accepts_common_falsy(_clean_env, monkeypatch, value):
+    monkeypatch.setenv("CLAWSEAT_FEISHU_ENABLED", value)
+    bp = _load_bp()
+    result = bp.run_bridge_preflight(project="install", seat="planner")
+    assert result.ok, f"{value!r} should disable preflight"
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on", ""])
+def test_feishu_enabled_env_does_not_skip(_clean_env, monkeypatch, value):
+    """Non-falsy values must NOT short-circuit — existing behavior wins."""
+    monkeypatch.setenv("CLAWSEAT_FEISHU_ENABLED", value)
+    bp = _load_bp()
+    # No binding and no auth_checker: group_resolution or auth should fail.
+    result = bp.run_bridge_preflight(project="install", seat="planner", skip_auth=True)
+    # Even with skip_auth=True, _check_group_resolution must have run
+    # (no binding → fails). If the short-circuit leaked here, result.ok==True.
+    assert not result.ok
+
+
 # ── render() covers both green and red formatting ─────────────────────
 
 
