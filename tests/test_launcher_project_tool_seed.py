@@ -92,14 +92,23 @@ def test_seed_user_tool_dirs_prefers_project_root_when_explicitly_isolated(tmp_p
 def _run_seed_helper_without_root(
     runtime_home: Path, project_name: str, project_root: Path
 ) -> None:
-    """Variant of `_run_seed_helper` that actively scrubs CLAWSEAT_ROOT
-    from the subprocess env so ambient shell exports don't leak in. The
-    launcher runs with `set -u`, so the wrapper-seed block must behave
-    correctly when CLAWSEAT_ROOT is genuinely absent from env."""
+    """Variant of `_run_seed_helper` that genuinely exercises the
+    CLAWSEAT_ROOT-unset branch. Defense in depth against three
+    injection vectors the reviewer identified:
+
+    1. Ambient shell exports — scrubbed from the subprocess env dict.
+    2. Non-interactive-bash `BASH_ENV` auto-source — scrubbed from the
+       subprocess env dict (bash honors it before running `-c`).
+    3. POSIX-sh `ENV` equivalent — scrubbed for the same reason.
+
+    Also adds a defensive `unset CLAWSEAT_ROOT` to the snippet itself,
+    which runs AFTER any startup file processing and before `source`,
+    so even exotic shell configs (custom /etc/bash.bashrc chains,
+    etc.) can't reintroduce the var via a path we haven't thought of."""
     env = {
         k: v
         for k, v in os.environ.items()
-        if k != "CLAWSEAT_ROOT"
+        if k not in {"CLAWSEAT_ROOT", "BASH_ENV", "ENV"}
     }
     env.update(
         {
@@ -113,6 +122,9 @@ def _run_seed_helper_without_root(
     snippet = "\n".join(
         [
             "set -euo pipefail",
+            # Belt + suspenders: strip CLAWSEAT_ROOT even if a startup
+            # file re-exported it after we scrubbed the env dict.
+            "unset CLAWSEAT_ROOT",
             f"source {shlex.quote(str(LAUNCHER))}",
             f"seed_user_tool_dirs {shlex.quote(str(runtime_home))} {shlex.quote(project_name)}",
         ]
@@ -160,18 +172,31 @@ def _run_seed_helper_with_root(
     project_root: Path,
     clawseat_root: Path,
 ) -> subprocess.CompletedProcess[str]:
+    """Mirror of `_run_seed_helper_without_root` for the set-CLAWSEAT_ROOT
+    case: strip BASH_ENV/ENV from env AND re-export the target value in
+    the bash snippet so any startup-file injection is overridden."""
     env = {
-        **os.environ,
-        "HOME": str(runtime_home.parent.parent),
-        "CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY": "1",
-        "CLAWSEAT_PROJECT": project_name,
-        "CLAWSEAT_TOOLS_ISOLATION": "per-project",
-        "CLAWSEAT_PROJECT_TOOL_ROOT": str(project_root),
-        "CLAWSEAT_ROOT": str(clawseat_root),
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"CLAWSEAT_ROOT", "BASH_ENV", "ENV"}
     }
+    env.update(
+        {
+            "HOME": str(runtime_home.parent.parent),
+            "CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY": "1",
+            "CLAWSEAT_PROJECT": project_name,
+            "CLAWSEAT_TOOLS_ISOLATION": "per-project",
+            "CLAWSEAT_PROJECT_TOOL_ROOT": str(project_root),
+        }
+    )
+    # Quote the CLAWSEAT_ROOT path for the bash literal.
+    quoted_root = shlex.quote(str(clawseat_root))
     snippet = "\n".join(
         [
             "set -euo pipefail",
+            # Belt + suspenders: re-export to the test's intended value
+            # AFTER any BASH_ENV / startup file has run.
+            f"export CLAWSEAT_ROOT={quoted_root}",
             f"source {shlex.quote(str(LAUNCHER))}",
             f"seed_user_tool_dirs {shlex.quote(str(runtime_home))} {shlex.quote(project_name)}",
         ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -73,15 +74,24 @@ def test_ancestor_skill_53_dispatch_preflight_uses_load_profile_not_raw_toml() -
         "under [dynamic_roster] projects"
     )
     # Negative assertion: the broken code pattern must NOT appear as
-    # executable code anywhere in the skill. (The warning text can
-    # mention `data["seats"]` with subscript notation — that's the
-    # anti-pattern we're teaching operators to recognize — but the
-    # specific `.get("seats", [])` idiom would indicate someone
-    # reintroduced the raw-TOML read path alongside the explanatory
-    # text.) Reviewer 5c9704f nit.
-    assert 'data.get("seats", [])' not in skill and \
-        "data.get('seats', [])" not in skill, (
-        "§5.3.6 must not contain executable `data.get(\"seats\", [])` "
-        "— that's the pre-iter-11 broken preflight pattern that "
-        "underreports under [dynamic_roster]"
+    # executable code anywhere in the skill. The warning text can
+    # reference `data["seats"]` with subscript notation — that's the
+    # anti-pattern we're teaching operators to recognize — but any
+    # spelling of `data.get("seats", ...)` is the regression-detect
+    # signal that someone reintroduced the raw-TOML read path.
+    #
+    # Whitespace-tolerant regex so formatting variants like
+    # `data.get( "seats" , [] )` or `data\n  .get('seats',\n  [])` also
+    # trip the guard — reviewer 9c455cc Low nit.
+    raw_toml_seats = re.compile(
+        r"""data\s*\.\s*get\s*\(\s*["']seats["']\s*,""",
+        re.MULTILINE | re.DOTALL,
+    )
+    match = raw_toml_seats.search(skill)
+    assert match is None, (
+        "§5.3.6 must not contain executable `data.get(\"seats\", ...)` "
+        "(any whitespace/quote variant). That's the pre-iter-11 broken "
+        "preflight pattern that underreports seats under "
+        f"[dynamic_roster]. Found at offset {match.start() if match else -1}: "
+        f"{match.group(0) if match else ''!r}"
     )
