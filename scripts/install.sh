@@ -1076,13 +1076,20 @@ install.sh 已完成。现在做 5 件事：
    tmux capture-pane -t '${PROJECT}-ancestor' -p | tail -15
    \`\`\`
 
-   对齐 install.sh 的 \`ancestor_pane_shows_active_response()\` detector，pane 为**活动**时跳过步骤 3：
+   把 pane 分两类"已接收 kickoff"的信号（任一出现就跳过步骤 3）:
 
-   - 看到以下任一 ⇒ Phase-A 已启动或正在启动，**跳到步骤 4**（不要重复粘贴！会导致双重输入）:
-     - \`B0\` / \`已读取 brief\` / \`env_scan\` 等 Phase-A 开跑后的输出
+   **A1. Phase-A 已启动（ancestor 已对 brief 有回应）**:
+     - \`B0\` / \`已读取 brief\` / \`env_scan\` 等 Phase-A 输出
+
+   **A2. Claude Code 正在处理刚投递的 kickoff**（对应 install.sh:1150 的
+   \`ancestor_pane_shows_active_response()\` runtime detector）:
      - \`Thinking...\` / \`Shell awaiting input\`
      - 旋转图标: \`✶\` / \`✻\` / \`✢\` / \`✳\` / \`✽\` / \`⏺\`
      - \`Read N files\` / \`Read N file\`
+
+   看到 A1 或 A2 任一 ⇒ Phase-A 已启动或启动中，**跳到步骤 4**（不要重复粘贴！会导致双重输入）
+
+   其他状态:
    - 看到空的输入框（\`> \` 或 \`❯ \`）+ 无最近活动 ⇒ auto-send 没成功，继续步骤 3
    - 看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏 ⇒ 按屏幕提示先过掉（Enter / 选 Yes / 完成 OAuth），然后回到本步骤重新 capture
 
@@ -1243,11 +1250,15 @@ print_operator_banner() {
   printf '       tmux capture-pane -t %q -p | tail -15\n' "${PROJECT}-ancestor"
   printf '\n'
   printf '    3. Decide: SKIP paste or DO paste / 判断：跳过粘贴 或 执行粘贴\n'
-  printf '       Aligns with ancestor_pane_shows_active_response() in install.sh.\n'
-  printf '       与 install.sh 的 ancestor_pane_shows_active_response() 对齐。\n'
-  printf '       - If pane shows ANY of → SKIP step 4 (auto-send succeeded; pasting = double input):\n'
-  printf '         出现任一 ⇒ 跳过步骤 4（auto-send 已生效，重复粘贴会双输入）:\n'
-  printf '           · "B0" / "已读取 brief" / env_scan activity\n'
+  printf '       Two kinds of "kickoff already accepted" signal — either one SKIPS step 4.\n'
+  printf '       两类"kickoff 已接收"信号 — 任一出现就跳过步骤 4:\n'
+  printf '       A1. Phase-A is running (ancestor replied to the brief):\n'
+  printf '           Phase-A 已启动 (ancestor 已对 brief 有回应):\n'
+  printf '           · "B0" / "已读取 brief" / env_scan output\n'
+  printf '       A2. Claude Code is processing the kickoff (matches the runtime\n'
+  printf '           detector ancestor_pane_shows_active_response() in install.sh:1150):\n'
+  printf '           Claude Code 正在处理 kickoff (与 install.sh:1150 的\n'
+  printf '           ancestor_pane_shows_active_response() 一致):\n'
   printf '           · "Thinking..." / "Shell awaiting input"\n'
   printf '           · spinner glyphs: ✶ ✻ ✢ ✳ ✽ ⏺\n'
   printf '           · "Read N files" / "Read N file"\n'

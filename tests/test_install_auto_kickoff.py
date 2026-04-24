@@ -121,7 +121,17 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
     assert kickoff in combined
     assert expected_brief.is_file()
     assert guide_path.is_file()
-    assert "Phase-A 不让 memory 做同步调研" in guide_path.read_text(encoding="utf-8")
+    guide_text = guide_path.read_text(encoding="utf-8")
+    assert "Phase-A 不让 memory 做同步调研" in guide_text
+    # Pin the Round-8 classification contract: both A1 (Phase-A output) and A2
+    # (active-processing) markers must appear in BOTH the operator guide and
+    # the stdout banner, so wording drift away from
+    # `ancestor_pane_shows_active_response()` re-triggers this test.
+    for marker in ("B0", "已读取 brief", "env_scan",
+                   "Thinking...", "Shell awaiting input",
+                   "Read N file", "✶", "⏺"):
+        assert marker in guide_text, f"guide missing classifier marker: {marker!r}"
+        assert marker in combined, f"banner/stdout missing classifier marker: {marker!r}"
     assert "session-name ancestor --project kickoff50" in agentctl_log.read_text(encoding="utf-8")
 
     tmux_output = tmux_log.read_text(encoding="utf-8")

@@ -78,15 +78,24 @@ You are invoked to install ClawSeat on this machine.
 
        Three possible states — classify before doing anything:
 
-       State A — PHASE-A ALREADY RUNNING (Step 9.5 auto-send succeeded):
-         Pane shows ANY of the markers used by install.sh's own
-         `ancestor_pane_shows_active_response()` detector:
-           - "B0" / "已读取 brief" / env_scan output (Phase-A has produced a reply)
-           - "Thinking..." / "Shell awaiting input" (Claude Code is processing)
-           - spinner glyphs:  ✶  ✻  ✢  ✳  ✽  ⏺
-           - "Read N files" / "Read N file" (Claude Code is reading the brief)
-         DO NOT paste again — pasting duplicates the kickoff and creates
-         double-input. SKIP step (d), go to (e).
+       State A — PHASE-A ALREADY RUNNING or KICKOFF IN-FLIGHT
+       (Step 9.5 auto-send succeeded):
+
+         A1. Phase-A has produced visible reply content:
+               - "B0" / "已读取 brief" / env_scan output
+             (Ancestor consumed the brief and started Phase-A steps.)
+
+         A2. Claude Code is actively processing the just-delivered kickoff
+             (matches `ancestor_pane_shows_active_response()` at
+             install.sh:1150 — this is the runtime-detector's exact set):
+               - "Thinking..." / "Shell awaiting input"
+               - spinner glyphs:  ✶  ✻  ✢  ✳  ✽  ⏺
+               - "Read N file" / "Read N files"
+             (Kickoff delivered; response in progress. Don't double-send.)
+
+         If ANY of A1 or A2 is visible, DO NOT paste again — pasting
+         duplicates the kickoff and creates double-input. SKIP step (d),
+         go to (e).
 
        State B — BLOCKED ON A CONFIRMATION SCREEN (pane NOT ready; auto-send
        was intentionally skipped by `ancestor_pane_waiting_on_operator` detector):
