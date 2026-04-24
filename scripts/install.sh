@@ -63,8 +63,8 @@ PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
 AGENTS_TEMPLATES_ROOT="$HOME/.agents/templates"
 CLAWSEAT_TEMPLATE_NAME="clawseat-default"
-BOOTSTRAP_TEMPLATE_DIR="$AGENTS_TEMPLATES_ROOT/$CLAWSEAT_TEMPLATE_NAME"
-BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
+BOOTSTRAP_TEMPLATE_DIR=""
+BOOTSTRAP_TEMPLATE_PATH=""
 PENDING_SEATS=(planner builder reviewer qa designer)
 
 die() { local n="$1" code="$2" msg="$3"; printf '%s\nERR_CODE: %s\n' "$msg" "$code" >&2; exit "$n"; }
@@ -287,6 +287,7 @@ parse_args() {
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
+      --template) CLAWSEAT_TEMPLATE_NAME="$2"; shift 2 ;;
       --reset-harness-memory)
         "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
 import sys
@@ -300,11 +301,15 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-default|clawseat-engineering|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
+  case "$CLAWSEAT_TEMPLATE_NAME" in
+    clawseat-default|clawseat-engineering|clawseat-creative) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+  esac
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
     [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
   fi
@@ -340,6 +345,29 @@ PY
   ANCESTOR_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.ancestor-patrol"
   ANCESTOR_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${ANCESTOR_PATROL_PLIST_LABEL}.plist"
   ANCESTOR_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
+  BOOTSTRAP_TEMPLATE_DIR="$AGENTS_TEMPLATES_ROOT/$CLAWSEAT_TEMPLATE_NAME"
+  BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
+}
+
+resolve_pending_seats() {
+  # For clawseat-default, keep the hardcoded list (generated template, no file to read).
+  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && return 0
+  local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+  [[ -f "$template_file" ]] || return 0  # fallback to hardcoded if not found
+  local seats
+  seats="$("$PYTHON_BIN" - "$template_file" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+seats = [e["id"] for e in data.get("engineers", []) if e.get("id") != "ancestor"]
+print(" ".join(seats))
+PY
+  2>/dev/null)"
+  [[ -n "$seats" ]] && read -ra PENDING_SEATS <<< "$seats"
 }
 
 normalize_provider_choice() {
@@ -846,10 +874,15 @@ write_project_local_toml() {
   fi
 
   mkdir -p "$(dirname "$PROJECT_LOCAL_TOML")" || die 31 PROJECT_LOCAL_DIR_FAILED "unable to create $(dirname "$PROJECT_LOCAL_TOML")"
+  # Build seat_order from resolved PENDING_SEATS (ancestor always first)
+  local _seat_order_str="\"ancestor\""
+  for seat in "${PENDING_SEATS[@]}"; do
+    _seat_order_str="${_seat_order_str}, \"${seat}\""
+  done
   cat >"$PROJECT_LOCAL_TOML" <<EOF
 project_name = "$PROJECT"
 repo_root = "$PROJECT_REPO_ROOT"
-seat_order = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
+seat_order = [$_seat_order_str]
 
 [[overrides]]
 id = "ancestor"
@@ -863,15 +896,72 @@ EOF
   fi
 
   for seat in "${PENDING_SEATS[@]}"; do
+    local _seat_tool _seat_auth _seat_provider _seat_model_override
+    if [[ "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-default" ]]; then
+      # For non-default templates, read per-seat tool/auth/provider from template TOML.
+      local _template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+      if [[ -f "$_template_file" ]]; then
+        _seat_tool="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(e.get("tool", "claude"))
+        break
+PY
+        2>/dev/null)"
+        _seat_auth="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(e.get("auth_mode", "oauth"))
+        break
+PY
+        2>/dev/null)"
+        _seat_provider="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(e.get("provider", "anthropic"))
+        break
+PY
+        2>/dev/null)"
+      fi
+    fi
+    # Fallback to ancestor provider for default template or if template read failed
+    _seat_tool="${_seat_tool:-claude}"
+    _seat_auth="${_seat_auth:-$seat_auth_mode}"
+    _seat_provider="${_seat_provider:-$seat_provider}"
     cat >>"$PROJECT_LOCAL_TOML" <<EOF
 
 [[overrides]]
 id = "$seat"
-tool = "claude"
-auth_mode = "$seat_auth_mode"
-provider = "$seat_provider"
+tool = "$_seat_tool"
+auth_mode = "$_seat_auth"
+provider = "$_seat_provider"
 EOF
-    if [[ -n "$seat_model" ]]; then
+    # Only write model for claude seats — codex/gemini ignore this field.
+    if [[ "$_seat_tool" == "claude" && -n "$seat_model" ]]; then
       printf 'model = "%s"\n' "$seat_model" >>"$PROJECT_LOCAL_TOML"
     fi
   done
@@ -964,7 +1054,10 @@ bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
   [[ -f "$AGENT_ADMIN_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 AGENT_ADMIN_MISSING "missing agent_admin script: $AGENT_ADMIN_SCRIPT"
-  write_bootstrap_template
+  # Only write a locally-generated template for clawseat-default; other templates
+  # (clawseat-engineering, clawseat-creative) have canonical definitions in
+  # templates/*.toml and must not be overridden by the install-time generated version.
+  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && write_bootstrap_template
   write_project_local_toml
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -1585,16 +1678,17 @@ PY
 }
 
 grid_payload() {
-  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" <<'PY'
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
 import json
 import shlex
 import sys
 
-project, wait_script = sys.argv[1:3]
+project, wait_script = sys.argv[1], sys.argv[2]
+seats = sys.argv[3:]  # dynamic from PENDING_SEATS
 panes = [
     {"label": "ancestor", "command": f"tmux attach -t '={project}-ancestor'"},
 ]
-for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+for seat in seats:
     panes.append(
         {
             "label": seat,
@@ -1613,7 +1707,12 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  parse_args "$@"; resolve_pending_seats; normalize_provider_choice
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
+    printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
+  fi
+  ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
   launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
   bootstrap_project_profile

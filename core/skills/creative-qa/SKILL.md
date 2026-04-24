@@ -1,7 +1,12 @@
 ---
 name: creative-qa
-description: Creative QA specialist — passive scoring and quality assessment for creative deliveries. Activated by planner's complete_handoff; does not modify content. Optionally publishes scored summary to Feishu.
+description: "[DEPRECATED] Superseded by creative-designer (which now handles creative review + scoring). Use creative-designer skill instead. This file is kept for reference only."
+deprecated: true
+superseded_by: creative-designer
 ---
+
+> **⚠ DEPRECATED**: This skill has been superseded by `creative-designer`, which now handles both creative review and quality assessment. Do not use in new projects.
+>
 
 # Creative QA
 
@@ -14,6 +19,16 @@ description: Creative QA specialist — passive scoring and quality assessment f
 3. 我**不主动发起**工作；被动等待 planner 的 complete_handoff。
 4. 我不做代码审查、不做系统配置。
 5. 我不跨 project。
+
+## 共享目录
+
+qa 在项目共享目录的以下路径工作：
+
+- **读取**：`$PROJECT_REPO_ROOT/creative/content/<unit_id>.md`（被评内容）
+- **读取**：`$PROJECT_REPO_ROOT/creative/brief.md`（对齐评估）
+- **写入**：`$PROJECT_REPO_ROOT/creative/scores/<unit_id>-score.json` + `<unit_id>-report.md`
+
+planner 在 dispatch 时会通过 TODO objective 传递绝对路径（`deliverable_path` 和 `brief_path`）。
 
 ## 2. 评分框架（Rubric）
 
@@ -73,8 +88,28 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - **Key Findings**：最强项和最弱项各 1–2 条
 - **Feishu Published**：是/否（若 TODO 要求）
 
-## 6. Anti-patterns
+## 6. Memory 最佳实践（可选）
+
+评分完成后，可将评分记录写入 memory oracle 作为项目级 delivery：
+
+```bash
+python3 memory_write.py \
+  --kind delivery \
+  --project <project> \
+  --title "Episode <n> Score: <grade> (<score>/100)" \
+  --content "$(cat $PROJECT_REPO_ROOT/creative/scores/<unit_id>-report.md)"
+```
+
+这使得 creative-planner 在后续轮次可通过 `query_memory.py --kind delivery` 查询历史评分趋势，辅助调整创作方向。
+
+## 7. Anti-patterns
 
 - 发现问题就直接改内容（严禁，只报告，不修改）
 - 评分无依据（每条分数必须引用原文证据）
 - 把 FEISHU_ENABLED=0 环境下的发布失败当成评分失败（两者独立）
+
+## Capability Skill Refs
+
+这个 role 的主要执行能力由以下 capability skill 定义：
+
+- **[cs-score](../cs-score/SKILL.md)** — 主要能力：rubric 评分（deliverable_path + brief_path → score.json + report.md）；默认 rubric、CONTRACT / ACCEPTANCE 定义在此

@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-creative"
-description = "Creative-project roster: ancestor + creative-planner (also produces content) + creative-designer + creative-qa (passive scoring)"
+description = "ancestor + planner(planning) + builder(codex, executes generation skills cs-classify/cs-write) + designer(gemini, reviews + executes cs-score)"
 
 [defaults]
 window_mode = "tabs-1up"
@@ -60,14 +60,47 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-planner/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-structure/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
   "creative planner: produces world-building docs, character bios, and story/episode outlines",
-  "dispatches creative-designer (gemini) for actual long-form text writing of each unit",
-  "dispatches creative-qa for passive scoring and optional Feishu publication",
-  "does NOT write long-form text itself — owns structure, delegates execution to designer",
-  "can fan-out multiple designer instances for parallel chapter writing",
+  "dispatches creative-builder (codex) to execute generation skills (cs-classify/cs-write)",
+  "dispatches creative-designer (gemini) for creative review after builder delivers",
+  "does NOT execute atomic tools itself — owns structure and coordination",
+  "can fan-out multiple builder instances for parallel unit execution",
+]
+
+[[engineers]]
+id = "builder"
+display_name = "creative-builder"
+role = "creative-builder"
+tool = "codex"
+auth_mode = "oauth"
+provider = "openai"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/creative-builder/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-classify/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-write/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "creative execution seat powered by Codex (OpenAI OAuth)",
+  "executes cs-classify / cs-write — content generation only",
+  "receives TODO from planner, executes, delivers to designer for review via complete_handoff",
+  "does NOT score — scoring is designer's responsibility",
 ]
 
 [[engineers]]
@@ -86,48 +119,18 @@ patrol_authority = false
 unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
-review_authority = false
-qa_authority = false
+review_authority = true
+qa_authority = true
 design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-designer/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-score/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "creative writing execution seat powered by Gemini (long-context, creative generation)",
-  "receives world-building docs + character bios + chapter/episode outline from planner",
-  "writes actual long-form text (chapters, episodes, scripts) based on the structural docs",
-  "does NOT modify the outline structure — escalates structural issues to planner",
-  "returns finished manuscript units to planner via complete_handoff.py",
-]
-
-[[engineers]]
-id = "qa"
-display_name = "creative-qa"
-role = "creative-qa"
-tool = "claude"
-auth_mode = "api"
-provider = "minimax"
-model = "MiniMax-M2.7-highspeed"
-monitor = true
-human_facing = false
-active_loop_owner = false
-dispatch_authority = false
-patrol_authority = false
-unblock_authority = false
-escalation_authority = false
-remind_active_loop_owner = false
-review_authority = false
-qa_authority = true
-design_authority = false
-skills = [
-  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/creative-qa/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
-]
-role_details = [
-  "creative QA: passive scoring and quality assessment; activated by planner's complete_handoff",
-  "scores deliveries against rubric criteria (coherence, tone, visual consistency, completeness)",
-  "optionally publishes scored summary to Feishu when configured; does not modify content",
+  "creative review seat powered by Gemini (Google OAuth)",
+  "receives builder's deliverables, runs cs-score for rubric-based scoring",
+  "issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts",
+  "executes cs-score and reviews builder deliveries — returns verdict to planner",
 ]

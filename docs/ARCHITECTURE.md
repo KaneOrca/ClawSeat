@@ -225,6 +225,24 @@ Recent structural changes:
 - **2026-04 — core/migration/ layer** — houses `*_dynamic.py` scripts that replace the legacy harness scripts for profiles with `[dynamic_roster].enabled = true`. Traffic flows through `core/transport/transport_router.py` so callers never pick the wrong path by hand.
 - **2026-04 — transport/payload consolidation (audit P0/P1)** — `build_notify_payload` extracted into `_task_io.py`, rendering/validation for codex provider config moved into a typed `CodexProviderConfig` dataclass, shells/*/adapter_shim.py collapsed onto `_shim_base.py`.
 - **2026-04 — install.sh enhancements** — `--repo-root` flag (FR-7) allows installing a project pointing to a different business repo (separate from the ClawSeat root); `--reset-harness-memory` clears per-seat harness choice history (FR-1 `last-harness.toml` persistence). `CLAWSEAT_FEISHU_ENABLED=0` env var disables all Feishu sends globally (send_delegation_report, planner stop-hook, announce helpers).
+- **2026-04 — project templates** — `--template` flag selects project roster: `clawseat-default` (6-seat), `clawseat-engineering` (codex builder + gemini designer), `clawseat-creative` (4-seat creative chain). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat correctly in `project-local.toml`.
+
+### Project Templates
+
+Three built-in project templates in `templates/`:
+
+| Template | Seats | Use case |
+|----------|-------|----------|
+| `clawseat-default` | ancestor, planner, builder, reviewer, qa, designer (all claude) | Standard engineering team |
+| `clawseat-engineering` | ancestor, planner (claude), builder (codex/openai), reviewer (claude), qa (claude/minimax), designer (gemini) | Engineering with specialised tools |
+| `clawseat-creative` | ancestor, planner (claude), builder (codex/openai), designer (gemini) | Fiction / screenplay / creative work |
+
+**Creative template seat responsibilities:**
+- `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure
+- `builder` (codex/oauth): executes all atomic skills — cs-classify, cs-write, cs-score, OpenClaw tools
+- `designer` (gemini/oauth): creative review — issues APPROVED / CHANGES_REQUESTED verdicts on builder deliverables
+
+**Capability skill layer** (`core/skills/cs-*/`): tool-agnostic interface contracts (WHAT, not HOW). cs-classify routes long-form vs short-form; cs-structure runs the Hollywood Writers Room (Agent Teams); cs-write executes long-form content; cs-score applies rubric-based scoring. Workflow composition is the planner's responsibility, not the skills'.
 
 Still outside ClawSeat by design:
 
