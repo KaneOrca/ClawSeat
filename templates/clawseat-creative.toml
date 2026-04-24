@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-creative"
-description = "ancestor + planner(planning) + builder(codex, executes all atomic skills) + designer(gemini, creative review)"
+description = "ancestor + planner(planning) + builder(codex, executes generation skills cs-classify/cs-write) + designer(gemini, reviews + executes cs-score)"
 
 [defaults]
 window_mode = "tabs-1up"
@@ -132,5 +132,5 @@ role_details = [
   "creative review seat powered by Gemini (Google OAuth)",
   "receives builder's deliverables, runs cs-score for rubric-based scoring",
   "issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts",
-  "does NOT execute atomic tools — only reviews and returns verdict to planner",
+  "executes cs-score and reviews builder deliveries — returns verdict to planner",
 ]

@@ -1,6 +1,6 @@
 ---
 name: creative-designer
-description: Creative Review specialist (Gemini-powered). Receives builder's deliverables and reviews content quality, style consistency, and requirement alignment. Issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts. Does not execute atomic tools.
+description: Creative Review specialist (Gemini-powered). Runs cs-score for rubric-based scoring and reviews builder deliveries. Issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts.
 ---
 
 # Creative Designer — Creative Reviewer
