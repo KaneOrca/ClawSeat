@@ -294,6 +294,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--allow-notify-failure",
+        action="store_true",
+        help=(
+            "Continue even if tmux notify fails (exit 0). "
+            "Default: exit 1 with a NOTIFY FAILED banner on failure. "
+            "Use in CI/batch where notify is best-effort."
+        ),
+    )
+    parser.add_argument(
         "--intent",
         choices=sorted(INTENT_MAP.keys()),
         default=None,
@@ -415,9 +424,26 @@ def main() -> int:
         resolution = resolve_seat_from_profile(args.target, profile)
         if resolution.kind == "tmux":
             result = notify(profile, args.target, message)
-            require_success(result, "dispatch notify")
-            receipt["notified_at"] = utc_now_iso()
-            receipt["notify_message"] = message
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+                print("============ NOTIFY FAILED ============", file=sys.stderr)
+                print(f"  target : {args.target}", file=sys.stderr)
+                print(f"  task   : {args.task_id}", file=sys.stderr)
+                print(f"  reason : {detail}", file=sys.stderr)
+                print(
+                    f"  fix    : send-and-verify.sh --project {profile.project_name} "
+                    f"{args.target} '<message>'",
+                    file=sys.stderr,
+                )
+                print("=======================================", file=sys.stderr)
+                if not getattr(args, "allow_notify_failure", False):
+                    receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
+                    write_json(receipt_path, receipt)
+                    return 1
+                print("warn: --allow-notify-failure set; continuing", file=sys.stderr)
+            else:
+                receipt["notified_at"] = utc_now_iso()
+                receipt["notify_message"] = message
             should_broadcast = (
                 source_role in {"planner", "planner-dispatcher"}
                 or target_role in {"planner", "planner-dispatcher"}

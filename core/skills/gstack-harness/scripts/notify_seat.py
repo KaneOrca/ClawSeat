@@ -44,6 +44,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not write a JSON receipt even when task-id is provided.",
     )
+    parser.add_argument(
+        "--allow-notify-failure",
+        action="store_true",
+        help=(
+            "Continue even if tmux notify fails (exit 0). "
+            "Default: exit 1 with a NOTIFY FAILED banner. "
+            "Use in CI/batch where notify is best-effort."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -74,8 +83,20 @@ def main() -> int:
 
     if resolution.kind == "tmux":
         result = notify(profile, args.target, payload)
-        # silent-ok audit: require_success raises on non-sent status; failure is not silent
-        require_success(result, "notify seat")
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+            print("============ NOTIFY FAILED ============", file=sys.stderr)
+            print(f"  target : {args.target}", file=sys.stderr)
+            print(f"  reason : {detail}", file=sys.stderr)
+            print(
+                f"  fix    : send-and-verify.sh --project {profile.project_name} "
+                f"{args.target} '<message>'",
+                file=sys.stderr,
+            )
+            print("=======================================", file=sys.stderr)
+            if not getattr(args, "allow_notify_failure", False):
+                raise SystemExit(1)
+            print("warn: --allow-notify-failure set; continuing", file=sys.stderr)
     elif resolution.kind == "openclaw":
         broadcast = send_feishu_user_message(payload, project=profile.project_name)
         if broadcast.get("status") == "failed":

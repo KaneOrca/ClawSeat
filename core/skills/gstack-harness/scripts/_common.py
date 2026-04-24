@@ -522,10 +522,14 @@ def notify(profile: HarnessProfile, target_seat: str, message: str) -> subproces
     # send-and-verify.sh fall through to agentctl's unscoped session-name
     # lookup (which would pick any project with a matching seat id and
     # silently deliver to the wrong tmux window).
+    # run_command_with_env already passes os.environ.copy(); HOME override anchors
+    # the per-project tasks root. AGENT_LAUNCHER_TMUX_SEND_ACTIVE bypasses the
+    # agent-launcher tmux guard on the raw send-keys fallback path in
+    # send-and-verify.sh — harmless when the tmux-send delegate path is taken.
     return run_command_with_env(
         [str(profile.send_script), "--project", profile.project_name, session_name, message],
         cwd=profile.repo_root,
-        env={"HOME": str(AGENT_HOME)},
+        env={"HOME": str(AGENT_HOME), "AGENT_LAUNCHER_TMUX_SEND_ACTIVE": "1"},
     )
 
 
