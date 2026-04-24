@@ -32,6 +32,12 @@
 > to `~/ClawSeat`, then read `~/ClawSeat/docs/INSTALL.md` and follow it.
 > Ask me for every choice.
 
+本地已经有 `~/ClawSeat` 的拷贝？换这句：
+
+> Install ClawSeat from my local `~/ClawSeat` (do not clone from GitHub,
+> use the directory as-is). Read `~/ClawSeat/docs/INSTALL.md` and follow
+> it. Ask me for every choice.
+
 九十秒后，你有六个 agent——在六格 iTerm 里各自跑着，各自住在沙箱里，互相说话。
 
 > **你看。它们干活。**
