@@ -319,16 +319,25 @@ bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
 
 ```bash
 python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py \
-  --project ${PROJECT_NAME} \
+  --profile ${AGENT_HOME}/.agents/projects/${PROJECT_NAME}/project.toml \
   --source ancestor \
   --target <planner|builder|reviewer|qa|designer> \
   --task-id <slug-with-date-suffix> \
-  --description "<任务摘要>" \
+  --title "<短标题>" \
+  --objective "<任务正文 / 详细描述>" \
+  [--reply-to ancestor] \
   [--skill-refs path/to/relevant/SKILL.md] \
   [--intent <intent-key>]
 ```
 
-会自动写 `~/.agents/tasks/${PROJECT_NAME}/<target>/TODO.md` 的 `[pending]` 条目 + 设 `reply_to=ancestor`，完成后 DELIVERY 回执。
+参数要点（**通过 `--help` 可随时验证**）：
+
+- `--profile`（**必需**）：指向 `~/.agents/projects/<project>/project.toml`（不是 `project-local.toml`，后者是 install.sh 写的 seat overrides；这里要的是 `agent_admin project bootstrap` 写的 project record）
+- `--target` / `--target-role` 二选一：`--target` 传显式 seat id；`--target-role` 传 role（e.g. `builder`）让脚本从 `state.db` 挑最空闲的 live seat
+- `--title` + `--objective`（**都必需**）：分别是任务**短标题**和**详细正文**；**没有** `--description` 这个 arg
+- `--reply-to`：省略时默认 = `--source`（即 ancestor），完成后回执给发起方
+
+会自动写 `~/.agents/tasks/${PROJECT_NAME}/<target>/TODO.md` 的 `[pending]` 条目 + 设 `reply_to=<source 或显式值>`，完成后 DELIVERY 回执。
 
 #### 5.3.2 Seat id 硬规则
 
