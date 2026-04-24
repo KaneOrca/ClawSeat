@@ -36,9 +36,9 @@ def test_canonical_docs_mark_legacy_brief_reference_and_install_entry() -> None:
     plugin_readme = _read("shells/openclaw-plugin/README.md")
     launch_ancestor = _read("scripts/launch_ancestor.sh")
 
-    assert "v0.7 install is agent-driven" in readme
-    assert "[`scripts/install.sh`](scripts/install.sh)" in readme
-    assert "launches the ancestor via [`scripts/launch_ancestor.sh`]" not in readme
+    assert "docs/INSTALL.md" in readme          # main install doc referenced
+    assert "scripts/install.sh" in readme        # install script referenced
+    assert "launch_ancestor.sh" not in readme    # old v0.5 launch path absent
 
     assert "v0.7 主链路默认走 `docs/INSTALL.md` 与 `scripts/install.sh`" in iterm
     assert "v0.5 主链路默认走 `docs/INSTALL.md` 与 `scripts/launch_ancestor.sh`" not in iterm

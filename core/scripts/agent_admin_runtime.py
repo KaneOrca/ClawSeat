@@ -188,7 +188,7 @@ def common_env() -> dict[str, str]:
         term = "xterm-256color"
     env = {
         "PATH": host.get("PATH", DEFAULT_PATH),
-        "USER": host.get("USER", os.popen("id -un").read().strip() or "ywf"),
+        "USER": host.get("USER", os.popen("id -un").read().strip() or ""),
         "SHELL": host.get("SHELL", "/bin/zsh"),
         "TERM": term,
         "LANG": host.get("LANG", "en_US.UTF-8"),
