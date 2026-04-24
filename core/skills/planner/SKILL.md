@@ -108,6 +108,19 @@ planner 需要用户决策
 
 ## 6. Broadcast（planner Stop-hook）
 
+### 6.0 身份澄清（**必读**）
+
+planner 的飞书广播用自己的 **lark-cli identity**（`--as user` OAuth 或 `--as bot` appSecret）。这个身份在 ClawSeat 里**被所有 seat 共享**作为 outbound 通道——ancestor 发飞书也借用 planner 的 `~/.lark-cli/` 认证态（通过 runtime home links 共享），消息里用 `sender_seat:` header 标明真实发送方。
+
+**不要**把 planner 的 lark-cli identity 和 **koder tenant** 搞混：
+
+- **planner's lark-cli identity** = ClawSeat 侧的 outbound 共享身份（seat → Feishu 群）
+- **koder tenant** = OpenClaw 侧独立 agent（Feishu 群 → koder → tmux send-keys 回 seat 的 inbound 通道，**可选 overlay**）
+
+两者在不同方向、不同进程、不同仓库，**互不依赖**。"飞书群没收到 planner 的广播"这类问题只查 `lark-cli auth status --as user/bot`，**不要**去 debug koder。
+
+### 6.1 实现要点
+
 每轮结束时，planner 应触发结构化 stop-hook 广播。
 
 目标 hook 路径：`scripts/hooks/planner-stop-hook.sh`
