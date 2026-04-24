@@ -83,7 +83,21 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - **Key Findings**：最强项和最弱项各 1–2 条
 - **Feishu Published**：是/否（若 TODO 要求）
 
-## 6. Anti-patterns
+## 6. Memory 最佳实践（可选）
+
+评分完成后，可将评分记录写入 memory oracle 作为项目级 delivery：
+
+```bash
+python3 memory_write.py \
+  --kind delivery \
+  --project <project> \
+  --title "Episode <n> Score: <grade> (<score>/100)" \
+  --content "$(cat $PROJECT_REPO_ROOT/creative/scores/<unit_id>-report.md)"
+```
+
+这使得 creative-planner 在后续轮次可通过 `query_memory.py --kind delivery` 查询历史评分趋势，辅助调整创作方向。
+
+## 7. Anti-patterns
 
 - 发现问题就直接改内容（严禁，只报告，不修改）
 - 评分无依据（每条分数必须引用原文证据）

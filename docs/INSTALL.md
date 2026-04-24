@@ -283,16 +283,45 @@ Reversing the overlay: restore from backups in `<workspace>/.backup-koder-overla
 
 ClawSeat supports multiple concurrent projects (sessions prefixed `<project>-<seat>`).
 
-### Create a new project
+### Create a new engineering project (default template)
 
 ```bash
 bash scripts/install.sh --project <new-name>
 bash scripts/install.sh --project <new-name> --provider minimax
-bash scripts/install.sh --project <new-name> --base-url https://api.example.invalid --api-key sk-test --model claude-sonnet
+bash scripts/install.sh --project <new-name> --repo-root /path/to/repo
 ```
 
 `install.sh --project` already wires `agent_admin project bootstrap` under the
 hood, so the same lazy-spawn install flow works for additional projects too.
+
+### Create a creative project (clawseat-creative template)
+
+For fiction, screenplay, or other creative work — uses a 4-seat roster
+(ancestor / creative-planner / creative-designer / creative-qa):
+
+```bash
+# 1. Create local config file
+cat > /tmp/myproject-local.toml << 'EOF'
+project_name = "myproject"
+repo_root = "/path/to/myproject"
+EOF
+
+# 2. Bootstrap with creative template
+agent_admin project bootstrap \
+  --template clawseat-creative \
+  --local /tmp/myproject-local.toml
+
+# 3. Use the new project
+agent_admin project use myproject
+```
+
+For an engineering team project with codex builder + gemini designer:
+
+```bash
+agent_admin project bootstrap \
+  --template clawseat-engineering \
+  --local /tmp/myproject-local.toml
+```
 
 ### Switch context
 
