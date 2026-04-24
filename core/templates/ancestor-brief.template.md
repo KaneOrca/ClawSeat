@@ -53,7 +53,45 @@
 ## Phase-A Steps
 
 ### B0 — env_scan LLM 分析（必须向用户汇报）
-**B0.0 — memory query（强制）**：
+
+**B0.pre — 先读 install.sh 已写入的 harness overrides（强制）**：
+
+`install.sh` 在 Step 3（`select_provider`）+ `bootstrap_project_profile` 已把 operator 的 provider 选择写进 `project-local.toml`，每个 seat 都有一条 `[[overrides]]`。B0 不应重新跑一遍 env_scan LLM 分析让 operator 再选一次——先读已有决策，展示给 operator 确认（Enter 沿用 / 输入覆盖）：
+
+```bash
+python3 - <<'PY'
+import sys, tomllib
+from pathlib import Path
+p = Path.home() / ".agents" / "tasks" / "${PROJECT_NAME}" / "project-local.toml"
+if not p.exists():
+    print("B0_PRE: project-local.toml missing — fall through to B0.0 env_scan")
+    sys.exit(0)
+data = tomllib.loads(p.read_text())
+overrides = data.get("overrides", [])
+if not overrides:
+    print("B0_PRE: overrides empty — fall through to B0.0 env_scan")
+    sys.exit(0)
+print("B0_PRE: install.sh 已为每个 seat 写入 harness override:")
+for o in overrides:
+    print(f"  {o.get('id'):10s}  {o.get('tool')} / {o.get('auth_mode')} / {o.get('provider')} / {o.get('model','')}")
+PY
+```
+
+把脚本输出**原样**贴给 operator，并问：
+
+```
+上述 harness 已由 install.sh 写入 project-local.toml。
+  回车 / y —— 沿用全部（推荐；跳过 B0.0 的重复扫描）
+  c     —— 自定义，进入 B0.0 env_scan + LLM 分析 + 重选
+```
+
+operator 选"沿用"：直接把 overrides 内容作为 B0 决策，写到
+`${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/ancestor-provider-decision.md`，**跳过 B0.0**，进 B1。
+
+operator 选"自定义"：继续 B0.0 原流程。
+
+**B0.0 — memory query + env_scan LLM 分析（fallback，只在 B0.pre 走"自定义"分支时执行）**：
+
 先查 memory，再开始读 machine 视图：
 
 ```bash

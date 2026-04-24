@@ -128,6 +128,73 @@ class KoderBindError(RuntimeError):
     pass
 
 
+def _koder_bind_recovery_hint(tenant: str, cfg: Any, err: str) -> str:
+    """Generate actionable recovery text when koder-bind fails.
+
+    Called only when validate_tenant returned (False, err). The hint is
+    appended to KoderBindError message so the operator / agent sees
+    exactly what to do next instead of a bare "does not exist" line.
+    """
+    # Only help on the missing-workspace case — other validation
+    # failures (bad name, unknown tenant) already have clear messages.
+    if "does not exist" not in err:
+        return ""
+
+    # Locate expected workspace path for this tenant (if registered at all).
+    expected: Path | None = None
+    if tenant in getattr(cfg, "tenants", {}):
+        tenant_obj = cfg.tenants[tenant]
+        try:
+            expected = Path(os.path.expanduser(str(tenant_obj.workspace)))
+        except Exception:
+            expected = None
+
+    # Look for same-directory backups named `<basename>*backup*`.
+    backups: list[Path] = []
+    if expected is not None:
+        parent = expected.parent
+        stem = expected.name
+        if parent.is_dir():
+            try:
+                backups = sorted(
+                    p
+                    for p in parent.iterdir()
+                    if p.is_dir()
+                    and p.name.startswith(stem)
+                    and "backup" in p.name.lower()
+                )
+            except OSError:
+                backups = []
+
+    lines = [
+        "",
+        "",
+        "Recovery options / 恢复选项:",
+    ]
+    if backups:
+        lines.append(
+            f"  (1) Restore from backup / 从备份恢复 "
+            f"(found {len(backups)} candidate(s)):"
+        )
+        for b in backups[-3:]:  # show at most 3 most recent
+            lines.append(f"        mv {b} {expected}")
+    else:
+        lines.append(
+            "  (1) No backup directory found nearby. Create or restore the "
+            f"workspace manually at / 手工创建或恢复 workspace 到: {expected}"
+        )
+    lines.append(
+        "  (2) Re-initialize the tenant workspace via OpenClaw side / 通过 "
+        "OpenClaw 重新初始化该 tenant workspace, then retry koder-bind."
+    )
+    lines.append(
+        "  (3) Skip the koder overlay for this install / 本次安装跳过 koder "
+        "overlay (omit the koder-bind step; cartooner / other projects can "
+        "run without koder until you are ready)."
+    )
+    return "\n".join(lines)
+
+
 def do_koder_bind(
     project: str,
     tenant: str,
@@ -152,9 +219,10 @@ def do_koder_bind(
     cfg = machine_cfg if machine_cfg is not None else load_machine()
     ok, err = validate_tenant(cfg, tenant)
     if not ok:
+        hint = _koder_bind_recovery_hint(tenant, cfg, err)
         raise KoderBindError(
             f"tenant {tenant!r} not registered in machine.toml: {err}. "
-            f"Known tenants: {sorted(cfg.tenants.keys())}"
+            f"Known tenants: {sorted(cfg.tenants.keys())}.{hint}"
         )
 
     tenant_obj = cfg.tenants[tenant]

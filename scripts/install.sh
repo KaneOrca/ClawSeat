@@ -1198,17 +1198,33 @@ print_operator_banner() {
   local kickoff=""
   kickoff="$(phase_a_kickoff_prompt)"
   printf '\n'
-  printf '╔════════════════════════════════════════════════════════════════╗\n'
-  printf '║  ClawSeat install complete                                   ║\n'
-  printf '║                                                              ║\n'
-  printf '║  NEXT STEPS: cat %s\n' "$GUIDE_FILE"
-  printf '║                                                              ║\n'
-  printf '║  Or read the file at: %s\n' "$GUIDE_FILE"
-  printf '╚════════════════════════════════════════════════════════════════╝\n'
+  printf -- '────────────────────────────────────────────────────────────────\n'
+  printf '  ClawSeat install complete / 安装已完成\n'
+  printf -- '────────────────────────────────────────────────────────────────\n'
   printf '\n'
+  printf '  AGENT (if you are an AI agent running install.sh):\n'
+  printf '    You MUST relay this banner to the operator before ending your\n'
+  printf '    session. install.sh exiting is NOT the final completion signal —\n'
+  printf '    Phase-A has not started yet. See docs/INSTALL.md §0 step 5.\n'
+  printf '    向 operator 复述本 banner 是必做步骤，禁止跳过。\n'
+  printf '\n'
+  printf '  OPERATOR — NEXT STEPS / 操作员下一步:\n'
+  printf '    1. Read the operator guide / 阅读操作员指引:\n'
+  printf '       cat %s\n' "$GUIDE_FILE"
+  printf '\n'
+  printf '    2. Verify the ancestor pane is ready (no Bypass / Trust / Login)\n'
+  printf '       确认 ancestor pane 已就绪 (无 Bypass / Trust / Login 确认屏):\n'
+  printf '       tmux capture-pane -t %q -p | tail -15\n' "${PROJECT}-ancestor"
+  printf '\n'
+  printf '    3. Paste the Phase-A kickoff below into the ancestor pane\n'
+  printf '       把下面的 Phase-A kickoff 粘贴到 ancestor pane 并回车\n'
+  printf '\n'
+  printf -- '────────────────────────────────────────────────────────────────\n'
   if [[ "$DRY_RUN" != "1" ]]; then
-    printf 'IF ANCESTOR IS IDLE, COPY AND PASTE THIS:\n'
+    printf '  PHASE-A KICKOFF (copy between the lines / 复制以下两条分隔线之间)\n'
+    printf -- '----------------------------------------------------------------\n'
     printf '%s\n' "$kickoff"
+    printf -- '----------------------------------------------------------------\n'
     printf '\n'
   fi
 }
@@ -1524,10 +1540,13 @@ main() {
     warn "Skipping ancestor focus because no iTerm grid window was opened."
   fi
   if [[ "$DRY_RUN" != "1" ]]; then
-    note "Step 9.5: auto-send Phase-A kickoff prompt"
+    note "Step 9.5: auto-send Phase-A kickoff prompt / 尝试自动发送 Phase-A kickoff"
     local kickoff=""
     kickoff="$(phase_a_kickoff_prompt)"
-    auto_send_phase_a_kickoff "$kickoff" || true
+    if ! auto_send_phase_a_kickoff "$kickoff"; then
+      warn "Phase-A kickoff auto-send skipped or failed — ancestor pane is NOT ready OR tmux send-keys did not verify delivery."
+      warn "auto-send 未完成：ancestor pane 未就绪或验证投递失败。请按 banner 指引手工粘贴 kickoff。"
+    fi
   fi
   write_operator_guide
   print_operator_banner
