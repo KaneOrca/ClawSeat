@@ -29,7 +29,7 @@ TARGET_MAPPING: dict[tuple[str, str], tuple[str, str]] = {
     ("install", "planner"):    ("oauth_token", "anthropic"),
     ("install", "builder-1"):  ("oauth_token", "anthropic"),
     ("install", "builder-2"):  ("api",         "anthropic-console"),
-    ("cartooner", "planner"):  ("oauth_token", "anthropic"),
+    ("myproject", "planner"):  ("oauth_token", "anthropic"),
     ("audit", "builder-1"):    ("api",         "anthropic-console"),
 }
 

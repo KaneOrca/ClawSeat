@@ -17,7 +17,7 @@ fi
 # ── C6: multi-project guardrail ──────────────────────────────────────
 # Without --project and without CLAWSEAT_PROJECT, `agentctl session-name`
 # picks *any* session with a matching seat id, so sending a reminder
-# for project install can silently land in cartooner's tmux window.
+# for project install can silently land in another project's tmux window.
 # Guardrail: if >1 project has a PROJECT_BINDING.toml under
 # ~/.agents/tasks/*/PROJECT_BINDING.toml, demand an explicit scope.
 # Single-project setups (legacy or greenfield) are unaffected.

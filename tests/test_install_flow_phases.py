@@ -61,10 +61,7 @@ def _clean_env(extra: dict | None = None) -> dict:
         "CLAWSEAT_SANDBOX_HOME_STRICT": "",
         "CLAWSEAT_REAL_HOME": "",
         # Keep GSTACK_SKILLS_ROOT so preflight skill checks pass in CI
-        "GSTACK_SKILLS_ROOT": os.environ.get(
-            "GSTACK_SKILLS_ROOT",
-            "/Users/ywf/.gstack/repos/gstack/.agents/skills",
-        ),
+        "GSTACK_SKILLS_ROOT": os.environ.get("GSTACK_SKILLS_ROOT", ""),
         "CLAWSEAT_ROOT": CLAWSEAT_ROOT,
         # Suppress Claude/Anthropic env-noise that can leak into subprocesses
         **{k: "" for k in [

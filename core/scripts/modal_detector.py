@@ -124,7 +124,7 @@ def _parse_session_name(session: str) -> tuple[str, str]:
 
     Examples:
       install-builder-2-claude  → (install, builder-2)
-      cartooner-planner-claude  → (cartooner, planner)
+      myproject-planner-claude  → (myproject, planner)
       ancestor-cc               → (ancestor, cc)
     """
     # Strip known tool suffixes (-claude, -codex, -cc) only when enough

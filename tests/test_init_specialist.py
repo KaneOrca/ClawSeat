@@ -26,11 +26,8 @@ def _clean_env(extra: dict | None = None) -> dict:
     """Minimal env — no seat-sandbox HOME pollution."""
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/Users/ywf"),
-        "GSTACK_SKILLS_ROOT": os.environ.get(
-            "GSTACK_SKILLS_ROOT",
-            "/Users/ywf/.gstack/repos/gstack/.agents/skills",
-        ),
+        "HOME": os.environ.get("HOME", str(Path.home())),
+        "GSTACK_SKILLS_ROOT": os.environ.get("GSTACK_SKILLS_ROOT", ""),
         "CLAWSEAT_ROOT": str(REPO),
         # Clear any seat-sandbox vars so real_user_home() uses pwd
         "AGENT_HOME": "",

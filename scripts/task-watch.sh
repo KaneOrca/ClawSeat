@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="/Users/ywf/ClawSeat"
-PROJECTS_DIR="/Users/ywf/coding/.agent/projects"
+REPO_ROOT="${CLAWSEAT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PROJECTS_DIR="${CLAWSEAT_PROJECTS_DIR:-${HOME}/.agents/tasks}"
 OPS_DIR="$REPO_ROOT/.agent/ops/install-nonint"
 OUT_DIR="$REPO_ROOT/.agent/task-watch"
 REPORT="$OUT_DIR/latest.md"

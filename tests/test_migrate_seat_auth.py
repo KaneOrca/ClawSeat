@@ -44,7 +44,7 @@ def _setup_sessions(base: Path, overrides: dict | None = None) -> None:
         ("install", "planner"):    ("oauth", "anthropic"),
         ("install", "builder-1"):  ("oauth", "anthropic"),
         ("install", "builder-2"):  ("oauth", "anthropic"),
-        ("cartooner", "planner"):  ("oauth", "anthropic"),
+        ("myproject", "planner"):  ("oauth", "anthropic"),
         ("audit", "builder-1"):    ("oauth", "anthropic"),
     }
     merged = {**defaults, **(overrides or {})}
@@ -218,7 +218,7 @@ def test_plan_prints_mapping_table(tmp_path, capsys):
     assert "planner" in out
     assert "builder-1" in out
     assert "builder-2" in out
-    assert "cartooner" in out
+    assert "myproject" in out
     assert "audit" in out
     assert "oauth_token" in out
     assert "anthropic-console" in out

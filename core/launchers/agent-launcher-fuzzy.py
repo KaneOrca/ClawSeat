@@ -51,8 +51,8 @@ def _favorites_from_env_or_defaults() -> list[str]:
         return [p.strip() for p in raw.split(",") if p.strip()]
     home = _home()
     return [
-        str(home / "coding" / "cartooner"),
-        str(home / "coding" / "openclaw"),
+        str(home / "coding"),
+        str(home / "projects"),
         str(home / "Desktop" / "work"),
         str(home / "Desktop"),
         str(home / "Documents"),

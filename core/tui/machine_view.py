@@ -75,7 +75,7 @@ except ImportError:
                 _MockTenant(
                     name="koder",
                     workspace="~/.openclaw/workspace-koder",
-                    description="original koder tenant, currently bound to cartooner",
+                    description="original koder tenant",
                 ),
             ],
         )
