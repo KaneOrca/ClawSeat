@@ -15,6 +15,8 @@ if str(_core_lib) not in sys.path:
 from real_home import real_user_home
 
 from _common import (
+    _should_announce_planner_event,
+    _try_announce_planner_event,
     add_notify_args,
     append_status_note,
     append_task_to_queue,
@@ -36,8 +38,6 @@ from _common import (
 from seat_resolver import resolve_seat_from_profile
 
 
-# ── Planner event announce helpers ─────────────────────────────────────
-
 def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
     """Return True if task_id appears under a [pending] or [queued] header in todo_path."""
     if not todo_path.exists():
@@ -49,34 +49,6 @@ def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
         re.MULTILINE,
     ))
 
-
-def _should_announce_planner_event(source: str, target: str, profile=None) -> bool:
-    override = os.environ.get("CLAWSEAT_ANNOUNCE_PLANNER_EVENTS")
-    if override is not None:
-        return override == "1" and (source == "planner" or target == "planner")
-    observability = getattr(profile, "observability", None)
-    if observability is None:
-        return False
-    return getattr(observability, "announce_planner_events", False) and (
-        source == "planner" or target == "planner"
-    )
-
-
-def _try_announce_planner_event(*, project: str, source: str, target: str, task_id: str, verb: str) -> dict:
-    message = f"[{project}] {source} → {target}: {task_id} {verb}"
-    if len(message) > 80:
-        message = message[:77] + "..."
-    try:
-        from _feishu import send_feishu_user_message
-        result = send_feishu_user_message(message, project=project)
-    except Exception as exc:
-        print(f"warn: planner announce failed for {task_id}: {exc}", file=sys.stderr)
-        return {"status": "exception", "reason": str(exc)}
-    result = result or {}
-    if result.get("status") not in ("sent", "skipped"):
-        detail = result.get("stderr") or result.get("stdout") or result.get("reason", "unknown")
-        print(f"warn: planner announce feishu returned {result.get('status')!r} for {task_id}: {detail}", file=sys.stderr)
-    return result
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
