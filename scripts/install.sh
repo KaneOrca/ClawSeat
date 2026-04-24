@@ -1012,16 +1012,27 @@ ancestor_patrol_cadence_seconds() {
 }
 
 uninstall_ancestor_patrol_plist_if_present() {
-  [[ -f "$ANCESTOR_PATROL_PLIST_PATH" ]] || return 0
-  note "  cleanup: found stale $ANCESTOR_PATROL_PLIST_PATH — removing (auto-patrol disabled; upgrade path)"
+  # Teardown idempotency: bootout is attempted *unconditionally* by label so
+  # a ghost-loaded LaunchAgent (plist file manually deleted but the job is
+  # still loaded in launchd) is still unloaded. `launchctl bootout ... || true`
+  # is a no-op when the label is not loaded, so this is safe. File removal
+  # (note + rm) is still gated on plist existence.
+  local have_file=0
+  [[ -f "$ANCESTOR_PATROL_PLIST_PATH" ]] && have_file=1
+
+  if [[ "$have_file" == "1" ]]; then
+    note "  cleanup: found stale $ANCESTOR_PATROL_PLIST_PATH — removing (auto-patrol disabled; upgrade path)"
+  fi
+
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] launchctl bootout gui/%s/%s 2>/dev/null || true\n' "$(id -u)" "$ANCESTOR_PATROL_PLIST_LABEL"
-    printf '[dry-run] rm -f %q\n' "$ANCESTOR_PATROL_PLIST_PATH"
+    [[ "$have_file" == "1" ]] && printf '[dry-run] rm -f %q\n' "$ANCESTOR_PATROL_PLIST_PATH"
     return 0
   fi
   if [[ "$(uname -s)" == "Darwin" ]]; then
     launchctl bootout "gui/$(id -u)/$ANCESTOR_PATROL_PLIST_LABEL" 2>/dev/null || true
   fi
+  [[ "$have_file" == "1" ]] || return 0
   rm -f "$ANCESTOR_PATROL_PLIST_PATH"
 }
 
