@@ -61,9 +61,27 @@ def test_clawseat_creative_loads_with_four_seats() -> None:
     seat_ids = [s["id"] for s in seats]
     assert "ancestor" in seat_ids
     assert "planner" in seat_ids
-    assert "builder" in seat_ids   # codex execution seat (replaces qa)
-    assert "designer" in seat_ids
+    assert "builder" in seat_ids   # codex classification seat
+    assert "designer" in seat_ids  # gemini writing + scoring seat
     assert "qa" not in seat_ids    # qa removed in creative seat redesign
+
+
+def test_clawseat_creative_builder_skills_has_classify_not_write() -> None:
+    """builder(codex) executes cs-classify only — cs-write must NOT be in its skills."""
+    data = _load("clawseat-creative")
+    builder = next(e for e in data["engineers"] if e["id"] == "builder")
+    skill_names = [s.split("/")[-2] for s in builder.get("skills", [])]
+    assert "cs-classify" in skill_names, f"builder must have cs-classify; got {skill_names}"
+    assert "cs-write" not in skill_names, f"builder must NOT have cs-write; got {skill_names}"
+
+
+def test_clawseat_creative_designer_skills_has_write_and_score() -> None:
+    """designer(gemini) executes cs-write + cs-score — both must be in its skills."""
+    data = _load("clawseat-creative")
+    designer = next(e for e in data["engineers"] if e["id"] == "designer")
+    skill_names = [s.split("/")[-2] for s in designer.get("skills", [])]
+    assert "cs-write" in skill_names, f"designer must have cs-write; got {skill_names}"
+    assert "cs-score" in skill_names, f"designer must have cs-score; got {skill_names}"
 
 
 def test_clawseat_creative_designer_is_gemini_oauth() -> None:

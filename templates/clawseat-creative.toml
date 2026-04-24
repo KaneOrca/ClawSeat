@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-creative"
-description = "ancestor + planner(planning) + builder(codex, executes generation skills cs-classify/cs-write) + designer(gemini, reviews + executes cs-score)"
+description = "ancestor + planner(planning) + builder(codex, executes cs-classify) + designer(gemini, executes cs-write + cs-score + review)"
 
 [defaults]
 window_mode = "tabs-1up"
@@ -65,8 +65,8 @@ skills = [
 ]
 role_details = [
   "creative planner: produces world-building docs, character bios, and story/episode outlines",
-  "dispatches creative-builder (codex) to execute generation skills (cs-classify/cs-write)",
-  "dispatches creative-designer (gemini) for creative review after builder delivers",
+  "dispatches creative-builder (codex) to execute cs-classify (workflow classification)",
+  "dispatches creative-designer (gemini) for cs-write (writing) + cs-score (scoring) + review",
   "does NOT execute atomic tools itself — owns structure and coordination",
   "can fan-out multiple builder instances for parallel unit execution",
 ]
@@ -93,13 +93,13 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-builder/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/cs-classify/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/cs-write/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "creative execution seat powered by Codex (OpenAI OAuth)",
-  "executes cs-classify / cs-write — content generation only",
-  "receives TODO from planner, executes, delivers to designer for review via complete_handoff",
+  "creative classification seat powered by Codex (OpenAI OAuth)",
+  "executes cs-classify / cs-classify-short — workflow classification only",
+  "receives TODO from planner, classifies, delivers to designer via complete_handoff",
+  "does NOT write content — writing is designer's responsibility",
   "does NOT score — scoring is designer's responsibility",
 ]
 
@@ -125,12 +125,13 @@ design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-designer/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-write/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/cs-score/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "creative review seat powered by Gemini (Google OAuth)",
-  "receives builder's deliverables, runs cs-score for rubric-based scoring",
+  "creative execution + review seat powered by Gemini (Google OAuth)",
+  "executes cs-write (long-form writing) + cs-score (rubric scoring) + review in one dispatch",
   "issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts",
-  "executes cs-score and reviews builder deliveries — returns verdict to planner",
+  "receives builder's classification, writes content, scores, and returns verdict to planner",
 ]

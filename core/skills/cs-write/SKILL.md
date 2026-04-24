@@ -67,7 +67,7 @@ Default output path: `$PROJECT_REPO_ROOT/creative/content/` (unless `objective` 
 
 | Template | Executor | Output form |
 |----------|----------|-------------|
-| `clawseat-creative` | `creative-builder` (codex oauth) | Long-form narrative / script |
+| `clawseat-creative` | `creative-designer` (gemini oauth) | Long-form narrative / script |
 | `clawseat-engineering` | `builder` (codex oauth) | Code / configuration / docs |
 
 Skill 不绑定任何特定工具；executor 自行决定生成方式。
