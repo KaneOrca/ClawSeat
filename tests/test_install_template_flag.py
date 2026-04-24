@@ -1,10 +1,11 @@
-"""Tests for install.sh --template flag.
+"""Tests for install.sh --template flag + kind-first prompt skip conditions.
 
 Verifies:
 1. --template clawseat-creative is accepted; CLAWSEAT_TEMPLATE_NAME propagated
 2. --template bad dies with exit 2
 3. Omitting --template keeps clawseat-default behaviour
 4. BOOTSTRAP_TEMPLATE_PATH follows --template (patch for fd7cd74 bug)
+5. prompt_kind_first_flow: skipped (no hang) when --project or --template explicit
 """
 from __future__ import annotations
 
@@ -86,3 +87,50 @@ def test_bootstrap_template_path_follows_template_flag(tmp_path: Path) -> None:
         assert "clawseat-default" not in line, (
             f"Template line still references clawseat-default (BOOTSTRAP_TEMPLATE_PATH bug not fixed):\n  {line}"
         )
+
+
+# ── prompt_kind_first_flow skip-condition tests (d0bfc52) ──────────────────
+
+
+def _run_no_tty(args: list[str], tmp_path: Path, timeout: int = 8) -> subprocess.CompletedProcess[str]:
+    """Run install.sh with stdin from /dev/null (non-TTY) and a timeout."""
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path / "home"),
+        "PYTHON_BIN": sys.executable,
+        "CLAWSEAT_REAL_HOME": str(tmp_path / "home"),
+    }
+    (tmp_path / "home").mkdir(parents=True, exist_ok=True)
+    with open(os.devnull, "rb") as devnull:
+        return subprocess.run(
+            ["bash", str(_INSTALL)] + args,
+            stdin=devnull,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+            timeout=timeout,
+        )
+
+
+def test_kind_first_prompt_skipped_when_project_explicit(tmp_path: Path) -> None:
+    """--project flag sets _PROJECT_EXPLICIT=1 → prompt_kind_first_flow returns immediately.
+    Non-TTY + explicit --project must not hang and must exit 0 in dry-run."""
+    result = _run_no_tty(["--project", "ci-proj", "--dry-run"], tmp_path)
+    assert result.returncode == 0, f"must not hang or fail; stderr:\n{result.stderr}"
+    assert "dry-run" in result.stdout or "Step" in result.stdout
+
+
+def test_kind_first_prompt_skipped_when_template_explicit(tmp_path: Path) -> None:
+    """--template flag sets _TEMPLATE_EXPLICIT=1 → prompt_kind_first_flow returns immediately."""
+    result = _run_no_tty(["--template", "clawseat-creative", "--project", "ci-proj", "--dry-run"], tmp_path)
+    assert result.returncode == 0, f"must not hang; stderr:\n{result.stderr}"
+
+
+def test_kind_first_prompt_skipped_non_tty_both_flags(tmp_path: Path) -> None:
+    """Non-TTY with both flags: no interactive prompt, full dry-run proceeds."""
+    result = _run_no_tty(
+        ["--project", "ci-eng", "--template", "clawseat-engineering", "--dry-run"], tmp_path
+    )
+    assert result.returncode == 0, result.stderr
+    assert "clawseat-engineering" in result.stderr  # dry-run echoes template name
