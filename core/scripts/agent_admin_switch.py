@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -222,8 +223,8 @@ class SwitchHandlers:
                 new_session.provider,
                 model=getattr(new_session, "_template_model", "") or "",
             )
-        except Exception:  # silent-ok: harness memory write is best-effort; must not fail switch
-            pass
+        except Exception as exc:  # silent-ok: harness memory write is best-effort; must not fail switch
+            print(f"warn: save_last_harness for {new_session.engineer_id}: {exc}", file=sys.stderr)
         return 0
 
     def session_switch_auth(self, args: Any) -> int:

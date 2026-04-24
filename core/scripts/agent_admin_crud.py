@@ -601,20 +601,26 @@ class CrudHandlers:
             print("\n".join(f"reseeded\t{item}" for item in reseeded))
         return 0
 
+    def _archive_session_artifacts(self, session: Any) -> None:
+        """Archive workspace/runtime/secret/session-dir and remove from project rosters."""
+        self.hooks.archive_if_exists(Path(session.workspace), "workspaces")
+        self.hooks.archive_if_exists(Path(session.runtime_dir), "runtimes")
+        if session.secret_file:
+            self.hooks.archive_if_exists(Path(session.secret_file), "secrets")
+        self.hooks.archive_if_exists(
+            self.hooks.session_path(session.project, session.engineer_id).parent, "sessions"
+        )
+        project = self.hooks.load_project(session.project)
+        project.engineers = [item for item in project.engineers if item != session.engineer_id]
+        project.monitor_engineers = [item for item in project.monitor_engineers if item != session.engineer_id]
+        self.hooks.write_project(project)
+
     def project_delete(self, args: Any) -> int:
         project = self.hooks.load_project(args.project)
         for engineer_id in list(project.engineers):
             session = self.hooks.resolve_engineer_session(engineer_id, project_name=project.name)
             self.hooks.session_service.stop_engineer(session)
-            self.hooks.archive_if_exists(Path(session.workspace), "workspaces")
-            self.hooks.archive_if_exists(Path(session.runtime_dir), "runtimes")
-            if session.secret_file:
-                self.hooks.archive_if_exists(Path(session.secret_file), "secrets")
-            self.hooks.archive_if_exists(self.hooks.session_path(session.project, session.engineer_id).parent, "sessions")
-            project = self.hooks.load_project(session.project)
-            project.engineers = [item for item in project.engineers if item != session.engineer_id]
-            project.monitor_engineers = [item for item in project.monitor_engineers if item != session.engineer_id]
-            self.hooks.write_project(project)
+            self._archive_session_artifacts(session)
             remaining_sessions = [
                 item for item in self.hooks.load_sessions().values() if item.engineer_id == session.engineer_id
             ]
@@ -720,15 +726,7 @@ class CrudHandlers:
         if project_name:
             session = self.hooks.resolve_engineer_session(args.engineer, project_name=project_name)
             self.hooks.session_service.stop_engineer(session)
-            self.hooks.archive_if_exists(Path(session.workspace), "workspaces")
-            self.hooks.archive_if_exists(Path(session.runtime_dir), "runtimes")
-            if session.secret_file:
-                self.hooks.archive_if_exists(Path(session.secret_file), "secrets")
-            self.hooks.archive_if_exists(self.hooks.session_path(session.project, session.engineer_id).parent, "sessions")
-            project = self.hooks.load_project(session.project)
-            project.engineers = [item for item in project.engineers if item != session.engineer_id]
-            project.monitor_engineers = [item for item in project.monitor_engineers if item != session.engineer_id]
-            self.hooks.write_project(project)
+            self._archive_session_artifacts(session)
             remaining_sessions = [
                 item for item in self.hooks.load_sessions().values() if item.engineer_id == session.engineer_id
             ]
@@ -742,15 +740,7 @@ class CrudHandlers:
         ]
         for session in all_sessions:
             self.hooks.session_service.stop_engineer(session)
-            self.hooks.archive_if_exists(Path(session.workspace), "workspaces")
-            self.hooks.archive_if_exists(Path(session.runtime_dir), "runtimes")
-            if session.secret_file:
-                self.hooks.archive_if_exists(Path(session.secret_file), "secrets")
-            self.hooks.archive_if_exists(self.hooks.session_path(session.project, session.engineer_id).parent, "sessions")
-            project = self.hooks.load_project(session.project)
-            project.engineers = [item for item in project.engineers if item != session.engineer_id]
-            project.monitor_engineers = [item for item in project.monitor_engineers if item != session.engineer_id]
-            self.hooks.write_project(project)
+            self._archive_session_artifacts(session)
         self.hooks.archive_if_exists(self.hooks.engineer_path(engineer.engineer_id).parent, "engineers")
         return 0
 
