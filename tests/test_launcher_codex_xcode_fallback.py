@@ -3,11 +3,18 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
 _LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
+_SCRIPTS = _REPO / "core" / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -167,3 +174,132 @@ def test_agent_launcher_codex_exec_sites_all_include_yolo_flag() -> None:
     needle = 'exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir"'
 
     assert text.count(needle) == 4
+
+
+# ── Secret-sync tests for FIX-CODEX-XCODE-SECRET-SYNC ───────────────────────
+
+
+def test_resolve_launcher_secret_target_codex_xcode(tmp_path: Path) -> None:
+    """resolve_launcher_secret_target('codex','xcode') must return a path under
+    real_home/.agent-runtime/secrets/codex/xcode.env."""
+    from agent_admin_config import resolve_launcher_secret_target
+
+    result = resolve_launcher_secret_target("codex", "xcode", real_home=tmp_path)
+    assert result is not None, "codex/xcode must have a secret target (was None before fix)"
+    assert str(result).endswith(".agent-runtime/secrets/codex/xcode.env"), (
+        f"unexpected path: {result}"
+    )
+    assert result == tmp_path / ".agent-runtime" / "secrets" / "codex" / "xcode.env"
+
+
+def _make_codex_xcode_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Shared setup for codex/api/xcode-best SessionService tests."""
+    import agent_admin_session as aas
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir(parents=True, exist_ok=True)
+    # real_user_home() is imported directly into agent_admin_session — patch it there.
+    monkeypatch.setattr(aas, "real_user_home", lambda: fake_home)
+
+    # Per-seat source secret (fake content — never printed)
+    secret_dir = tmp_path / "secrets" / "codex" / "xcode-best"
+    secret_dir.mkdir(parents=True, exist_ok=True)
+    source_secret = secret_dir / "reviewer-1.env"
+    source_secret.write_text("OPENAI_API_KEY=FAKE_FIXTURE_KEY\n", encoding="utf-8")
+
+    session = SimpleNamespace(
+        engineer_id="reviewer-1",
+        project="install",
+        tool="codex",
+        auth_mode="api",
+        provider="xcode-best",
+        identity="codex.api.xcode-best.install.reviewer-1",
+        workspace=str(tmp_path / "workspace" / "reviewer-1"),
+        runtime_dir="/tmp/legacy-runtime",
+        session="install-reviewer-1-codex",
+        secret_file=str(source_secret),
+        wrapper="",
+        _template_model="",
+    )
+
+    launcher = tmp_path / "repo" / "core" / "launchers" / "agent-launcher.sh"
+    launcher.parent.mkdir(parents=True, exist_ok=True)
+    launcher.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    launcher.chmod(0o755)
+
+    hooks = MagicMock()
+    hooks.agentctl_path = str(tmp_path / "agentctl.sh")
+    hooks.launcher_path = str(launcher)
+    hooks.load_project.return_value = SimpleNamespace(name="install")
+    hooks.reconcile_session_runtime.return_value = session
+    hooks.tmux_has_session.return_value = False
+    hooks.write_session = MagicMock()
+
+    svc = aas.SessionService(hooks)
+    return svc, session, fake_home, source_secret
+
+
+def test_sync_launcher_secret_codex_xcode_writes_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """start_engineer for codex/api/xcode-best must sync the secret to
+    ~/.agent-runtime/secrets/codex/xcode.env with mode 0600."""
+    import agent_admin_session as aas
+
+    svc, session, fake_home, source_secret = _make_codex_xcode_service(tmp_path, monkeypatch)
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(aas.subprocess, "run", fake_run)
+
+    with (
+        patch.object(svc, "_assert_session_running"),
+        patch.object(svc, "_run_tmux_with_retry"),
+    ):
+        svc.start_engineer(session)
+
+    target = fake_home / ".agent-runtime" / "secrets" / "codex" / "xcode.env"
+    assert target.exists(), "launcher secret target must be written by _sync_launcher_secret_file"
+    assert oct(target.stat().st_mode & 0o777) == oct(0o600), (
+        f"target must be 0600, got {oct(target.stat().st_mode & 0o777)}"
+    )
+
+    # Verify content was copied (by checking key name, not value)
+    content = target.read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY=" in content
+
+    # Negative: fake key value must not leak into captured test output
+    captured = capsys.readouterr()
+    assert "FAKE_FIXTURE_KEY" not in captured.out
+    assert "FAKE_FIXTURE_KEY" not in captured.err
+
+
+def test_sync_launcher_secret_codex_xcode_source_is_per_seat(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Target file content must come from session.secret_file (per-seat),
+    not from a global path."""
+    import agent_admin_session as aas
+
+    svc, session, fake_home, source_secret = _make_codex_xcode_service(tmp_path, monkeypatch)
+
+    # Write a distinct marker to the per-seat source
+    source_secret.write_text("OPENAI_API_KEY=SEAT_SPECIFIC_MARKER\n", encoding="utf-8")
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(aas.subprocess, "run", fake_run)
+
+    with (
+        patch.object(svc, "_assert_session_running"),
+        patch.object(svc, "_run_tmux_with_retry"),
+    ):
+        svc.start_engineer(session)
+
+    target = fake_home / ".agent-runtime" / "secrets" / "codex" / "xcode.env"
+    assert target.exists()
+    content = target.read_text(encoding="utf-8")
+    # Key name present — content came from per-seat source
+    assert "OPENAI_API_KEY=" in content

@@ -615,6 +615,7 @@ LAUNCHER_AUTH_MAP: dict[tuple[str, str, str | None], str] = {
 LAUNCHER_SECRET_TARGETS: dict[tuple[str, str], str] = {
     ("claude", "oauth_token"): ".agents/.env.global",
     ("gemini", "primary"):     ".agent-runtime/secrets/gemini/primary.env",
+    ("codex",  "xcode"):       ".agent-runtime/secrets/codex/xcode.env",
 }
 
 
