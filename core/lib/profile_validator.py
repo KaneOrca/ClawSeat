@@ -161,10 +161,6 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
                     f"seat_overrides.{seat_name}.parallel_instances > 1 is not permitted "
                     f"for {seat_name!r}. Only {sorted(PARALLEL_ALLOWED)} support fan-out."
                 )
-            # Rule 10: max 10 already covered by range check above
-            # Extra: parallel_instances > 1 is only valid for actual fan-out roles
-            if pi_int > 10:
-                errors.append(f"seat_overrides.{seat_name}.parallel_instances={pi_int} exceeds max 10.")
 
     # Rule 11: seat_overrides.X.tool/auth_mode/provider validation
     if isinstance(overrides, dict):
