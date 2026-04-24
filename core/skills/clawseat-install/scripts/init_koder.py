@@ -577,7 +577,7 @@ seat: planner
   2. claude + api    + anthropic            (需 ANTHROPIC_API_KEY)
   3. claude + api    + minimax              (走 MiniMax 端点，Memory 里有 key)
   4. claude + api    + xcode-best           (你之前 qa-1 用过这个)
-  5. codex  + api    + xcode-best           (gpt-5.4 系列)
+  5. codex  + api    + xcode-best           (gpt-5.5 系列)
 
   请选 1-5 或告诉我用别的组合。
 ```

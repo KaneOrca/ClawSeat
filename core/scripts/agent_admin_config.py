@@ -338,7 +338,7 @@ PROVIDER_DEFAULTS = {
         },
         "xcode-best": {
             "base_url": "https://api.xcode.best/v1",
-            "default_model": "gpt-5.4",
+            "default_model": "gpt-5.5",
             "url_markers": ("xcode.best",),
         },
     },

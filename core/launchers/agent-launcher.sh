@@ -893,7 +893,7 @@ run_codex_runtime() {
   if [[ "$auth_mode" == "custom" ]]; then
     load_custom_env "$CUSTOM_ENV_FILE"
     rm -f "$CODEX_HOME/config.toml"
-    python3 - "$CODEX_HOME/config.toml" "${LAUNCHER_CUSTOM_MODEL:-gpt-5.4}" "${LAUNCHER_CUSTOM_BASE_URL:-$(launcher_tool_default_base_url codex)}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
+    python3 - "$CODEX_HOME/config.toml" "${LAUNCHER_CUSTOM_MODEL:-gpt-5.5}" "${LAUNCHER_CUSTOM_BASE_URL:-$(launcher_tool_default_base_url codex)}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
 import json
 import sys
 
@@ -918,14 +918,14 @@ PY
           ;;
       esac
     fi
-    python3 - "$CODEX_HOME/config.toml" "${OPENAI_BASE_URL:-${OPENAI_API_BASE:-$(launcher_provider_default_base_url codex xcode-best)}}" "${OPENAI_API_KEY:-}" <<'PY'
+    python3 - "$CODEX_HOME/config.toml" "${OPENAI_MODEL:-${LAUNCHER_CUSTOM_MODEL:-gpt-5.5}}" "${OPENAI_BASE_URL:-${OPENAI_API_BASE:-$(launcher_provider_default_base_url codex xcode-best)}}" "${OPENAI_API_KEY:-}" <<'PY'
 import json
 import sys
 
-config_path, base_url, api_key = sys.argv[1:4]
+config_path, model, base_url, api_key = sys.argv[1:5]
 with open(config_path, "w", encoding="utf-8") as handle:
     handle.write('model_provider = "xcodeapi"\n')
-    handle.write('model = "gpt-5.4"\n')
+    handle.write(f"model = {json.dumps(model)}\n")
     handle.write("[model_providers.xcodeapi]\n")
     handle.write('name = "xcodeapi"\n')
     handle.write(f"base_url = {json.dumps(base_url)}\n")

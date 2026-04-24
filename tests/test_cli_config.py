@@ -99,7 +99,7 @@ def test_codex_provider_config_rejects_unknown_key() -> None:
     from core.scripts.agent_admin_config import parse_codex_provider_config
     raw = {
         "model_provider": "api111",
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
         "base_url": "https://x",
         "wire_api": "responses",
         "disable_response_storge": True,  # deliberate typo
@@ -136,7 +136,7 @@ def test_codex_render_uses_typed_fields_end_to_end(tmp_path: Path) -> None:
     )
     toml_text = (codex_home / "config.toml").read_text(encoding="utf-8")
     assert 'model_provider = "api111"' in toml_text
-    assert 'model = "gpt-5.4"' in toml_text
+    assert 'model = "gpt-5.5"' in toml_text
     assert 'wire_api = "responses"' in toml_text
     assert "disable_response_storage = true" in toml_text
 
@@ -176,7 +176,7 @@ def test_codex_render_propagates_unknown_key_from_dict(tmp_path: Path) -> None:
             provider_configs={
                 "broken": {
                     "model_provider": "api111",
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.5",
                     "base_url": "https://x",
                     "wire_api": "responses",
                     "reasoning": "high",  # typo: real name is model_reasoning_effort
