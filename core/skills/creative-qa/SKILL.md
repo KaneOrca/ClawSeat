@@ -1,7 +1,12 @@
 ---
 name: creative-qa
-description: Creative QA specialist — passive scoring and quality assessment for creative deliveries. Activated by planner's complete_handoff; does not modify content. Optionally publishes scored summary to Feishu.
+description: "[DEPRECATED] Superseded by creative-designer (which now handles creative review + scoring). Use creative-designer skill instead. This file is kept for reference only."
+deprecated: true
+superseded_by: creative-designer
 ---
+
+> **⚠ DEPRECATED**: This skill has been superseded by `creative-designer`, which now handles both creative review and quality assessment. Do not use in new projects.
+>
 
 # Creative QA
 
