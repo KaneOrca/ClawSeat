@@ -1002,9 +1002,28 @@ ancestor_patrol_cadence_seconds() {
   printf '%s\n' "$((cadence_minutes * 60))"
 }
 
+uninstall_ancestor_patrol_plist_if_present() {
+  [[ -f "$ANCESTOR_PATROL_PLIST_PATH" ]] || return 0
+  note "  cleanup: found stale $ANCESTOR_PATROL_PLIST_PATH — removing (auto-patrol disabled; upgrade path)"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] launchctl bootout gui/%s/%s 2>/dev/null || true\n' "$(id -u)" "$ANCESTOR_PATROL_PLIST_LABEL"
+    printf '[dry-run] rm -f %q\n' "$ANCESTOR_PATROL_PLIST_PATH"
+    return 0
+  fi
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    launchctl bootout "gui/$(id -u)/$ANCESTOR_PATROL_PLIST_LABEL" 2>/dev/null || true
+  fi
+  rm -f "$ANCESTOR_PATROL_PLIST_PATH"
+}
+
 install_ancestor_patrol_plist() {
   if [[ "$ENABLE_AUTO_PATROL" != "1" ]]; then
-    note "Step 6: skip ancestor patrol LaunchAgent (default; pass --enable-auto-patrol to install a periodic plist that sends a natural-language patrol request)"
+    note "Step 6: auto-patrol disabled (default; pass --enable-auto-patrol to install a periodic plist that sends a natural-language patrol request)"
+    # Upgrade path: if a previous install had the plist enabled, tear it
+    # down so the project actually becomes manual-by-default instead of
+    # leaving a ghost LaunchAgent spraying /patrol-tick (or stale
+    # payloads) at the ancestor.
+    uninstall_ancestor_patrol_plist_if_present
     return 0
   fi
   note "Step 6: install ancestor patrol LaunchAgent (--enable-auto-patrol)"

@@ -169,14 +169,32 @@ restart-dead-seats) so unconditionally entering it after B7 is safe.
 
 ## Phase-B patrol semantics
 
-Phase B is triggered by **external `launchd` plist** (template at
-`core/templates/ancestor-patrol.plist.in`, installed by `scripts/install.sh`).
-Every `checklist_phase_b_cadence_minutes` minutes, the plist resolves the
-canonical ancestor session via `agentctl.sh session-name ancestor --project
-<project>` and sends `/patrol-tick` through `send-and-verify.sh` — ancestor
-skill recognizes the marker and executes
-P1..P7 from the responsibility matrix §3.2 in that one turn. Phase B
-runs until the project is archived (ancestor never retires on its own).
+Phase B is **manual-by-default** since Round-8. Triggers:
+
+1. **Operator natural-language request** (primary): ancestor skill §3.0
+   recognizes keywords (`巡检` / `稳态检查` / `Phase-B 巡检` / `扫一下 seat`
+   / `patrol 一次` / `patrol` / `scan seats` / `Phase-B patrol` /
+   `liveness check`) and runs one P1..P7 cycle per request.
+
+2. **Optional external `launchd` plist** (opt-in via
+   `scripts/install.sh --enable-auto-patrol --project <name>`; default
+   install does NOT install the plist). When enabled, template at
+   `core/templates/ancestor-patrol.plist.in` renders a LaunchAgent that
+   every `checklist_phase_b_cadence_minutes` minutes resolves the
+   canonical ancestor session via `agentctl.sh session-name ancestor
+   --project <project>` and sends a bilingual natural-language Phase-B
+   request ("请按 SKILL §3 做一次 Phase-B 稳态巡检（P1..P7）。Please
+   run one Phase-B patrol cycle per SKILL §3.") through
+   `send-and-verify.sh`. Ancestor skill §3.0 recognizes it via the
+   same natural-language trigger and executes P1..P7 in one turn.
+
+The legacy `/patrol-tick` slash token has been retired — Claude Code's
+built-in slash-command resolver rejects unregistered `/xxx` tokens with
+"Unknown command: /patrol-tick", so the token never actually reached
+ancestor as model input. Natural language is the canonical form.
+
+Phase B runs until the project is archived (ancestor never retires on
+its own).
 
 Ancestor does NOT run an in-process `sleep`-loop; patrol cadence is
 owned by the OS scheduler.
@@ -213,7 +231,7 @@ ancestor seat's own workspace journal, NOT by rewriting the brief.
 - `seats_declared[].session` → `sessions: list[str]`: fan-out roles expand to one entry per instance (§N-2).
 - B2 semantics: verify-**or**-launch memory; ancestor owns machine-service launch (§B2 revision).
 - B5 semantics: verify PROJECT_BINDING.toml.feishu_group_id already written by the launcher (§B5 revision); ancestor does NOT prompt operator (would violate N1 in responsibilities.md).
-- Phase-B trigger: external `launchd` plist injects `/patrol-tick` via `tmux send-keys` (SKILL.md §8 Q3 closed).
+- Phase-B trigger: **manual-by-default** (operator natural-language request); optional `launchd` plist via `--enable-auto-patrol` injects a bilingual natural-language request through `send-and-verify.sh`. `/patrol-tick` slash token retired in Round-8 (rejected by Claude Code slash resolver). See §"Phase-B patrol semantics" above.
 
 ## Residual open questions (deferred to v0.2)
 

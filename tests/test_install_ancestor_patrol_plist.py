@@ -17,12 +17,15 @@ _fake_install_root = _HELPERS._fake_install_root
 
 
 def test_install_writes_and_bootstraps_ancestor_patrol_plist(tmp_path: Path) -> None:
+    """Opt-in path: `--enable-auto-patrol` renders + bootstraps the plist."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     launchctl_log = tmp_path / "launchctl.log"
     plutil_log = tmp_path / "plutil.log"
 
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh"), "--project", "patrol50", "--provider", "minimax"],
+        ["bash", str(root / "scripts" / "install.sh"),
+         "--enable-auto-patrol",
+         "--project", "patrol50", "--provider", "minimax"],
         input="\n",
         capture_output=True,
         text=True,
@@ -68,10 +71,13 @@ def test_install_writes_and_bootstraps_ancestor_patrol_plist(tmp_path: Path) -> 
 
 
 def test_install_dry_run_reports_ancestor_patrol_launchagent(tmp_path: Path) -> None:
+    """Opt-in dry-run path: `--enable-auto-patrol --dry-run` previews render+bootstrap."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
 
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh"), "--dry-run", "--project", "patrol51", "--provider", "minimax"],
+        ["bash", str(root / "scripts" / "install.sh"),
+         "--enable-auto-patrol", "--dry-run",
+         "--project", "patrol51", "--provider", "minimax"],
         capture_output=True,
         text=True,
         timeout=30,
@@ -94,3 +100,100 @@ def test_install_dry_run_reports_ancestor_patrol_launchagent(tmp_path: Path) -> 
     assert result.returncode == 0, result.stderr
     assert f"[dry-run] render {root / 'core' / 'templates' / 'ancestor-patrol.plist.in'} -> {plist_path}" in combined
     assert f"[dry-run] launchctl bootstrap gui/{os.getuid()} {plist_path}" in combined
+
+
+def test_install_default_skips_ancestor_patrol_plist(tmp_path: Path) -> None:
+    """Default install (no `--enable-auto-patrol`): plist NOT rendered, no bootstrap."""
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    launchctl_log = tmp_path / "launchctl.log"
+    plutil_log = tmp_path / "plutil.log"
+
+    result = subprocess.run(
+        ["bash", str(root / "scripts" / "install.sh"),
+         "--project", "patrol52", "--provider", "minimax"],
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "LAUNCHCTL_LOG_FILE": str(launchctl_log),
+            "PLUTIL_LOG_FILE": str(plutil_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    combined = result.stdout + result.stderr
+    assert "Step 6: auto-patrol disabled" in combined
+    assert "--enable-auto-patrol" in combined  # skip note references the flag
+
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol52.ancestor-patrol.plist"
+    assert not plist_path.exists(), "default install must NOT render patrol plist"
+
+    # No launchctl bootstrap for THIS project (other tests may have left their own entries).
+    if launchctl_log.exists():
+        launchctl_text = launchctl_log.read_text(encoding="utf-8")
+        assert f"bootstrap gui/{os.getuid()} {plist_path}" not in launchctl_text
+        assert f"com.clawseat.patrol52.ancestor-patrol" not in launchctl_text or \
+            "bootstrap" not in launchctl_text.split("com.clawseat.patrol52.ancestor-patrol", 1)[0]
+
+
+def test_install_default_removes_stale_patrol_plist(tmp_path: Path) -> None:
+    """Upgrade path: pre-existing plist from an earlier enabled install must be
+    torn down when operator reruns a default install without
+    `--enable-auto-patrol`. Otherwise the ghost LaunchAgent keeps firing."""
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    launchctl_log = tmp_path / "launchctl.log"
+    plutil_log = tmp_path / "plutil.log"
+
+    # Seed a stale plist as if a previous `--enable-auto-patrol` install ran.
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol53.ancestor-patrol.plist"
+    plist_path.parent.mkdir(parents=True, exist_ok=True)
+    plist_path.write_text(
+        "<?xml version=\"1.0\"?><plist><dict><key>Label</key>"
+        "<string>com.clawseat.patrol53.ancestor-patrol</string>"
+        "</dict></plist>\n",
+        encoding="utf-8",
+    )
+    assert plist_path.is_file()
+
+    result = subprocess.run(
+        ["bash", str(root / "scripts" / "install.sh"),
+         "--project", "patrol53", "--provider", "minimax"],
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "LAUNCHCTL_LOG_FILE": str(launchctl_log),
+            "PLUTIL_LOG_FILE": str(plutil_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    combined = result.stdout + result.stderr
+    assert "cleanup: found stale" in combined
+
+    # Plist file removed.
+    assert not plist_path.exists(), "stale plist must be removed on default install"
+
+    # launchctl bootout was called for this label.
+    launchctl_text = launchctl_log.read_text(encoding="utf-8") if launchctl_log.exists() else ""
+    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol53.ancestor-patrol" in launchctl_text

@@ -315,11 +315,17 @@ def render_brief(ctx: BriefContext) -> str:
 
     ## Phase-B patrol recap
 
-    After B7 writes STATUS.md you enter Phase-B automatically.
-    Cadence is triggered externally by a `launchd` plist every
-    `{ctx.patrol_cadence_minutes}` minutes; each wake runs P1..P7 from
-    the ancestor skill's steady-state patrol contract. You do not run an in-process sleep
-    loop.
+    After B7 writes STATUS.md you enter Phase-B. Patrol is
+    **manual-by-default** — run one P1..P7 cycle when operator asks via
+    natural-language trigger ("巡检" / "patrol" / "稳态检查" /
+    "scan seats" / "Phase-B patrol" / "liveness check"); see ancestor
+    skill §3.0. Optionally, if the project was installed with
+    `install.sh --enable-auto-patrol`, an external `launchd` plist
+    injects the same natural-language request every
+    `{ctx.patrol_cadence_minutes}` minutes. The `/patrol-tick` slash
+    token is deprecated — Claude Code's slash resolver rejects
+    unregistered `/xxx` tokens as "Unknown command". You do not run an
+    in-process sleep loop.
 
     ## Resources
 
