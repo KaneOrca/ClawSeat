@@ -79,9 +79,14 @@ You are invoked to install ClawSeat on this machine.
        Three possible states — classify before doing anything:
 
        State A — PHASE-A ALREADY RUNNING (Step 9.5 auto-send succeeded):
-         Pane shows "B0" / "已读取 brief" / "env_scan" / Claude Code is
-         actively processing. DO NOT paste again — pasting duplicates the
-         kickoff and creates double-input. SKIP step (d), go to (e).
+         Pane shows ANY of the markers used by install.sh's own
+         `ancestor_pane_shows_active_response()` detector:
+           - "B0" / "已读取 brief" / env_scan output (Phase-A has produced a reply)
+           - "Thinking..." / "Shell awaiting input" (Claude Code is processing)
+           - spinner glyphs:  ✶  ✻  ✢  ✳  ✽  ⏺
+           - "Read N files" / "Read N file" (Claude Code is reading the brief)
+         DO NOT paste again — pasting duplicates the kickoff and creates
+         double-input. SKIP step (d), go to (e).
 
        State B — BLOCKED ON A CONFIRMATION SCREEN (pane NOT ready; auto-send
        was intentionally skipped by `ancestor_pane_waiting_on_operator` detector):

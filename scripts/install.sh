@@ -1066,7 +1066,7 @@ write_operator_guide() {
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
 
-install.sh 已完成。现在做 4 件事：
+install.sh 已完成。现在做 5 件事：
 
 1. 切到 iTerm 窗口 "clawseat-$PROJECT" 的 ancestor pane（左上角第一格）
 
@@ -1076,7 +1076,13 @@ install.sh 已完成。现在做 4 件事：
    tmux capture-pane -t '${PROJECT}-ancestor' -p | tail -15
    \`\`\`
 
-   - 看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样 ⇒ Phase-A 已启动，**跳到步骤 4**（不要重复粘贴！会导致双重输入）
+   对齐 install.sh 的 \`ancestor_pane_shows_active_response()\` detector，pane 为**活动**时跳过步骤 3：
+
+   - 看到以下任一 ⇒ Phase-A 已启动或正在启动，**跳到步骤 4**（不要重复粘贴！会导致双重输入）:
+     - \`B0\` / \`已读取 brief\` / \`env_scan\` 等 Phase-A 开跑后的输出
+     - \`Thinking...\` / \`Shell awaiting input\`
+     - 旋转图标: \`✶\` / \`✻\` / \`✢\` / \`✳\` / \`✽\` / \`⏺\`
+     - \`Read N files\` / \`Read N file\`
    - 看到空的输入框（\`> \` 或 \`❯ \`）+ 无最近活动 ⇒ auto-send 没成功，继续步骤 3
    - 看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏 ⇒ 按屏幕提示先过掉（Enter / 选 Yes / 完成 OAuth），然后回到本步骤重新 capture
 
@@ -1237,11 +1243,16 @@ print_operator_banner() {
   printf '       tmux capture-pane -t %q -p | tail -15\n' "${PROJECT}-ancestor"
   printf '\n'
   printf '    3. Decide: SKIP paste or DO paste / 判断：跳过粘贴 或 执行粘贴\n'
-  printf '       - If pane shows B0 / "已读取 brief" / env_scan  → SKIP step 4\n'
-  printf '         auto-send already delivered kickoff; pasting again = double input\n'
-  printf '         若 pane 已在 B0 / env_scan ⇒ Phase-A 已启动，跳过步骤 4\n'
+  printf '       Aligns with ancestor_pane_shows_active_response() in install.sh.\n'
+  printf '       与 install.sh 的 ancestor_pane_shows_active_response() 对齐。\n'
+  printf '       - If pane shows ANY of → SKIP step 4 (auto-send succeeded; pasting = double input):\n'
+  printf '         出现任一 ⇒ 跳过步骤 4（auto-send 已生效，重复粘贴会双输入）:\n'
+  printf '           · "B0" / "已读取 brief" / env_scan activity\n'
+  printf '           · "Thinking..." / "Shell awaiting input"\n'
+  printf '           · spinner glyphs: ✶ ✻ ✢ ✳ ✽ ⏺\n'
+  printf '           · "Read N files" / "Read N file"\n'
   printf '       - If pane sits at ">" or "❯" with no activity → DO step 4\n'
-  printf '         若 pane 静止在空输入框 ⇒ auto-send 未生效，继续步骤 4\n'
+  printf '         若 pane 静止在空输入框无活动 ⇒ auto-send 未生效，继续步骤 4\n'
   printf '       - If pane shows any of: Bypass Permissions / Trust folder /\n'
   printf '         Login / Accessing workspace / Quick safety check\n'
   printf '         → clear that screen first (Enter / Yes / OAuth), re-capture, then decide\n'
