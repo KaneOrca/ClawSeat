@@ -38,8 +38,10 @@ ClawSeat install — Agent kickoff prompt
 
 You are invoked to install ClawSeat on this machine.
 
-1. Read <CLAWSEAT_ROOT>/docs/INSTALL.md (default: ~/ClawSeat/docs/INSTALL.md) and
-   execute it end-to-end.
+1. If `~/ClawSeat` does not exist, clone it first:
+   `git clone https://github.com/KaneOrca/ClawSeat ~/ClawSeat`.
+   Then read `~/ClawSeat/docs/INSTALL.md` (your <CLAWSEAT_ROOT>/docs/INSTALL.md)
+   and execute it end-to-end.
 
 2. Install preferences (operator fills these in before running):
    - Project name:           <PROJECT_NAME>       (e.g. "install" for first-time setup)
