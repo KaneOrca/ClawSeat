@@ -449,8 +449,13 @@ seed_user_tool_dirs() {
   # CLAWSEAT_ROOT/core/shell-scripts/lark-cli; we symlink it into
   # $runtime_home/bin/lark-cli and prepend that bin dir to PATH so
   # seats pick it up before any real lark-cli in the system PATH.
-  local wrapper_src="$CLAWSEAT_ROOT/core/shell-scripts/lark-cli"
-  if [[ -x "$wrapper_src" ]]; then
+  #
+  # `${CLAWSEAT_ROOT:-}` fallback keeps `set -u` callers (e.g. the
+  # launcher-lib helper sourced by test_launcher_project_tool_seed.py
+  # under `set -euo pipefail`) from tripping when the env var hasn't
+  # been wired. The wrapper-seed step no-ops cleanly in that case.
+  local wrapper_src="${CLAWSEAT_ROOT:-}/core/shell-scripts/lark-cli"
+  if [[ -n "${CLAWSEAT_ROOT:-}" && -x "$wrapper_src" ]]; then
     local wrapper_tgt="$runtime_home/bin/lark-cli"
     mkdir -p "$(dirname "$wrapper_tgt")"
     if [[ -L "$wrapper_tgt" ]]; then
