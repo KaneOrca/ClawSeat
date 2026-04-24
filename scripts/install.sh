@@ -885,12 +885,13 @@ EOF
   fi
 
   for seat in "${PENDING_SEATS[@]}"; do
-    local _seat_tool _seat_auth _seat_provider _seat_model_override
+    local _seat_tool _seat_auth _seat_provider _seat_template_model
     if [[ "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-default" ]]; then
-      # For non-default templates, read per-seat tool/auth/provider from template TOML.
+      # For non-default templates, read per-seat tool/auth/provider/model from template TOML.
       local _template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
       if [[ -f "$_template_file" ]]; then
-        _seat_tool="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+        read -r _seat_tool _seat_auth _seat_provider _seat_template_model < <(
+          "$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
 import sys
 try:
     import tomllib
@@ -901,43 +902,18 @@ with open(sys.argv[1], "rb") as f:
 target = sys.argv[2]
 for e in data.get("engineers", []):
     if e.get("id") == target:
-        print(e.get("tool", "claude"))
+        print(
+            e.get("tool", "claude"),
+            e.get("auth_mode", "oauth"),
+            e.get("provider", "anthropic"),
+            e.get("model", ""),
+        )
         break
 PY
-        2>/dev/null)"
-        _seat_auth="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
-import sys
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
-with open(sys.argv[1], "rb") as f:
-    data = tomllib.load(f)
-target = sys.argv[2]
-for e in data.get("engineers", []):
-    if e.get("id") == target:
-        print(e.get("auth_mode", "oauth"))
-        break
-PY
-        2>/dev/null)"
-        _seat_provider="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
-import sys
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
-with open(sys.argv[1], "rb") as f:
-    data = tomllib.load(f)
-target = sys.argv[2]
-for e in data.get("engineers", []):
-    if e.get("id") == target:
-        print(e.get("provider", "anthropic"))
-        break
-PY
-        2>/dev/null)"
+          2>/dev/null) || true
       fi
     fi
-    # Fallback to ancestor provider for default template or if template read failed
+    # Fallback to ancestor values for default template or if template read failed
     _seat_tool="${_seat_tool:-claude}"
     _seat_auth="${_seat_auth:-$seat_auth_mode}"
     _seat_provider="${_seat_provider:-$seat_provider}"
@@ -949,9 +925,14 @@ tool = "$_seat_tool"
 auth_mode = "$_seat_auth"
 provider = "$_seat_provider"
 EOF
-    # Only write model for claude seats — codex/gemini ignore this field.
-    if [[ "$_seat_tool" == "claude" && -n "$seat_model" ]]; then
-      printf 'model = "%s"\n' "$seat_model" >>"$PROJECT_LOCAL_TOML"
+    # Write model for claude seats: template-specified model takes precedence;
+    # fall back to the ancestor's selected model when template doesn't specify one.
+    # codex/gemini seats never get a model override.
+    if [[ "$_seat_tool" == "claude" ]]; then
+      local _effective_model="${_seat_template_model:-$seat_model}"
+      if [[ -n "$_effective_model" ]]; then
+        printf 'model = "%s"\n' "$_effective_model" >>"$PROJECT_LOCAL_TOML"
+      fi
     fi
   done
   chmod 600 "$PROJECT_LOCAL_TOML" || die 31 PROJECT_LOCAL_CHMOD_FAILED "unable to chmod $PROJECT_LOCAL_TOML"
