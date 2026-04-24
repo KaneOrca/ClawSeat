@@ -44,9 +44,22 @@ dispatch creative-designer 时，TODO objective 必须传递绝对路径：
 | 全局大纲 | 整个故事的主线、节奏、转折点 |
 | 分集/分章大纲 | 每个执行单元（章/集）的具体事件序列、对话要点 |
 
-## 3. 工作模式（三步流程）
+## 3. 工作模式（流程选择 + 执行）
 
-### Step 1 — cs-structure（编剧室模式，Agent Teams）
+### Step 0 — cs-classify（工作流选择）
+
+接到 brief 后，先调用 cs-classify 得到 `classification.json`，根据 `type` 自行决定流程：
+
+- **long-form**（`type=long-form`）：
+  `cs-structure（Agent Teams）→ cs-write → cs-score`
+- **short-form + 需要角度确认**：
+  `cs-classify-short → cs-write → cs-score`
+- **short-form + 直接执行**：
+  `cs-write → cs-score`
+
+### Step 1 — cs-structure（长文编剧室模式，Agent Teams）
+
+仅当 Step 0 决定走 long-form 路径时执行：
 
 1. 读 `$PROJECT_REPO_ROOT/creative/brief.md`，明确创作目标、受众、风格、体量
 2. 启动 Agent Teams session（需要 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）

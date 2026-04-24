@@ -1,11 +1,11 @@
 ---
 name: cs-classify
-description: Creative task routing skill — accepts a user brief and classifies it as long-form or short-form, producing a routing decision (classification.json) that determines which cs-* skills to invoke.
+description: Creative task classification skill — accepts a user brief and classifies it as long-form or short-form. Produces classification.json. Tool-agnostic; workflow selection is the caller's responsibility.
 ---
 
-# CS-Classify — Creative Task Router
+# CS-Classify — Creative Task Classifier
 
-**Design principle**: Entry point for the creative pipeline. Reads the user brief once, decides the optimal execution path, and outputs a structured routing decision.
+**Design principle**: Atomic classification tool. Reads the user brief and outputs a structured classification. Workflow selection (which cs-* skills to invoke next) is decided by the receiving seat (creative-planner), not by this skill.
 
 ## CONTRACT
 
@@ -24,20 +24,16 @@ description: Creative task routing skill — accepts a user brief and classifies
   "type": "long-form" | "short-form",
   "reasoning": "1-2 sentence justification for the classification",
   "estimated_words": 5000,
-  "estimated_units": 5,
-  "recommended_flow": "cs-structure→cs-write→cs-score" | "cs-classify-short→cs-write→cs-score",
-  "short_form_direct": true | false
+  "estimated_units": 5
 }
 ```
 
 | Field | Description |
 |-------|-------------|
-| `type` | Route decision: long-form activates full cs-structure pipeline; short-form uses lightweight path |
+| `type` | Classification result: `long-form` or `short-form` |
 | `reasoning` | Brief explanation for the classification |
-| `estimated_words` | Estimated total word count for the deliverable |
-| `estimated_units` | Number of chapters/episodes (long-form only; omit for short-form) |
-| `recommended_flow` | The exact skill chain to execute after classification |
-| `short_form_direct` | If true: skip cs-classify-short, pass inline brief directly to cs-write |
+| `estimated_words` | Estimated total word count |
+| `estimated_units` | Number of chapters/episodes (long-form only; omit or null for short-form) |
 
 ## 判断规则
 
@@ -73,6 +69,10 @@ description: Creative task routing skill — accepts a user brief and classifies
   → 写 classification.json
   → 写 DELIVERY.md（记录分类结论和路由建议）
 ```
+
+## EXECUTION NOTES
+
+工作流选择由接收 seat（creative-planner）根据 `type` 自行决定，不在此 skill 内规定。
 
 ## 执行者说明
 

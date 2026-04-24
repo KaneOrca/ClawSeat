@@ -1,13 +1,11 @@
 ---
 name: cs-classify-short
-description: Lightweight short-form structure skill. Receives a short-form brief, produces a concise angle.md (≤200 words) covering angle options, core thesis, target audience, and tone. Optionally gates on user confirmation before proceeding to cs-write.
+description: Lightweight short-form structure skill. Receives a short-form brief, produces a concise angle.md (≤200 words) covering angle options, core thesis, target audience, and tone. Atomic tool; next step decided by caller.
 ---
 
 # CS-Classify-Short — Lightweight Short-Form Structure
 
-**Design principle**: Minimal overhead for short-form content. Unlike cs-structure (which produces full world-building docs), this skill produces only a compact angle brief (200 words max) to guide cs-write.
-
-**When to use**: Called when `cs-classify` outputs `type=short-form` AND `short_form_direct=false` (angle confirmation needed).
+**Design principle**: Atomic tool. Produces only `angle.md` (200 words max). Unlike cs-structure (which produces full world-building docs), this skill is optimized for short-form content where a brief angle brief suffices. What happens after `angle.md` is produced is decided by the caller (creative-planner), not by this skill.
 
 ## CONTRACT
 
@@ -50,10 +48,10 @@ description: Lightweight short-form structure skill. Receives a short-form brief
 ```
 if quick_mode=false:
     → 推飞书摘要（user_gate=required）等待用户确认角度选择
-    → 用户回复后，planner 将确认的角度传入 cs-write 的 unit_brief_path 或 inline brief
+    → 用户回复后，planner 将确认的角度用于下一步（具体如何使用由 planner 决定）
 if quick_mode=true:
     → 直接使用 Recommended 角度，无需确认
-    → 将 angle.md 作为 unit_brief 的前置摘要传入 cs-write
+    → 将 angle.md 返回给 planner，由 planner 决定后续步骤
 ```
 
 若 `CLAWSEAT_FEISHU_ENABLED=0`：自动切换为 `quick_mode=true`（无法推飞书，无法等待确认）。
@@ -74,21 +72,6 @@ if quick_mode=true:
 | Template | Executor | Use case |
 |----------|----------|----------|
 | `clawseat-creative` | `creative-planner` (claude oauth) | 短文角度确认 |
-
-短文执行链示例（有角度确认）：
-```
-brief → cs-classify (short-form, direct=false)
-      → cs-classify-short (产出 angle.md + 推飞书 Gate)
-      → cs-write (用 angle.md 作为 unit brief 直接执笔)
-      → cs-score (评分)
-```
-
-短文执行链示例（无角度确认）：
-```
-brief → cs-classify (short-form, direct=true)
-      → cs-write (inline brief 直接执笔)
-      → cs-score
-```
 
 ## 禁止事项
 
