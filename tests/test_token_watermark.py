@@ -150,6 +150,27 @@ def test_measure_no_session_file(tmp_path, monkeypatch):
     assert source == "unknown"
 
 
+def test_measure_jsonl_via_workspace_glob(tmp_path, monkeypatch):
+    """Regression: glob pattern must match real Claude project dirs (no leading dash).
+
+    .claude/projects/<hash>/<convo>.jsonl — the hash dir does NOT start with '-'.
+    Before the fix, glob("-*/*.jsonl") returned nothing; now glob("*/*.jsonl") finds it.
+    """
+    profile = _make_profile(tmp_path)
+    monkeypatch.delenv("CC_CONTEXT_USAGE_PCT", raising=False)
+
+    # Simulate Claude Code's workspace layout
+    workspace = profile.workspace_for("builder-1")
+    convo_dir = workspace / ".claude" / "projects" / "abc123ef456789"
+    convo_dir.mkdir(parents=True)
+    jsonl = convo_dir / "convo.jsonl"
+    jsonl.write_bytes(b"x" * (100_000 * 8))  # 100k tokens → 50% of 200k default
+
+    pct, source = measure_token_usage_pct(profile, "builder-1")
+    assert source == "session_jsonl_size", f"unexpected source: {source}"
+    assert pct == pytest.approx(0.5, abs=0.01)
+
+
 def test_measure_env_var(tmp_path, monkeypatch):
     """CC_CONTEXT_USAGE_PCT env var → uses it directly."""
     profile = _make_profile(tmp_path)

@@ -1149,8 +1149,8 @@ def _find_session_jsonls(runtime_dir: str | None, workspace: "Path") -> list["Pa
     """Locate session.jsonl files for the seat's active CC session.
 
     Searches (in order):
-    1. runtime_dir/home/.claude/projects/-*/*.jsonl
-    2. workspace/.claude/projects/-*/*.jsonl
+    1. runtime_dir/home/.claude/projects/*/*.jsonl
+    2. workspace/.claude/projects/*/*.jsonl
     """
     candidates: list[Path] = []
     for base in [
@@ -1159,7 +1159,7 @@ def _find_session_jsonls(runtime_dir: str | None, workspace: "Path") -> list["Pa
     ]:
         if base is None or not base.exists():
             continue
-        candidates.extend(base.glob("-*/*.jsonl"))
+        candidates.extend(base.glob("*/*.jsonl"))
     return candidates
 
 
