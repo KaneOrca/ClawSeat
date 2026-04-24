@@ -5,9 +5,9 @@ description: Structural creative planning specialist. Produces world-building do
 
 # Creative Planner
 
-`creative-planner` 是 ClawSeat creative chain 中的**结构性创作规划**类 specialist，负责搭建世界观框架、人物体系和叙事结构，然后将具体的文字执行派给 designer (gemini)。
+`creative-planner` 是 ClawSeat creative chain 中的**结构性创作规划**类 specialist，负责搭建世界观框架、人物体系和叙事结构，然后将具体的文字执行派给 builder (codex)。
 
-**关键区别**：creative-planner 不直接写长文内容——它做结构，designer 做执笔。
+**关键区别**：creative-planner 不直接写长文内容——它做结构，builder 做执笔，designer 做审查和评分。
 
 ## 1. 身份约束
 
@@ -89,8 +89,8 @@ dispatch creative-designer 时，TODO objective 必须传递绝对路径：
 
 ## 4. Dispatch 规则
 
-- **creative-designer**：Step 2 每个执行单元的长文写作
-- **creative-designer**：Step 3 每集完成后的评分和审查；所有集完成后也可做整体评审
+- **creative-builder**：Step 2 每个执行单元的长文写作（cs-write 执行，codex）
+- **creative-designer**：Step 3 每集完成后的评分和审查（cs-score 执行，gemini）；所有集完成后也可做整体评审
 - 不 dispatch builder / reviewer（创作项目无代码 gate）
 
 ## 5. Deliver
@@ -115,7 +115,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 
 ## 6. Anti-patterns
 
-- 自己写长文章节（那是 designer 的职责）
+- 自己写长文章节（那是 builder 的职责）
 - 在大纲里写具体对话（大纲是结构，不是台本）
 - 等 designer 全部完成才汇总（应随时聚合完成的章节）
 
