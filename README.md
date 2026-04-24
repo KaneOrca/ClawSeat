@@ -1,11 +1,13 @@
 # ClawSeat
 
-## 一句话，六个 AI 工程师，装进你的 Mac。
+## OpenClaw × gstack × tmux = 一支住在你 Mac 里的 AI 研发团队
 
 不上云。不订阅。在你的 Mac 上。
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](docs/INSTALL.md)
+[![OpenClaw](https://img.shields.io/badge/built%20on-OpenClaw-purple)](https://github.com/openclaw/openclaw)
+[![gstack](https://img.shields.io/badge/powered%20by-gstack-orange)](https://github.com/garrytan/gstack)
 [![PRs welcome](https://img.shields.io/badge/PRs-%E6%AC%A2%E8%BF%8E-brightgreen)](CONTRIBUTING.md)
 
 ---
@@ -22,7 +24,9 @@
 
 ---
 
-给你的 Claude 讲一句话：
+## 一句话装好
+
+给你的 Claude 讲这句话：
 
 > Install ClawSeat on my Mac. Clone `https://github.com/KaneOrca/ClawSeat`
 > to `~/ClawSeat`, then read `~/ClawSeat/docs/INSTALL.md` and follow it.
@@ -34,13 +38,56 @@
 
 ---
 
+## ClawSeat 是**把两个开源巨头织进一台 Mac**的那层
+
+不是另一个 agent 框架。不是又一个 SaaS。是一层约 350 个文件的 bash + Python，
+把两个已经证明自己的开源项目织在一起——让它们当你的研发团队。
+
+### 左边：OpenClaw — 通道 + Agent 控制面
+
+[OpenClaw](https://github.com/openclaw/openclaw)（MIT 开源）是一个本地跑的
+多通道 AI 助手 Gateway。Feishu / WhatsApp / Telegram / Slack / Discord /
+iMessage 等 20+ 通道，同一个 agent 在所有通道里都是你。每个 agent 是独立
+进程、独立 sandbox、独立 memory。心跳机制让 agent 主动行动，不只被动回复。
+插件市场 [ClawHub](https://clawhub.ai) 里 101+ bundled extensions。
+
+ClawSeat 借它的：ACP agent 进程模型、Feishu 通道桥接、心跳调度、koder
+overlay（把一个 OpenClaw agent 变成 ClawSeat 的反向信道）、state.db 事件总线。
+
+### 右边：gstack — 方法论工具包
+
+[gstack](https://github.com/garrytan/gstack)（MIT 开源）是一套给 Claude Code
+用的工程方法论 skill 包。30+ 种技能，每个都是一套完整流程——`/ship`（改代码
+→ 跑测试 → review → merge → 部署 → canary）、`/qa`（定位 bug → 修 → 验）、
+`/review`（pre-merge 审核）、`/investigate`（根因调查 iron law）、`/cso`（安全
+审计）、`/design-review`（视觉 QA）⋯⋯每一个都像请了个专家站你旁边。
+
+ClawSeat 借它的：builder 默认装 `/ship` + `/investigate` + `/land-and-deploy`；
+reviewer 装 `/review`；qa 装 `/qa`；designer 装 `/design-review` + `/design-shotgun`；
+planner 装 `/plan-eng-review` + `/plan-ceo-review` + `/plan-design-review`。每个
+seat 生来就会做自己该做的事。
+
+### 中间：ClawSeat — 编排粘合层
+
+把两者整合进 iTerm 六格：
+
+- **6 seat roster**（ancestor / planner / builder / reviewer / qa / designer）
+  ——每个对应一个 OpenClaw agent 身份 + 一组 gstack skills
+- **dispatch 协议**——三阶段状态机（assigned → notified → consumed），每一阶段
+  写 `handoff.json` + `state.db`，seat 崩了能从上次位置接回
+- **intent 系统**——planner 派活时写 `--intent ship`，harness 自动注入 gstack
+  trigger phrase + 对应 SKILL.md，builder 自动激活 `/ship` 方法论，不用谁记咒语
+- **AI 原生安装**——本来就该这样
+- **六格可视化**——本来也该这样
+
+---
+
 ## 三件事让它不一样。
 
 ### 你跟它对话，它就装好了。
 
-别家 agent 框架都要 wizard、YAML、云端 console。ClawSeat 只要一句话。
-你的 AI 自己读文档。你的 AI 自己问你要哪家 provider、哪个项目、要不要开飞书。
-你的 AI 自己告诉你装完了。
+别家 agent 编排要 wizard、YAML DSL、集群 control plane。ClawSeat 只要一句话。
+你的 AI 自己 clone、扫环境、问 provider、拉 6 个 seat、引你走完 Phase-A。
 
 这才叫 AI 原生。
 
@@ -49,20 +96,24 @@
 不是 dashboard。不是 log 流。是六格活的 TUI，每一格是一个真正在思考的 agent。
 
 你看见 reviewer 否决 builder 的 diff。
-你看见 planner 在 QA 找出 bug 后改方向。
+你看见 planner 拿 gstack `/plan-eng-review` 拆解需求。
 你看见 designer 和 builder 为一个按钮吵五个来回。
 
 你看见你的团队在工作——因为它们就是你的团队。
 
-### 你掌握每一行。
+### 巨人的肩上，每一行你都能改。
 
-350 个文件。全是 bash、Python、Markdown。
+ClawSeat 自己只有 ~350 个文件。OpenClaw 和 gstack 也都 MIT 开源。三层全开。
 
-想让 planner 更凶？改一个 markdown。
-想加一个 seat？`core/scripts/seat_skill_mapping.py` 加一行。
-想 fork 整个系统？MIT 许可，拿走。
+想让 planner 更凶？改 `core/skills/planner/SKILL.md`。
+想换 gstack skill 绑定？改 `core/scripts/seat_skill_mapping.py` 一行。
+想加通道（Slack 不够，要 DingTalk）？OpenClaw 的 plugin SDK 写一个就完。
+想把 builder 换成 Codex 而不是 Claude？改 `PROJECT_BINDING.toml` 里的
+`builder_tool`。
+想 fork 整个栈？三个都是 MIT，整套拿走。
 
-没有 Docker。没有 plugin SDK。改源码就是扩展方式。
+没有 Docker。没有 YAML 状态机。没有封闭的 plugin 墙——插件走的是上游
+OpenClaw 的 SDK + ClawHub 市场，生态比我们大得多。
 
 ---
 
@@ -83,6 +134,7 @@ cd ~/ClawSeat && ./scripts/install.sh --project demo
 给用 Mac 的人。
 给懂 tmux 的人。
 给不想再学一个云端 console 的人。
+给爱拆开研究整个工具链的人。
 
 就是你。
 
@@ -91,9 +143,11 @@ cd ~/ClawSeat && ./scripts/install.sh --project demo
 ## 深入
 
 - [`docs/INSTALL.md`](docs/INSTALL.md) — 你的 AI 会自己读
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 为想拆开看看的人
-- [`docs/HACKING.md`](docs/HACKING.md) — 想改哪就改哪
+- [`docs/OPENCLAW.md`](docs/OPENCLAW.md) — ClawSeat 怎么用 OpenClaw 的
+- [`docs/GSTACK.md`](docs/GSTACK.md) — 哪个 seat 装哪些 gstack skill
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — L1/L2/L3 金字塔 + dispatch 协议
+- [`docs/HACKING.md`](docs/HACKING.md) — 想改哪就改哪的导览
 
 ## 许可
 
-MIT。
+MIT。ClawSeat、OpenClaw、gstack 全是。
