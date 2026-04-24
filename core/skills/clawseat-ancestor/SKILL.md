@@ -354,7 +354,7 @@ ClawSeat 区分**三种**标识符，搞错一个就走死链：
 |---------|-----|------|
 | **role id**（role 词典的 role） | `planner` / `builder` / `reviewer` / `qa` / `designer` / `memory` / `ancestor` | `dispatch_task.py --target-role` 的参数；用来描述"这是个 builder 类型"。role 是 **role**，不是 seat |
 | **engineer id**（具体的 seat 实例） | 单实例时和 role id 同名：`planner` / `memory` / `ancestor`；多实例时加后缀：`builder-1` / `reviewer-1` / `designer-1`（由 `profile.seats` 声明） | `send-and-verify.sh <seat>` 参数；`dispatch_task.py --target` 参数（**explicit seat id from `profile.seats`**）；`agent_admin session start-engineer <seat>`；`~/.agents/workspaces/<project>/<engineer-id>/` 目录 |
-| **tmux session name** | `<project>-<engineer-id>-<tool>`（e.g. `cartooner-planner-claude` 单实例；`cartooner-builder-1-claude` 多实例） | 只用来 `capture-pane` 观察；**不要** 直接 `send-keys` 进去。canonical 解析：`agentctl session-name <engineer-id> --project <p>` → 读 project record + engineer tool 推导 |
+| **tmux session name** | `<project>-<engineer-id>-<tool>`（e.g. `myproject-planner-claude` 单实例；`myproject-builder-1-claude` 多实例） | 只用来 `capture-pane` 观察；**不要** 直接 `send-keys` 进去。canonical 解析：`agentctl session-name <engineer-id> --project <p>` → 读 project record + engineer tool 推导 |
 
 **engineer id vs role id 判别法**：
 
@@ -362,7 +362,7 @@ ClawSeat 区分**三种**标识符，搞错一个就走死链：
 # 看本项目的 engineer 列表（注意：`engineer list` 是**全局**的，没有 --project flag；
 # 要按项目看，用 `project show` 读 project record 里的 engineers 字段）
 python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT_NAME}
-#   name = cartooner
+#   name = myproject
 #   ...
 #   engineers = planner, memory, builder-1, reviewer-1, ...
 ```
@@ -373,9 +373,9 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT_NAME
 
 **反例（常见错误）**：
 
-- ❌ `send-and-verify.sh --project cartooner planner-claude "..."` — tool 后缀是 tmux 层概念，**不在** engineer id 里；`agentctl session-name` 不认
-- ❌ `tmux send-keys -t cartooner-planner-claude "..." Enter` — 裸 send-keys 绕过 Enter flush，TUI 可能吞回车
-- ❌ `send-and-verify.sh cartooner-planner "..."` — 少了 `--project` flag
+- ❌ `send-and-verify.sh --project myproject planner-claude "..."` — tool 后缀是 tmux 层概念，**不在** engineer id 里；`agentctl session-name` 不认
+- ❌ `tmux send-keys -t myproject-planner-claude "..." Enter` — 裸 send-keys 绕过 Enter flush，TUI 可能吞回车
+- ❌ `send-and-verify.sh myproject-planner "..."` — 少了 `--project` flag
 - ❌ 多实例项目里 `dispatch_task.py --target builder` — `profile.seats` 里没有裸 `builder`，只有 `builder-1` / `builder-2`；脚本会 `SystemExit: dispatch target 'builder' is not a declared seat`
 - ❌ 单实例项目里 `dispatch_task.py --target builder-1` — `profile.seats` 里只有裸 `builder`，反过来也不对
 
@@ -431,7 +431,7 @@ ancestor 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"op
 
 ```bash
 # PROJECT_NAME 必须先 export 或替换为实际值（heredoc 里 $ 不展开时 Python 拿不到）：
-export PROJECT_NAME=cartooner   # 换成你当前项目
+export PROJECT_NAME=myproject   # 换成你当前项目
 
 python3 - "$PROJECT_NAME" <<'PY'
 import sys, os
