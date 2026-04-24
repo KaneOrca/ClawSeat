@@ -61,8 +61,9 @@ def test_clawseat_creative_loads_with_four_seats() -> None:
     seat_ids = [s["id"] for s in seats]
     assert "ancestor" in seat_ids
     assert "planner" in seat_ids
+    assert "builder" in seat_ids   # codex execution seat (replaces qa)
     assert "designer" in seat_ids
-    assert "qa" in seat_ids
+    assert "qa" not in seat_ids    # qa removed in creative seat redesign
 
 
 def test_clawseat_creative_designer_is_gemini_oauth() -> None:

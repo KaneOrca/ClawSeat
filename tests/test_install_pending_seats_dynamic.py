@@ -78,6 +78,49 @@ def test_creative_template_seat_order_excludes_reviewer_qa(tmp_path):
     )
 
 
+def test_creative_template_builder_is_codex_designer_is_gemini(tmp_path):
+    """clawseat-creative: builder override uses codex, designer uses gemini."""
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    _copy_templates(root)
+
+    result = _run_install(root, home, launcher_log, tmux_log, py_stubs,
+                          ["--project", "harnesstest", "--template", "clawseat-creative"])
+    assert result.returncode == 0, result.stderr
+
+    local_toml = home / ".agents" / "tasks" / "harnesstest" / "project-local.toml"
+    assert local_toml.exists()
+    content = local_toml.read_text(encoding="utf-8")
+
+    # Find the builder override block (lines between id = "builder" and next [[overrides]])
+    lines = content.splitlines()
+    in_builder = False
+    in_designer = False
+    builder_lines: list[str] = []
+    designer_lines: list[str] = []
+    for line in lines:
+        if '[[overrides]]' in line:
+            in_builder = False
+            in_designer = False
+        if 'id = "builder"' in line:
+            in_builder = True
+        if 'id = "designer"' in line:
+            in_designer = True
+        if in_builder:
+            builder_lines.append(line)
+        if in_designer:
+            designer_lines.append(line)
+
+    builder_text = "\n".join(builder_lines)
+    designer_text = "\n".join(designer_lines)
+
+    assert "codex" in builder_text, (
+        f"builder override should specify codex:\n{builder_text}\n\nFull TOML:\n{content}"
+    )
+    assert "gemini" in designer_text, (
+        f"designer override should specify gemini:\n{designer_text}\n\nFull TOML:\n{content}"
+    )
+
+
 def test_default_template_seat_order_unchanged(tmp_path):
     """clawseat-default project-local.toml keeps the standard 6-seat order."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)

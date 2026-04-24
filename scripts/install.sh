@@ -885,13 +885,69 @@ EOF
   fi
 
   for seat in "${PENDING_SEATS[@]}"; do
+    local _seat_tool _seat_auth _seat_provider _seat_model_override
+    if [[ "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-default" ]]; then
+      # For non-default templates, read per-seat tool/auth/provider from template TOML.
+      local _template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+      if [[ -f "$_template_file" ]]; then
+        _seat_tool="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(e.get("tool", "claude"))
+        break
+PY
+        2>/dev/null)"
+        _seat_auth="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(e.get("auth_mode", "oauth"))
+        break
+PY
+        2>/dev/null)"
+        _seat_provider="$("$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(e.get("provider", "anthropic"))
+        break
+PY
+        2>/dev/null)"
+      fi
+    fi
+    # Fallback to ancestor provider for default template or if template read failed
+    _seat_tool="${_seat_tool:-claude}"
+    _seat_auth="${_seat_auth:-$seat_auth_mode}"
+    _seat_provider="${_seat_provider:-$seat_provider}"
     cat >>"$PROJECT_LOCAL_TOML" <<EOF
 
 [[overrides]]
 id = "$seat"
-tool = "claude"
-auth_mode = "$seat_auth_mode"
-provider = "$seat_provider"
+tool = "$_seat_tool"
+auth_mode = "$_seat_auth"
+provider = "$_seat_provider"
 EOF
     if [[ -n "$seat_model" ]]; then
       printf 'model = "%s"\n' "$seat_model" >>"$PROJECT_LOCAL_TOML"
