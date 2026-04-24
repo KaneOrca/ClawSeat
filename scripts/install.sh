@@ -949,7 +949,8 @@ tool = "$_seat_tool"
 auth_mode = "$_seat_auth"
 provider = "$_seat_provider"
 EOF
-    if [[ -n "$seat_model" ]]; then
+    # Only write model for claude seats — codex/gemini ignore this field.
+    if [[ "$_seat_tool" == "claude" && -n "$seat_model" ]]; then
       printf 'model = "%s"\n' "$seat_model" >>"$PROJECT_LOCAL_TOML"
     fi
   done

@@ -121,6 +121,48 @@ def test_creative_template_builder_is_codex_designer_is_gemini(tmp_path):
     )
 
 
+def test_creative_codex_gemini_seats_have_no_model_override(tmp_path):
+    """builder(codex) and designer(gemini) overrides must NOT have a model field."""
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    _copy_templates(root)
+
+    result = _run_install(root, home, launcher_log, tmux_log, py_stubs,
+                          ["--project", "modeltest", "--template", "clawseat-creative",
+                           "--provider", "minimax", "--api-key", "sk-test"])
+    assert result.returncode == 0, result.stderr
+
+    local_toml = home / ".agents" / "tasks" / "modeltest" / "project-local.toml"
+    assert local_toml.exists()
+    content = local_toml.read_text(encoding="utf-8")
+
+    # Parse per-seat sections
+    lines = content.splitlines()
+    in_builder = in_designer = False
+    builder_lines: list[str] = []
+    designer_lines: list[str] = []
+    for line in lines:
+        if '[[overrides]]' in line:
+            in_builder = in_designer = False
+        if 'id = "builder"' in line:
+            in_builder = True
+        if 'id = "designer"' in line:
+            in_designer = True
+        if in_builder:
+            builder_lines.append(line)
+        if in_designer:
+            designer_lines.append(line)
+
+    builder_text = "\n".join(builder_lines)
+    designer_text = "\n".join(designer_lines)
+
+    assert "model" not in builder_text, (
+        f"codex builder override must not have model field:\n{builder_text}"
+    )
+    assert "model" not in designer_text, (
+        f"gemini designer override must not have model field:\n{designer_text}"
+    )
+
+
 def test_default_template_seat_order_unchanged(tmp_path):
     """clawseat-default project-local.toml keeps the standard 6-seat order."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
