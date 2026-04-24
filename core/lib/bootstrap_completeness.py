@@ -2,10 +2,9 @@
 
 At bootstrap / reconfigure time, verify the project has the structural
 artefacts that runtime seats will expect. Failures here show up far
-later — the P1 example the user named was cartooner missing
-``PLANNER_BRIEF.md``; planner would boot, accept a task, then silently
-skip context reads. A preflight is always cheaper than a mid-task
-surprise.
+later — a project missing ``PLANNER_BRIEF.md`` lets planner boot,
+accept a task, then silently skip context reads. A preflight is always
+cheaper than a mid-task surprise.
 
 Checks:
 

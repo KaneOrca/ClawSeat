@@ -12,7 +12,7 @@ This module creates idempotent symlinks from the sandbox HOME back to
 the real operator's dotfiles so every seat "feels right" without
 any manual post-boot fixup. The P1 ask from the user:
 
-    runtime home 自动补齐 — 不应该再靠我们手工给 cartooner.planner
+    runtime home 自动补齐 — 不应该再靠手工给每个 seat
     补符号链接。
 
 Rules (all idempotent, safe to re-run):
