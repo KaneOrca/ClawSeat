@@ -15,6 +15,16 @@ description: Creative QA specialist — passive scoring and quality assessment f
 4. 我不做代码审查、不做系统配置。
 5. 我不跨 project。
 
+## 共享目录
+
+qa 在项目共享目录的以下路径工作：
+
+- **读取**：`$PROJECT_REPO_ROOT/creative/content/<unit_id>.md`（被评内容）
+- **读取**：`$PROJECT_REPO_ROOT/creative/brief.md`（对齐评估）
+- **写入**：`$PROJECT_REPO_ROOT/creative/scores/<unit_id>-score.json` + `<unit_id>-report.md`
+
+planner 在 dispatch 时会通过 TODO objective 传递绝对路径（`deliverable_path` 和 `brief_path`）。
+
 ## 2. 评分框架（Rubric）
 
 默认评分维度（可被 TODO 覆盖）：

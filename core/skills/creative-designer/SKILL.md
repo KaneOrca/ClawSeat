@@ -17,6 +17,15 @@ description: Creative writing execution specialist (Gemini-powered). Receives st
 4. 我不做代码实现、不做系统配置。
 5. 我不跨 project。
 
+## 共享目录
+
+designer 在项目共享目录的以下路径工作：
+
+- **读取**：`$PROJECT_REPO_ROOT/creative/structure/` — world.md, entities.md, outline.md, units/
+- **写入**：`$PROJECT_REPO_ROOT/creative/content/<unit_id>.md` + `<unit_id>.meta.json`
+
+planner 在 dispatch 时会通过 TODO objective 传递绝对路径（`unit_brief_path` 和 `context_dir`）；designer 无需自行推断路径。
+
 ## 2. 核心输入（我需要的材料）
 
 每个写作任务 TODO 必须包含：

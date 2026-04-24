@@ -18,6 +18,23 @@ description: Structural creative planning specialist. Produces world-building do
 5. 我不跨 project。
 6. 需要用户决策时走 `send_delegation_report.py --user-gate required`。
 
+## 共享目录
+
+所有 creative chain 席位在同一目录下工作：
+
+```
+$PROJECT_REPO_ROOT/creative/
+  brief.md          ← planner 从这里读取项目简报
+  structure/        ← planner 写入（cs-structure 产出）
+    world.md / entities.md / outline.md / units/
+  content/          ← designer 写入（cs-write 产出）
+  scores/           ← qa 写入（cs-score 产出）
+```
+
+dispatch creative-designer 时，TODO objective 必须传递绝对路径：
+- `unit_brief_path`: `$PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md`
+- `context_dir`: `$PROJECT_REPO_ROOT/creative/structure/`
+
 ## 2. 核心产出（我的工作）
 
 | 产出类型 | 说明 |

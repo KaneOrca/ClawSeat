@@ -14,7 +14,7 @@ The scorer reads deliverables and produces structured scoring artifacts; it does
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `deliverable_path` | path | ✓ | Path to content.md / DELIVERY.md / git commit SHA |
+| `deliverable_path` | path | ✓ | Path to deliverable; typically `$PROJECT_REPO_ROOT/creative/content/<unit_id>.md` |
 | `brief_path` | path | ✓ | Original project brief (for alignment assessment) |
 | `rubric_path` | path | optional | Custom rubric TOML/MD; defaults to built-in rubric below |
 | `feishu_publish` | bool | optional | Publish score summary to Feishu (default: false) |
@@ -23,8 +23,8 @@ The scorer reads deliverables and produces structured scoring artifacts; it does
 
 | File | Description |
 |------|-------------|
-| `score.json` | `{dimensions:[{name,weight,score,evidence}], total, grade, timestamp}` |
-| `report.md` | Human-readable scoring report (dimension breakdown + summary + improvement suggestions) |
+| `score.json` | `{dimensions:[{name,weight,score,evidence}], total, grade, timestamp}`; path: `$PROJECT_REPO_ROOT/creative/scores/<unit_id>-score.json` |
+| `report.md` | Human-readable scoring report; path: `$PROJECT_REPO_ROOT/creative/scores/<unit_id>-report.md` |
 
 ### ACCEPTANCE CRITERIA
 

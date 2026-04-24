@@ -14,8 +14,8 @@ The same interface covers fiction writing (Gemini), code implementation (Codex),
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `unit_brief_path` | path | ✓ | Unit brief file (from cs-structure's `units/`) |
-| `context_dir` | path | optional | Context directory containing `world.md` + `entities.md` |
+| `unit_brief_path` | path | ✓ | Unit brief file; canonical path: `$PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md` |
+| `context_dir` | path | optional | Context dir with `world.md` + `entities.md`; defaults to `$PROJECT_REPO_ROOT/creative/structure/` |
 | `min_words` | int | optional | Minimum word/line count (read from unit brief if not specified) |
 | `format` | enum | optional | Output format: `prose` / `fountain` / `markdown` / `code` (default: `prose`) |
 
@@ -23,10 +23,10 @@ The same interface covers fiction writing (Gemini), code implementation (Codex),
 
 | File | Description |
 |------|-------------|
-| `content.md` (or `.fountain` / `.py` / etc.) | The actual produced content; format determined by `format` parameter |
-| `meta.json` | `{word_count, sections_completed[], format, completed_at}` |
+| `content.md` (or `.fountain` / `.py` / etc.) | The actual produced content; canonical path: `$PROJECT_REPO_ROOT/creative/content/<unit_id>.md` |
+| `meta.json` | `{word_count, sections_completed[], format, completed_at}`; path: `$PROJECT_REPO_ROOT/creative/content/<unit_id>.meta.json` |
 
-Output path: same directory as `unit_brief_path` unless `objective` specifies otherwise.
+Default output path: `$PROJECT_REPO_ROOT/creative/content/` (unless `objective` specifies otherwise).
 
 ### ACCEPTANCE CRITERIA
 
