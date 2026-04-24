@@ -71,3 +71,10 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 自己写长文章节（那是 designer 的职责）
 - 在大纲里写具体对话（大纲是结构，不是台本）
 - 等 designer 全部完成才汇总（应随时聚合完成的章节）
+
+## Capability Skill Refs
+
+这个 role 的主要执行能力由以下 capability skill 定义：
+
+- **[cs-structure](../cs-structure/SKILL.md)** — 主要能力：世界观文档、人物小传、全局大纲、单元简报（CONTRACT / ACCEPTANCE 定义在此）
+- **[cs-write](../cs-write/SKILL.md)** — 可选辅助：当需要直接产出短文字摘要或 brief-level 内容时参照此接口

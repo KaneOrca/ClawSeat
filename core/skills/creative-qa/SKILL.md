@@ -78,3 +78,9 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 发现问题就直接改内容（严禁，只报告，不修改）
 - 评分无依据（每条分数必须引用原文证据）
 - 把 FEISHU_ENABLED=0 环境下的发布失败当成评分失败（两者独立）
+
+## Capability Skill Refs
+
+这个 role 的主要执行能力由以下 capability skill 定义：
+
+- **[cs-score](../cs-score/SKILL.md)** — 主要能力：rubric 评分（deliverable_path + brief_path → score.json + report.md）；默认 rubric、CONTRACT / ACCEPTANCE 定义在此

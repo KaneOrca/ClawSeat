@@ -67,3 +67,9 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 自己修改大纲（发现结构问题应通过 escalate 返给 planner）
 - 在写作中引入大纲没有提到的新人物（需要 planner 决策）
 - 忽略风格指南（视角/语气/字数是交付标准的一部分）
+
+## Capability Skill Refs
+
+这个 role 的主要执行能力由以下 capability skill 定义：
+
+- **[cs-write](../cs-write/SKILL.md)** — 主要能力：长文执行（unit_brief_path → content.md + meta.json）；CONTRACT / ACCEPTANCE 定义在此

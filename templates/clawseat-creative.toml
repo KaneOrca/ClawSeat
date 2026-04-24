@@ -60,6 +60,7 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-planner/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-structure/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
@@ -92,6 +93,7 @@ design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-designer/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-write/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
@@ -124,6 +126,7 @@ design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/creative-qa/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cs-score/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
