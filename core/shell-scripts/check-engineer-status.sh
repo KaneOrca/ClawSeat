@@ -217,6 +217,46 @@ for s in $SESSIONS; do
     continue
   fi
 
+  # === 2.5. 工具执行指示器（先于底部 prompt 检测，覆盖三个 harness 的 WORKING 误判）===
+  # 根因：❯ / › / "Type your message" 在工具运行中也会出现在底部；
+  # 下列指示器更能代表"正在执行"，先行检测可防止 IDLE/STALLED 误判。
+
+  # Claude Code — ⏺ tool-call bullet（每次工具调用输出前出现）
+  if printf '%s\n' "$RAW_TAIL20" | grep -qF '⏺'; then
+    echo "$s: WORKING (tool indicator)"
+    continue
+  fi
+
+  # Claude Code — ✶ ✻ ✢ ✳ ✽ 活动 spinner（模型推理阶段，区别于 braille spinner）
+  if printf '%s\n' "$RAW_TAIL20" | grep -qE '✶|✻|✢|✳|✽'; then
+    echo "$s: WORKING (cc spinner)"
+    continue
+  fi
+
+  # 扩展 esc to interrupt 搜索范围：tail-20 ⊃ tail-10；
+  # 长输出或多工具调用时 interrupt 提示可能被推出原来的 tail-10 窗口。
+  if printf '%s\n' "$RAW_TAIL20" | grep -q "esc to interrupt"; then
+    TIMER=$(printf '%s\n' "$RAW_TAIL5" | grep -oE "([0-9]+h )?[0-9]+m [0-9]+s|[0-9]+s · " | tail -1 | sed 's/ · $//')
+    if [ -n "$TIMER" ]; then
+      echo "$s: WORKING ($TIMER)"
+    else
+      echo "$s: WORKING (esc-extended)"
+    fi
+    continue
+  fi
+
+  # Codex — │ 行前缀（工具输出框；出现在 › prompt 仍在底部时）
+  if printf '%s\n' "$RAW_TAIL20" | grep -qE '^[[:space:]]*│ .'; then
+    echo "$s: WORKING (codex tool)"
+    continue
+  fi
+
+  # Gemini — 生成中间态文本（pane title 未及更新时的兜底）
+  if printf '%s\n' "$RAW_TAIL20" | grep -qiE 'Generating\.\.\.|Gemini is (working|thinking)'; then
+    echo "$s: WORKING (gemini active)"
+    continue
+  fi
+
   # === 3. plan mode / decision-needed ===
   if printf '%s\n' "$RAW_TAIL5" | grep -q "plan mode on"; then
     CTX_INFO=""
