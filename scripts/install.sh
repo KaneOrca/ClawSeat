@@ -1556,16 +1556,17 @@ PY
 }
 
 grid_payload() {
-  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" <<'PY'
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
 import json
 import shlex
 import sys
 
-project, wait_script = sys.argv[1:3]
+project, wait_script = sys.argv[1], sys.argv[2]
+seats = sys.argv[3:]  # dynamic from PENDING_SEATS
 panes = [
     {"label": "ancestor", "command": f"tmux attach -t '={project}-ancestor'"},
 ]
-for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+for seat in seats:
     panes.append(
         {
             "label": seat,
