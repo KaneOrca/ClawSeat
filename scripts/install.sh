@@ -347,6 +347,27 @@ PY
   BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
 }
 
+resolve_pending_seats() {
+  # For clawseat-default, keep the hardcoded list (generated template, no file to read).
+  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && return 0
+  local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+  [[ -f "$template_file" ]] || return 0  # fallback to hardcoded if not found
+  local seats
+  seats="$("$PYTHON_BIN" - "$template_file" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+seats = [e["id"] for e in data.get("engineers", []) if e.get("id") != "ancestor"]
+print(" ".join(seats))
+PY
+  2>/dev/null)"
+  [[ -n "$seats" ]] && read -ra PENDING_SEATS <<< "$seats"
+}
+
 normalize_provider_choice() {
   if [[ "$FORCE_PROVIDER" =~ ^[0-9]+$ ]]; then
     FORCE_PROVIDER_CHOICE="$FORCE_PROVIDER"
@@ -842,10 +863,15 @@ write_project_local_toml() {
   fi
 
   mkdir -p "$(dirname "$PROJECT_LOCAL_TOML")" || die 31 PROJECT_LOCAL_DIR_FAILED "unable to create $(dirname "$PROJECT_LOCAL_TOML")"
+  # Build seat_order from resolved PENDING_SEATS (ancestor always first)
+  local _seat_order_str="\"ancestor\""
+  for seat in "${PENDING_SEATS[@]}"; do
+    _seat_order_str="${_seat_order_str}, \"${seat}\""
+  done
   cat >"$PROJECT_LOCAL_TOML" <<EOF
 project_name = "$PROJECT"
 repo_root = "$PROJECT_REPO_ROOT"
-seat_order = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
+seat_order = [$_seat_order_str]
 
 [[overrides]]
 id = "ancestor"
@@ -1502,7 +1528,7 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  parse_args "$@"; resolve_pending_seats; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
   launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
   bootstrap_project_profile
