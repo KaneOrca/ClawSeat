@@ -149,15 +149,15 @@ def _koder_bind_recovery_hint(tenant: str, cfg: Any, err: str) -> str:
         except Exception:
             expected = None
 
-    # ClawSeat backs up workspaces in two places:
-    #   (a) sibling directories — operator-initiated `mv workspace workspace.pre-*-backup.<ts>`
-    #       preserves the *entire* old workspace next to the expected path
-    #   (b) in-workspace `.backup-<ts>/` — managed backups written by
-    #       clawseat-install/init_koder.py + _seat_bootstrap.py (partial
-    #       snapshot, not a whole-workspace restore)
-    # List both, newest first by mtime (not lexicographic).
+    # Error path reachable here: validate_tenant(..., "does not exist"), i.e.
+    # tenant.workspace does NOT exist on disk. That means in-workspace
+    # .backup-<ts>/ directories cannot be scanned (the workspace itself is
+    # gone). Only sibling backups — operator-initiated `mv workspace
+    # workspace.pre-*-backup.<ts>` that preserves the whole old workspace
+    # next to the expected path — are actionable here. Managed in-workspace
+    # backups are a different error mode (corrupted/partial workspace) and
+    # belong to a separate validator failure; do not conflate.
     sibling_backups: list[Path] = []
-    inner_backups: list[Path] = []
     if expected is not None:
         parent = expected.parent
         stem = expected.name
@@ -178,20 +178,6 @@ def _koder_bind_recovery_hint(tenant: str, cfg: Any, err: str) -> str:
                 )
             except OSError:
                 sibling_backups = []
-        if expected.is_dir():
-            try:
-                inners = [
-                    p
-                    for p in expected.iterdir()
-                    if p.is_dir() and p.name.startswith(".backup-")
-                ]
-                inner_backups = sorted(
-                    inners,
-                    key=lambda p: _safe_mtime(p),
-                    reverse=True,
-                )
-            except OSError:
-                inner_backups = []
 
     lines = [
         "",
@@ -202,25 +188,15 @@ def _koder_bind_recovery_hint(tenant: str, cfg: Any, err: str) -> str:
     if sibling_backups:
         lines.append(
             f"  ({step}) Restore whole-workspace backup (operator-initiated) / "
-            f"从整个 workspace 备份恢复 — {len(sibling_backups)} candidate(s), newest first:"
+            f"从整个 workspace 备份恢复 — {len(sibling_backups)} candidate(s), newest first by mtime:"
         )
         for b in sibling_backups[:3]:
             lines.append(f"        mv {b} {expected}")
         step += 1
-    if inner_backups:
+    else:
         lines.append(
-            f"  ({step}) In-workspace managed backup found (.backup-*) — do NOT mv the whole "
-            f"workspace; use clawseat-install's recovery flow / 使用 clawseat-install 的恢复流程:"
-        )
-        lines.append(
-            f"        python3 {Path.home()}/clawseat/core/skills/clawseat-install/scripts/init_koder.py "
-            "# inspect .backup-* and restore the specific files it manages"
-        )
-        step += 1
-    if not sibling_backups and not inner_backups:
-        lines.append(
-            f"  ({step}) No backup found at {expected} or alongside it. "
-            f"Create or restore the workspace manually / 手工创建或恢复 workspace."
+            f"  ({step}) No sibling backup found next to {expected}. Create or "
+            f"restore the workspace manually / 手工创建或恢复 workspace."
         )
         step += 1
     lines.append(

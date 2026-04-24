@@ -114,7 +114,10 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "Step 9.5: auto-send Phase-A kickoff prompt" in combined
     assert "Phase-A kickoff delivered to kickoff50-ancestor" in combined
-    assert "IF ANCESTOR IS IDLE, COPY AND PASTE THIS:" in combined
+    # Banner marker (Round-8 rewrite): bilingual header + "copy between the lines"
+    # fences the kickoff block instead of the old "IF ANCESTOR IS IDLE" line.
+    assert "PHASE-A KICKOFF (copy between the lines" in combined
+    assert "ClawSeat install complete / 安装已完成" in combined
     assert kickoff in combined
     assert expected_brief.is_file()
     assert guide_path.is_file()
@@ -151,8 +154,14 @@ def test_install_keeps_manual_fallback_when_auto_send_times_out(tmp_path: Path) 
 
     assert result.returncode == 0, result.stderr
     assert "Auto-send could not verify kickoff delivery to kickoff50-ancestor." in combined
-    assert "IF ANCESTOR IS IDLE, COPY AND PASTE THIS:" in combined
+    # Banner marker (Round-8 rewrite): see sibling test for full coverage.
+    # Manual-fallback path still prints the fenced kickoff block for copy-paste.
+    assert "PHASE-A KICKOFF (copy between the lines" in combined
+    assert "ClawSeat install complete / 安装已完成" in combined
     assert kickoff in combined
+    # Round-8 Step 9.5 now emits an explicit warn when auto-send skips or fails
+    # (previously `|| true` swallowed it silently).
+    assert "Phase-A kickoff auto-send skipped or failed" in combined
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "capture-pane -t =kickoff50-ancestor" in tmux_output
