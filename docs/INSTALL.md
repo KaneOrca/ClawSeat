@@ -84,6 +84,19 @@ bash scripts/install.sh --provider anthropic_console --api-key sk-ant-...
 bash scripts/install.sh --base-url https://api.example.invalid --api-key sk-test --model claude-sonnet
 ```
 
+Additional flags:
+
+```bash
+# Install for a different project's repo (cartooner, etc.)
+bash scripts/install.sh --project cartooner --repo-root /path/to/cartooner
+
+# Disable Feishu notifications (no lark-cli required)
+CLAWSEAT_FEISHU_ENABLED=0 bash scripts/install.sh --project myproj
+
+# Forget remembered per-seat harness choices from a previous run
+bash scripts/install.sh --reset-harness-memory
+```
+
 Security note: `--api-key` is visible in `ps` output and shell history. Prefer:
 
 ```bash
