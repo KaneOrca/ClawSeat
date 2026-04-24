@@ -38,9 +38,10 @@ bash scripts/install.sh
 
 For non-default cases, follow the playbook and pass only the flags it
 documents, for example `--project`, `--repo-root` (FR-7: point ancestor to a
-different business repo), `--provider`, `--base-url`, `--api-key`, `--model`,
-`--reinstall`, or `--reset-harness-memory` (FR-1: clear saved per-seat harness
-choices).
+different business repo), `--template` (select project roster: `clawseat-default` |
+`clawseat-engineering` | `clawseat-creative`), `--provider`, `--base-url`,
+`--api-key`, `--model`, `--reinstall`, or `--reset-harness-memory` (FR-1: clear
+saved per-seat harness choices).
 
 Important:
 - `scripts/install.sh` is the L1 user-facing entrypoint. Do not replace it
