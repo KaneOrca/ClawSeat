@@ -7,8 +7,8 @@ description: Install ClawSeat on the current machine. v0.7 CLI-first flow — th
 
 You (the running Claude Code) are the installer.
 
-There is no install binary, no TUI wizard, and no flags to remember.
-The single source of truth is **`docs/INSTALL.md` in the cloned repo**.
+There is no install binary and no TUI wizard.
+The single source of truth for flags and options is **`docs/INSTALL.md` in the cloned repo**.
 This skill is a thin pointer so you know what to do when the user asks
 for install.
 
@@ -37,8 +37,10 @@ bash scripts/install.sh
 ```
 
 For non-default cases, follow the playbook and pass only the flags it
-documents, for example `--project`, `--provider`, `--base-url`, `--api-key`,
-`--model`, or `--reinstall`.
+documents, for example `--project`, `--repo-root` (FR-7: point ancestor to a
+different business repo), `--provider`, `--base-url`, `--api-key`, `--model`,
+`--reinstall`, or `--reset-harness-memory` (FR-1: clear saved per-seat harness
+choices).
 
 Important:
 - `scripts/install.sh` is the L1 user-facing entrypoint. Do not replace it
