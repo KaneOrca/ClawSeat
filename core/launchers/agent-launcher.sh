@@ -729,10 +729,9 @@ run_claude_runtime() {
     #   2. drop all agent-launcher-provided token env vars so Claude
     #      doesn't prefer a stale token/API-mode path over its own
     #      native login flow
-    # Reference: launcher_runtime.sh:201 + launcher_data.py:124 (ClawSeat XDG fix);
-    # only restore HOME (missed XDG + CLAUDE_CODE_OAUTH_TOKEN), which
-    # left Claude looking at sandbox XDG dirs and picking up whatever
-    # stale token env we inherited — the real "re-auth every start" bug.
+    # Older ClawSeat builds only restored HOME and missed XDG + CLAUDE_CODE_OAUTH_TOKEN,
+    # leaving Claude looking at sandbox XDG dirs and picking up stale token env —
+    # the root cause of the "re-auth every start" bug.
     unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
     unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_SUBSCRIBER_SUBSCRIPTION_ID
     export HOME="$REAL_HOME"
