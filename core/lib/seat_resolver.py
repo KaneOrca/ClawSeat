@@ -378,6 +378,31 @@ def resolve_seat(
             session_name=session_name,
         )
 
+    # ── 2.5. suffix alias fallback ───────────────────────────────────────────
+    # Bare seat name (e.g. "builder") may not be in tmux_project_seats when
+    # dynamic_roster generates runtime_seats with numbered suffixes such as
+    # "builder-1".  Try -1 through -9 in order and resolve to the first match.
+    # Emits a diagnostic note to stderr so callers can see the alias mapping.
+    _alias_target: str | None = None
+    for _n in range(1, 10):
+        _candidate = f"{target}-{_n}"
+        if _candidate in hints.tmux_project_seats:
+            _alias_target = _candidate
+            break
+    if _alias_target is not None:
+        print(
+            f"note: seat {target!r} resolved via alias {_alias_target!r}",
+            file=sys.stderr,
+        )
+        resolver = profile_session_name_resolver or _resolve_session_name_from_session_toml
+        session_name = resolver(profile_project_name, _alias_target)
+        return SeatResolution(
+            kind="tmux",
+            transport="tmux-send-keys",
+            target=target,
+            session_name=session_name,
+        )
+
     # ── 3. openclaw: workspace contract exists with feishu_group_id ───────────
     workspace_contract = oc_home / f"workspace-{target}" / "WORKSPACE_CONTRACT.toml"
     if workspace_contract.exists():
