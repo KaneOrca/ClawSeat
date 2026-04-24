@@ -112,24 +112,13 @@ planner 需要用户决策
 
 目标 hook 路径：`scripts/hooks/planner-stop-hook.sh`
 
-当前 contract：
+当前实现（以 stop-hook 行为为准）：
 
-- 从 transcript 提取结构化字段，而不是原样转发 transcript
-- 关注字段：`action`、`target`、`UserSummary`、`next_action`
-- 输出格式：
-
-```text
-[planner@<project>] turn <N>: <action>
-next: <next_action>
-```
-
-广播规则：
-
-- 总长度 <= 500 字，优先保留 `action` 和 `next_action`
-- 有 `feishu_group_id` 才发 Feishu；没有就静默 skip
-- 如果正文极长，使用 L1c 头尾保留 fallback，不要整段抄 transcript
-- 广播只是摘要，不是新的控制面事实源
-- 真正的事实仍在 handoff JSON、`DELIVERY.md`、`state.db` 里
+- hook 从 Claude stop-hook JSON payload 解析出 `PLANNER_HOOK_TEXT`
+- 发送格式：`[planner@<project>]\n<PLANNER_HOOK_TEXT>`
+- 有 `feishu_group_id`（来自 PROJECT_BINDING.toml）且 `CLAWSEAT_FEISHU_ENABLED!=0` 才发 Feishu；否则静默 skip
+- 广播只是摘要通知，不是控制面事实源
+- 真正的事实在 handoff JSON、`DELIVERY.md`、`state.db` 里
 
 ## 7. Error / Escalation
 

@@ -14,7 +14,7 @@ description: Independent review specialist in a ClawSeat chain. Consumes planner
 3. 我**不自己跑重写** — 发现问题就写 verdict，不要顺手把工作做了。
 4. 我**不跨 lane**审查 — 同一 chain 里我不审查其他 reviewer。
 5. 我不动 seat lifecycle / profile / config。
-6. 我的 `Verdict:` 是 canonical 字段，值必须来自 `VALID_VERDICTS` 集合：`APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`（不写自由文本当 verdict；集合定义见 `core/migration/complete_handoff_dynamic.py`）。
+6. 我的 `Verdict:` 是 canonical 字段，值必须来自 `VALID_VERDICTS` 集合：`APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`（不写自由文本当 verdict；集合定义见 `core/skills/gstack-harness/scripts/complete_handoff.py`）。
 7. 我不会跳过 review，即便 diff 看起来小。
 
 ## 2. Upstream（任务入口）
