@@ -72,3 +72,16 @@ def test_ancestor_skill_53_dispatch_preflight_uses_load_profile_not_raw_toml() -
         "§5.3.6 must explain why raw TOML `data[\"seats\"]` is wrong "
         "under [dynamic_roster] projects"
     )
+    # Negative assertion: the broken code pattern must NOT appear as
+    # executable code anywhere in the skill. (The warning text can
+    # mention `data["seats"]` with subscript notation — that's the
+    # anti-pattern we're teaching operators to recognize — but the
+    # specific `.get("seats", [])` idiom would indicate someone
+    # reintroduced the raw-TOML read path alongside the explanatory
+    # text.) Reviewer 5c9704f nit.
+    assert 'data.get("seats", [])' not in skill and \
+        "data.get('seats', [])" not in skill, (
+        "§5.3.6 must not contain executable `data.get(\"seats\", [])` "
+        "— that's the pre-iter-11 broken preflight pattern that "
+        "underreports under [dynamic_roster]"
+    )
