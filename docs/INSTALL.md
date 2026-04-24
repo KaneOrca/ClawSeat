@@ -199,7 +199,7 @@ export PROJECT_NAME=install
 Verify:
 
 ```bash
-test -d "$CLAWSEAT_ROOT/.git" && test -f "$CLAWSEAT_ROOT/scripts/install.sh"
+test -e "$CLAWSEAT_ROOT/.git" && test -f "$CLAWSEAT_ROOT/scripts/install.sh"
 ```
 
 Failure:
@@ -216,6 +216,8 @@ INSTALL_BROKEN: repository missing or scripts/install.sh not found
 cd "$CLAWSEAT_ROOT"
 bash scripts/install.sh
 ```
+
+> **交互模式（kind-first）**：如果未传 `--template` 和 `--project`，install.sh 会先问项目类型（工程 / 创作 / 通用），再根据类型显示对应 placeholder 询问项目名。CI 环境（非 TTY）自动跳过交互，使用 `clawseat-default` 模板和默认项目名；如需指定，传 `--project <name> --template <kind>`。
 
 Dry-run preflight:
 
@@ -235,8 +237,8 @@ bash scripts/install.sh --base-url https://api.example.invalid --api-key sk-test
 Additional flags:
 
 ```bash
-# Install for a different project's repo (cartooner, etc.)
-bash scripts/install.sh --project cartooner --repo-root /path/to/cartooner
+# Install for a different project's repo
+bash scripts/install.sh --project myproject --repo-root /path/to/myproject
 
 # Disable Feishu notifications (no lark-cli required)
 CLAWSEAT_FEISHU_ENABLED=0 bash scripts/install.sh --project myproj

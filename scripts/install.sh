@@ -2,6 +2,7 @@
 set -euo pipefail
 
 DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""
+_PROJECT_EXPLICIT=0; _TEMPLATE_EXPLICIT=0  # set to 1 when flag is passed explicitly
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
@@ -279,7 +280,7 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --dry-run) DRY_RUN=1; shift ;;
-      --project) PROJECT="$2"; shift 2 ;;
+      --project) PROJECT="$2"; _PROJECT_EXPLICIT=1; shift 2 ;;
       --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
       --provider) FORCE_PROVIDER="$2"; shift 2 ;;
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
@@ -287,7 +288,7 @@ parse_args() {
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
-      --template) CLAWSEAT_TEMPLATE_NAME="$2"; shift 2 ;;
+      --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
       --reset-harness-memory)
         "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
 import sys
@@ -335,6 +336,10 @@ PY
       die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|ark|xcode-best + --api-key"
     fi
   fi
+  compute_project_paths
+}
+
+compute_project_paths() {
   STATUS_FILE="$HOME/.agents/tasks/$PROJECT/STATUS.md"
   PROVIDER_ENV="$HOME/.agents/tasks/$PROJECT/ancestor-provider.env"
   BRIEF_PATH="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/ancestor-bootstrap.md"
@@ -347,6 +352,55 @@ PY
   ANCESTOR_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
   BOOTSTRAP_TEMPLATE_DIR="$AGENTS_TEMPLATES_ROOT/$CLAWSEAT_TEMPLATE_NAME"
   BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
+}
+
+# kind-first interactive prompt — only runs when TTY available and neither
+# --project nor --template was passed explicitly.  Uses /dev/tty so pipe/CI
+# stdin does not interfere.  Sets PROJECT + CLAWSEAT_TEMPLATE_NAME, then
+# recomputes derived paths via compute_project_paths().
+prompt_kind_first_flow() {
+  # Skip when: non-TTY, or either flag was explicitly provided.
+  [[ -t 0 && -t 1 ]] || return 0
+  [[ "$_PROJECT_EXPLICIT" == "0" && "$_TEMPLATE_EXPLICIT" == "0" ]] || return 0
+
+  printf '\nClawSeat — 新项目配置\n' >&2
+  printf '\n选择项目类型：\n' >&2
+  printf '  1) 工程 (clawseat-engineering  — 5 seat: planner/builder/reviewer/qa/designer)\n' >&2
+  printf '  2) 创作 (clawseat-creative     — 4 seat: planner/builder/designer)\n' >&2
+  printf '  3) 通用 (clawseat-default      — 5 seat 基线模板)\n' >&2
+
+  local _kind=""
+  while true; do
+    printf '选择 [1-3]: ' >&2
+    read -r _kind < /dev/tty
+    case "$_kind" in
+      1) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
+      2) CLAWSEAT_TEMPLATE_NAME="clawseat-creative";    break ;;
+      3) CLAWSEAT_TEMPLATE_NAME="clawseat-default";     break ;;
+      *) printf '请输入 1、2 或 3\n' >&2 ;;
+    esac
+  done
+
+  local _placeholder
+  case "$CLAWSEAT_TEMPLATE_NAME" in
+    clawseat-engineering) _placeholder="e.g. api-service, web-frontend, mobile-app" ;;
+    clawseat-creative)    _placeholder="e.g. novel-scifi, series-drama, script-ep01" ;;
+    *)                    _placeholder="e.g. myproject, experiment-01" ;;
+  esac
+
+  local _name="" _attempt=0
+  while [[ $_attempt -lt 3 ]]; do
+    _attempt=$((_attempt + 1))
+    printf '\n项目名 (%s): ' "$_placeholder" >&2
+    read -r _name < /dev/tty
+    if [[ "$_name" =~ ^[a-z0-9-]+$ ]]; then
+      PROJECT="$_name"
+      compute_project_paths
+      return 0
+    fi
+    printf '无效：项目名必须匹配 ^[a-z0-9-]+$\n' >&2
+  done
+  die 2 INVALID_PROJECT "项目名 3 次输入均无效，请用 --project 传入合法名称"
 }
 
 resolve_pending_seats() {
@@ -1688,7 +1742,7 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; resolve_pending_seats; normalize_provider_choice
+  parse_args "$@"; prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
