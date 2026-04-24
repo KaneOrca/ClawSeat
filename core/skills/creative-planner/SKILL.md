@@ -54,14 +54,19 @@ dispatch creative-designer 时，TODO objective 必须传递绝对路径：
 4. 编剧室协作产出 `creative/structure/`（world.md / entities.md / outline.md / units/）
 5. **[GATE]** 推飞书摘要（`user_gate=required`），等待用户确认后才进入 Step 2
 
-### Step 2 — cs-write（ClawSeat 团队模式，门控通过后）
+### Step 2 — cs-write（ClawSeat 团队模式，Gate 2 通过后）
 
 1. 读取 `creative/structure/units/` 下的分集列表
-2. 按顺序（或用户指定的批次）dispatch **creative-designer**（gemini）
-3. 每个 dispatch 的 TODO objective 必须包含绝对路径：
-   - `unit_brief_path: $PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md`
-   - `context_dir: $PROJECT_REPO_ROOT/creative/structure/`
-4. 可以并发 dispatch 多个 designer 实例处理不同章节（fan-out）
+2. 逐集 dispatch **creative-designer**（gemini），每集 dispatch 前准备滚动上下文：
+   - **首集**（Episode 1）：无 state_summary；objective 包含 `context_dir`（world.md + entities.md）
+   - **第 N 集**（N > 1）：
+     1. 读取 `creative/content/<n-1>.md`，提取集末状态摘要（人物位置/关键事件/未解悬念）
+     2. 写入 `creative/structure/state_<n-1>.md`
+     3. dispatch objective 带入：
+        - `unit_brief_path: $PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md`
+        - `context_dir: $PROJECT_REPO_ROOT/creative/structure/`
+        - `state_summary_path: $PROJECT_REPO_ROOT/creative/structure/state_<n-1>.md`
+3. 可以并发 dispatch 多个 designer 实例处理不同章节（fan-out，适用于无强时序依赖的章节）
 
 ### Step 3 — cs-score（qa 评分）
 

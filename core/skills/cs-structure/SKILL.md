@@ -82,17 +82,34 @@ Teammate: 叙事设计师
 
 **启动要求**：creative-planner 的运行环境需设置 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`。
 
-## GATE: 用户确认门控
+## GATE 1: 世界观 + 人物确认
 
-cs-structure 完成后，**暂停等待用户确认**，不自动进入 cs-write：
+编剧室的世界观架构师和人物设计师完成初稿后**暂停**：
 
-1. 产出 `creative/structure/`（world.md / entities.md / outline.md / units/）
-2. 调用 `send_delegation_report.py` 推送摘要到飞书：
-   - world.md 摘要（前 500 字）
+1. 产出 `creative/structure/world.md` + `entities.md`（草稿标记为 draft_v1）
+2. 推飞书摘要（`user_gate=required`）：
+   - world.md 前 500 字
    - entities.md 主要人物列表
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
+  --project <project> \
+  --report-status in_progress \
+  --decision-hint ask_user \
+  --user-gate required \
+  --human-summary "世界观+人物初稿完成（Gate 1）。请确认世界观规则和人物设定后继续大纲创作。"
+```
+
+3. 用户确认后，叙事设计师继续完成 `outline.md` + `units/`
+
+## GATE 2: 分集大纲确认
+
+叙事设计师完成分集大纲后**暂停**，不自动进入 cs-write：
+
+1. 产出 `creative/structure/outline.md` + `units/*.md`
+2. 推飞书摘要（`user_gate=required`）：
    - outline.md 大纲骨架
-   - units/ 分集列表
-3. `user_gate=required`，等待用户回复确认后 creative-planner 才 dispatch cs-write
+   - units/ 分集列表（集号/标题/主要冲突）
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_report.py" \
@@ -100,8 +117,12 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_repor
   --report-status done \
   --decision-hint ask_user \
   --user-gate required \
-  --human-summary "编剧室完成。大纲: <outline_summary>。分集: <units_list>。请确认后继续执行 cs-write。"
+  --human-summary "分集大纲完成（Gate 2）。大纲: <outline_summary>。分集: <units_list>。请确认后继续执行 cs-write。"
 ```
+
+3. 用户确认后，creative-planner 开始 dispatch cs-write
+
+> **参考依据**：Hollywood Series Bible → Season Arc 两阶段确认；Netflix 全季预写模式
 
 ## PATH CONVENTIONS
 

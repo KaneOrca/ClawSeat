@@ -18,6 +18,7 @@ The same interface covers fiction writing (Gemini), code implementation (Codex),
 | `context_dir` | path | optional | Context dir with `world.md` + `entities.md`; defaults to `$PROJECT_REPO_ROOT/creative/structure/` |
 | `min_words` | int | optional | Minimum word/line count (read from unit brief if not specified) |
 | `format` | enum | optional | Output format: `prose` / `fountain` / `markdown` / `code` (default: `prose`) |
+| `state_summary_path` | path | optional | End-of-previous-episode state summary (injected by planner; empty for Episode 1) |
 
 ### OUTPUT
 
@@ -34,6 +35,22 @@ Default output path: `$PROJECT_REPO_ROOT/creative/content/` (unless `objective` 
 - `meta.json.word_count >= min_words` (if specified)
 - Format matches `format` parameter
 - `DELIVERY.md` records content path + `meta.json` summary (word_count, grade)
+
+## ROLLING CONTEXT（滚动上下文注入）
+
+串行写作时，planner 在每次 dispatch cs-write 前负责：
+
+1. 读取上一集 `creative/content/<n>.md`
+2. 提取「集末状态摘要」（2–3 段）：
+   - 人物当前位置和情感状态
+   - 本集发生的关键事件
+   - 未解的悬念和张力
+3. 写入 `creative/structure/state_<n>.md`
+4. 在下一集 dispatch objective 中带入 `state_summary_path: $PROJECT_REPO_ROOT/creative/structure/state_<n>.md`
+
+首集（Episode 1）无 state_summary；`context_dir`（world.md + entities.md）已提供锚点。
+
+> **参考依据**：雪花法迭代累积；Sudowrite Story Bible；NovelCrafter Codex 跨集追踪
 
 ## 工作流程
 
