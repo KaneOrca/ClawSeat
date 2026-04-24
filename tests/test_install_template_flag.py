@@ -70,8 +70,19 @@ def test_bootstrap_template_path_follows_template_flag(tmp_path: Path) -> None:
     """
     result = _run(["--project", "pathtest", "--template", "clawseat-creative", "--dry-run"], tmp_path)
     assert result.returncode == 0, result.stderr
-    # dry-run output must reference clawseat-creative path, not clawseat-default
-    assert "clawseat-creative" in result.stdout, (
-        f"Expected 'clawseat-creative' in BOOTSTRAP_TEMPLATE_PATH dry-run output:\n{result.stdout}"
-    )
-    assert "clawseat-default" not in result.stdout or result.stdout.count("clawseat-creative") > 0
+
+    # Filter to lines that reference the template file path or bootstrap command.
+    template_lines = [
+        line for line in result.stdout.splitlines()
+        if "template.toml" in line or ("bootstrap --template" in line)
+    ]
+    assert template_lines, f"No template-path lines found in dry-run output:\n{result.stdout}"
+
+    # Every such line must reference clawseat-creative, never clawseat-default.
+    for line in template_lines:
+        assert "clawseat-creative" in line, (
+            f"Template line references wrong template (expected clawseat-creative):\n  {line}"
+        )
+        assert "clawseat-default" not in line, (
+            f"Template line still references clawseat-default (BOOTSTRAP_TEMPLATE_PATH bug not fixed):\n  {line}"
+        )
