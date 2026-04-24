@@ -3,7 +3,9 @@
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Ancestor Phase-B patrol beacon. Installed by
-  scripts/install.sh at project setup time.
+  `scripts/install.sh --enable-auto-patrol` at project setup time (opt-in;
+  default install does NOT install this plist — patrol runs on operator
+  natural-language request instead).
 
   Substitutions performed at install time:
     {PROJECT}          → project name (e.g. install)
@@ -22,11 +24,16 @@
     launchctl bootout    gui/$(id -u)/com.clawseat.{PROJECT}.ancestor-patrol
 
   Behavior: every CADENCE_SECONDS, this plist runs the one-liner below. The
-  one-liner uses the canonical send-and-verify wrapper to send a
-  `/patrol-tick` marker to the ancestor tmux session if that session
-  currently exists. If the session is gone (user killed it or hasn't
-  started it yet), the send is silently skipped so we don't error-spam
-  the logs.
+  one-liner uses the canonical send-and-verify wrapper to send a **natural
+  language** Phase-B patrol request to the ancestor tmux session if that
+  session currently exists. Natural language (not a `/`-prefixed slash
+  command) is required because Claude Code treats `/xxx` as a slash-command
+  resolver lookup and returns "Unknown command" for un-registered tokens
+  like `/patrol-tick`. Natural language is identified by ancestor SKILL §3
+  semantic-trigger detection.
+
+  If the session is gone (user killed it or hasn't started it yet), the
+  send is silently skipped so we don't error-spam the logs.
 -->
 <plist version="1.0">
 <dict>
@@ -37,7 +44,7 @@
     <array>
         <string>/bin/bash</string>
         <string>-lc</string>
-        <string>SESSION="$('{CLAWSEAT_ROOT}/core/shell-scripts/agentctl.sh' session-name ancestor --project '{PROJECT}' 2&gt;/dev/null || true)"; [[ -n "$SESSION" ]] &amp;&amp; tmux has-session -t "=$SESSION" 2&gt;/dev/null &amp;&amp; '{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh' --project '{PROJECT}' ancestor '/patrol-tick' &gt;/dev/null 2&gt;&amp;1 || true</string>
+        <string>SESSION="$('{CLAWSEAT_ROOT}/core/shell-scripts/agentctl.sh' session-name ancestor --project '{PROJECT}' 2&gt;/dev/null || true)"; [[ -n "$SESSION" ]] &amp;&amp; tmux has-session -t "=$SESSION" 2&gt;/dev/null &amp;&amp; '{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh' --project '{PROJECT}' ancestor '请按 SKILL §3 做一次 Phase-B 稳态巡检（P1..P7）。Please run one Phase-B patrol cycle per SKILL §3.' &gt;/dev/null 2&gt;&amp;1 || true</string>
     </array>
 
     <key>StartInterval</key>

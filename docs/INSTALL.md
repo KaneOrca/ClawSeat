@@ -86,8 +86,9 @@ You are invoked to install ClawSeat on this machine.
              (Ancestor consumed the brief and started Phase-A steps.)
 
          A2. Claude Code is actively processing the just-delivered kickoff
-             (matches `ancestor_pane_shows_active_response()` at
-             install.sh:1150 — this is the runtime-detector's exact set):
+             (matches the runtime detector
+             `ancestor_pane_shows_active_response()` in `scripts/install.sh`
+             — this is the detector's exact set):
                - "Thinking..." / "Shell awaiting input"
                - spinner glyphs:  ✶  ✻  ✢  ✳  ✽  ⏺
                - "Read N file" / "Read N files"

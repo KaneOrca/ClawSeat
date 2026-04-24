@@ -103,15 +103,35 @@ bash ${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh
 
 ## 3. 稳态巡检（Phase B）
 
-触发机制来自 external launchd plist，模板是 `core/templates/ancestor-patrol.plist.in`。launchd 每隔 `checklist_phase_b_cadence_minutes` 分钟注入一次：
+### 3.0 触发机制（natural-language trigger, manual-first）
 
-```bash
-bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
-  --project ${PROJECT_NAME} \
-  ancestor "/patrol-tick"
-```
+patrol **默认手动触发**，Claude Code 不支持 `/`-前缀 slash token 作为 agent 消息（原生 slash resolver 会返回 "Unknown command"）。触发路径：
 
-我不跑 in-process `sleep` loop。看到 `/patrol-tick` 后，只在当前回合执行一次 P1..P7，然后回到等待状态。
+1. **主路径 — operator 自然语言请求**:
+   我识别以下关键字作为"做一次 Phase-B 巡检"的请求：
+   - 中文: "巡检" / "稳态检查" / "Phase-B 巡检" / "扫一下 seat" / "patrol 一次"
+   - 英文: "patrol" / "scan seats" / "Phase-B patrol" / "liveness check"
+   收到请求后，在当前回合执行一次 P1..P7，然后回到等待状态。
+
+2. **可选路径 — external launchd plist（opt-in, 非默认）**:
+   操作员若要自动周期触发 patrol：
+   ```bash
+   bash scripts/install.sh --enable-auto-patrol --project <name>
+   ```
+   `install.sh` 默认**不装** patrol LaunchAgent。加了 `--enable-auto-patrol` 才装。plist 每 `checklist_phase_b_cadence_minutes` 分钟通过 `send-and-verify.sh` 注入一次自然语言 payload：
+   ```
+   请按 SKILL §3 做一次 Phase-B 稳态巡检（P1..P7）。
+   Please run one Phase-B patrol cycle per SKILL §3.
+   ```
+   payload 是**自然语言**，不是 `/xxx` token — 因为后者会被 Claude Code 的 slash-command resolver 当作未注册命令拒绝。
+
+### 3.1 执行契约
+
+- 不跑 in-process `sleep` loop（Claude Code 不适合长 idle）
+- 每次触发只执行 P1..P7 **一次**，然后回等待
+- 不区分 manual 还是 plist 触发 — 表现一致
+- 若 operator 的 prompt 看起来是 patrol 请求但模糊，先在 pane 里确认一句 "你是要做一次 Phase-B 巡检吗？" 再开跑
+- 识别 false positive（比如 operator 在聊天中提到 "patrol" 但不是请求）要尽量避免打扰
 
 | # | 动作 | 备注 |
 |---|------|------|
@@ -488,7 +508,7 @@ P2 每次巡检都会尝试重启；超过 N 次（默认 5）失败后升级成
 
 ## 8. 架构师决策（2026-04-22 closed）
 
-- [x] Phase-B 由 external launchd plist 注入 `/patrol-tick`；ancestor 不跑 sleep loop。
+- [x] Phase-B 由 external launchd plist 注入自然语言 patrol 请求（原 `/patrol-tick` token 因 Claude Code slash resolver "Unknown command" 已弃用；see §3.0）；ancestor 不跑 sleep loop。
 - [x] `B1.5-env-scan` 已加入，机器层视图以 `~/.agents/memory/machine/*.json` 为准。
 - [x] `B2.5-bootstrap-tenants` 已加入，tenant 列表由 `bootstrap_machine_tenants.py` 写入 `~/.clawseat/machine.toml`。
 - [x] `B3.5-clarify-providers` 已加入，provider 逐个 CLI 澄清。

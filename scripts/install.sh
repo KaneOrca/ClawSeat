@@ -8,6 +8,7 @@ CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
 PYTHON_BIN_WAS_SET="${PYTHON_BIN+1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
+ENABLE_AUTO_PATROL=0
 CALLER_HOME="${HOME:-}"
 
 # HOME is intentionally rebound once for the whole script: keep CALLER_HOME only
@@ -285,6 +286,7 @@ parse_args() {
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
+      --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
       --reset-harness-memory)
         "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
 import sys
@@ -298,7 +300,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -1001,7 +1003,11 @@ ancestor_patrol_cadence_seconds() {
 }
 
 install_ancestor_patrol_plist() {
-  note "Step 6: install ancestor patrol LaunchAgent"
+  if [[ "$ENABLE_AUTO_PATROL" != "1" ]]; then
+    note "Step 6: skip ancestor patrol LaunchAgent (default; pass --enable-auto-patrol to install a periodic plist that sends a natural-language patrol request)"
+    return 0
+  fi
+  note "Step 6: install ancestor patrol LaunchAgent (--enable-auto-patrol)"
   [[ -f "$ANCESTOR_PATROL_TEMPLATE" || "$DRY_RUN" == "1" ]] || die 31 ANCESTOR_PATROL_TEMPLATE_MISSING "missing patrol plist template: $ANCESTOR_PATROL_TEMPLATE"
 
   local cadence_seconds="" launchd_domain=""
@@ -1081,7 +1087,7 @@ install.sh 已完成。现在做 5 件事：
    **A1. Phase-A 已启动（ancestor 已对 brief 有回应）**:
      - \`B0\` / \`已读取 brief\` / \`env_scan\` 等 Phase-A 输出
 
-   **A2. Claude Code 正在处理刚投递的 kickoff**（对应 install.sh:1150 的
+   **A2. Claude Code 正在处理刚投递的 kickoff**（对应 scripts/install.sh 的
    \`ancestor_pane_shows_active_response()\` runtime detector）:
      - \`Thinking...\` / \`Shell awaiting input\`
      - 旋转图标: \`✶\` / \`✻\` / \`✢\` / \`✳\` / \`✽\` / \`⏺\`
@@ -1256,8 +1262,8 @@ print_operator_banner() {
   printf '           Phase-A 已启动 (ancestor 已对 brief 有回应):\n'
   printf '           · "B0" / "已读取 brief" / env_scan output\n'
   printf '       A2. Claude Code is processing the kickoff (matches the runtime\n'
-  printf '           detector ancestor_pane_shows_active_response() in install.sh:1150):\n'
-  printf '           Claude Code 正在处理 kickoff (与 install.sh:1150 的\n'
+  printf '           detector ancestor_pane_shows_active_response() in scripts/install.sh):\n'
+  printf '           Claude Code 正在处理 kickoff (与 scripts/install.sh 的\n'
   printf '           ancestor_pane_shows_active_response() 一致):\n'
   printf '           · "Thinking..." / "Shell awaiting input"\n'
   printf '           · spinner glyphs: ✶ ✻ ✢ ✳ ✽ ⏺\n'

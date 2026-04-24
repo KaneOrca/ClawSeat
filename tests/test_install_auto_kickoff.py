@@ -129,7 +129,11 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
     # `ancestor_pane_shows_active_response()` re-triggers this test.
     for marker in ("B0", "已读取 brief", "env_scan",
                    "Thinking...", "Shell awaiting input",
-                   "Read N file", "✶", "⏺"):
+                   # Both singular + plural: `ancestor_pane_shows_active_response`
+                   # matches the regex `Read [0-9]+ files?`.
+                   "Read N file", "Read N files",
+                   # All six spinner glyphs from the runtime detector.
+                   "✶", "✻", "✢", "✳", "✽", "⏺"):
         assert marker in guide_text, f"guide missing classifier marker: {marker!r}"
         assert marker in combined, f"banner/stdout missing classifier marker: {marker!r}"
     assert "session-name ancestor --project kickoff50" in agentctl_log.read_text(encoding="utf-8")
