@@ -319,9 +319,9 @@ bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
 
 ```bash
 python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py \
-  --profile ${AGENT_HOME}/.agents/projects/${PROJECT_NAME}/project.toml \
+  --profile "${PLANNER_PROFILE:-${AGENT_HOME}/.agents/profiles/${PROJECT_NAME}-profile-dynamic.toml}" \
   --source ancestor \
-  --target <planner|builder|reviewer|qa|designer> \
+  --target <engineer-id-from-profile.seats> \
   --task-id <slug-with-date-suffix> \
   --title "<短标题>" \
   --objective "<任务正文 / 详细描述>" \
@@ -330,32 +330,48 @@ python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py \
   [--intent <intent-key>]
 ```
 
-参数要点（**通过 `--help` 可随时验证**）：
+参数要点（**通过 `dispatch_task.py --help` 和 `resolve.dynamic_profile_path()` 随时验证**）：
 
-- `--profile`（**必需**）：指向 `~/.agents/projects/<project>/project.toml`（不是 `project-local.toml`，后者是 install.sh 写的 seat overrides；这里要的是 `agent_admin project bootstrap` 写的 project record）
-- `--target` / `--target-role` 二选一：`--target` 传显式 seat id；`--target-role` 传 role（e.g. `builder`）让脚本从 `state.db` 挑最空闲的 live seat
+- `--profile`（**必需**）：指向 **harness profile TOML**（含 `project_name` / `seats` / `dynamic_roster` 等），由 layered v2 架构动态 materialize。
+  - Canonical path: `${AGENT_HOME}/.agents/profiles/${PROJECT_NAME}-profile-dynamic.toml`（primary；`core/resolve.py::dynamic_profile_path`）
+  - Legacy fallback: `/tmp/${PROJECT_NAME}-profile-dynamic.toml`（保留兼容；首访问时会迁到 persistent 路径）
+  - 如果 `$PLANNER_PROFILE` env 已由 planner 导出 → 直接复用它
+  - ❌ **不要**用 `~/.agents/projects/<p>/project.toml`（那是 `agent_admin_store.py` 写的 project registry / `[seat_overrides.<seat>]` 简表，**不是** harness profile，`load_profile()` 会拒）
+  - ❌ **不要**用 `~/.agents/tasks/<p>/project-local.toml`（那是 install.sh 的 seat-overrides 输入快照）
+- `--target` / `--target-role` 二选一：
+  - `--target`：**explicit engineer id**，必须是 `profile.seats` 里的成员。可能含后缀（多实例 seat 如 `builder-1` / `reviewer-1` / `designer-1`；单实例才是裸 `planner`）
+  - `--target-role`：传 role（e.g. `builder`），脚本从 `state.db` 挑该 role 的最空闲 live seat
 - `--title` + `--objective`（**都必需**）：分别是任务**短标题**和**详细正文**；**没有** `--description` 这个 arg
 - `--reply-to`：省略时默认 = `--source`（即 ancestor），完成后回执给发起方
 
 会自动写 `~/.agents/tasks/${PROJECT_NAME}/<target>/TODO.md` 的 `[pending]` 条目 + 设 `reply_to=<source 或显式值>`，完成后 DELIVERY 回执。
 
-#### 5.3.2 Seat id 硬规则
+#### 5.3.2 三套 ID 硬规则（role id / engineer id / tmux session name）
 
-| 何时用什么 ID | 用哪个形式 |
-|--------------|----------|
-| 给 `send-and-verify.sh` 的 seat 参数 | **role id 单词**：`planner` / `builder` / `reviewer` / `qa` / `designer` / `memory` / `ancestor` |
-| 给 `dispatch_task.py --target` | 同上 role id |
-| 给 `agent_admin session start-engineer <seat>` | 同上 role id |
-| `~/.agents/workspaces/<project>/<seat>/` 目录 | 同上 role id |
-| tmux session（只用来 `capture-pane` 观察；**不要** `send-keys` 进去） | `<project>-<role>-<tool>`（e.g. `cartooner-planner-claude`） |
+ClawSeat 区分**三种**标识符，搞错一个就走死链：
+
+| ID 种类 | 举例 | 何时用 |
+|---------|-----|------|
+| **role id**（role 词典的 role） | `planner` / `builder` / `reviewer` / `qa` / `designer` / `memory` / `ancestor` | `dispatch_task.py --target-role` 的参数；用来描述"这是个 builder 类型"。role 是 **role**，不是 seat |
+| **engineer id**（具体的 seat 实例） | 单实例时和 role id 同名：`planner` / `memory` / `ancestor`；多实例时加后缀：`builder-1` / `reviewer-1` / `designer-1`（由 `profile.seats` 声明） | `send-and-verify.sh <seat>` 参数；`dispatch_task.py --target` 参数（**explicit seat id from `profile.seats`**）；`agent_admin session start-engineer <seat>`；`~/.agents/workspaces/<project>/<engineer-id>/` 目录 |
+| **tmux session name** | `<project>-<engineer-id>-<tool>`（e.g. `cartooner-planner-claude` 单实例；`cartooner-builder-1-claude` 多实例） | 只用来 `capture-pane` 观察；**不要** 直接 `send-keys` 进去。canonical 解析：`agentctl session-name <engineer-id> --project <p>` → 读 project record + engineer tool 推导 |
+
+**engineer id vs role id 判别法**：
+
+```bash
+# 看本项目的 engineer 列表
+python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py engineer list --project ${PROJECT_NAME}
+```
+
+如果输出有 `builder-1`、`reviewer-1` 这类后缀形式 → 是多实例项目，`dispatch_task.py --target` 必须传后缀形式；`--target-role builder` 才能自动挑 seat。
 
 **反例（常见错误）**：
 
-- ❌ `send-and-verify.sh --project cartooner planner-claude "..."` — tool 后缀是 tmux 层概念，不是 seat id；`agentctl session-name` 不认
+- ❌ `send-and-verify.sh --project cartooner planner-claude "..."` — tool 后缀是 tmux 层概念，**不在** engineer id 里；`agentctl session-name` 不认
 - ❌ `tmux send-keys -t cartooner-planner-claude "..." Enter` — 裸 send-keys 绕过 Enter flush，TUI 可能吞回车
 - ❌ `send-and-verify.sh cartooner-planner "..."` — 少了 `--project` flag
-
-canonical session 解析逻辑：`agentctl session-name <role> --project <p>` 读 `project.toml::overrides.<role>.tool` 推导出 `<p>-<role>-<tool>` 形式。只传 role id，tool 自动补。
+- ❌ 多实例项目里 `dispatch_task.py --target builder` — `profile.seats` 里没有裸 `builder`，只有 `builder-1` / `builder-2`；脚本会 `SystemExit: dispatch target 'builder' is not a declared seat`
+- ❌ 单实例项目里 `dispatch_task.py --target builder-1` — `profile.seats` 里只有裸 `builder`，反过来也不对
 
 #### 5.3.3 ancestor 桌面 ≈ koder frontstage（operator-facing）
 
@@ -401,25 +417,69 @@ ancestor 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"op
 
 #### 5.3.6 dispatch 前置 checklist（避免把活派错 seat）
 
-派任何结构化任务前，先 Read **项目 seat roster**：
+派任何结构化任务前，先 Read **authoritative seat roster**（按优先级）：
+
+**1. Authoritative：harness profile `profile.seats`**（`dispatch_task.py` 真正校验的那个）
 
 ```bash
-# Real roster（install.sh 写入的实际 harness 决策）:
-python3 - <<'PY'
-import tomllib, os
+# PROJECT_NAME 必须先 export 或替换为实际值（heredoc 里 $ 不展开时 Python 拿不到）：
+export PROJECT_NAME=cartooner   # 换成你当前项目
+
+python3 - "$PROJECT_NAME" <<'PY'
+import sys, tomllib, os
 from pathlib import Path
-p = Path(os.environ.get("AGENT_HOME", os.path.expanduser("~"))) / ".agents" / "tasks" / "${PROJECT_NAME}" / "project-local.toml"
+
+project = sys.argv[1]
+agent_home = Path(os.environ.get("AGENT_HOME") or os.path.expanduser("~"))
+candidates = [
+    agent_home / ".agents" / "profiles" / f"{project}-profile-dynamic.toml",  # primary
+    Path(f"/tmp/{project}-profile-dynamic.toml"),                              # legacy fallback
+]
+profile = next((p for p in candidates if p.exists()), None)
+if profile is None:
+    print(f"HARNESS_PROFILE_NOT_FOUND: tried {[str(c) for c in candidates]}")
+    print("若 planner 已起，可以用 $PLANNER_PROFILE env var 直接拿")
+    sys.exit(2)
+print(f"profile: {profile}")
+data = tomllib.loads(profile.read_text())
+seats = data.get("seats", [])
+print(f"profile.seats (authoritative for dispatch_task.py --target):")
+for s in seats:
+    print(f"  - {s}")
+# Optional: peek legacy_seat_roles 帮助理解 role → seat id 映射
+roles = data.get("legacy_seat_roles", {})
+if roles:
+    print("role → seat-id hint:")
+    for sid, role in sorted(roles.items()):
+        print(f"  {sid:16s}  (role={role})")
+PY
+```
+
+**2. Supplement：install 时 operator 选的 harness overrides**（仅供**诊断 harness drift**，不是 dispatch authority）
+
+```bash
+python3 - "$PROJECT_NAME" <<'PY'
+import sys, tomllib, os
+from pathlib import Path
+project = sys.argv[1]
+agent_home = Path(os.environ.get("AGENT_HOME") or os.path.expanduser("~"))
+p = agent_home / ".agents" / "tasks" / project / "project-local.toml"
 if p.exists():
     data = tomllib.loads(p.read_text())
     for o in data.get("overrides", []):
-        print(f"  {o.get('id'):10s}  {o.get('tool')} / {o.get('auth_mode')} / {o.get('provider')} / {o.get('model', '')}")
+        print(f"  {o.get('id'):14s}  {o.get('tool')} / {o.get('auth_mode')} / {o.get('provider')} / {o.get('model', '')}")
 PY
-
-# Canonical role 职责（repo-level CLAUDE.md，如果业务仓库有）:
-head -60 $(git rev-parse --show-toplevel)/CLAUDE.md 2>/dev/null | grep -E "seat|职责|role" | head -20
 ```
 
-然后按真实 roster 决定 `--target`（不要靠记忆或常识推断）。
+**注意**：`project-local.toml` 是 install-time snapshot，**不是**运行时 authoritative dispatch roster。后续 `session switch-harness` / seat rebind / multi-instance 扩展都不会回写到它。真正校验 dispatch 合法性的是 harness profile `profile.seats`。
+
+**3. Role 语义职责**（repo-level CLAUDE.md，如果业务仓库有写）
+
+```bash
+head -60 "$(git rev-parse --show-toplevel 2>/dev/null)"/CLAUDE.md 2>/dev/null | grep -E "seat|职责|role" | head -20
+```
+
+然后按 `profile.seats` 里真实存在的 engineer id 决定 `--target`（不要靠记忆或常识推断）。
 
 ### 5.1 memory 交互工具（直接脚本，不走 tmux）
 
