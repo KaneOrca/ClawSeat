@@ -111,13 +111,13 @@ template: clawseat-creative
 
 - id: classify
   skill: cs-classify
-  seat_role: creative-planner
+  seat_role: creative-builder
   input:
     brief: project_params.brief_path
 
 - id: write
   skill: cs-write
-  seat_role: creative-builder
+  seat_role: creative-designer
   input:
     unit_brief_path: project_params.brief_path
     context_dir: project_params.output_dir

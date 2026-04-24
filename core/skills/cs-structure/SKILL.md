@@ -6,7 +6,7 @@ description: Capability skill for structural planning — world-building, archit
 # CS-Structure — Structural Planning Capability
 
 **Design principle**: Skill = WHAT (interface contract), not HOW (tool or executor).
-The executor (creative-planner, engineering planner, etc.) adapts this contract to its runtime.
+The executor (ancestor, engineering planner, etc.) adapts this contract to its runtime.
 
 ## CONTRACT
 
@@ -56,7 +56,7 @@ cs-structure 通过 Claude Code Agent Teams 模式执行，模拟好莱坞编剧
 **Team composition（建议 4–5 人）**
 
 ```
-Lead: creative-planner
+Lead: ancestor
   - 协调整个编剧室，解决世界观/人物设计冲突
   - 合并各 teammate 产出，写入 creative/structure/
 
@@ -80,7 +80,7 @@ Teammate: 叙事设计师
 
 **跨 teammate 协调机制**：Teammate 通过 Agent Teams inter-agent messaging 互发消息，世界观规则和人物设定在同一 session 内协商，避免矛盾；Lead 在最终合并前做一致性审查。
 
-**启动要求**：creative-planner 的运行环境需设置 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`。
+**启动要求**：ancestor 的运行环境需设置 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`。
 
 ## GATE 1: 世界观 + 人物确认
 
@@ -120,7 +120,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_repor
   --human-summary "分集大纲完成（Gate 2）。大纲: <outline_summary>。分集: <units_list>。请确认后继续执行 cs-write。"
 ```
 
-3. 用户确认后，creative-planner 开始 dispatch cs-write
+3. 用户确认后，ancestor 开始 dispatch cs-write
 
 > **参考依据**：Hollywood Series Bible → Season Arc 两阶段确认；Netflix 全季预写模式
 
@@ -152,7 +152,7 @@ This structure ensures all seats in the same project share a consistent filesyst
 
 | Template | Executor | Use case |
 |----------|----------|----------|
-| `clawseat-creative` | `creative-planner` (claude oauth) | Fiction / narrative structure |
+| `clawseat-creative` | `ancestor` (claude oauth) | Fiction / narrative structure |
 | `clawseat-engineering` | `planner` (claude oauth) | Engineering architecture docs |
 
 Skill 本身不绑定任何特定工具；executor 自行决定执行方式。
