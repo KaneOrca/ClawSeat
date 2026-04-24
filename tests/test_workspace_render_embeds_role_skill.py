@@ -99,6 +99,36 @@ def test_load_role_skill_content_handles_suffixed_seat_id(tmp_path: Path) -> Non
     assert info[0] == "builder"
 
 
+def test_load_role_skill_content_role_hint_overrides_seat_id_mapping(tmp_path: Path) -> None:
+    """role_hint wins over seat-id mapping (creative template: builder seat → creative-builder skill)."""
+    # Set up both the generic and the creative-specific skill
+    (tmp_path / "core" / "skills" / "builder").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "builder" / "SKILL.md").write_text("# Builder (engineering)\n", encoding="utf-8")
+    (tmp_path / "core" / "skills" / "creative-builder").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "creative-builder" / "SKILL.md").write_text(
+        "---\nname: creative-builder\n---\n# Creative Builder\n\ncreative skill body\n",
+        encoding="utf-8",
+    )
+    info = agent_admin_template._load_role_skill_content(tmp_path, "builder", role_hint="creative-builder")
+    assert info is not None
+    role, body = info
+    assert role == "creative-builder", f"expected creative-builder, got {role!r}"
+    assert "creative skill body" in body
+    assert "engineering" not in body
+
+
+def test_load_role_skill_content_role_hint_falls_back_when_skill_missing(tmp_path: Path) -> None:
+    """When role_hint SKILL.md doesn't exist, falls back to seat-id mapping."""
+    (tmp_path / "core" / "skills" / "builder").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "builder" / "SKILL.md").write_text("# Builder fallback\n", encoding="utf-8")
+    # no creative-builder dir
+    info = agent_admin_template._load_role_skill_content(tmp_path, "builder", role_hint="creative-builder")
+    assert info is not None
+    role, body = info
+    assert role == "builder"
+    assert "Builder fallback" in body
+
+
 def test_role_skill_section_lines_empty_when_missing(tmp_path: Path) -> None:
     assert agent_admin_template._role_skill_section_lines(tmp_path, "unknown-seat") == []
 
@@ -143,6 +173,27 @@ def test_real_repo_role_skills_load_for_canonical_seats(seat_id: str, expected_r
     assert len(body) > 100, f"{expected_role} SKILL.md should not be an empty stub"
     # A rendered role skill must not leak its frontmatter
     assert not body.startswith("---\n"), f"{expected_role} SKILL.md frontmatter not stripped"
+
+
+@pytest.mark.parametrize(
+    ("seat_id", "role_hint", "expected_role", "expected_marker"),
+    [
+        ("builder", "creative-builder", "creative-builder", "cs-classify"),
+        ("designer", "creative-designer", "creative-designer", "cs-score"),
+        ("planner", "creative-planner", "creative-planner", "cs-structure"),
+    ],
+)
+def test_real_repo_creative_seats_load_correct_skill_via_role_hint(
+    seat_id: str, role_hint: str, expected_role: str, expected_marker: str
+) -> None:
+    """Creative template seats (builder/designer/planner) must load their
+    creative-* SKILL.md when the template role is passed as role_hint."""
+    info = agent_admin_template._load_role_skill_content(_REPO, seat_id, role_hint=role_hint)
+    assert info is not None, f"creative seat {seat_id!r} with role_hint={role_hint!r} should resolve"
+    role, body = info
+    assert role == expected_role, f"expected {expected_role!r}, got {role!r}"
+    assert expected_marker in body, f"{expected_role} SKILL.md should mention {expected_marker!r}"
+    assert not body.startswith("---\n"), "frontmatter must be stripped"
 
 
 def test_real_repo_role_skill_section_for_qa_includes_contract_marker() -> None:

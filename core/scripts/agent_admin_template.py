@@ -21,16 +21,46 @@ if _CORE_SCRIPTS_PATH not in sys.path:
     sys.path.insert(0, _CORE_SCRIPTS_PATH)
 
 
-def _load_role_skill_content(repo_root: Path, seat_id: str) -> tuple[str, str] | None:
+def _load_role_skill_content(
+    repo_root: Path,
+    seat_id: str,
+    role_hint: str | None = None,
+) -> tuple[str, str] | None:
     """Locate and read `core/skills/<role>/SKILL.md` for a seat.
 
     Returns (role_name, body_without_frontmatter) or None when no role
-    mapping exists or the SKILL.md file is missing. Role resolution uses
-    `seat_skill_mapping.role_skill_for_seat`, which handles suffixed ids
-    like `builder-1 -> builder` and the memory -> memory-oracle renames.
+    mapping exists or the SKILL.md file is missing. Resolution order:
+      1. role_hint (e.g. "creative-builder") when the seat's template role
+         differs from its generic seat-id (e.g. "builder").  If the hint's
+         SKILL.md exists it takes precedence so creative/engineering template
+         seats load the right contract.
+      2. seat_skill_mapping.role_skill_for_seat(seat_id) — handles suffixed
+         ids like `builder-1 -> builder` and `memory -> memory-oracle`.
     YAML frontmatter (leading `---` block) is stripped so the embedded
     content slots cleanly under a `## Role SKILL (canonical)` header.
     """
+    def _read_skill(role_name: str) -> tuple[str, str] | None:
+        skill_file = Path(repo_root) / "core" / "skills" / role_name / "SKILL.md"
+        if not skill_file.is_file():
+            return None
+        try:
+            text = skill_file.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        # Strip YAML frontmatter of the form:
+        #   ---\n<fields>\n---\n<body>
+        if text.startswith("---\n") or text.startswith("---\r\n"):
+            newline_marker = "\n---\n"
+            end = text.find(newline_marker, 4)
+            if end >= 0:
+                text = text[end + len(newline_marker):]
+        return role_name, text.lstrip("\n")
+
+    if role_hint:
+        result = _read_skill(role_hint)
+        if result is not None:
+            return result
+
     try:
         from seat_skill_mapping import role_skill_for_seat
     except ModuleNotFoundError:
@@ -38,27 +68,16 @@ def _load_role_skill_content(repo_root: Path, seat_id: str) -> tuple[str, str] |
     role_name = role_skill_for_seat(seat_id)
     if not role_name:
         return None
-    skill_file = Path(repo_root) / "core" / "skills" / role_name / "SKILL.md"
-    if not skill_file.is_file():
-        return None
-    try:
-        text = skill_file.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    # Strip YAML frontmatter of the form:
-    #   ---\n<fields>\n---\n<body>
-    # Leaves files without frontmatter intact.
-    if text.startswith("---\n") or text.startswith("---\r\n"):
-        newline_marker = "\n---\n"
-        end = text.find(newline_marker, 4)
-        if end >= 0:
-            text = text[end + len(newline_marker):]
-    return role_name, text.lstrip("\n")
+    return _read_skill(role_name)
 
 
-def _role_skill_section_lines(repo_root: Path, seat_id: str) -> list[str]:
+def _role_skill_section_lines(
+    repo_root: Path,
+    seat_id: str,
+    role_hint: str | None = None,
+) -> list[str]:
     """Render the `## Role SKILL (canonical)` block, or [] when no skill."""
-    info = _load_role_skill_content(repo_root, seat_id)
+    info = _load_role_skill_content(repo_root, seat_id, role_hint)
     if not info:
         return []
     role_name, body = info
@@ -231,7 +250,7 @@ class TemplateHandlers:
         )
         if engineer.skills:
             codex_lines.extend(["", *self.hooks.render_loaded_skills_lines(engineer, session.engineer_id)])
-        codex_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id))
+        codex_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id, role_hint=engineer.role or None))
 
         tasks_root = getattr(project, "tasks_root", f"{repo_root}/.tasks")
         profile_display = getattr(project, "profile_path", "")
@@ -268,7 +287,7 @@ class TemplateHandlers:
         claude_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             claude_lines.extend(["", *dispatch_playbook_lines])
-        claude_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id))
+        claude_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id, role_hint=engineer.role or None))
 
         gemini_lines = [
             f"# {session.engineer_id}",
@@ -298,7 +317,7 @@ class TemplateHandlers:
         gemini_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             gemini_lines.extend(["", *dispatch_playbook_lines])
-        gemini_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id))
+        gemini_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id, role_hint=engineer.role or None))
 
         workspace_notes_lines = [
             "# Workspace Notes",
