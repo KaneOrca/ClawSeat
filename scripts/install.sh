@@ -960,7 +960,10 @@ bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
   [[ -f "$AGENT_ADMIN_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 AGENT_ADMIN_MISSING "missing agent_admin script: $AGENT_ADMIN_SCRIPT"
-  write_bootstrap_template
+  # Only write a locally-generated template for clawseat-default; other templates
+  # (clawseat-engineering, clawseat-creative) have canonical definitions in
+  # templates/*.toml and must not be overridden by the install-time generated version.
+  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && write_bootstrap_template
   write_project_local_toml
 
   if [[ "$DRY_RUN" == "1" ]]; then
