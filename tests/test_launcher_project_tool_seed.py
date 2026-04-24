@@ -89,25 +89,60 @@ def test_seed_user_tool_dirs_prefers_project_root_when_explicitly_isolated(tmp_p
 # ── wrapper-seed branch coverage (iter-14, reviewer 3b0ce9e nit) ─────────
 
 
+def _run_seed_helper_without_root(
+    runtime_home: Path, project_name: str, project_root: Path
+) -> None:
+    """Variant of `_run_seed_helper` that actively scrubs CLAWSEAT_ROOT
+    from the subprocess env so ambient shell exports don't leak in. The
+    launcher runs with `set -u`, so the wrapper-seed block must behave
+    correctly when CLAWSEAT_ROOT is genuinely absent from env."""
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k != "CLAWSEAT_ROOT"
+    }
+    env.update(
+        {
+            "HOME": str(runtime_home.parent.parent),
+            "CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY": "1",
+            "CLAWSEAT_PROJECT": project_name,
+            "CLAWSEAT_TOOLS_ISOLATION": "per-project",
+            "CLAWSEAT_PROJECT_TOOL_ROOT": str(project_root),
+        }
+    )
+    snippet = "\n".join(
+        [
+            "set -euo pipefail",
+            f"source {shlex.quote(str(LAUNCHER))}",
+            f"seed_user_tool_dirs {shlex.quote(str(runtime_home))} {shlex.quote(project_name)}",
+        ]
+    )
+    result = subprocess.run(
+        ["bash", "-c", snippet],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_seed_user_tool_dirs_wrapper_block_noops_when_clawseat_root_unset(
     tmp_path: Path,
 ) -> None:
     """With CLAWSEAT_ROOT unset (e.g. test/library callers under set -u),
     the wrapper-seed block must no-op cleanly: no `$runtime_home/bin/lark-cli`
     is created and the primary seed loop completes. Pins the gate added
-    in iter-13 3b0ce9e."""
+    in iter-13 3b0ce9e. Runs with CLAWSEAT_ROOT actively scrubbed from
+    the subprocess env so ambient shell exports (e.g. reviewer's shell
+    where CLAWSEAT_ROOT=/Users/ywf/ClawSeat) don't mask the test."""
     runtime_home = tmp_path / "runtime" / "home"
     project_root = tmp_path / "real_home" / ".agent-runtime" / "projects" / "smoke01"
     runtime_home.mkdir(parents=True)
     project_root.mkdir(parents=True)
     _seed_project_root(project_root)
 
-    # _run_seed_helper's env inherits os.environ but doesn't set CLAWSEAT_ROOT,
-    # exercising exactly the unset path.
-    assert "CLAWSEAT_ROOT" not in os.environ or not os.environ.get("CLAWSEAT_ROOT"), (
-        "test precondition: ambient CLAWSEAT_ROOT must not leak in"
-    )
-    _run_seed_helper(runtime_home, "smoke01", project_root)
+    _run_seed_helper_without_root(runtime_home, "smoke01", project_root)
 
     # Primary seed loop succeeded → .lark-cli symlink exists (from primary
     # loop, not from wrapper-seed).
