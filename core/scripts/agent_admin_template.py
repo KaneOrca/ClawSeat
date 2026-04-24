@@ -121,8 +121,8 @@ class TemplateHandlers:
 
         # Model/effort resolution chain:
         # 1. _template_model/_template_effort (set by project_bootstrap on session)
-        # 2. template.toml engineer spec (direct file read — reliable fallback)
-        # 3. CLAUDE_API_PROVIDER_CONFIGS (for third-party API providers)
+        # 2. template.toml engineer spec — only attempted when session.project_record.template_name is set
+        # 3. CLAUDE_API_PROVIDER_CONFIGS — only for auth_mode=api with a known provider
         model = getattr(session, "_template_model", "") or ""
         effort = getattr(session, "_template_effort", "") or ""
 

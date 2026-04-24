@@ -337,7 +337,7 @@ class HeartbeatHandlers:
             candidates: list[Path] = []
             for base in [workspace / ".claude" / "projects"]:
                 if base.exists():
-                    candidates.extend(base.glob("-*/*.jsonl"))
+                    candidates.extend(base.glob("*/*.jsonl"))
             if not candidates:
                 return (None, "unknown")
             largest = max(candidates, key=lambda p: p.stat().st_size)
