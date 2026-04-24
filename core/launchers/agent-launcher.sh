@@ -442,6 +442,40 @@ seed_user_tool_dirs() {
       ln -s "$src" "$tgt"
     fi
   done
+
+  # Seed the lark-cli HOME-override wrapper so sandbox seats can invoke
+  # `lark-cli ...` transparently and still see the operator's real
+  # Keychain-backed auth state. The wrapper itself lives in
+  # CLAWSEAT_ROOT/core/shell-scripts/lark-cli; we symlink it into
+  # $runtime_home/bin/lark-cli and prepend that bin dir to PATH so
+  # seats pick it up before any real lark-cli in the system PATH.
+  local wrapper_src="$CLAWSEAT_ROOT/core/shell-scripts/lark-cli"
+  if [[ -x "$wrapper_src" ]]; then
+    local wrapper_tgt="$runtime_home/bin/lark-cli"
+    mkdir -p "$(dirname "$wrapper_tgt")"
+    if [[ -L "$wrapper_tgt" ]]; then
+      current_target="$(readlink "$wrapper_tgt" 2>/dev/null || true)"
+      if [[ "$current_target" != "$wrapper_src" ]]; then
+        rm -f "$wrapper_tgt"
+        ln -s "$wrapper_src" "$wrapper_tgt"
+      fi
+    elif [[ -e "$wrapper_tgt" ]]; then
+      backup_path="$backup_base/bin/lark-cli.$(date +%s)"
+      mkdir -p "$(dirname "$backup_path")"
+      mv "$wrapper_tgt" "$backup_path"
+      ln -s "$wrapper_src" "$wrapper_tgt"
+    else
+      ln -s "$wrapper_src" "$wrapper_tgt"
+    fi
+
+    # Prepend $runtime_home/bin to PATH so the wrapper shadows the real
+    # lark-cli in system PATH. Idempotent; repeated seat restarts don't
+    # double-prepend.
+    case ":${PATH:-}:" in
+      *":$runtime_home/bin:"*) ;;
+      *) export PATH="$runtime_home/bin${PATH:+:$PATH}" ;;
+    esac
+  fi
 }
 
 resolve_claude_secret_file() {
