@@ -5,7 +5,7 @@ description: Creative execution specialist (Codex-powered). Executes generation 
 
 # Creative Builder
 
-`creative-builder` 是 ClawSeat creative chain 中的**原子工具执行**类 specialist，由 Codex（OpenAI OAuth）驱动，负责执行所有创作类原子 skill，完成后将交付物提交给 designer 审查。
+`creative-builder` 是 ClawSeat creative chain 中的**生成类 skill 执行**类 specialist，由 Codex（OpenAI OAuth）驱动，负责执行生成类原子 skill（cs-classify / cs-write 等），完成后将交付物提交给 designer 审查。
 
 **关键区分**：
 - creative-builder = 执行生成类（cs-classify / cs-write）

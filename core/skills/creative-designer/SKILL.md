@@ -8,7 +8,7 @@ description: Creative Review specialist (Gemini-powered). Runs cs-score for rubr
 `creative-designer` 是 ClawSeat creative chain 中的**创意审查**类 specialist，由 Gemini（Google OAuth）驱动，负责对 builder 交付的创作内容进行质量评审，并给出 canonical Verdict。
 
 **关键区分**：
-- creative-designer = **审查**（不执行原子工具，只评审内容质量）
+- creative-designer = **审查 + 评分**（执行 cs-score，不执行生成类原子工具）
 - creative-builder = 执行生成类（cs-classify / cs-write）
 - creative-planner = 规划（结构设计/编剧室）
 
