@@ -196,8 +196,14 @@ ancestor as model input. Natural language is the canonical form.
 Phase B runs until the project is archived (ancestor never retires on
 its own).
 
-Ancestor does NOT run an in-process `sleep`-loop; patrol cadence is
-owned by the OS scheduler.
+Ancestor does NOT run an in-process `sleep`-loop. Patrol cadence is:
+
+- **default**: event-driven by operator natural-language request (no
+  cadence; ancestor responds when asked).
+- **opt-in via `--enable-auto-patrol`**: the OS scheduler (`launchd`
+  plist) owns cadence — every `checklist_phase_b_cadence_minutes`
+  minutes the plist injects a natural-language Phase-B request
+  through `send-and-verify.sh`.
 
 ## Idempotency requirements
 

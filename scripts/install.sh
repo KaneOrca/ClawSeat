@@ -355,6 +355,15 @@ normalize_provider_choice() {
 ensure_host_deps() {
   note "Step 1: preflight"
   if [[ "$FORCE_REINSTALL" != "1" && -f "$STATUS_FILE" ]] && grep -q '^phase=ready$' "$STATUS_FILE"; then
+    # Round-8: even on the "already installed" fast-path, honor the
+    # auto-patrol default. If the operator rerun without
+    # --enable-auto-patrol but an existing LaunchAgent is still firing
+    # (from a pre-Round-8 install), tear it down; otherwise the ghost
+    # plist keeps injecting stale payloads even though install.sh
+    # itself exited early and never reached Step 6.
+    if [[ "$ENABLE_AUTO_PATROL" != "1" ]]; then
+      uninstall_ancestor_patrol_plist_if_present
+    fi
     printf 'Project %s already installed (phase=ready) at %s.\n' "$PROJECT" "$STATUS_FILE"
     printf 'Use --reinstall or --force to rebuild.\n'
     exit 0
