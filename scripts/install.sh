@@ -1586,7 +1586,12 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; resolve_pending_seats; normalize_provider_choice; ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  parse_args "$@"; resolve_pending_seats; normalize_provider_choice
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
+    printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
+  fi
+  ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch ancestor seat via agent-launcher"
   launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
   bootstrap_project_profile
