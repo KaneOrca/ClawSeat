@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Dispatch / consumption / merge hub for ClawSeat chains. Owns dispatch_authority for builder/reviewer/qa/designer; does not own seat lifecycle or operator CLI surface.
+description: Dispatch / consumption / merge hub for ClawSeat chains. Owns dispatch_authority for the worker seats declared in project.toml engineers (minimal default = builder + designer; clawseat-default still gets reviewer + qa); does not own seat lifecycle or operator CLI surface.
 ---
 
 # Planner
@@ -46,7 +46,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
   --reply-to planner
 ```
 
-我可以派的 seat：`builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
+我可以派的 seat 由 project.toml `engineers` 字段决定（除 `PRIMARY_SEAT_ID` 外的所有 engineer），常见组合：`clawseat-minimal` = `builder` + `designer`；`clawseat-default` = `builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
 
 派发规则：
 

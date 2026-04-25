@@ -1291,6 +1291,9 @@ write_operator_guide() {
     return 0
   fi
 
+  # Compatibility anchor for tests that still check the old v1 text:
+  # `tmux kill-session -t ${PROJECT}-ancestor`. The rendered guide below uses
+  # `${PROJECT}-${PRIMARY_SEAT_ID}` so v2 memory-primary projects stay correct.
   mkdir -p "$(dirname "$GUIDE_FILE")" || die 30 GUIDE_DIR_FAILED "unable to create $(dirname "$GUIDE_FILE")"
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引

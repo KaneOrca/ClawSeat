@@ -138,7 +138,7 @@ python3 core/scripts/bootstrap_machine_tenants.py ${AGENT_HOME}/.agents/memory/
 
 成功判据：`list_openclaw_tenants()` 返回非空（若本机装了 OpenClaw）。
 
-跑完后，ancestor 自己 Read：
+跑完后，始祖 seat (${PRIMARY_SEAT_ID}) 自己 Read：
 - `${AGENT_HOME}/.agents/memory/machine/openclaw.json`
 - `${AGENT_HOME}/.openclaw/workspace.toml`（如存在）
 - `${AGENT_HOME}/.clawseat/machine.toml`
@@ -164,7 +164,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 
 **B3.5.0 — project scope assertion（强制）**：
 
-在进入 B3.5 / B5 / B6 / B7 任何 seat 操作前，先确认当前 ancestor 的运行时身份没有串项目：
+在进入 B3.5 / B5 / B6 / B7 任何 seat 操作前，先确认当前始祖 seat (${PRIMARY_SEAT_ID}) 的运行时身份没有串项目：
 
 ```bash
 [ "$(echo "$PROJECT_NAME")" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
@@ -238,7 +238,7 @@ cat ${AGENT_HOME}/.agents/memory/machine/openclaw.json
 - `${AGENT_HOME}/.agents/memory/machine/openclaw.json` 的 `agents[]` + `accounts[]`
 - `${AGENT_HOME}/.lark-cli/config.json`（如存在）
 
-ancestor 自己归纳，不再 `tmux send-keys` 给 memory，也不生成额外调研报告文件。
+始祖 seat (${PRIMARY_SEAT_ID}) 自己归纳，不再 `tmux send-keys` 给 memory，也不生成额外调研报告文件。
 
 整理成：
 1. 本机可用 openclaw agent：name / appId / account / app mode (user/bot) / 当前占用状态
@@ -303,7 +303,7 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bind \
 - 未完成时 B5.5 smoke 只能测 @ 路径，非 @ 需要等配置后重测
 - 配置完成后无需重启 OpenClaw，事件订阅会实时生效
 
-ancestor 行动：确认 operator 已完成 Layer 2 → 记录到 `phase-a-decisions.md` → 再继续 B5.5。
+始祖 seat (${PRIMARY_SEAT_ID}) 行动：确认 operator 已完成 Layer 2 → 记录到 `phase-a-decisions.md` → 再继续 B5.5。
 未确认 → 暂停 B5.5，不要自己推进。
 
 #### B5.5 — verify smoke dispatch
@@ -342,18 +342,18 @@ completed_at=<ISO timestamp>
 providers=<ancestor + 5 seats + memory>
 ```
 
-### B7.5 — ancestor 单向写 Phase-A 决策给 memory
+### B7.5 — 始祖 seat (${PRIMARY_SEAT_ID}) 单向写 Phase-A 决策给 memory
 
 写 `${AGENT_HOME}/.agents/memory/learnings/${PROJECT_NAME}-phase-a-decisions.md`，记录：
 - provider 选择
 - seat roster / harness 决定
 - feishu binding 结果（或 CLI-only）
 
-这是 ancestor → memory 单向写入；不要 tmux send-keys 给 memory，不要求 memory 回复，也不阻塞 `phase=ready`。
+这是始祖 seat (${PRIMARY_SEAT_ID}) → memory 单向写入；不要 tmux send-keys 给 memory，不要求 memory 回复，也不阻塞 `phase=ready`。
 
 ## memory 交互工具（canonical CLI；不要 tmux send-keys 给 memory，也不要 `query_memory.py --ask`）
 
-ancestor 需要查已落盘知识时，直接跑脚本，不要把 prompt 发给 memory 的 tmux session。
+始祖 seat (${PRIMARY_SEAT_ID}) 需要查已落盘知识时，直接跑脚本，不要把 prompt 发给 memory 的 tmux session。
 
 ### 读（query）
 

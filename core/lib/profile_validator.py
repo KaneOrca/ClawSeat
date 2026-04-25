@@ -31,7 +31,9 @@ from machine_config import (  # noqa: E402
 
 PROFILE_SCHEMA_VERSION = 2
 
-# §7: legal seat names (exactly these six).
+# §7: legal seat names. `ancestor` stays as a v1 alias for migration
+# compatibility; v2 templates use `memory` as the primary seat. This set may
+# shrink in a future major release once v1 templates are sunset.
 LEGAL_SEATS = frozenset({"ancestor", "planner", "builder", "reviewer", "qa", "designer"})
 # §7 rule 3: minimum required.
 REQUIRED_SEATS = frozenset({"ancestor", "planner"})
