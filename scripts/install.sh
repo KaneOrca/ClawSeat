@@ -67,6 +67,10 @@ CLAWSEAT_TEMPLATE_NAME="clawseat-default"
 BOOTSTRAP_TEMPLATE_DIR=""
 BOOTSTRAP_TEMPLATE_PATH=""
 PENDING_SEATS=(planner builder reviewer qa designer)
+# PRIMARY_SEAT_ID = the seat user dialogs with (always one per project).
+# v1 templates use "ancestor"; v2 clawseat-minimal uses "memory".
+# Set by resolve_pending_seats() based on template's first primary engineer.
+PRIMARY_SEAT_ID="ancestor"
 
 die() { local n="$1" code="$2" msg="$3"; printf '%s\nERR_CODE: %s\n' "$msg" "$code" >&2; exit "$n"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
@@ -404,12 +408,20 @@ prompt_kind_first_flow() {
 }
 
 resolve_pending_seats() {
+  # PRIMARY_SEAT_ID is the seat the user dialogs with (ancestor in v1 templates,
+  # memory in v2 clawseat-minimal). PENDING_SEATS is everyone else (workers).
   # For clawseat-default, keep the hardcoded list (generated template, no file to read).
-  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && return 0
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]]; then
+    PRIMARY_SEAT_ID="ancestor"
+    return 0
+  fi
   local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
-  [[ -f "$template_file" ]] || return 0  # fallback to hardcoded if not found
-  local seats
-  seats="$("$PYTHON_BIN" - "$template_file" <<'PY'
+  if [[ ! -f "$template_file" ]]; then
+    PRIMARY_SEAT_ID="ancestor"
+    return 0  # fallback to hardcoded if not found
+  fi
+  local primary seats
+  primary="$("$PYTHON_BIN" - "$template_file" <<'PY'
 import sys
 try:
     import tomllib
@@ -417,7 +429,25 @@ except ImportError:
     import tomli as tomllib
 with open(sys.argv[1], "rb") as f:
     data = tomllib.load(f)
-seats = [e["id"] for e in data.get("engineers", []) if e.get("id") != "ancestor"]
+PRIMARY_IDS = ("ancestor", "memory")
+for e in data.get("engineers", []):
+    if e.get("id") in PRIMARY_IDS:
+        print(e["id"])
+        break
+PY
+  2>/dev/null)"
+  PRIMARY_SEAT_ID="${primary:-ancestor}"
+
+  seats="$("$PYTHON_BIN" - "$template_file" "$PRIMARY_SEAT_ID" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+primary = sys.argv[2]
+seats = [e["id"] for e in data.get("engineers", []) if e.get("id") != primary]
 print(" ".join(seats))
 PY
   2>/dev/null)"
@@ -928,8 +958,8 @@ write_project_local_toml() {
   fi
 
   mkdir -p "$(dirname "$PROJECT_LOCAL_TOML")" || die 31 PROJECT_LOCAL_DIR_FAILED "unable to create $(dirname "$PROJECT_LOCAL_TOML")"
-  # Build seat_order from resolved PENDING_SEATS (ancestor always first)
-  local _seat_order_str="\"ancestor\""
+  # Build seat_order from PRIMARY_SEAT_ID (ancestor or memory) + PENDING_SEATS workers
+  local _seat_order_str="\"$PRIMARY_SEAT_ID\""
   for seat in "${PENDING_SEATS[@]}"; do
     _seat_order_str="${_seat_order_str}, \"${seat}\""
   done
@@ -939,8 +969,8 @@ repo_root = "$PROJECT_REPO_ROOT"
 seat_order = [$_seat_order_str]
 
 [[overrides]]
-id = "ancestor"
-session_name = "$PROJECT-ancestor"
+id = "$PRIMARY_SEAT_ID"
+session_name = "$PROJECT-$PRIMARY_SEAT_ID"
 tool = "claude"
 auth_mode = "$seat_auth_mode"
 provider = "$seat_provider"
@@ -1371,7 +1401,7 @@ pane_contains_text_relaxed() {
 }
 
 auto_send_phase_a_kickoff() {
-  local kickoff="$1" session_name="$PROJECT-ancestor"
+  local kickoff="$1" session_name="$PROJECT-$PRIMARY_SEAT_ID"
   local max_polls=24 poll_seconds=3 post_send_seconds=2 max_send_attempts=3
   local poll_count=0 send_attempts=0 pane_text="" post_send_text=""
 
@@ -1393,7 +1423,7 @@ auto_send_phase_a_kickoff() {
     fi
 
     send_attempts=$((send_attempts + 1))
-    if bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" ancestor "$kickoff" >/dev/null 2>&1; then
+    if bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" "$PRIMARY_SEAT_ID" "$kickoff" >/dev/null 2>&1; then
       sleep "$post_send_seconds"
       post_send_text="$(capture_tmux_pane_text "$session_name")"
       if pane_contains_text_relaxed "$post_send_text" "$kickoff"; then
@@ -1765,8 +1795,8 @@ main() {
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
   fi
   ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
-  note "Step 5: launch ancestor seat via agent-launcher"
-  launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
+  note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
+  launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
   install_ancestor_patrol_plist
   note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
@@ -1788,12 +1818,12 @@ main() {
     launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
     open_iterm_window "$(memory_payload)" memory_window_id
   fi
-  note "Step 9: focus ancestor and persist operator guide"
+  note "Step 9: focus primary seat ($PRIMARY_SEAT_ID) and persist operator guide"
   if [[ -n "$GRID_WINDOW_ID" ]]; then
     run sleep 3
-    focus_iterm_window "$GRID_WINDOW_ID" "ancestor"
+    focus_iterm_window "$GRID_WINDOW_ID" "$PRIMARY_SEAT_ID"
   else
-    warn "Skipping ancestor focus because no iTerm grid window was opened."
+    warn "Skipping primary seat focus because no iTerm grid window was opened."
   fi
   if [[ "$DRY_RUN" != "1" ]]; then
     note "Step 9.5: auto-send Phase-A kickoff prompt / 尝试自动发送 Phase-A kickoff"

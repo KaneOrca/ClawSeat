@@ -1,93 +1,95 @@
 # RFC-001: Self-Contained Project Architecture (ClawSeat v2)
 
-- **Status**: Draft
+- **Status**: Draft (architecture aligned 2026-04-26)
 - **Author**: ancestor (cartooner-ancestor session) on behalf of operator (ywf)
-- **Date**: 2026-04-25
+- **Date**: 2026-04-25 (initial), 2026-04-26 (vocabulary alignment + role re-split)
 - **Branch**: `refactor/clawseat-v2-self-contained`
 - **Worktree**: `/Users/ywf/coding/.claude/worktrees/clawseat-v2/`
-- **Discussion log**: cartooner-ancestor scrollback 2026-04-25 22:30~23:50（与 operator 的实时架构对齐对话）
 
 ---
 
-## 1. Motivation
+## 1. Vocabulary (canonical, after 2026-04-26 alignment)
 
-ClawSeat v1 (current) 拓扑存在三类问题：
+| Term | Definition |
+|------|-----------|
+| **始祖 / ancestor** | A SEAT TYPE — every project has 1, named `<project>-memory`. Owns 4 capabilities below. v1 called it "ancestor", v2 names it after its core capability (memory). |
+| **memory (capability)** | The seat's persistent project knowledge store: TASKS / STATUS / decisions / history / learnings. Lives in `~/.agents/memory/<project>/` (M1) or pluggable memory skill (M2). **Not a separate seat** — it's owned by the primary seat. |
+| **research (capability)** | The seat's active investigation: grep code, run commands, query docs, fetch web. Distinct from memory: research = gathering new info, memory = recalling old info. **Not a separate seat** — owned by the primary seat. |
+| **dispatch (capability)** | Route work to project workers (planner / builder / designer) or to other projects' primary seats. Owned by the primary seat. |
+| **dialog (capability)** | First user-facing surface for the project. The primary seat's iTerm window is the user's conversation entry point. Owned by the primary seat. |
+| **project** | A self-contained 4-seat unit: 1 primary (memory) + 3 workers (planner / builder / designer). |
+| **No global seats** | No global ancestor, no global memory. Every project is fully autonomous. Cross-project work = direct memory ↔ memory dispatch. |
 
-1. **重复的 ancestor**：每个项目独立 ancestor seat，N 个项目 = N 个 ancestor 进程，协调能力却不跨项目
-2. **memory 角色弱化**：全局 `machine-memory-claude` 主要做 install 时一次性 env scan，之后基本只是查询目标，养一个常驻 LLM 不划算
-3. **`close t` bug 引发的整窗炸 + recover 链路依赖 sandbox 内 ancestor 主动跑（已知失效）** —— 详见 [`/tmp/clawseat-reports/cartooner-grid-rca-20260425-152000.md`](file:///tmp/clawseat-reports/cartooner-grid-rca-20260425-152000.md)
-4. **OAuth engineer seat 实际 unsandboxed**（HOME=`/Users/ywf` + `--dangerously-skip-permissions`），与 sandbox 化的 ancestor 形成"工人比老板权限大"的反直觉拓扑
-5. **没有自定义模板** — `install.sh` 硬编码白名单只接受 `clawseat-{default,engineering,creative}`
-6. **template UX 半瘸** — `prompt_kind_first_flow()` 一旦遇到 pipe / `--reinstall` 就静默 skip，操作员看不到"工程/创作/通用"选择
+### Seat naming (canonical)
+
+```
+<project>-memory                     primary seat (the project's brain)
+<project>-planner-claude             worker: planning + code review
+<project>-builder-codex              worker: code execution
+<project>-designer-gemini            worker: aesthetic / visual review
+```
+
+The `-<tool>` suffix on workers makes the underlying LLM choice transparent. The primary seat omits this suffix because (a) it's the unique entry point so no need to disambiguate, and (b) operator may swap memory's tool less frequently than workers.
 
 ---
 
-## 2. Proposal
-
-### 2.1 核心简化：项目自闭环
-
-**没有 global ancestor，没有 global memory，每个项目是 4-seat 自闭环单元。**
+## 2. Per-project Topology
 
 ```
 项目 = install (例)
-┌────────────────────────────────────────────────────────────┐
-│ install-memory  (= 旧 ancestor + 旧 memory 合并)           │
-│ - claude oauth · HOME=/Users/ywf · max privilege           │
-│ - 职责: 项目记忆 + 决策 + 观察 + 派工 + 与用户对话         │
-│ - 记忆机制: M1 文件 placeholder, M2 接成熟 memory skill    │
-│ - 独立 iTerm 窗口 (项目第一入口, 用户对话面)               │
-└─────┬────────────────┬────────────────┬───────────────────┘
-      │ dispatch       │ dispatch       │ dispatch
-      ▼                ▼                ▼
-┌──────────┐    ┌──────────┐    ┌──────────┐
-│ planner  │    │ designer │    │ reviewer │
-│ plan +   │    │ 审美判断 │    │ 代码审查 │
-│ 编码     │    │ 视觉反馈 │    │          │
-│          │    │          │    │          │
-│ 默认     │    │ gemini   │    │ 默认     │
-│ claude   │    │ oauth    │    │ codex    │
-│ 可切换   │    │          │    │ oauth/api│
-│          │    │          │    │ 可切换   │
-└──────────┘    └──────────┘    └──────────┘
-       (3 个 worker, 同一个 iTerm 窗口的 3 panes)
+┌──────────────────────────────────────────────────────────────────┐
+│ install-memory  (= 旧 ancestor + 旧 memory 合并)                 │
+│ ───────────────────────────────────────────────────────────────  │
+│ - claude oauth · HOME=/Users/ywf · max privilege                 │
+│ - capabilities: memory + research + dispatch + dialog            │
+│ - memory impl: M1 filesystem placeholder, M2 mature skill        │
+│ - research impl: M1 Bash+Read+Grep+Glob, M2 + WebFetch + MCP    │
+│ - 独立 iTerm 窗口 (项目第一入口, 用户对话面)                      │
+└─────┬───────────────────┬───────────────────┬───────────────────┘
+      │ dispatch          │ dispatch          │ dispatch
+      ▼                   ▼                   ▼
+┌──────────────────┐ ┌─────────────────┐ ┌─────────────────────┐
+│ install-planner- │ │ install-builder-│ │ install-designer-   │
+│ claude           │ │ codex           │ │ gemini              │
+│                  │ │                 │ │                     │
+│ 规划 + code review│ │ 代码编写 + 跑命令│ │ 审美 + 视觉评审    │
+│ (Claude 强项:    │ │ (Codex GPT-5.4  │ │ (Gemini 多模态强)   │
+│  思维 + 长上下文 │ │  codegen 强)    │ │                     │
+│  审查)           │ │                 │ │                     │
+└──────────────────┘ └─────────────────┘ └─────────────────────┘
+       (3 workers, 共享 1 个 iTerm 窗口的 3 panes)
 ```
 
-### 2.2 关键合并/精简
+### Why this role split (vs v1)
 
-| 旧（v1） | 新（v2） |
-|---------|---------|
-| per-project ancestor | 删除，由 `<project>-memory` 接管 |
-| 全局 `machine-memory-claude` (LLM seat) | 删除，机器观察由 Tier 3 watchdog daemon 承担 |
-| 单独 `builder` seat | 合并进 planner（planner 既规划又写代码） |
-| 单独 `qa` seat | 删除（M1 不要，M2 看是否需要） |
-| 全局 ancestor 协调跨项目 | 不存在；project memory 之间通过 dispatch 协议互发 |
-| iTerm 1 窗口 6 panes | iTerm 2 窗口/项目: `<project>-memory` (1 pane) + `<project>-workers` (3 panes) |
+| v1 7-seat | v2 4-seat | Reasoning |
+|-----------|-----------|-----------|
+| ancestor (orchestrator) | merged into memory | Per-project; same agent does both |
+| machine-memory-claude (global oracle) | deleted | Memory is per-project; machine state via Tier 3 watchdog |
+| planner (dispatcher) | planner (planner + code reviewer) | Claude excels at READING code; let it review |
+| builder (executor) | builder (codex codegen) | Codex GPT-5.4 excels at WRITING code |
+| reviewer (separate code review seat) | merged into planner | Reviewer was redundant with planner-as-reviewer |
+| qa (test runner) | dropped (M1) | Move tests into planner's responsibility; M2 may add back |
+| designer (aesthetic) | designer (gemini) | Unchanged |
 
-### 2.3 4-Seat Minimal Template
+Key insight: **Use each LLM for its strength**. Claude reads/judges. Codex writes. Gemini sees. No LLM doing what it's worst at.
 
-文件：[`templates/clawseat-minimal.toml`](../templates/clawseat-minimal.toml)（草案见 §6）
+---
 
-| Seat | Tool | Auth | Provider 默认 | 可切换 | 角色 |
-|------|------|------|--------------|--------|------|
-| `memory` | claude | oauth | anthropic | 否 (固定) | 项目记忆 + 决策 + 派工 + 用户对话 |
-| `planner` | claude | oauth | anthropic | **是** (任意 LLM 模型) | 规划 + 编码 |
-| `designer` | gemini | oauth | google | 是 | 审美判断 |
-| `reviewer` | codex | oauth | openai | **是** (oauth ⇄ api 可切，api 默认 xcode-best) | 代码审查 |
-
-### 2.4 iTerm 拓扑（多项目并存）
+## 3. iTerm Window Topology (multi-project)
 
 ```
         ┌──────────────────────┐    ┌──────────────────────┐
 对话窗口 │  install-memory      │    │  cartooner-memory    │
-        │  ❯ 第一入口           │    │  ❯ 第一入口          │
+        │  ❯ 第一入口          │    │  ❯ 第一入口          │
         └──────────────────────┘    └──────────────────────┘
 
 工人窗口 ┌──────────────────────┐    ┌──────────────────────┐
         │  install-workers     │    │  cartooner-workers   │
         │  ┌────────┬────────┐ │    │  ┌────────┬────────┐ │
-        │  │planner │designer│ │    │  │planner │designer│ │
+        │  │planner │builder │ │    │  │planner │builder │ │
         │  ├────────┴────────┤ │    │  ├────────┴────────┤ │
-        │  │     reviewer    │ │    │  │     reviewer    │ │
+        │  │     designer    │ │    │  │     designer    │ │
         │  └─────────────────┘ │    │  └─────────────────┘ │
         └──────────────────────┘    └──────────────────────┘
 ```
@@ -96,160 +98,166 @@ ClawSeat v1 (current) 拓扑存在三类问题：
 
 ---
 
-## 3. Architecture Tiers
+## 4. Architecture Tiers
 
-### Tier 1 — Decision + Memory (Per-Project Memory Seats)
+### Tier 1 — Per-Project Primary Seats
 
-每个 `<project>-memory`：
-- LLM 决策（接收用户请求、做策略判断）
-- 项目记忆（持有 TASKS / STATUS / 历史决策 / 项目知识库）
-- 项目内派工（dispatch 给本项目 workers）
-- **跨项目协作**：直接 `tmux-send <other-project>-memory` 发 dispatch 给其他项目的 memory
-- 通过 `cmdq.jsonl` 给 Tier 3 watchdog 派系统级活
+每个 `<project>-memory`:
+- Claude OAuth, REAL_HOME=/Users/ywf, --dangerously-skip-permissions
+- Owns: memory + research + dispatch + dialog
+- Dialog: receives user input via its iTerm window
+- Cross-project: direct `tmux-send <other>-memory` dispatch
+- System actions: writes to `~/.clawseat/state/cmdq.jsonl` for Tier 3 to execute
 
-**HOME 模式**：REAL_HOME（不沙箱），原因：OAuth 必须复用宿主登录态；与现有 OAuth engineer seat 同等权限。
+### Tier 2 — Per-Project Workers
 
-### Tier 2 — Workers (Per-Project Worker Seats)
-
-`<project>-planner` / `<project>-designer` / `<project>-reviewer`：
-- 接受 memory dispatch，执行具体任务
-- 不直接面用户（汇报回 memory）
-- 不能直接 dispatch 跨项目（必须通过自己 memory 中转）
+`<project>-planner-claude`, `<project>-builder-codex`, `<project>-designer-gemini`:
+- Own respective LLM tool (Claude / Codex / Gemini)
+- Receive dispatch from project's memory seat
+- Don't directly face user (report back to memory)
+- Don't dispatch cross-project (must go through memory)
 
 ### Tier 3 — Execution (No-LLM Watchdogs)
 
-机器级 daemon 集群（无 LLM，纯 shell）：
-- `watchdog-iterm-grid` — 监控所有 `<project>-memory` 和 `<project>-workers` 窗口存在性，缺失自动 recover
+机器级 daemon 集群（无 LLM, 纯 shell, 跑在用户 launchd 下）:
+- `watchdog-iterm-grid` — 监控所有 `<project>-memory` 和 `<project>-workers` 窗口存在性, 缺失自动 recover
 - `watchdog-cron-drift` — 校验 crontab 期望与现状
 - `watchdog-tmux-health` — 关键 session alive 监控
 - `watchdog-secrets-ttl` — token 即将过期预警
 - `watchdog-disk-quota` — `~/.clawseat` 占用监控
+- `watchdog-slash-injector` — 接收 cmdq.jsonl 中的 `kind:"slash"` 指令, 通过 tmux send-keys 投递 `/clear` `/new` 等
 
-**部署形态**：launchd plist，跑在用户身份下，0 LLM token 成本。
-**输入/输出契约**：
-- 写：`~/.clawseat/state/observations.jsonl`、`~/.clawseat/state/alerts.jsonl`
-- 读：`~/.clawseat/state/policy.json`（仅 memory seat 可写）、`~/.clawseat/state/cmdq.jsonl`（memory 派活给 watchdog 用）
-- 反馈：`~/.clawseat/state/cmdq-results.jsonl`
+输入/输出契约 (`~/.clawseat/state/`):
+- 写: `observations.jsonl` (Tier 3) / `alerts.jsonl` (Tier 3)
+- 读: `policy.json` (Tier 1 写, Tier 3 读) / `cmdq.jsonl` (Tier 1 写, Tier 3 读)
+- 反馈: `cmdq-results.jsonl` (Tier 3 写, Tier 1 读)
 
 ### Tier 0 — Templates
 
-模板系统（§6）：
-- repo 内置：`clawseat-minimal`（v2 第一个）、未来可加 `clawseat-engineering`（重写适配 v2）/ `clawseat-creative` 等
-- 用户自定义：`~/.agents/templates/<name>.toml` ✅ v2 解锁
-- 模板继承：`extends = "clawseat-minimal"` + override seat 字段
-- 模板版本：`version` 字段 + 升级路径
+模板系统:
+- repo 内置: `clawseat-minimal` (v2 第一个), 未来可加 `clawseat-engineering` (重写适配 v2) / `clawseat-creative` 等
+- 用户自定义: `~/.agents/templates/<name>.toml` ✅ M3 解锁
+- 模板继承: `extends = "clawseat-minimal"` + override seat 字段 ✅ M3
+- 模板版本: `version` 字段 + 升级路径 (v1 = 1, v2 = 1 仍兼容)
 
 ---
 
-## 4. Slash-Command Awareness
+## 5. Slash-Command Awareness
 
 来自 operator 的明确要求："让 ClawSeat 知道如何使用 /new、/clear 等基础功能"。
 
-> **Memory note**: Claude Code 的 slash-command **只能由真正的键盘输入触发**——LLM 在响应里写 `/clear` 文本不会被解释为命令。
+> Claude Code 的 slash-command **只能由真正的键盘输入触发** — LLM 在响应里写 `/clear` 文本不会被解释为命令。
 
-设计：
-- Tier 3 加一个 `watchdog-slash-injector` daemon，订阅 `cmdq.jsonl` 中 `kind: "slash"` 的指令
-- memory seat 决策"该让某个 worker /clear context"时，写一行 cmdq:
+设计:
+- Tier 3 加 `watchdog-slash-injector` daemon, 订阅 `cmdq.jsonl` 中 `kind: "slash"` 的指令
+- memory seat 决策"该让某 worker /clear context"时, 写一行 cmdq:
   ```json
-  {"kind": "slash", "target_seat": "install-planner", "command": "/clear", "reason": "context > 200k tokens"}
+  {"kind":"slash","target_seat":"install-builder-codex","command":"/clear","reason":"context > 200k tokens"}
   ```
-- watchdog 通过 `tmux send-keys` 真正按键投递（而非文本投递）
-- 用途：定期 /clear 长上下文 worker、紧急 /new 重置卡死 seat 等
+- watchdog 通过 `tmux send-keys` 真正按键投递 (而非文本投递)
+- 用途: 定期 /clear 长上下文 worker、紧急 /new 重置卡死 seat 等
 
 ---
 
-## 5. Open Questions（M1 不阻塞，M2 决定）
+## 6. Implementation Milestones
+
+### M1 — Skeleton (本 RFC + 已落 commit)
+
+完成情况：
+
+- [x] `templates/clawseat-minimal.toml` 落到 v2 worktree (canonical, 4 seat)
+- [x] install.sh 接受 `clawseat-minimal` 模板 (whitelist 含 minimal)
+- [x] install.sh `prompt_kind_first_flow` 改 2-mode (新手 default = clawseat-minimal / 专家 = clawseat-engineering)
+- [x] install.sh `bootstrap_project_profile` 修复 reinstall session.toml 复活 bug
+- [x] install.sh PRIMARY_SEAT_ID generalization (8 处 hardcoded `${PROJECT}-ancestor` 改 `${PROJECT}-${PRIMARY_SEAT_ID}`)
+- [x] Python `agent_admin_window.py` + `agent_admin_session.py` 5 处 `"ancestor"` 字面量改成 `_PRIMARY_SEAT_IDS = {"ancestor", "memory"}` 集合判断
+- [ ] **NEXT**: 测试 — `clawseat project new testbed --template clawseat-minimal` → 4 seat 正常 spawn → memory 收到用户对话
+- [ ] auto_send_phase_a_kickoff: 扩 polling 窗口到 OAuth 信任屏完成 (当前 72s 不够)
+- [ ] memory seat 启动时挂 Stop hook
+- [ ] memory seat 接受 dispatch 协议 (跟 v1 dispatch_task 兼容)
+- [ ] iTerm 窗口拓扑改成 1 memory window + 1 workers window (现在仍是 v1 单窗 4 panes — install.sh window_payload 需要拆分)
+
+### M2 — Watchdog Tier
+
+- [ ] `~/.clawseat/state/` 目录契约 (policy.json / cmdq.jsonl / observations.jsonl / alerts.jsonl / cmdq-results.jsonl)
+- [ ] `watchdog-iterm-grid` daemon
+- [ ] `watchdog-cron-drift` daemon
+- [ ] `watchdog-secrets-ttl` daemon
+- [ ] `watchdog-slash-injector` daemon
+- [ ] launchd plist 装载脚本
+
+### M3 — 自定义模板 + 继承
+
+- [ ] `templates/*.toml` 文件扫描注册 (去掉硬编码白名单)
+- [ ] template `extends = "clawseat-minimal"` 继承机制
+- [ ] `agent_admin template list/show/validate/create` 子命令
+- [ ] 文档: 如何写自定义模板
+
+### M4 — 干掉 v1 旧拓扑
+
+- [ ] 现有 install/cartooner/mor 项目迁移工具 (v1 → v2 自闭环)
+- [ ] 删除 v1 全局 machine-memory-claude
+- [ ] 文档: v1 → v2 升级指南
+
+---
+
+## 7. Open Questions (M1 不阻塞，M2 决定)
 
 | # | 问题 | M1 临时方案 | M2 决策 |
 |---|------|------------|---------|
-| Q1 | 机器级 watchdog 归谁？ | install 时装机器级 launchd plist，跑无 LLM daemon | 确认 launchd plist 内容 |
-| Q2 | bootstrap 时是否默认创建第一个项目？ | 否（install.sh 只装基础设施，用 `clawseat project new <name>` 创建） | 确认 |
-| Q3 | memory skill 现在选型？ | 后期接口预留（M1 用 `~/.agents/memory/<project>/notes.md` placeholder）| 选型 mem0/letta/built-in/vector DB |
+| Q1 | 机器级 watchdog 归谁? | install 时装机器级 launchd plist | 确认 launchd plist 内容 |
+| Q2 | bootstrap 时是否默认创建第一个项目? | 否 (install.sh 只装基础设施, 用 `clawseat project new <name>` 创建) | 确认 |
+| Q3 | memory skill 现在选型? | 后期接口预留 (M1 用 `~/.agents/memory/<project>/notes.md` placeholder) | 选型 mem0 / letta / built-in / vector DB |
 | Q4 | 大规模 (5+ 项目) iTerm UX | 自然摆放 | 探索 dock 风格 / Spaces 分桌面 |
 | Q5 | per-project memory 的写权限范围 | 跟当前 OAuth engineer 一样 (REAL_HOME + dangerously-skip) | 加 ACL gate (只能写 cmdq.jsonl, 系统级 mutating 走 watchdog) |
 | Q6 | 跨项目协作的限速 | memory ↔ memory 自由 dispatch | 加 rate limit / circuit breaker |
 
 ---
 
-## 6. Implementation Milestones
+## 8. Migration Plan
 
-### M1 — Skeleton (本 RFC 范围)
+### 短期: v1 + v2 并存
 
-- [ ] `templates/clawseat-minimal.toml` 落到 v2 worktree（草案已有）
-- [ ] install.sh 接受 `clawseat-minimal` 模板（去掉 3 名字白名单，改为 `templates/*.toml` 文件扫描）
-- [ ] `install.sh` 修复 prompt_kind_first_flow 失效问题（pipe 兼容、--reinstall 也触发）
-- [ ] 让 install.sh 创建项目时分别开 `<project>-memory` 和 `<project>-workers` 两个 iTerm 窗口
-- [ ] 修复 `close t → close s` bug ([cartooner grid RCA #1](file:///tmp/clawseat-reports/cartooner-grid-rca-20260425-152000.md))
-- [ ] memory seat 启动时挂 Stop hook：每次回合结束跑 `~/.clawseat/state/observations` 自检
-- [ ] memory seat 接受 dispatch 协议（跟 v1 dispatch_task 兼容）
-- [ ] 测试：`clawseat project new testbed --template clawseat-minimal` → 4 seat 正常 spawn → memory 收到用户对话
-
-### M2 — Watchdog Tier
-
-- [ ] `~/.clawseat/state/` 目录契约（policy.json / cmdq.jsonl / observations.jsonl / alerts.jsonl / cmdq-results.jsonl）
-- [ ] `watchdog-iterm-grid` daemon
-- [ ] `watchdog-cron-drift` daemon
-- [ ] `watchdog-secrets-ttl` daemon
-- [ ] `watchdog-slash-injector` daemon (触发 /clear / /new)
-- [ ] launchd plist 装载脚本
-
-### M3 — 自定义模板 + 继承
-
-- [ ] `templates/*.toml` 文件扫描注册（去掉硬编码白名单）
-- [ ] template `extends = "clawseat-minimal"` 继承机制
-- [ ] `agent_admin template list/show/validate/create` 子命令
-- [ ] 文档：如何写自定义模板
-
-### M4 — 干掉 v1 旧拓扑
-
-- [ ] 现有 install/cartooner/mor 项目迁移工具（v1 → v2 自闭环）
-- [ ] 删除 v1 的 per-project ancestor 概念
-- [ ] 删除 v1 的全局 machine-memory-claude
-- [ ] 文档：v1 → v2 升级指南
-
----
-
-## 7. Migration Plan
-
-### 短期：v1 + v2 并存
-
-- 当前 install (在 experimental 分支上) 保留作 baseline
-- v2 新建项目用 `--template clawseat-minimal`，跑在 v2 worktree 的代码上
+- 当前 install / cartooner / mor (在 experimental 分支上) 保留作 baseline
+- v2 新建项目用 `--template clawseat-minimal`, 跑在 v2 worktree 的代码上
 - 两套并存验证 1-2 周
-- v2 验证通过后，提供迁移工具把 v1 项目转 v2
 
-### 长期：完全切换 v2
+### 长期: 完全切换 v2
 
 - v2 stable 后 mark `clawseat-{default,engineering,creative}` 为 deprecated
 - 至少 1 个发布周期保持兼容
-- 然后正式删除 v1 拓扑代码
+- 然后正式删除 v1 拓扑代码 + 删除 machine-memory-claude
 
 ---
 
-## 8. Decision Log（本次对话共识）
+## 9. Decision Log
 
 | 日期 | 决议 | 来源 |
 |------|------|------|
-| 2026-04-25 | 取消"全局 ancestor + 全局 memory"路线，改为"项目自闭环 + per-project memory" | operator 22:50~23:00 |
-| 2026-04-25 | per-project memory 名 = `<project>-memory`（不再叫 `<project>-ancestor`）| operator 23:30 |
-| 2026-04-25 | 没有 builder seat（planner 自己写代码） | operator 23:35 |
-| 2026-04-25 | 没有 qa seat（M1 范围）| operator 23:35 |
-| 2026-04-25 | 没有 global ancestor（"如果有多个项目，所有 memory 都是第一入口直接跟用户沟通"） | operator 23:42 |
-| 2026-04-25 | 每个项目 2 个 iTerm 窗口（memory 独立窗口 + workers grid 窗口） | operator 23:42 |
-| 2026-04-25 | planner 默认 claude，支持任意模型切换 | operator 23:48 |
-| 2026-04-25 | reviewer 默认 codex，支持 oauth/api 切换；api 默认 xcode-best | operator 23:48 |
-| 2026-04-25 | 跨项目协作通过 memory ↔ memory 直接 dispatch（无中介） | ancestor 提议 + operator 隐含同意 |
+| 2026-04-25 22:50 | 取消"全局 ancestor + 全局 memory"路线，改为"项目自闭环 + per-project memory" | operator |
+| 2026-04-25 23:30 | per-project memory 名 = `<project>-memory`（不再叫 `<project>-ancestor`）| operator |
+| 2026-04-25 23:35 | 没有 builder seat（planner 自己写代码）| operator |
+| 2026-04-25 23:35 | 没有 qa seat（M1 范围）| operator |
+| 2026-04-25 23:42 | 没有 global ancestor（"如果有多个项目，所有 memory 都是第一入口直接跟用户沟通"）| operator |
+| 2026-04-25 23:42 | 每个项目 2 个 iTerm 窗口（memory 独立窗口 + workers grid 窗口）| operator |
+| 2026-04-25 23:48 | planner 默认 claude，支持任意模型切换 | operator |
+| 2026-04-25 23:48 | reviewer 默认 codex，支持 oauth/api 切换；api 默认 xcode-best | operator |
+| 2026-04-26 00:35 | **撤销 23:35 决定**: codex 应是 builder 不是 reviewer; planner 兼任 review; ancestor 加 research 能力 | operator |
+| 2026-04-26 00:48 | **词汇对齐**: ancestor 是 SEAT 类型 (per-project); memory + research 是 capability (住在 ancestor 上); 没有独立 memory seat; 没有全局 ancestor | operator |
+| 2026-04-26 00:48 | **命名规则**: 所有 seat 统一 `<project>-<role>[-<tool>]`; primary seat = `<project>-memory` (不带 tool 后缀) | operator |
+| 2026-04-26 01:10 | 4-seat = `<project>-memory` + planner-claude + builder-codex + designer-gemini | operator |
+| 2026-04-26 01:30 | install.sh + agent_admin Python 引入 PRIMARY_SEAT_ID / `_PRIMARY_SEAT_IDS` 抽象，让模板可指定 ancestor 或 memory 任一作为 primary | ancestor 实施 |
 
 ---
 
-## 9. Review Workflow
+## 10. Review Workflow
 
-本 RFC 完成草案后：
+本 RFC 完成草案后:
 
-1. operator review（你正在看的就是）
-2. operator 拍板后，dispatch 给 install team 实施
-3. install team planner 出实施细则 → builder 编码 → reviewer code review
-4. M1 完成后 operator 验收（用 `clawseat project new testbed` 创个最小项目跑通对话）
+1. operator review (你正在看的就是)
+2. operator 拍板后, dispatch 给 install team 实施 M1 剩余任务
+3. install team planner-claude 出实施细则 → builder-codex 编码 → planner-claude review → memory archive
+4. M1 完成后 operator 验收 (用 `clawseat project new testbed --template clawseat-minimal` 创个最小项目跑通对话)
 5. M1 验收通过 → 启动 M2
 
 ---

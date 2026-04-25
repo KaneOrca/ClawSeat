@@ -1,16 +1,23 @@
 # clawseat-minimal — v2 Self-Contained Project Template
 #
 # 4-seat 自闭环项目单元：
-#   - <project>-memory     (decision + memory + 用户对话; 独立 iTerm 窗口)
-#   - <project>-planner    (规划 + 编码; workers 窗口 pane)
-#   - <project>-designer   (审美判断; workers 窗口 pane)
-#   - <project>-reviewer   (代码审查; workers 窗口 pane)
+#   - <project>-memory       (memory + research + decision + dispatch + dialog;
+#                             独立 iTerm 窗口；用户对话第一入口)
+#   - <project>-planner-claude   (规划 + 代码审查; workers 窗口 pane)
+#   - <project>-builder-codex    (代码编写; workers 窗口 pane)
+#   - <project>-designer-gemini  (审美判断; workers 窗口 pane)
+#
+# 角色边界（与 v1 重要区别）：
+#   - 没有独立 reviewer seat — planner 自审 (Claude 强项就是判断/审查)
+#   - 没有独立 builder/qa seat — builder 是 codex (强项是写代码)
+#   - 没有 ancestor seat — memory 接管 (memory 是其能力，不是单独 seat)
+#   - 没有全局 memory — 每项目自闭环
 #
 # 依据: docs/rfc/RFC-001-self-contained-project-architecture.md
 
 version = 1
 template_name = "clawseat-minimal"
-description = "Self-contained 4-seat project unit (v2): memory in dedicated window, 3-pane worker grid"
+description = "v2 self-contained 4-seat project: memory orchestrates from dedicated window, planner+builder+designer share 3-pane worker grid"
 
 # ── window layout ─────────────────────────────────────────────────────────────
 # Two iTerm windows per project. Memory gets its own window (user's primary
@@ -21,8 +28,8 @@ memory_window_title  = "{PROJECT}-memory"      # 独立窗口, 1 pane
 workers_window_title = "{PROJECT}-workers"     # 独立窗口, 3 panes
 
 [window_layout.workers_grid]
-layout = "tile-3"   # planner top-left | designer top-right | reviewer bottom-full
-panes = ["planner", "designer", "reviewer"]
+layout = "tile-3"   # planner top-left | builder top-right | designer bottom-full
+panes = ["planner", "builder", "designer"]
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 
@@ -34,120 +41,135 @@ monitor_max_panes = 4
 
 # ── seats ─────────────────────────────────────────────────────────────────────
 
-# Memory: project's brain — orchestration + persistent memory + user dialog
+# Memory: project's brain — memory + research + dispatch + dialog
+#
+# Why "memory" not "ancestor": v1 called this seat "ancestor" but its primary
+# CAPABILITY is owning the project's persistent memory + actively researching
+# before deciding. The seat IS the project's memory. Naming it `<project>-memory`
+# makes cross-project dispatch unambiguous: `tmux-send install-memory "..."` is
+# obviously talking to install project's brain.
 [[engineers]]
 id = "memory"
 display_name = "Memory"
-role = "project-memory"            # 新角色: 合并 v1 ancestor + v1 memory
-window = "memory"                  # 走 memory_window_title
+role = "project-memory"            # 包含 ancestor + memory + research 多重能力
+window = "memory"                  # 走 memory_window_title (独立窗口)
 human_facing = true                # 用户对话入口
 patrol_authority = true
 unblock_authority = true
 dispatch_authority = true          # 派工给本项目 workers
-escalation_authority = true        # 跨项目协作时直接 dispatch 别的 project memory
-review_authority = false           # 不做 code review (那是 reviewer 的事)
+escalation_authority = true        # 跨项目协作: 直接 tmux-send <other>-memory dispatch
+review_authority = false           # 代码审查交给 planner (Claude 思维强)
 
-tool = "claude"                    # 固定 (memory 需要 Claude 的长上下文 + 思维)
+tool = "claude"                    # 固定 (memory 需要 Claude 长上下文 + 思维)
 auth_mode = "oauth"
 provider = "anthropic"
-# model: 用 OAuth 默认 (claude-opus-4-7 或当前订阅最高档)
+# model: 用 OAuth 默认 (Claude Pro 订阅最高档)
 
-# Memory skill 配置（M1 placeholder, M2 接成熟方案）
+# Memory skill 配置 (M1 placeholder, M2 接成熟方案)
 [engineers.memory_skill]
-kind = "filesystem-placeholder"   # M1: ~/.agents/memory/<project>/notes.md
+kind = "filesystem-placeholder"   # M1: ~/.agents/memory/<project>/notes.md + TASKS.md + STATUS.md
 # M2 候选: "mem0" | "letta" | "anthropic-builtin" | "vector-lancedb"
 # kind = "mem0"
 # config_path = "~/.clawseat/memory-skills/mem0.toml"
 
-# ── Planner: 规划 + 编码 (合并 v1 planner + v1 builder) ────────────────────────
+# Research capability
+[engineers.research_capability]
+# M1: 直接 Bash + Read 工具 (grep 代码 / 跑命令 / 查文件)
+# M2: 加 webfetch / MCP 等专业研究工具
+tools = ["Bash", "Read", "Grep", "Glob"]
+# M2: tools += ["WebFetch", "MCP:openai-deepresearch", ...]
+
+# ── Planner: 规划 + 代码审查 (合并 v1 planner + v1 reviewer) ────────────────────
+#
+# Planner 不写代码 (那是 builder 的事), 也不审视觉 (designer 的事).
+# 用 Claude 的强判断/审阅能力去 review builder 的 codex 输出.
 [[engineers]]
 id = "planner"
 display_name = "Planner"
-role = "planner-builder"           # 新角色: 既规划又写代码
+role = "planner-reviewer"          # 规划 + 代码审查
 window = "workers"
 window_pane = "top-left"
 human_facing = false
-dispatch_authority = false         # 只接受 dispatch，不主动派给别的 worker
+review_authority = true            # 代码侧 review
+dispatch_authority = false         # 只接 memory dispatch, 不主动派别人
 
-# 默认: claude (思维强)，但 operator 可切换
-tool = "claude"                    # 可切换: codex | gemini
-auth_mode = "oauth"                # 可切换: api
-provider = "anthropic"             # 可切换: openai | google | minimax | xcode-best | ark
+tool = "claude"                    # 默认 claude (思维强 + 长上下文 review)
+auth_mode = "oauth"                # 可切 api
+provider = "anthropic"             # 可切 openai (codex) | google (gemini) | minimax | xcode-best | ark
 
 [engineers.planner.alternatives]
 # Operator 通过 `agent_admin engineer rebind planner --tool=X --auth-mode=Y --provider=Z` 切换
-# 校验白名单（防误填）
 allowed_tools = ["claude", "codex", "gemini"]
 allowed_auth_modes = ["oauth", "api"]
 allowed_providers = ["anthropic", "openai", "google", "minimax", "xcode-best", "ark"]
 
-# ── Designer: 审美判断 ────────────────────────────────────────────────────────
+# ── Builder: 代码执行 (用 codex 的 codegen 强项) ──────────────────────────────
+#
+# Builder 写代码、跑命令、做实际编辑. Codex 的 GPT-5.4 codegen 是强项.
+# 不审 (planner 审), 不评视觉 (designer 评).
 [[engineers]]
-id = "designer"
-display_name = "Designer"
-role = "aesthetic-reviewer"        # 不生成，只评审视觉/交互/审美
+id = "builder"
+display_name = "Builder"
+role = "code-builder"
 window = "workers"
 window_pane = "top-right"
 human_facing = false
-review_authority = true            # 审美侧的 review
+review_authority = false           # 不审, 自己写的代码由 planner review
 
-tool = "gemini"                    # 默认 gemini (Google 的多模态视觉强)
-auth_mode = "oauth"
-provider = "google"
+tool = "codex"                     # 默认 codex (GPT-5.4 codegen 强)
+auth_mode = "oauth"                # 可切 api (--provider xcode-best)
+provider = "openai"
 
-[engineers.designer.alternatives]
-allowed_tools = ["gemini", "claude"]   # M1 不开 codex 给 designer
-allowed_auth_modes = ["oauth", "api"]
-allowed_providers = ["google", "anthropic", "minimax"]
-
-# ── Reviewer: 代码审查 ───────────────────────────────────────────────────────
-[[engineers]]
-id = "reviewer"
-display_name = "Reviewer"
-role = "code-reviewer"
-window = "workers"
-window_pane = "bottom-full"
-human_facing = false
-review_authority = true            # 代码侧的 review
-
-# 默认: codex oauth (GPT-5.4 审查严苛)，operator 可切 oauth ⇄ api
-tool = "codex"
-auth_mode = "oauth"                # 可切 api
-provider = "openai"                # api 模式下的默认 provider 在下面
-
-[engineers.reviewer.alternatives]
+[engineers.builder.alternatives]
 allowed_tools = ["codex", "claude"]
 allowed_auth_modes = ["oauth", "api"]
 allowed_providers = ["openai", "anthropic", "xcode-best", "minimax", "ark"]
 
-# Reviewer api 模式默认走 xcode-best (operator 明确要求)
-[engineers.reviewer.api_defaults]
+# Builder api 模式默认走 xcode-best (operator 明确要求)
+[engineers.builder.api_defaults]
 provider = "xcode-best"
-# base_url + api_key 由 secrets resolve
+
+# ── Designer: 审美 + 视觉/UX 评审 ────────────────────────────────────────────
+#
+# Designer 不生成代码也不写规划; 它评审视觉效果 + 用户体验 + 美学.
+# Gemini 多模态视觉是强项.
+[[engineers]]
+id = "designer"
+display_name = "Designer"
+role = "aesthetic-reviewer"
+window = "workers"
+window_pane = "bottom-full"
+human_facing = false
+review_authority = true            # 审美/视觉侧 review
+
+tool = "gemini"                    # 默认 gemini (Google 多模态视觉强)
+auth_mode = "oauth"
+provider = "google"
+
+[engineers.designer.alternatives]
+allowed_tools = ["gemini", "claude"]
+allowed_auth_modes = ["oauth", "api"]
+allowed_providers = ["google", "anthropic", "minimax"]
 
 # ── notes for v2 implementer ──────────────────────────────────────────────────
 #
-# 1. install.sh 必须支持 `--template clawseat-minimal`
-#    当前 v1 install.sh 硬编码白名单只接受 default/engineering/creative
-#    M1 需把白名单改为 templates/*.toml 文件扫描
+# Window 创建顺序:
+#   a. 先创建 memory iTerm 窗口 (1 pane) → launch <project>-memory tmux session
+#   b. 再创建 workers iTerm 窗口 (3 panes) → launch planner / builder / designer
+#   c. memory 窗口默认 focus (用户对话入口)
 #
-# 2. Window 创建顺序
-#    a. 先创建 memory iTerm 窗口（1 pane）→ launch <project>-memory tmux session
-#    b. 再创建 workers iTerm 窗口（3 panes）→ launch planner/designer/reviewer
-#    c. memory 窗口默认 focus（用户对话入口）
+# 跨项目 dispatch:
+#   memory seat 知道有哪些其他项目: 读 ~/.clawseat/projects.json 注册表
+#   install.sh 创建项目时往该注册表追加一行
 #
-# 3. 跨项目 dispatch
-#    memory seat 知道有哪些其他项目: 读 ~/.clawseat/projects.json 注册表
-#    install.sh 创建项目时往该注册表追加一行
+# M2 watchdog 与本模板的接口:
+#   - watchdog 监控 memory_window_title + workers_window_title 存在性
+#   - watchdog 监控 4 个 tmux session 健康度
+#   - memory seat 通过 ~/.clawseat/state/cmdq.jsonl 给 watchdog 派活
 #
-# 4. M2 watchdog 与本模板的接口
-#    - watchdog 监控 memory_window_title + workers_window_title 存在性
-#    - watchdog 监控 4 个 tmux session 健康度
-#    - memory seat 通过 ~/.clawseat/state/cmdq.jsonl 给 watchdog 派活
-#
-# 5. M3 自定义模板继承示例
-#    用户可写 templates/clawseat-myproject.toml:
-#      extends = "clawseat-minimal"
-#      [[engineers.overrides]]
-#      id = "designer"
-#      tool = "claude"        # 不要 gemini 了改 claude
+# M3 自定义模板继承示例 (尚未实现):
+#   用户可写 templates/clawseat-myproject.toml:
+#     extends = "clawseat-minimal"
+#     [[engineers.overrides]]
+#     id = "designer"
+#     tool = "claude"        # 不要 gemini 改 claude

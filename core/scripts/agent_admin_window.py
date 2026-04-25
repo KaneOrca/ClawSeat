@@ -31,6 +31,23 @@ _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
 _MEMORY_WINDOW_TITLE = "machine-memory-claude"
 
+# Per-project primary seat ids — the seat that is the user's first dialog
+# entry (orchestrator + memory + research). v1 templates name it "ancestor";
+# v2 clawseat-minimal renames to "memory" per RFC-001 §2.4. Code that special-
+# cases the primary seat (window grid, recovery hooks, brief env injection,
+# reseed restrictions) checks set membership instead of literal equality.
+_PRIMARY_SEAT_IDS = frozenset({"ancestor", "memory"})
+
+
+def _project_primary_seat_id(project: Any) -> str:
+    """Return the project's primary seat id (first engineer in template order
+    matching _PRIMARY_SEAT_IDS). Falls back to 'ancestor' for v1 compat."""
+    for raw_engineer_id in getattr(project, "engineers", []) or []:
+        engineer_id = str(raw_engineer_id)
+        if engineer_id in _PRIMARY_SEAT_IDS:
+            return engineer_id
+    return "ancestor"
+
 
 def tmux(
     args: list[str],
@@ -181,12 +198,12 @@ def _is_frontstage_engineer(engineer_id: str) -> bool:
 
 
 def _project_grid_seat_ids(project: Any) -> list[str]:
-    """Return the non-ancestor project seats in roster order."""
+    """Return the non-primary project seats (workers) in roster order."""
     roster: list[str] = []
     seen: set[str] = set()
     for raw_engineer_id in getattr(project, "engineers", []) or []:
         engineer_id = str(raw_engineer_id)
-        if engineer_id == "ancestor" or _is_frontstage_engineer(engineer_id):
+        if engineer_id in _PRIMARY_SEAT_IDS or _is_frontstage_engineer(engineer_id):
             continue
         if engineer_id in seen:
             continue
@@ -198,17 +215,18 @@ def _project_grid_seat_ids(project: Any) -> list[str]:
 def build_grid_payload(project: Any, *, wait_for_seat_script: Path | None = None) -> dict[str, Any]:
     wait_script = wait_for_seat_script or _WAIT_FOR_SEAT_SCRIPT
     seats = _project_grid_seat_ids(project)
+    primary_seat_id = _project_primary_seat_id(project)
     if not seats:
         print(
-            f"agent_admin_window: project {project.name} has no non-ancestor seats; "
-            "falling back to ancestor-only grid",
+            f"agent_admin_window: project {project.name} has no worker seats; "
+            f"falling back to {primary_seat_id}-only grid",
             file=sys.stderr,
         )
 
     panes: list[dict[str, str]] = [
         {
-            "label": "ancestor",
-            "command": f"tmux attach -t '={project.name}-ancestor'",
+            "label": primary_seat_id,
+            "command": f"tmux attach -t '={project.name}-{primary_seat_id}'",
         }
     ]
     for seat_id in seats:
@@ -452,8 +470,8 @@ async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -
 
 def reseed_pane(project: Any, seat_id: str) -> dict[str, str]:
     seat = str(seat_id).strip()
-    if seat == "ancestor":
-        raise AgentAdminWindowError("cannot reseed ancestor pane")
+    if seat in _PRIMARY_SEAT_IDS:
+        raise AgentAdminWindowError(f"cannot reseed primary seat pane ({seat})")
     try:
         import iterm2  # type: ignore[import-not-found]
     except ImportError as exc:

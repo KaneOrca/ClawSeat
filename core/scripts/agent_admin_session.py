@@ -611,7 +611,9 @@ class SessionService:
                     env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
                         project_tool_root(session.project, home=_real_home_for_tool_seeding())
                     )
-                if session.engineer_id == "ancestor":
+                # Primary seat (ancestor or memory in v2 minimal) gets the
+                # ancestor-bootstrap brief injected as CLAWSEAT_ANCESTOR_BRIEF.
+                if session.engineer_id in ("ancestor", "memory"):
                     ancestor_brief = self._ancestor_brief_path(session.project)
                     if ancestor_brief.is_file():
                         env["CLAWSEAT_ANCESTOR_BRIEF"] = str(ancestor_brief)
