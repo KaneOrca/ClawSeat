@@ -447,12 +447,18 @@ async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -
 
     app = await iterm2.async_get_app(connection)
     target = await _find_reseed_target_session(app, project_name, seat_id)
+
     activate = getattr(target, "async_activate", None)
     if activate is not None:
         try:
             await activate()
+            await asyncio.sleep(0.1)
         except Exception:  # noqa: BLE001 focus is best-effort
             pass
+
+    await target.async_send_text("\x03")
+    await asyncio.sleep(0.05)
+
     wait_command = (
         "bash "
         + shlex.quote(str(_WAIT_FOR_SEAT_SCRIPT))
@@ -460,11 +466,28 @@ async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -
         + shlex.quote(project_name)
         + " "
         + shlex.quote(seat_id)
-        + "\n"
     )
-    for payload in ("\x03", "\x02d", wait_command):
-        await target.async_send_text(payload)
-        await asyncio.sleep(0)
+    window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project_name}"
+    script = (
+        'tell application "iTerm2"\n'
+        "  repeat with w in windows\n"
+        f'    if (name of w as text) contains "{_sanitize_applescript_text(window_title)}" then\n'
+        "      repeat with t in tabs of w\n"
+        "        repeat with s in sessions of t\n"
+        '          tell s to set seatName to variable named "user.seat_id"\n'
+        f'          if (seatName as text) is "{_sanitize_applescript_text(seat_id)}" then\n'
+        f'            tell s to write text "{_sanitize_applescript_text(wait_command)}"\n'
+        "            return\n"
+        "          end if\n"
+        "        end repeat\n"
+        "      end repeat\n"
+        "    end if\n"
+        "  end repeat\n"
+        f'  error "reseed-pane: seat \'{_sanitize_applescript_text(seat_id)}\' not found in iTerm grid window \'{_sanitize_applescript_text(window_title)}\'"\n'
+        "end tell"
+    )
+    osascript(script)
+
     return {"status": "ok", "project": project_name, "seat_id": seat_id}
 
 
