@@ -1760,15 +1760,17 @@ PY
 }
 
 grid_payload() {
-  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
+  # v1 compat: single-window 6-pane (ancestor + N workers)
+  # v2 callers should use workers_payload() + memories_payload() instead.
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$PRIMARY_SEAT_ID" "${PENDING_SEATS[@]}" <<'PY'
 import json
 import shlex
 import sys
 
-project, wait_script = sys.argv[1], sys.argv[2]
-seats = sys.argv[3:]  # dynamic from PENDING_SEATS
+project, wait_script, primary_seat = sys.argv[1], sys.argv[2], sys.argv[3]
+seats = sys.argv[4:]
 panes = [
-    {"label": "ancestor", "command": f"tmux attach -t '={project}-ancestor'"},
+    {"label": primary_seat, "command": f"tmux attach -t '={project}-{primary_seat}'"},
 ]
 for seat in seats:
     panes.append(
@@ -1785,6 +1787,183 @@ for seat in seats:
 print(json.dumps({"title": f"clawseat-{project}", "panes": panes}, ensure_ascii=False))
 PY
 }
+
+# v2 workers_payload: planner main left 50% + N-1 workers right grid (max 2 rows, col-major fill)
+# Recipe per RFC-001 §3:
+#   N_workers=1 (planner only): []
+#   N_workers=2 (planner+1):    [(0,True)]
+#   N_workers=3 (planner+2):    [(0,True), (1,False)]                            ← v2 minimal
+#   N_workers=4 (planner+3):    [(0,True), (1,True), (1,False)]
+#   N_workers=5 (planner+4):    [(0,True), (1,True), (1,False), (2,False)]
+workers_payload() {
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
+import json
+import shlex
+import sys
+
+project, wait_script = sys.argv[1], sys.argv[2]
+seats = sys.argv[3:]  # PENDING_SEATS minus PRIMARY_SEAT_ID
+# Locate planner — must be first non-primary worker per minimal template
+if "planner" not in seats:
+    raise SystemExit("workers_payload requires 'planner' in seats list")
+right_seats = [s for s in seats if s != "planner"]
+n_total = 1 + len(right_seats)
+
+# Build right-side recipe with max-2-rows, col-major fill
+def right_recipe(n_right: int) -> list[list]:
+    """Returns split steps relative to pane indices in the COMBINED layout
+    (planner is pane 0; right starts as pane 1 after first vertical split)."""
+    if n_right == 0: return []
+    if n_right == 1: return []  # right side is single pane (after the planner-vs-right split)
+    if n_right == 2: return [[1, False]]  # split right horizontally
+    # n_right >= 3: build top row of right, then horizontal splits per col
+    cols = (n_right + 1) // 2
+    splits: list[list[int]] = []
+    # Build top row of right area: split pane 1 vertically (cols-1) times
+    for col in range(1, cols):
+        # parent index in combined layout: 0=planner, 1=right_col0, 2=right_col1, ...
+        splits.append([col, True])
+    # Horizontal splits: each top right pane splits into bottom (col-major)
+    cols_with_bottom = n_right - cols  # number of cols that need a bottom pane
+    for col in range(cols_with_bottom):
+        splits.append([col + 1, False])  # +1 because pane 0 is planner
+    return splits
+
+recipe = [[0, True]] + right_recipe(len(right_seats))  # First: planner | right split
+
+# Pane order for payload (matches recipe creation order):
+#   pane[0] = planner (left)
+#   pane[1] = right col_0 top (first right worker)
+#   pane[2..cols] = top of subsequent right cols
+#   pane[cols+1..] = bottom row of right cols (col-major)
+panes = [
+    {"label": "planner", "command": f"tmux attach -t '={project}-planner-claude'"},
+]
+# Compute right-side fill order matching recipe pane creation
+n_right = len(right_seats)
+if n_right > 0:
+    cols = max(1, (n_right + 1) // 2 if n_right >= 3 else 1)
+    # For n_right=1: just first right_seat
+    # For n_right=2: top + bottom (1 col)
+    # For n_right>=3: row-major in driver order = top row left-to-right + bottom row left-to-right
+    if n_right == 1:
+        ordering = [0]
+    elif n_right == 2:
+        ordering = [0, 1]  # top, bottom
+    else:
+        # User intent (col-major): user_idx 0=col0_top, 1=col0_bot, 2=col1_top, 3=col1_bot, ...
+        # Driver order: top row first (col0_top, col1_top, col2_top, ...), then bottom row
+        # Map: driver_pane_idx -> user_idx
+        ordering = []
+        # top row first
+        for col in range(cols):
+            user_idx = col * 2  # top of col c is user_idx 2c
+            if user_idx < n_right:
+                ordering.append(user_idx)
+        # bottom row
+        for col in range(cols):
+            user_idx = col * 2 + 1  # bottom of col c is user_idx 2c+1
+            if user_idx < n_right:
+                ordering.append(user_idx)
+    for driver_idx, user_idx in enumerate(ordering):
+        seat = right_seats[user_idx]
+        panes.append(
+            {
+                "label": seat,
+                "command": "bash "
+                + shlex.quote(wait_script)
+                + " "
+                + shlex.quote(project)
+                + " "
+                + shlex.quote(seat),
+            }
+        )
+
+print(json.dumps({
+    "title": f"clawseat-{project}-workers",
+    "panes": panes,
+    "recipe": recipe,
+}, ensure_ascii=False))
+PY
+}
+
+# v2 memories_payload: shared "clawseat-memories" window with all known project memory tmux sessions
+# Recipe uses grid_for_n formula (max 2 rows, col-major fill) from RFC-001 §3.1.
+memories_payload() {
+  "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import subprocess
+
+# Discover all <project>-memory tmux sessions (excluding global machine-memory-claude)
+result = subprocess.run(
+    ["/opt/homebrew/bin/tmux", "ls", "-F", "#{session_name}"],
+    capture_output=True, text=True, env={**os.environ, "TMUX": ""}, check=False,
+)
+all_sessions = result.stdout.strip().split("\n") if result.returncode == 0 else []
+# Match <project>-memory but NOT machine-memory-claude (that's the v1 global memory, deprecated)
+memory_sessions = sorted([
+    s for s in all_sessions
+    if s.endswith("-memory") and s != "machine-memory-claude"
+])
+
+n = len(memory_sessions)
+if n == 0:
+    print(json.dumps({"status": "skip", "reason": "no project memory sessions found"}))
+    raise SystemExit(0)
+
+# grid_for_n + col-major fill (per RFC §3.1)
+def grid_for_n(k: int) -> tuple:
+    if k == 1: return (1, 1)
+    if k == 2: return (1, 2)
+    return ((k + 1) // 2, 2)
+
+cols, rows = grid_for_n(n)
+
+# Recipe: build top row by vertical splits, then horizontal splits per col
+recipe: list = []
+if n == 1:
+    pass  # no splits
+elif n == 2:
+    recipe = [[0, False]]  # split horizontally (top + bottom)
+else:
+    # Build top row: split pane 0 vertically (cols-1) times
+    for col in range(1, cols):
+        recipe.append([col - 1, True])
+    # Horizontal splits per col (cols with bottom = n - cols)
+    cols_with_bottom = n - cols  # number of cols that have a bottom pane
+    for col in range(cols_with_bottom):
+        recipe.append([col, False])
+
+# Driver order = top row (left-to-right), then bottom row (left-to-right)
+# User intent (col-major): col0_top, col0_bot, col1_top, col1_bot, ...
+# Map driver_pane_idx -> user_idx
+ordering = []
+for col in range(cols):
+    user_idx = col * 2  # top
+    if user_idx < n:
+        ordering.append(user_idx)
+for col in range(cols):
+    user_idx = col * 2 + 1  # bottom
+    if user_idx < n:
+        ordering.append(user_idx)
+
+panes = []
+for driver_idx, user_idx in enumerate(ordering):
+    sess = memory_sessions[user_idx]
+    panes.append({
+        "label": sess,
+        "command": f"tmux attach -t '={sess}'",
+    })
+
+print(json.dumps({
+    "title": "clawseat-memories",
+    "panes": panes,
+    "recipe": recipe,
+}, ensure_ascii=False))
+PY
+}
+
 memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"label":"memory","command":"tmux attach -t '\''=machine-memory-claude'\''"}]}'; }
 
 main() {
@@ -1799,7 +1978,31 @@ main() {
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
   install_ancestor_patrol_plist
-  note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
+
+  # v2 split window topology (per RFC-001 §3): one workers window per project +
+  # one shared memories window across all projects (rebuilt on each install).
+  # v1 single-window grid_payload preserved as fallback for clawseat-default
+  # template (which still uses 6-pane single-window).
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" ]]; then
+    note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
+    open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
+
+    note "Step 7b: rebuild shared memories window (all <project>-memory panes)"
+    # Close existing memories window if any (we rebuild from scratch with current N)
+    osascript -e 'tell application "iTerm2" to close (every window whose name is "clawseat-memories")' 2>/dev/null || true
+    local _memories_payload
+    _memories_payload="$(memories_payload)"
+    if [[ -n "$_memories_payload" && "$_memories_payload" != *'"status": "skip"'* ]]; then
+      local _mem_window_id=""
+      open_iterm_window "$_memories_payload" _mem_window_id
+    else
+      warn "memories_payload returned skip — no project memory tmux sessions found"
+    fi
+  else
+    # v1 single-window topology (clawseat-default / engineering / creative)
+    note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
+  fi
+
   note "Step 8: ensure memory singleton daemon"
   if [[ "$DRY_RUN" == "1" ]]; then
     install_memory_hook

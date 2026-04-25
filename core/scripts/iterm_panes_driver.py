@@ -143,6 +143,33 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, dict[str, An
     delay = payload.get("send_delay_ms", DEFAULT_SEND_DELAY_MS)
     if not isinstance(delay, (int, float)) or delay < 0 or delay > 5000:
         delay = DEFAULT_SEND_DELAY_MS
+
+    # Optional `recipe` field overrides _LAYOUT_RECIPES[n] for callers that
+    # need non-balanced layouts (e.g. v2 workers window with planner main left
+    # 50% + N-1 workers in right grid; or v2 memories window with max-2-rows
+    # column-major fill). Recipe is a list of [parent_idx, vertical_bool] pairs;
+    # length must equal n-1.
+    recipe = payload.get("recipe")
+    if recipe is not None:
+        if not isinstance(recipe, list):
+            return None, {"status": "error", "reason": "recipe must be a list when provided"}
+        if len(recipe) != n - 1:
+            return None, {
+                "status": "error",
+                "reason": f"recipe length {len(recipe)} != n-1 ({n - 1})",
+                "fix": "recipe must contain exactly n-1 split steps",
+            }
+        cleaned_recipe: list[tuple[int, bool]] = []
+        for i, step in enumerate(recipe):
+            if not isinstance(step, list) or len(step) != 2:
+                return None, {"status": "error", "reason": f"recipe[{i}] must be [parent_idx, vertical_bool]"}
+            parent_idx, vertical = step
+            if not isinstance(parent_idx, int) or parent_idx < 0 or parent_idx > i:
+                return None, {"status": "error", "reason": f"recipe[{i}] parent_idx invalid: {parent_idx}"}
+            if not isinstance(vertical, bool):
+                return None, {"status": "error", "reason": f"recipe[{i}] vertical must be bool"}
+            cleaned_recipe.append((parent_idx, vertical))
+        return {"title": title, "panes": cleaned, "send_delay_ms": int(delay), "recipe": cleaned_recipe}, None
     return {"title": title, "panes": cleaned, "send_delay_ms": int(delay)}, None
 
 
@@ -191,8 +218,11 @@ async def _build_layout(connection: Any, payload: dict[str, Any]) -> dict[str, A
                 "fix": "upgrade iTerm to 3.4+ with Python API enabled",
             }
 
+        # Use payload-supplied recipe if provided, else fall back to balanced
+        # _LAYOUT_RECIPES[n] for backwards compat with v1 callers.
+        recipe = payload.get("recipe") or _LAYOUT_RECIPES[n]
         sessions: list[Any] = [window.current_tab.current_session]
-        for step_idx, (parent_idx, vertical) in enumerate(_LAYOUT_RECIPES[n], start=1):
+        for step_idx, (parent_idx, vertical) in enumerate(recipe, start=1):
             try:
                 parent = sessions[parent_idx]
                 new_pane = await parent.async_split_pane(vertical=vertical)
@@ -201,7 +231,7 @@ async def _build_layout(connection: Any, payload: dict[str, Any]) -> dict[str, A
                 return {
                     "status": "error",
                     "reason": (
-                        f"split-pane step {step_idx}/{len(_LAYOUT_RECIPES[n])} failed: "
+                        f"split-pane step {step_idx}/{len(recipe)} failed: "
                         f"{exc!r}"
                     ),
                     "fix": "iTerm window may be too small for the layout",
