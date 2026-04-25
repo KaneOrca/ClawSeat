@@ -124,6 +124,45 @@ def test_workspace_contract_not_affected(tmp_path: Path) -> None:
     assert result.session_name == "testproject-builder-1-claude"
 
 
+# ── Reviewer nit pins ────────────────────────────────────────────────────────
+
+
+def test_alias_session_name_none_when_no_session_toml(tmp_path: Path) -> None:
+    """Alias resolution returns kind=tmux with session_name=None when no session.toml
+    exists for the aliased seat.  Downstream callers handle None gracefully per
+    SeatResolution.__post_init__ contract."""
+    # Resolver returns None (no session.toml written) but alias match is valid.
+    result = resolve_seat(
+        target="builder",
+        profile_seats=["builder-1"],
+        profile_project_name="testproject",
+        profile_handoff_dir=tmp_path / "handoffs",
+        # Always-None resolver simulates missing session.toml
+        profile_session_name_resolver=lambda proj, seat: None,
+        profile_runtime_seats=["builder-1"],
+        _openclaw_home=Path("/nonexistent"),
+    )
+    assert result.kind == "tmux"
+    assert result.session_name is None
+
+
+def test_strict_mode_with_alias_does_not_raise(tmp_path: Path) -> None:
+    """strict=True must NOT raise when an alias resolves the seat — alias is a valid
+    resolution, not a failure.  Only unresolvable targets should raise in strict mode."""
+    result = resolve_seat(
+        target="reviewer",
+        profile_seats=["reviewer-1"],
+        profile_project_name="testproject",
+        profile_handoff_dir=tmp_path / "handoffs",
+        profile_session_name_resolver=lambda proj, seat: f"{proj}-{seat}-claude",
+        profile_runtime_seats=["reviewer-1"],
+        strict=True,
+        _openclaw_home=Path("/nonexistent"),
+    )
+    assert result.kind == "tmux"
+    assert result.session_name == "testproject-reviewer-1-claude"
+
+
 # ── Integration: real install profile end-to-end ─────────────────────────────
 
 
