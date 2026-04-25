@@ -12,6 +12,7 @@ CLAWSEAT_ROOT="${CLAWSEAT_ROOT:-$REPO_ROOT}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 DRY_RUN=0
+QUIET=0
 PROJECT="install"
 FEISHU_GROUP_ID=""
 REAL_HOME="${CLAWSEAT_REAL_HOME:-$HOME}"
@@ -91,6 +92,10 @@ parse_args() {
     case "$1" in
       --dry-run)
         DRY_RUN=1
+        shift
+        ;;
+      --quiet|-q)
+        QUIET=1
         shift
         ;;
       -h|--help)
@@ -255,6 +260,9 @@ run_koder_bind() {
   note "Step 5: project koder-bind"
   if [[ -n "${KODER_BIND_RUNNER:-}" ]]; then
     cmd=("$KODER_BIND_RUNNER" --project "$PROJECT" --tenant "$CHOSEN" --workspace "$WORKSPACE")
+    if [[ -n "${FEISHU_GROUP_ID:-}" ]]; then
+      cmd+=(--feishu-group-id "$FEISHU_GROUP_ID")
+    fi
   else
     bind_py='import sys; from pathlib import Path; repo = Path(sys.argv[1]); sys.path[:0] = [str(repo), str(repo / "core" / "lib")]; from core.scripts.agent_admin_layered import do_koder_bind; do_koder_bind(sys.argv[2], sys.argv[3], group_id=sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None)'
     cmd=("$PYTHON_BIN" -c "$bind_py" "$REPO_ROOT" "$PROJECT" "$CHOSEN" "${FEISHU_GROUP_ID:-}")
@@ -311,10 +319,32 @@ Without Layer 2, non-@ messages will not reach koder.
 EOF
 }
 
+print_banner() {
+  [[ "$QUIET" == "1" ]] && return 0
+  cat <<'BANNER'
+══════════════════════════════════════════════════════
+  ⚠ WARNING — apply-koder-overlay.sh is DESTRUCTIVE
+══════════════════════════════════════════════════════
+  This script will overwrite workspace-<tenant>/ contents.
+
+  PREREQUISITE: B2.5 must have populated ~/.clawseat/machine.toml
+  via bootstrap_machine_tenants.py (which scans openclaw.json).
+
+  Required run order:
+    1) install.sh        (Phase A)
+    2) B2.5 bootstrap    (~/.clawseat/machine.toml populated)
+    3) apply-koder-overlay.sh   ← you are here
+
+  Without prerequisites, koder overlay binding will be incomplete.
+══════════════════════════════════════════════════════
+BANNER
+}
+
 main() {
   local profile_path="" openclaw_home=""
 
   parse_args "$@"
+  print_banner
 
   note "Step 1: list OpenClaw tenants"
   collect_tenants

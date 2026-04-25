@@ -123,3 +123,80 @@ def test_dry_run_does_not_execute_runners(tmp_path: Path) -> None:
     assert not marker.exists()
     assert "[dry-run]" in result.stdout
     assert "configure_koder_feishu" in result.stdout or "runner-touch.sh" in result.stdout
+
+
+def test_destructive_banner_visible_at_runtime(tmp_path: Path) -> None:
+    """Runtime banner must include DESTRUCTIVE and B2.5 before 'Step 1'."""
+    real_home = _seed_home(tmp_path)
+    # --dry-run so we don't need full OpenClaw setup
+    result = _run(["--dry-run", "install"], real_home=real_home)
+    out = result.stdout
+    assert "DESTRUCTIVE" in out, f"banner must say DESTRUCTIVE; stdout:\n{out}"
+    assert "B2.5" in out, f"banner must mention B2.5; stdout:\n{out}"
+    # Banner must appear before Step 1 output
+    if "Step 1" in out:
+        assert out.index("DESTRUCTIVE") < out.index("Step 1"), (
+            "DESTRUCTIVE banner must appear before 'Step 1'"
+        )
+
+
+def test_destructive_banner_suppressed_by_quiet(tmp_path: Path) -> None:
+    """--quiet flag must suppress the banner entirely."""
+    real_home = _seed_home(tmp_path)
+    result = _run(["--quiet", "--dry-run", "install"], real_home=real_home)
+    assert "DESTRUCTIVE" not in result.stdout, (
+        f"--quiet should suppress DESTRUCTIVE banner; stdout:\n{result.stdout}"
+    )
+
+
+def test_koder_bind_runner_threads_group_id(tmp_path: Path) -> None:
+    """KODER_BIND_RUNNER must receive --feishu-group-id when FEISHU_GROUP_ID is set."""
+    real_home = _seed_home(tmp_path)
+    args_log = tmp_path / "runner-args.txt"
+    runner = _write(
+        tmp_path / "bind-runner.sh",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> '{args_log}'\n",
+    )
+    result = _run(
+        ["install"],
+        real_home=real_home,
+        input_text="1\n",          # select first tenant
+        extra_env={
+            "KODER_BIND_RUNNER": str(runner),
+            "INIT_KODER_RUNNER": str(runner),  # prevent init_koder from running
+            "FEISHU_GROUP_ID": "oc_test_fixture_1234567890",
+            "CONFIGURE_KODER_FEISHU_RUNNER": "true",  # no-op feishu config
+        },
+    )
+    if args_log.exists():
+        args_text = args_log.read_text(encoding="utf-8")
+        assert "--feishu-group-id" in args_text, (
+            f"KODER_BIND_RUNNER must receive --feishu-group-id; args logged:\n{args_text}"
+        )
+        assert "oc_test_fixture_1234567890" in args_text
+
+
+def test_koder_bind_runner_no_flag_when_empty_group_id(tmp_path: Path) -> None:
+    """When FEISHU_GROUP_ID is empty, --feishu-group-id must NOT be passed."""
+    real_home = _seed_home(tmp_path)
+    args_log = tmp_path / "runner-args-empty.txt"
+    runner = _write(
+        tmp_path / "bind-runner-empty.sh",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> '{args_log}'\n",
+    )
+    result = _run(
+        ["install"],
+        real_home=real_home,
+        input_text="1\n",
+        extra_env={
+            "KODER_BIND_RUNNER": str(runner),
+            "INIT_KODER_RUNNER": str(runner),
+            "FEISHU_GROUP_ID": "",
+            "CONFIGURE_KODER_FEISHU_RUNNER": "true",
+        },
+    )
+    if args_log.exists():
+        args_text = args_log.read_text(encoding="utf-8")
+        assert "--feishu-group-id" not in args_text, (
+            f"Empty FEISHU_GROUP_ID must NOT produce --feishu-group-id flag; args:\n{args_text}"
+        )
