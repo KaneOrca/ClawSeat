@@ -175,6 +175,56 @@ verify_handoff.py --task-id task-001 --task-id task-001-impl
 
 查 state.db：三阶段全部完成？全链 closeout？
 
+## 外部设计工具 handoff
+
+ClawSeat 的 dispatch chain 不一定从 koder 内部派发开始——也可以接收**外部设计工具的产物**作为入口。这让 ClawSeat 成为「任何设计来源 → 实现」的通用 handoff 终点。
+
+### Claude Design（Anthropic Labs，2026-04 发布）
+
+[claude.ai/design](https://claude.ai/design)（Claude Pro / Max / Team / Enterprise 可用）把文字提示转成设计 / 原型 / one-pager / HTML，由 Claude Opus 4.7 驱动。完成后可打包成 **handoff bundle 传给 Claude Code 实现**——正好对应 ClawSeat 的 chain 入口。
+
+**接入流程**：
+
+1. 在 `claude.ai/design` 探索方向 → 选定 → 导出 handoff bundle（HTML / PNG / Canva / 描述）
+2. 把 bundle 提交给 ClawSeat 的 koder：
+   - 飞书群里 @koder 发设计描述 + bundle 链接
+   - 或直接放进 `~/.agents/tasks/<project>/inbox/<task-id>/`
+3. koder 写一条 dispatch：
+
+```bash
+dispatch_task.py \
+  --source koder --target engineer-e \
+  --task-id task-design-001 \
+  --objective "评审 Claude Design 出的 hall 卡片重设计，bundle 见 attached" \
+  --intent design-review \
+  --skill-refs <bundle-path>
+```
+
+4. engineer-e（designer）按 `/design-review` 评审视觉决策 → 通过则 engineer-b 拆解给 engineer-a 实现 → engineer-c review → engineer-d QA
+
+### gstack `/design-shotgun` + `/design-html`
+
+本地开源等价方案：
+
+- `/design-shotgun` 用 GPT-4o vision 出多版设计候选
+- `/design-html` 落地成 **Pretext-native HTML**（30KB zero deps，文字真能 reflow / heights 真能 compute / charRect 字符级精度）
+
+适合需要**字符级物理对齐**的视觉（如 arena-pretext-ui 那种文字本身是物理参与者的项目）——`/design-html` 产物的 `prepare/layout` 调用天然兼容 obstacle 系统。
+
+### Figma / Sketch / 其它
+
+任何能导出 PNG + HTML + 设计描述的工具都能走同一条 chain。关键是给 koder 一个清晰的 spec，koder 再 dispatch 给适当的 specialist——chain 的内部协议（assigned → notified → consumed 三阶段状态机）不变。
+
+### 三种工具如何选
+
+| 场景 | 推荐 |
+|---|---|
+| 探索新方向 / 客户协作 / 要 PPT 输出 | Claude Design |
+| 本地 / 离线 / 字符级物理对齐（Pretext-native） | gstack `/design-shotgun` + `/design-html` |
+| 已有 Figma / 团队设计师 | Figma export → 喂 koder |
+
+> **ClawSeat 不绑设计工具——只要给 koder 一个能转化成 dispatch objective 的产物就行。**
+
 ## 查询 + 定制
 
 **看每个 seat 现在绑了哪些 skill**：
