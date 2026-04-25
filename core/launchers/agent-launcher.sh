@@ -1010,7 +1010,7 @@ run_gemini_runtime() {
     echo " Directory:  $workdir"
     echo " HOME:       $HOME"
     echo "────────────────────────────────────────"
-    exec gemini
+    exec gemini -y
   fi
 
   local secret_file="" runtime_dir
@@ -1059,9 +1059,9 @@ run_gemini_runtime() {
   echo " XDG_CONFIG: $XDG_CONFIG_HOME"
   echo "────────────────────────────────────────"
   if [[ -n "${LAUNCHER_CUSTOM_MODEL:-}" ]]; then
-    exec gemini -m "${LAUNCHER_CUSTOM_MODEL}"
+    exec gemini -y -m "${LAUNCHER_CUSTOM_MODEL}"
   fi
-  exec gemini
+  exec gemini -y
 }
 
 exec_agent_shell_command() {
