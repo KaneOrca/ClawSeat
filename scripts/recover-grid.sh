@@ -2,14 +2,14 @@
 # recover-grid.sh — recover misrouted iTerm grid panes.
 #
 # Use this when specialist panes (planner/builder/reviewer/qa/designer)
-# are showing ancestor's TUI content instead of their own seat.
+# are showing the primary seat's TUI content instead of their own seat.
 #
-# Root cause (suspected): panes' wait-for-seat.sh attached to install-ancestor
-# before specialist tmux sessions existed, and their tmux-attach loop
-# is still blocking on that stale connection.
+# Root cause (suspected): panes' wait-for-seat.sh attached to the project's
+# primary seat session before specialist tmux sessions existed, and their
+# tmux-attach loop is still blocking on that stale connection.
 #
-# What this does: detaches every client on install-ancestor except the
-# primary ancestor pane client. Each detached pane's wait-for-seat.sh
+# What this does: detaches every client on the primary seat session except the
+# primary seat pane client. Each detached pane's wait-for-seat.sh
 # loop will re-resolve via agentctl and attach to its canonical seat.
 #
 # Usage:
@@ -21,12 +21,32 @@
 set -euo pipefail
 
 PROJECT="${1:-install}"
-ANCESTOR_SESSION="${PROJECT}-ancestor"
+PRIMARY_SEAT_ID="$(
+  PROJECT="$PROJECT" python3 - <<'PY'
+import os
+from pathlib import Path
+
+try:
+    import tomllib
+
+    project = os.environ["PROJECT"]
+    project_toml = Path.home() / ".agents" / "projects" / project / "project.toml"
+    data = tomllib.loads(project_toml.read_text()) if project_toml.exists() else {}
+    engineers = data.get("engineers") or []
+    primary = engineers[0] if engineers else ""
+    if isinstance(primary, dict):
+        primary = primary.get("id", "")
+    print(primary or "ancestor")
+except Exception:
+    print("ancestor")
+PY
+)"
+PRIMARY_SESSION="${PROJECT}-${PRIMARY_SEAT_ID}"
 WINDOW_TITLE="clawseat-${PROJECT}"
 
-if ! env -u TMUX tmux has-session -t "=$ANCESTOR_SESSION" 2>/dev/null; then
-  echo "error: no tmux session named '$ANCESTOR_SESSION'" >&2
-  echo "hint: is the ancestor seat running? check \`tmux list-sessions\`" >&2
+if ! env -u TMUX tmux has-session -t "=$PRIMARY_SESSION" 2>/dev/null; then
+  echo "error: no tmux session named '$PRIMARY_SESSION'" >&2
+  echo "hint: is the primary seat running? check \`tmux list-sessions\`" >&2
   exit 1
 fi
 
@@ -53,11 +73,11 @@ if command -v osascript >/dev/null 2>&1; then
   fi
 fi
 
-clients="$(env -u TMUX tmux list-clients -t "=$ANCESTOR_SESSION" -F '#{client_tty}' 2>/dev/null || true)"
+clients="$(env -u TMUX tmux list-clients -t "=$PRIMARY_SESSION" -F '#{client_tty}' 2>/dev/null || true)"
 total=$(printf '%s\n' "$clients" | grep -c . || true)
 
 if [[ "$total" -le 1 ]]; then
-  echo "ok: $ANCESTOR_SESSION has $total client(s) — no recovery needed"
+  echo "ok: $PRIMARY_SESSION has $total client(s) — no recovery needed"
   exit 0
 fi
 
@@ -74,10 +94,7 @@ while IFS= read -r tty; do
 done <<< "$extras"
 
 echo
-echo "recovered: detached $count wrong client(s) from $ANCESTOR_SESSION"
+echo "recovered: detached $count wrong client(s) from $PRIMARY_SESSION"
 echo "each affected pane's wait-for-seat.sh loop will now re-resolve + attach to its canonical seat"
 echo
-echo "verify with:"
-echo "  for s in ${PROJECT}-ancestor ${PROJECT}-planner-claude ${PROJECT}-builder-codex ${PROJECT}-reviewer-codex ${PROJECT}-qa-claude ${PROJECT}-designer-gemini; do"
-echo "    tmux list-clients -t =\$s 2>/dev/null | wc -l | awk -v s=\$s '{print s\": \"\$1\" client(s)\"}'"
-echo "  done"
+echo "verify: tmux list-clients per seat - see agent_admin window list-panes --project ${PROJECT}"

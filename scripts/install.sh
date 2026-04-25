@@ -1163,14 +1163,23 @@ bootstrap_project_profile() {
 render_brief() {
   note "Step 4: render ancestor brief"
   [[ -f "$TEMPLATE_PATH" || "$DRY_RUN" == "1" ]] || die 30 TEMPLATE_MISSING "missing template: $TEMPLATE_PATH"
+  local pending_seats_human
+  printf -v pending_seats_human '%s, ' "${PENDING_SEATS[@]}"
+  pending_seats_human="${pending_seats_human%, }"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] render %s -> %s\n' "$TEMPLATE_PATH" "$BRIEF_PATH"
   else
-    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" <<'PY'
+    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" "$PRIMARY_SEAT_ID" "$pending_seats_human" <<'PY'
 from pathlib import Path
 from string import Template
 import sys
-tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(PROJECT_NAME=sys.argv[3], CLAWSEAT_ROOT=sys.argv[4], AGENT_HOME=sys.argv[5])
+tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(
+    PROJECT_NAME=sys.argv[3],
+    CLAWSEAT_ROOT=sys.argv[4],
+    AGENT_HOME=sys.argv[5],
+    PRIMARY_SEAT_ID=sys.argv[7],
+    PENDING_SEATS_HUMAN=sys.argv[8],
+)
 tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-default")
 out = Path(sys.argv[2]); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(tmpl, encoding="utf-8")
 PY

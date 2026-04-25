@@ -26,7 +26,7 @@
 - monitor grid: `clawseat-${PROJECT_NAME}` (iTerm window)
 - grid recovery: `agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]`
 - memory iterm window: `machine-memory-claude`
-- seats 待拉起: planner, builder, reviewer, qa, designer
+- seats 待拉起: ${PENDING_SEATS_HUMAN}
   - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template {CLAWSEAT_TEMPLATE_NAME} --local ...` 建好 project + engineer/session records
   - 这 5 个 pane 当前都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
 
@@ -170,7 +170,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 [ "$(echo "$PROJECT_NAME")" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
 ancestor_session="$(tmux display-message -p '#{session_name}')"
 echo "scope: project=$PROJECT_NAME ancestor_session=$ancestor_session"
-[ "$ancestor_session" = "${PROJECT_NAME}-ancestor" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
+[ "$ancestor_session" = "${PROJECT_NAME}-${PRIMARY_SEAT_ID}" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
 ```
 
 scope 不匹配 → halt，并告知 operator 先修正当前 iTerm / tmux 归属，不要继续 spawn seat。
@@ -195,7 +195,7 @@ fi
 
 每个 seat 只调用一次 `agent_admin session start-engineer`。启动后如果 seat 仍在 onboarding，先用 `agent_admin session status` / `tmux has-session` 查状态，不要反复 `start-engineer` 触发 retry。
 
-for seat in [planner, builder, reviewer, qa, designer]:
+for seat in [${PENDING_SEATS_HUMAN}]:
 1. 向用户交互："`${seat}` 用 bootstrapped default，还是切到 codex / gemini / 自定义 provider？"
    - 如需看当前默认，先跑：`python3 core/scripts/agent_admin.py show ${seat} --project ${PROJECT_NAME}`
 2. 如果用户改了 default，先重绑 session（不要直接调 launcher）：
