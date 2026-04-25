@@ -37,16 +37,15 @@
 
 ---
 
-### #2 auto_send_phase_a_kickoff 72s polling 窗口对 OAuth 太短 — 🟠 HIGH
+### #2 auto_send_phase_a_kickoff 72s polling 窗口对 OAuth 太短 — ~~🟠 HIGH~~ **SUPERSEDED by #17**
 
 **症状**:
 - `auto_send_phase_a_kickoff()` (install.sh:1403) max_polls=24 × poll_seconds=3 = 72s
 - 全新 identity HOME 启 Claude Code OAuth 时弹"Quick safety check / Trust folder"，operator 手动确认完平均 30-90s
-- 加上 `ancestor_pane_waiting_on_operator()` 检测期，72s 经常不够，install.sh 总是落到 banner fallback
 
-**修复**:
-- max_polls 从 24 → 60（约 180s）
-- 或增加智能等待：检测到 trust prompt 自动按 1 + Enter 通过
+**临时修复 (commit 4113225, Package B)**: max_polls 24 → 60（180s）
+
+**状态**: ⚠️ **SUPERSEDED** — #17 (Package P1) 直接删除整个 `auto_send_phase_a_kickoff()` 函数 + Step 9.5，改为 confirm-then-dispatch 协议。P1 commit 落地后 4113225 的改动同时被删，这是预期（重构方向变了）。#2 视为 closed by #17。
 
 **Owner**: builder-codex
 
@@ -404,7 +403,79 @@ if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
 
 ---
 
-### #18 (预留新 issue 编号)
+### #18 clawseat-ancestor SKILL/brief 缺 seat 失败诊断流程 — 🟠 HIGH
+
+**症状（2026-04-26 04:55 arena 实证）**: arena-memory 把 builder 死亡误诊为 "401 Unauthorized"，反复 stop+start 没用。实际是 xcode.best 瞬时 disconnect，gpt-5.5 endpoint 完全 OK（curl 200）；arena-memory 没 cat codex-tui.log 就开始猜。
+
+**根因**: SKILL 和 brief 都没规定"seat 死后做什么"的 canonical 步骤。memory 凭印象诊断 → 错指根因 → 错修。
+
+**修复**: clawseat-ancestor SKILL.md + ancestor-brief.template.md 都加 §"Seat 失败诊断三步走"（强制顺序）:
+```
+1. cat <runtime>/codex-home/log/codex-tui.log | tail -30   # 看真实错误
+2. curl -H "Authorization: Bearer $KEY" $BASE_URL/v1/responses ...  # 验证 endpoint
+3. 只有前两步都正常才 stop+start
+```
+配合 #19 的 seat-diagnostic.sh 一键化。
+
+**Owner**: memory (skill 文档) + builder-codex (brief template)
+**批次**: Package P (插队批次 1.5)
+
+**验收**: 新项目 memory 遇 seat 死，先跑 diagnostic 再行动；不再有 "凭直觉猜 401" 类型 RCA
+
+---
+
+### #19 seat-diagnostic.sh 一条命令诊断 — 🟡 MEDIUM
+
+**症状（配合 #18）**: 即使 SKILL 写明"先看 log 再诊断"，memory 也得记住 4 个不同的 path/命令（codex-tui.log / claude TUI 没 log / curl 命令 / secrets path）。容易遗漏。
+
+**修复**: 写 `core/scripts/seat-diagnostic.sh <project> <seat>` 一条命令打印:
+1. tmux session alive? + 客户端数
+2. 对应 tool 的 tui.log 最近 30 行（codex 走 codex-tui.log；gemini 走 gemini-cli.log；claude 走 ~/Library/Logs/Claude/claude.log）
+3. 从 last-harness.toml 读 provider → curl /v1/models（如果是 API tool）→ HTTP code
+4. 检查 secrets/<provider>/<seat>.env 存在 + 有 OPENAI_API_KEY/ANTHROPIC_API_KEY 字段
+
+**Owner**: builder-codex
+**批次**: Package P
+
+**验收**: `bash seat-diagnostic.sh arena builder` 输出一屏总览，memory 30s 内定位根因
+
+---
+
+### #20 (预留新 issue 编号)
+
+---
+
+### #22 dispatch_task / 包 objective 缺显式 test_policy 字段 — 🟠 HIGH
+
+**症状（2026-04-26 05:30 Package P1 实证）**: builder 完成 #17 实现后 blocked 在 `tests/test_install_isolation.py:486`（断言 auto-send 副作用），不敢动 test 因为 batch 2 objective 写过 "DON'T touch tests"。但 batch 2 是 vocab rename（test 用 v1 fixture，确实不许动），Package P 是功能重构（test 必须跟代码改）—— builder 把 batch 2 规则**静默继承**到 P 上下文，导致卡链。
+
+**根因**: dispatch 协议没有 per-package 的 test policy 字段。builder 只能从前一个包猜，不同语义的包用同一规则会出错。
+
+**修复**:
+1. `dispatch_task.py` 加 `--test-policy` 必选参数:
+   - `UPDATE` (功能改 → test 必须跟改)
+   - `FREEZE` (vocab/rename → test 不动)
+   - `EXTEND` (新功能 → 加 test 不删旧)
+   - `N/A` (纯文档/配置)
+2. memory 派包**强制填**；TODO.md 渲染时把 policy 列在最显眼位置
+3. builder skill (`core/skills/builder/SKILL.md` 或 codex template) 写明：每个包的 test_policy 是 hard rule，不许跨包继承
+4. 同时把"batch 2 DON'T touch tests"那种 batch 级规则改成 per-package 写
+
+**Owner**: builder-codex（dispatch_task.py）+ planner-claude（review test_policy 取值）+ memory（更新 reporting skill 和 brief 强调 policy 字段重要性）
+**批次**: 批次 3（不阻塞当前任务）
+
+**验收**:
+- `dispatch_task.py --help` 显示 `--test-policy {UPDATE,FREEZE,EXTEND,N/A}` 必选
+- builder 收到的 TODO.md 头部明显写 `test_policy: <value>`
+- 跨包不再静默继承 test 规则
+
+**关联**:
+- 是 Package P1 卡链的事后修复
+- 跟 #16 reporting protocol 配合：memory chat 尾块 dispatches 区可以显示每个 active dispatch 的 test_policy
+
+---
+
+### #23 (预留新 issue 编号)
 
 ---
 
