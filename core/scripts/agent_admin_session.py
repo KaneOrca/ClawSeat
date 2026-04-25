@@ -679,8 +679,9 @@ class SessionService:
 
         # Auto-recover iTerm grid pane routing after any specialist seat
         # start / restart. When a seat's canonical tmux session comes up
-        # after grid open time, stray grid panes may have attached to
-        # install-ancestor instead (see scripts/recover-grid.sh / docs
+        # after grid open time, stray grid panes may have attached to the
+        # project's primary seat (v1 install-ancestor, v2 install-memory)
+        # instead (see scripts/recover-grid.sh / docs
         # ITERM_TMUX_REFERENCE.md §3.1.1). This hook is idempotent:
         # if no misroute exists it prints "ok" and exits 0.
         self._auto_recover_grid_after_start(session)

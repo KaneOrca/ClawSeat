@@ -16,7 +16,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT/#\~/$HOME}"
-SEATS=(ancestor planner builder reviewer qa designer)
+read_project_seats() {
+  python3 - "$PROJECT" <<'PY'
+from pathlib import Path
+import sys
+import tomllib
+
+project = sys.argv[1]
+fallback = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
+project_toml = Path.home() / ".agents" / "projects" / project / "project.toml"
+try:
+    with project_toml.open("rb") as fh:
+        data = tomllib.load(fh)
+except Exception:
+    print("\n".join(fallback))
+    raise SystemExit(0)
+
+engineers = data.get("engineers")
+if not isinstance(engineers, list) or not engineers:
+    print("\n".join(fallback))
+    raise SystemExit(0)
+
+cleaned = [str(seat).strip() for seat in engineers if str(seat).strip()]
+print("\n".join(cleaned or fallback))
+PY
+}
+
+SEATS=()
+while IFS= read -r seat; do
+  [[ -n "$seat" ]] && SEATS+=("$seat")
+done < <(read_project_seats)
+if [[ "${#SEATS[@]}" -eq 0 ]]; then
+  SEATS=(ancestor planner builder reviewer qa designer)
+fi
+PRIMARY_SEAT_ID="${SEATS[0]}"
+SEATS_CSV="$(IFS=,; printf '%s' "${SEATS[*]}")"
 
 ensure_session() {
   local name="$1" cmd="$2"
@@ -24,12 +58,12 @@ ensure_session() {
   tmux new-session -d -s "$name" -c "$CLAWSEAT_ROOT" "$cmd"
 }
 
-ensure_session "${PROJECT}-ancestor" "bash -lc 'claude --dangerously-skip-permissions; exec bash'"
+ensure_session "${PROJECT}-${PRIMARY_SEAT_ID}" "bash -lc 'claude --dangerously-skip-permissions; exec bash'"
 for seat in "${SEATS[@]:1}"; do
   ensure_session "${PROJECT}-${seat}" "bash"
 done
 
-PROJECT="$PROJECT" CLAWSEAT_ROOT="$CLAWSEAT_ROOT" python3 - <<'PY'
+PROJECT="$PROJECT" CLAWSEAT_ROOT="$CLAWSEAT_ROOT" SEATS_CSV="$SEATS_CSV" python3 - <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -39,7 +73,7 @@ root = Path(os.environ["CLAWSEAT_ROOT"]).expanduser()
 sys.path.insert(0, str(root / "core" / "scripts"))
 from agent_admin_window import build_monitor_layout
 
-seats = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
+seats = [seat for seat in os.environ["SEATS_CSV"].split(",") if seat]
 project = SimpleNamespace(
     name=os.environ["PROJECT"],
     repo_root=str(root),
