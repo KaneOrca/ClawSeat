@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# WARNING: This script is destructive.
+# - Overwrites workspace-<tenant>/ contents in the OpenClaw home directory.
+# - Requires B2.5 (bootstrap_machine_tenants.py) to have populated
+#   ~/.clawseat/machine.toml with openclaw.json scan results FIRST.
+# - Run order: install.sh -> B2.5 -> apply-koder-overlay.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -251,8 +256,8 @@ run_koder_bind() {
   if [[ -n "${KODER_BIND_RUNNER:-}" ]]; then
     cmd=("$KODER_BIND_RUNNER" --project "$PROJECT" --tenant "$CHOSEN" --workspace "$WORKSPACE")
   else
-    bind_py='import sys; from pathlib import Path; repo = Path(sys.argv[1]); sys.path[:0] = [str(repo), str(repo / "core" / "lib")]; from core.scripts.agent_admin_layered import do_koder_bind; do_koder_bind(sys.argv[2], sys.argv[3])'
-    cmd=("$PYTHON_BIN" -c "$bind_py" "$REPO_ROOT" "$PROJECT" "$CHOSEN")
+    bind_py='import sys; from pathlib import Path; repo = Path(sys.argv[1]); sys.path[:0] = [str(repo), str(repo / "core" / "lib")]; from core.scripts.agent_admin_layered import do_koder_bind; do_koder_bind(sys.argv[2], sys.argv[3], group_id=sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None)'
+    cmd=("$PYTHON_BIN" -c "$bind_py" "$REPO_ROOT" "$PROJECT" "$CHOSEN" "${FEISHU_GROUP_ID:-}")
   fi
 
   run_or_die 5 KODER_BIND_FAILED "agent-admin koder-bind failed for tenant '$CHOSEN'" "${cmd[@]}"
@@ -284,6 +289,15 @@ print_layer2_hint() {
   cat <<EOF
 
 ✓ koder overlay applied (OpenClaw Layer 1 ready).
+
+──────────────────────────────────────────────────
+Layer 1 (OpenClaw side) configured automatically.
+Layer 2 (Feishu) requires manual operator action:
+  1. Go to Feishu developer console (https://open.feishu.cn/app)
+  2. Enable 'Receive all group messages' for this bot
+  3. Add bot to the target group
+Without Layer 2, non-@ messages will not reach koder.
+──────────────────────────────────────────────────
 
 ⚠ Feishu Layer 2 配置必需（operator 手动操作）：
   1. 打开 https://open.feishu.cn/app

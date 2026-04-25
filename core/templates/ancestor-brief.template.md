@@ -27,7 +27,7 @@
 - grid recovery: `agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]`
 - memory iterm window: `machine-memory-claude`
 - seats 待拉起: planner, builder, reviewer, qa, designer
-  - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template clawseat-default --local ...` 建好 project + engineer/session records
+  - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template {CLAWSEAT_TEMPLATE_NAME} --local ...` 建好 project + engineer/session records
   - 这 5 个 pane 当前都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
 
 ## Seat TUI 生命周期（强制理解）
@@ -184,7 +184,7 @@ if ! python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT
   echo "PHASE_A_FAILED: B3.5.0 — project ${PROJECT_NAME} 未 bootstrap"
   echo "这通常是 pre-SPAWN-049 遗留项目（例如 smoke01），或 install.sh Step 5.5 还没跑过"
   echo "修复顺序："
-  echo "  1. 补 bootstrap: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bootstrap --template clawseat-default --local ${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/project-local.toml"
+  echo "  1. 补 bootstrap: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bootstrap --template {CLAWSEAT_TEMPLATE_NAME} --local ${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/project-local.toml"
   echo "  2. project use: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project use ${PROJECT_NAME}"
   echo "  3. 然后再回到 B3.5 / B4"
   echo "  4. 如果只是 iTerm 六宫格丢失，先用 agent_admin window open-grid ${PROJECT_NAME} --recover 重开"

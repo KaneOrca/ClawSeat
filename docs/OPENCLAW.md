@@ -67,7 +67,7 @@ koder 是**一个 OpenClaw agent 被 ClawSeat 重新身份化**——从"通用 
 1. 选一个现有的 OpenClaw agent（比如 `yu`）
 2. 重写它的 IDENTITY / SOUL / TOOLS / MEMORY / AGENTS / CONTRACT 文件，
    让它知道自己"受 ClawSeat 项目 `<X>` 委托"
-3. 绑定到 `PROJECT_BINDING.toml::openclaw_koder_agent` 字段
+3. 绑定到 `PROJECT_BINDING.toml::openclaw_koder_agent` 字段（运行时通过 `binding.extras.openclaw_frontstage_tenant` 读取）
 4. Feishu 群里 @它 → 它透过 OpenClaw Gateway + tmux send-keys 转给本地 seat
    → 本地 seat 回复 → koder 把结果转回 Feishu 群
 

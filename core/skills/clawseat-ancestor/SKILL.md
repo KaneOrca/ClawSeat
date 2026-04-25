@@ -582,7 +582,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/send_delegation_repo
 - lark-cli app / OpenClaw agent app 不混：前者是 Feishu sender，后者是 OpenClaw koder overlay 目标
 - `~/.lark-cli/config.json` 里的 `apps[].appId` 是 Feishu sender app
 - `~/.agents/tasks/<project>/PROJECT_BINDING.toml` 里的 `feishu_sender_app_id` 记录 sender app id
-- `~/.agents/tasks/<project>/PROJECT_BINDING.toml` 里的 `openclaw_koder_agent` 记录 OpenClaw koder overlay 目标
+- `~/.agents/tasks/<project>/PROJECT_BINDING.toml` 里的 `openclaw_koder_agent` 记录 OpenClaw koder overlay 目标（runtime 读取 `binding.extras.openclaw_frontstage_tenant`）
 - `feishu_sender_app_id` 和 `openclaw_koder_agent` 是不同概念，不能再混写成一个 `feishu_bot_account`
 
 ### 5.y · Feishu auth 状态决策树

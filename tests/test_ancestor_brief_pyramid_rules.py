@@ -13,7 +13,7 @@ def test_ancestor_brief_template_has_pyramid_l2_l3_boundary_and_bootstrap_prefli
 
     assert "### B3.5.0 — pre-flight: 确认 project 已 bootstrap" in text
     assert "agent_admin.py project show ${PROJECT_NAME}" in text
-    assert "agent_admin.py project bootstrap --template clawseat-default" in text
+    assert "agent_admin.py project bootstrap --template {CLAWSEAT_TEMPLATE_NAME}" in text
     assert "agent_admin.py project use ${PROJECT_NAME}" in text
     assert "smoke01" in text
     assert "L2/L3 边界" in text

@@ -152,16 +152,17 @@ LaunchAgent for ancestor patrol. An operator installing ClawSeat should see
 the contract, not an afterthought — every new category of access is declared
 up front, and silent access to credentials or the network is a playbook bug.
 
-### Why manual Phase-A handoff (step 5)
+### Why Phase-A handoff matters (step 5)
 
-`install.sh` intentionally does not auto-paste the Phase-A kickoff prompt.
-Claude Code v2.1.118+ surfaces a Bypass Permissions confirmation screen, Trust
-Folder prompt, or OAuth flow on first boot — `install.sh` detects these
-(`ancestor_pane_waiting_on_operator`), skips auto-send, and expects the invoking
-agent to walk the operator through the manual handoff. Treating `install.sh`'s
-exit as "done" drops the ancestor on the floor at the Bypass screen and
-Phase-A never starts — the #1 reported install failure mode. Step 5 is
-non-negotiable.
+`install.sh` Step 9.5 attempts auto-send of the Phase-A kickoff prompt via
+best-effort detection. Claude Code v2.1.118+ surfaces a Bypass Permissions
+confirmation screen, Trust Folder prompt, or OAuth flow on first boot —
+`install.sh` detects these blocking screens (`ancestor_pane_waiting_on_operator`)
+and skips auto-send in those cases, expecting the invoking agent to walk the
+operator through manual paste as a fallback. Treating `install.sh`'s exit as
+"done" without confirming Phase-A started drops the ancestor on the floor and
+Phase-A never begins — the #1 reported install failure mode. Step 5 is
+non-negotiable whether auto-send succeeded or not.
 
 ### Why minimal
 
@@ -280,8 +281,11 @@ What `install.sh` does in order:
    auto-attach after ancestor later spawns each seat in B3.5.
 9. Launch `machine-memory-claude` through `core/launchers/agent-launcher.sh`,
    then open a second iTerm window for it.
-10. Focus the ancestor pane and emit 3-Enter flush so the operator visually sees bypass activate.
-11. Print the ancestor-prompt stub for the operator to copy and paste.
+10. Step 9.5: attempt auto-send of the Phase-A kickoff prompt via best-effort
+    screen detection. If a Bypass / Trust / OAuth blocking screen is detected,
+    auto-send is skipped and a fallback banner instructs manual paste.
+11. Print the Phase-A kickoff banner so the operator can manually paste if
+    auto-send did not fire or was skipped.
 
 Verify:
 

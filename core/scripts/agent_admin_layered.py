@@ -219,10 +219,24 @@ def _safe_mtime(p: Path) -> float:
         return 0.0
 
 
+_FEISHU_GROUP_ID_RE = re.compile(r"^oc_.{16,}$")
+
+
+def _validate_feishu_group_id(group_id: str) -> None:
+    """Raise KoderBindError if group_id doesn't match oc_<16+ chars>."""
+    if not _FEISHU_GROUP_ID_RE.match(group_id):
+        raise KoderBindError(
+            f"invalid feishu_group_id {group_id!r}: must start with 'oc_' "
+            "and be at least 19 chars total (oc_ + 16 chars). "
+            "Find it in Feishu developer console → group chat info."
+        )
+
+
 def do_koder_bind(
     project: str,
     tenant: str,
     *,
+    group_id: str | None = None,
     machine_cfg=None,
     binding_home: Path | None = None,
 ) -> dict[str, Any]:
@@ -230,7 +244,16 @@ def do_koder_bind(
 
     Atomic-ish: updates both files; if the binding write fails, the
     workspace contract update is rolled back via backup/restore.
+
+    Parameters
+    ----------
+    group_id :
+        Feishu open-chat group ID (format: oc_ + ≥16 chars).
+        If None, writes "oc_pending" placeholder — update later with
+        `agent-admin project bind --feishu-group`.
     """
+    if group_id is not None:
+        _validate_feishu_group_id(group_id)
     if not _MACHINE_AVAILABLE and machine_cfg is None:
         raise KoderBindError(
             "core.lib.machine_config not importable; koder-bind requires the "
@@ -270,7 +293,7 @@ def do_koder_bind(
         if existing is not None:
             binding = ProjectBinding(
                 project=existing.project,
-                feishu_group_id=existing.feishu_group_id,
+                feishu_group_id=group_id or existing.feishu_group_id,
                 feishu_group_name=existing.feishu_group_name,
                 feishu_external=existing.feishu_external,
                 feishu_sender_app_id=existing.feishu_sender_app_id,
@@ -284,11 +307,11 @@ def do_koder_bind(
                 extras=extras,
             )
         else:
-            # New binding — minimum viable with placeholder Feishu group.
-            # Operator can replace it later with `agent-admin project bind`.
+            # New binding — use provided group_id or placeholder.
+            # Placeholder can be replaced later with `agent-admin project bind`.
             binding = ProjectBinding(
                 project=project,
-                feishu_group_id="oc_pending",
+                feishu_group_id=group_id or "oc_pending",
                 openclaw_koder_agent="koder",
                 bound_by="agent-admin project koder-bind",
                 extras=extras,
@@ -315,7 +338,10 @@ def do_koder_bind(
 
 def cmd_project_koder_bind(args: argparse.Namespace) -> int:
     try:
-        result = do_koder_bind(args.project, args.tenant)
+        result = do_koder_bind(
+            args.project, args.tenant,
+            group_id=getattr(args, "feishu_group_id", None),
+        )
     except (KoderBindError, ProjectBindingError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -308,6 +308,16 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         "--tenant", required=True,
         help="Tenant name as registered in machine.toml [openclaw_tenants.X].",
     )
+    project_koder_bind_nested.add_argument(
+        "--feishu-group-id",
+        default=None,
+        dest="feishu_group_id",
+        help=(
+            "Feishu open-chat group ID (format: oc_ + ≥16 chars). "
+            "If omitted, 'oc_pending' placeholder is written and can be "
+            "updated later with `project bind --feishu-group`."
+        ),
+    )
     project_koder_bind_nested.set_defaults(func=hooks.cmd_project_koder_bind)
 
     project_seat_nested = project_sub.add_parser(
