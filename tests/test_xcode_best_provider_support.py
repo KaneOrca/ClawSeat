@@ -119,10 +119,7 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
     assert "ANTHROPIC_BASE_URL=https://xcode.best" in reviewer_secret
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "xcodemenu50-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["xcodemenu50-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://xcode.best"
@@ -150,10 +147,7 @@ def test_install_provider_xcode_best_with_api_key_auto_fills_base_url(tmp_path: 
     assert "ANTHROPIC_BASE_URL=https://xcode.best" in planner_secret
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "xcodeforce50-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["xcodeforce50-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://xcode.best"

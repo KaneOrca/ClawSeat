@@ -135,7 +135,7 @@ def test_install_launch_survives_session_create_with_early_detach_off(tmp_path: 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "new-session" in tmux_output
     assert "-s survive49-ancestor" in tmux_output
-    assert "-s machine-memory-claude" in tmux_output
+    assert "-s machine-memory-claude" not in tmux_output
     assert "set-option -t survive49-ancestor detach-on-destroy off" in tmux_output
     assert "set-option -t survive49-ancestor status on" in tmux_output
     assert "set-option -t survive49-ancestor status-style fg=white,bg=blue,bold" in tmux_output

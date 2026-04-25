@@ -85,7 +85,7 @@ def test_install_dry_run_does_not_send_phase_a_kickoff(tmp_path: Path) -> None:
     assert not agentctl_log.exists()
 
 
-def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
+def test_install_persists_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
     brief_stub = (
         "读 {BRIEF_PATH} 开始 Phase-A。"
         "按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；"
@@ -105,6 +105,7 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
 
     combined = result.stdout + result.stderr
     expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    kickoff_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
     guide_path = home / ".agents" / "tasks" / "kickoff50" / "OPERATOR-START-HERE.md"
     kickoff = (
         f"读 {expected_brief} 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。"
@@ -112,47 +113,30 @@ def test_install_sends_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Step 9.5: auto-send Phase-A kickoff prompt" in combined
-    assert "Phase-A kickoff delivered to kickoff50-ancestor" in combined
-    # Banner marker (Round-8 rewrite): bilingual header + "copy between the lines"
-    # fences the kickoff block instead of the old "IF ANCESTOR IS IDLE" line.
-    assert "PHASE-A KICKOFF (copy between the lines" in combined
+    assert "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt" in combined
+    assert "auto-send Phase-A kickoff prompt" not in combined
+    assert "Phase-A kickoff delivered" not in combined
+    assert "Phase-A kickoff submitted" not in combined
     assert "ClawSeat install complete / 安装已完成" in combined
-    assert kickoff in combined
+    assert "Choose one to start Phase-A / 三选一启动 Phase-A" in combined
+    assert str(kickoff_path) in combined
     assert expected_brief.is_file()
+    assert kickoff_path.read_text(encoding="utf-8") == kickoff + "\n"
     assert guide_path.is_file()
     guide_text = guide_path.read_text(encoding="utf-8")
-    assert "Phase-A 不让 memory 做同步调研" in guide_text
-    # Pin the Round-8 classification contract: both A1 (Phase-A output) and A2
-    # (active-processing) markers must appear in BOTH the operator guide and
-    # the stdout banner, so wording drift away from
-    # `ancestor_pane_shows_active_response()` re-triggers this test.
-    for marker in ("B0", "已读取 brief", "env_scan",
-                   "Thinking...", "Shell awaiting input",
-                   # Both singular + plural: `ancestor_pane_shows_active_response`
-                   # matches the regex `Read [0-9]+ files?`.
-                   "Read N file", "Read N files",
-                   # All six spinner glyphs from the runtime detector.
-                   "✶", "✻", "✢", "✳", "✽", "⏺"):
-        assert marker in guide_text, f"guide missing classifier marker: {marker!r}"
-        assert marker in combined, f"banner/stdout missing classifier marker: {marker!r}"
-    assert "session-name ancestor --project kickoff50" in agentctl_log.read_text(encoding="utf-8")
+    assert "install.sh 不再自动发送 Phase-A kickoff" in guide_text
+    assert str(kickoff_path) in guide_text
+    assert not agentctl_log.exists()
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
-    assert tmux_output.index("capture-pane -t =kickoff50-ancestor") < tmux_output.index("send-keys -l -t kickoff50-ancestor")
-    assert "send-keys -l -t kickoff50-ancestor" in tmux_output
-    assert tmux_output.count("send-keys -l -t kickoff50-ancestor") == 1
-    assert kickoff in tmux_output
-    assert "spawn engineer seat 要 one-at-a-time。" in tmux_output
+    assert "capture-pane -t =kickoff50-ancestor" not in tmux_output
+    assert "send-keys -l -t kickoff50-ancestor" not in tmux_output
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "kickoff50-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["kickoff50-ancestor"]
 
 
-def test_install_keeps_manual_fallback_when_auto_send_times_out(tmp_path: Path) -> None:
+def test_install_writes_operator_triggered_kickoff_without_auto_send(tmp_path: Path) -> None:
     result, _, tmux_log, home, _ = _run_install(
         tmp_path,
         dry_run=False,
@@ -161,29 +145,27 @@ def test_install_keeps_manual_fallback_when_auto_send_times_out(tmp_path: Path) 
 
     combined = result.stdout + result.stderr
     expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    kickoff_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
     kickoff = (
         f"读 {expected_brief} 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。"
         "不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Auto-send could not verify kickoff delivery to kickoff50-ancestor." in combined
-    # Banner marker (Round-8 rewrite): see sibling test for full coverage.
-    # Manual-fallback path still prints the fenced kickoff block for copy-paste.
-    assert "PHASE-A KICKOFF (copy between the lines" in combined
+    assert "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt" in combined
+    assert "Auto-send could not verify kickoff delivery" not in combined
+    assert "Phase-A kickoff auto-send skipped or failed" not in combined
     assert "ClawSeat install complete / 安装已完成" in combined
-    assert kickoff in combined
-    # Round-8 Step 9.5 now emits an explicit warn when auto-send skips or fails
-    # (previously `|| true` swallowed it silently).
-    assert "Phase-A kickoff auto-send skipped or failed" in combined
+    assert str(kickoff_path) in combined
+    assert kickoff_path.read_text(encoding="utf-8") == kickoff + "\n"
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
-    assert "capture-pane -t =kickoff50-ancestor" in tmux_output
+    assert "capture-pane -t =kickoff50-ancestor" not in tmux_output
     assert "send-keys -l -t kickoff50-ancestor" not in tmux_output
 
 
-def test_install_accepts_claude_spinner_as_active_kickoff_response(tmp_path: Path) -> None:
-    result, _, tmux_log, _, _ = _run_install(
+def test_install_does_not_probe_spinner_before_operator_trigger(tmp_path: Path) -> None:
+    result, _, tmux_log, home, _ = _run_install(
         tmp_path,
         dry_run=False,
         pane_snapshots=["Type your message"],
@@ -193,9 +175,14 @@ def test_install_accepts_claude_spinner_as_active_kickoff_response(tmp_path: Pat
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, result.stderr
-    assert "Step 9.5: auto-send Phase-A kickoff prompt" in combined
-    assert "Phase-A kickoff submitted to kickoff50-ancestor" in combined
+    assert "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt" in combined
+    assert "auto-send Phase-A kickoff prompt" not in combined
+    assert "Phase-A kickoff submitted" not in combined
     assert "Auto-send could not verify kickoff delivery" not in combined
+    assert (
+        home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
+    ).is_file()
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
-    assert "send-keys -l -t kickoff50-ancestor" in tmux_output
+    assert "capture-pane -t =kickoff50-ancestor" not in tmux_output
+    assert "send-keys -l -t kickoff50-ancestor" not in tmux_output

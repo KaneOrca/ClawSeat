@@ -37,8 +37,6 @@ ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
 ITERM_DRIVER_TIMEOUT_SECONDS=30
 TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
 ANCESTOR_PATROL_TEMPLATE="$REPO_ROOT/core/templates/ancestor-patrol.plist.in"
-MEMORY_HOOK_INSTALLER="$REPO_ROOT/core/skills/memory-oracle/scripts/install_memory_hook.py"
-SEAT_CLAUDE_TEMPLATE_SCRIPT="$REPO_ROOT/core/scripts/seat_claude_template.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
@@ -1546,22 +1544,6 @@ launch_seat() {
   configure_tmux_session_display "$session"
 }
 
-install_memory_hook() {
-  note "Step 7.5: install memory Stop-hook"
-  local engineers_root="$HOME/.agents/engineers"
-  local template_settings="$engineers_root/memory/.claude-template/settings.json"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    run "$PYTHON_BIN" "$SEAT_CLAUDE_TEMPLATE_SCRIPT" --seat memory --engineers-root "$engineers_root" --clawseat-root "$CLAWSEAT_ROOT"
-    run "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --settings-path "$template_settings" --clawseat-root "$CLAWSEAT_ROOT" --dry-run
-    return 0
-  fi
-  mkdir -p "$MEMORY_WORKSPACE" || die 32 MEMORY_WORKSPACE_CREATE_FAILED "unable to create memory workspace: $MEMORY_WORKSPACE"
-  "$PYTHON_BIN" "$SEAT_CLAUDE_TEMPLATE_SCRIPT" --seat memory --engineers-root "$engineers_root" --clawseat-root "$CLAWSEAT_ROOT" \
-    || die 32 MEMORY_TEMPLATE_PREP_FAILED "failed to prepare Claude template for memory seat"
-  "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --settings-path "$template_settings" --clawseat-root "$CLAWSEAT_ROOT" \
-    || die 32 MEMORY_HOOK_INSTALL_FAILED "failed to install memory Stop-hook into $template_settings"
-}
-
 check_iterm_window_exists() {
   local title="$1"
   if ! command -v osascript >/dev/null 2>&1; then
@@ -1826,16 +1808,16 @@ import json
 import os
 import subprocess
 
-# Discover all <project>-memory tmux sessions (excluding global machine-memory-claude)
+# Discover all <project>-memory tmux sessions.
 result = subprocess.run(
     ["/opt/homebrew/bin/tmux", "ls", "-F", "#{session_name}"],
     capture_output=True, text=True, env={**os.environ, "TMUX": ""}, check=False,
 )
 all_sessions = result.stdout.strip().split("\n") if result.returncode == 0 else []
-# Match <project>-memory but NOT machine-memory-claude (that's the v1 global memory, deprecated)
+legacy_global_memory = "-".join(("machine", "memory", "claude"))
 memory_sessions = sorted([
     s for s in all_sessions
-    if s.endswith("-memory") and s != "machine-memory-claude"
+    if s.endswith("-memory") and s != legacy_global_memory
 ])
 
 n = len(memory_sessions)
@@ -1860,10 +1842,7 @@ print(json.dumps({
 PY
 }
 
-memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"label":"memory","command":"tmux attach -t '\''=machine-memory-claude'\''"}]}'; }
-
 main() {
-  local memory_window_id=""
   parse_args "$@"; prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
@@ -1898,24 +1877,9 @@ main() {
     note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
   fi
 
-  note "Step 8: ensure memory singleton daemon"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    install_memory_hook
-    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
-    open_iterm_window "$(memory_payload)" memory_window_id
-  elif tmux has-session -t '=machine-memory-claude' 2>/dev/null; then
-    printf 'memory seat already running (machine-memory-claude), reusing.\n'
-    install_memory_hook
-    if [[ "$(check_iterm_window_exists "machine-memory-claude")" != "1" ]]; then
-      open_iterm_window "$(memory_payload)" memory_window_id
-    else
-      printf 'memory iTerm window already open, skipping open.\n'
-    fi
-  else
-    install_memory_hook
-    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
-    open_iterm_window "$(memory_payload)" memory_window_id
-  fi
+  # v1 machine-memory-claude tmux session may still be running on machines
+  # upgraded from v0.6 or earlier; v2 install no longer creates/manages it.
+  # M4 will retire the legacy session entirely.
   note "Step 9: focus primary seat ($PRIMARY_SEAT_ID) and persist operator guide"
   if [[ -n "$GRID_WINDOW_ID" ]]; then
     run sleep 3

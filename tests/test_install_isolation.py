@@ -444,18 +444,13 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
     records = _read_jsonl(launcher_log)
-    expected_sessions = [
-        "smoketest-ancestor",
-        "machine-memory-claude",
-    ]
+    expected_sessions = ["smoketest-ancestor"]
     assert [record["session"] for record in records] == expected_sessions
 
     expected_root_dir = str(root)
-    expected_memory_dir = str(home / ".agents" / "workspaces" / "smoketest" / "memory")
     expected_brief = str(home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "ancestor-bootstrap.md")
 
     for record in records:
-        session = record["session"]
         assert record["tool"] == "claude"
         assert record["auth"] == "custom"
         assert record["custom_env_file"]
@@ -463,16 +458,12 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
         assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
         assert record["custom_model"] == "MiniMax-M2.7-highspeed"
         assert record["clawseat_root"] == str(root)
-        if session == "machine-memory-claude":
-            assert record["dir"] == expected_memory_dir
-        else:
-            assert record["dir"] == expected_root_dir
+        assert record["dir"] == expected_root_dir
         assert record["runtime_home"] == str(
-            home / ".agent-runtime" / "identities" / "claude" / "api" / f"custom-{session}" / "home"
+            home / ".agent-runtime" / "identities" / "claude" / "api" / f"custom-{record['session']}" / "home"
         )
 
     assert records[0]["brief"] == expected_brief
-    assert records[1]["brief"] == ""
     brief_text = Path(expected_brief).read_text(encoding="utf-8")
     assert "~/" not in brief_text
     assert "${AGENT_HOME}" not in brief_text

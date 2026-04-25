@@ -142,10 +142,7 @@ def test_install_detects_ark_candidate_and_applies_default_model(tmp_path: Path)
     assert "ANTHROPIC_MODEL=ark-code-latest" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "arkmenu50-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["arkmenu50-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://ark.cn-beijing.volces.com/api/coding"
@@ -197,10 +194,7 @@ def test_install_provider_ark_with_api_key_auto_fills_base_url_and_model(tmp_pat
     assert "ANTHROPIC_MODEL=ark-code-latest" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "arkforce50-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["arkforce50-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://ark.cn-beijing.volces.com/api/coding"
