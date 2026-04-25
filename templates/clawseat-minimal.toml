@@ -8,7 +8,7 @@
 #
 # 依据: docs/rfc/RFC-001-self-contained-project-architecture.md
 
-version = 2
+version = 1
 template_name = "clawseat-minimal"
 description = "Self-contained 4-seat project unit (v2): memory in dedicated window, 3-pane worker grid"
 

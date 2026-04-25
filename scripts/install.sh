@@ -302,14 +302,14 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-default|clawseat-engineering|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-default|clawseat-engineering|clawseat-creative) ;;
-    *) die 2 INVALID_TEMPLATE "--template must be clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+    clawseat-minimal|clawseat-default|clawseat-engineering|clawseat-creative) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-minimal | clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
     [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
@@ -363,26 +363,26 @@ prompt_kind_first_flow() {
   [[ -t 0 && -t 1 ]] || return 0
   [[ "$_PROJECT_EXPLICIT" == "0" && "$_TEMPLATE_EXPLICIT" == "0" ]] || return 0
 
-  printf '\nClawSeat — 新项目配置\n' >&2
-  printf '\n选择项目类型：\n' >&2
-  printf '  1) 工程 (clawseat-engineering  — 5 seat: planner/builder/reviewer/qa/designer)\n' >&2
-  printf '  2) 创作 (clawseat-creative     — 4 seat: planner/builder/designer)\n' >&2
-  printf '  3) 通用 (clawseat-default      — 5 seat 基线模板)\n' >&2
+  printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
+  printf '\n选择项目类型 / Choose project mode:\n' >&2
+  printf '  1) 新手 (clawseat-minimal     — 4 seat 全 OAuth 多模型: memory + planner + designer + reviewer)  [default]\n' >&2
+  printf '  2) 专家 (clawseat-engineering — 6 seat 工程级: ancestor + planner + builder + reviewer + qa + designer)\n' >&2
 
   local _kind=""
   while true; do
-    printf '选择 [1-3]: ' >&2
+    printf '选择 [1-2, Enter=1]: ' >&2
     read -r _kind < /dev/tty
+    [[ -z "$_kind" ]] && _kind="1"   # Enter == default beginner
     case "$_kind" in
-      1) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
-      2) CLAWSEAT_TEMPLATE_NAME="clawseat-creative";    break ;;
-      3) CLAWSEAT_TEMPLATE_NAME="clawseat-default";     break ;;
-      *) printf '请输入 1、2 或 3\n' >&2 ;;
+      1) CLAWSEAT_TEMPLATE_NAME="clawseat-minimal";     break ;;
+      2) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
+      *) printf '请输入 1 或 2 (回车 = 1 新手)\n' >&2 ;;
     esac
   done
 
   local _placeholder
   case "$CLAWSEAT_TEMPLATE_NAME" in
+    clawseat-minimal)     _placeholder="e.g. myapp, learn-python, my-first-project" ;;
     clawseat-engineering) _placeholder="e.g. api-service, web-frontend, mobile-app" ;;
     clawseat-creative)    _placeholder="e.g. novel-scifi, series-drama, script-ep01" ;;
     *)                    _placeholder="e.g. myproject, experiment-01" ;;
@@ -1103,8 +1103,23 @@ bootstrap_project_profile() {
   fi
 
   if [[ -f "$PROJECT_RECORD_PATH" ]]; then
-    printf 'Project %s already exists at %s; skipping bootstrap.\n' "$PROJECT" "$PROJECT_RECORD_PATH"
-    return 0
+    if [[ "$FORCE_REINSTALL" == "1" ]]; then
+      # --reinstall must re-bootstrap so session.toml gets recreated.
+      # Bug fix: previously this branch would silently skip even when the
+      # operator explicitly asked for --reinstall, leaving stale state where
+      # project.toml exists but session.toml is missing — causing all
+      # downstream `agent_admin session-name` / `send-and-verify --project`
+      # calls (including Step 9.5 auto-send) to fail with SESSION_NOT_FOUND.
+      printf 'Project %s exists at %s — --reinstall: wiping project record + sessions to force re-bootstrap.\n' \
+        "$PROJECT" "$PROJECT_RECORD_PATH"
+      rm -f "$PROJECT_RECORD_PATH"
+      rm -rf "$HOME/.agents/sessions/$PROJECT"
+      # Note: ~/.agents/tasks/$PROJECT (TASKS.md, STATUS.md, handoffs) is
+      # preserved — operator's history shouldn't be lost on --reinstall.
+    else
+      printf 'Project %s already exists at %s; skipping bootstrap.\n' "$PROJECT" "$PROJECT_RECORD_PATH"
+      return 0
+    fi
   fi
 
   mkdir -p "$AGENTS_TEMPLATES_ROOT" || die 31 TEMPLATE_ROOT_CREATE_FAILED "unable to create $AGENTS_TEMPLATES_ROOT"
