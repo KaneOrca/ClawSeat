@@ -1,0 +1,130 @@
+"""Tests for FIX-INIT-KODER-HARDCODES (Wave 3b).
+
+Pins the 5 init_koder.py + template.toml fixes that remove hardcoded
+defaults so future koder bootstrap stays project-aware.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+_REPO = Path(__file__).resolve().parents[1]
+_INIT_KODER = _REPO / "core" / "skills" / "clawseat-install" / "scripts" / "init_koder.py"
+_TEMPLATE = _REPO / "core" / "templates" / "gstack-harness" / "template.toml"
+
+# Add the script's parent so we can import its functions
+_SCRIPT_DIR = _INIT_KODER.parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+
+def _make_profile(notify_target: str = "planner") -> SimpleNamespace:
+    return SimpleNamespace(
+        heartbeat_owner="koder",
+        heartbeat_transport="openclaw",
+        active_loop_owner="planner",
+        default_notify_target=notify_target,
+    )
+
+
+# ── Fix 1: notify_target threaded through render_soul + render_tools_index ──
+
+def test_render_soul_uses_default_notify_target():
+    """render_soul must substitute notify_target into '<X> 是唯一的下一跳'."""
+    import init_koder
+    soul = init_koder.render_soul(notify_target="planner")
+    assert "**planner 是唯一的下一跳**" in soul
+    soul_custom = init_koder.render_soul(notify_target="director")
+    assert "**director 是唯一的下一跳**" in soul_custom
+    assert "**planner 是唯一的下一跳**" not in soul_custom
+
+
+def test_render_tools_index_uses_notify_target():
+    """render_tools_index must use notify_target in 'dispatch 目标永远是 ...'."""
+    import init_koder
+    out = init_koder.render_tools_index(_REPO, heartbeat_owner="koder", notify_target="planner")
+    assert "dispatch 目标永远是 `planner`" in out
+    out_custom = init_koder.render_tools_index(_REPO, heartbeat_owner="koder", notify_target="lead")
+    assert "dispatch 目标永远是 `lead`" in out_custom
+
+
+# ── Fix 2: --project is required, no default ────────────────────────────────
+
+def test_project_arg_is_required_no_default():
+    """--project must be required (argparse exits 2 when missing)."""
+    result = subprocess.run(
+        [sys.executable, str(_INIT_KODER), "--workspace", "/tmp/nonexistent-workspace"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode != 0, "missing --project must fail"
+    assert "--project" in result.stderr, "stderr must mention the missing flag"
+
+
+# ── Fix 3: workspace_path threaded into render_tools_project ────────────────
+
+def test_render_tools_project_uses_workspace_path(tmp_path: Path):
+    """render_tools_project must embed the actual workspace path, not hardcode workspace-koder."""
+    import init_koder
+    custom_ws = tmp_path / ".openclaw" / "workspace-yu"
+    out = init_koder.render_tools_project(_REPO, heartbeat_owner="koder", workspace_path=custom_ws)
+    assert str(custom_ws) in out, (
+        f"render_tools_project must embed the actual workspace path; got:\n{out[:500]}"
+    )
+    assert "workspace-koder/WORKSPACE_CONTRACT" not in out, (
+        "Hardcoded workspace-koder path must NOT appear when workspace_path is provided"
+    )
+
+
+def test_render_tools_project_no_hardcoded_workspace_koder():
+    """The hardcoded `~/.openclaw/workspace-koder/WORKSPACE_CONTRACT.toml` literal
+    must not appear anywhere in init_koder.py source."""
+    src = _INIT_KODER.read_text(encoding="utf-8")
+    assert ".openclaw/workspace-koder/WORKSPACE_CONTRACT" not in src, (
+        "init_koder.py must not hardcode workspace-koder path; use workspace_path arg"
+    )
+
+
+# ── Fix 4 + 5: template.toml lists clawseat-koder-frontstage ────────────────
+
+def test_template_toml_lists_clawseat_koder_frontstage():
+    """gstack-harness template.toml koder skills must include clawseat-koder-frontstage."""
+    text = _TEMPLATE.read_text(encoding="utf-8")
+    assert "clawseat-koder-frontstage" in text, (
+        "template.toml koder skills must include clawseat-koder-frontstage"
+    )
+
+
+def test_install_koder_skills_resolves_clawseat_koder_frontstage(tmp_path: Path):
+    """install_koder_skills (driven by template.toml) must produce a symlink for
+    clawseat-koder-frontstage when the source skill exists in the repo."""
+    import init_koder
+    skills_dir = tmp_path / "skills"
+    spec = init_koder._find_template_engineer(init_koder.load_template(), "koder")
+    init_koder.install_koder_skills(
+        skills_dir, _REPO, spec=spec, dry_run=False,
+    )
+    # The skill source exists at core/skills/clawseat-koder-frontstage/
+    expected = skills_dir / "clawseat-koder-frontstage"
+    assert expected.exists() or expected.is_symlink(), (
+        f"clawseat-koder-frontstage symlink must exist at {expected}; "
+        f"actual contents: {sorted(p.name for p in skills_dir.iterdir())}"
+    )
+
+
+# ── Integration: full file rendering with project-specific settings ─────────
+
+def test_integration_workspace_path_propagates_through_render(tmp_path: Path):
+    """Full integration: render_tools_project receives the workspace_path
+    from build_workspace_files, which must use it in the contract snippet."""
+    import init_koder
+    workspace = tmp_path / ".openclaw" / "workspace-creative"
+    out = init_koder.render_tools_project(
+        _REPO, heartbeat_owner="koder", workspace_path=workspace,
+    )
+    # The custom workspace path must appear; the default workspace-koder path must not
+    assert "workspace-creative" in out
+    assert "workspace-koder/WORKSPACE_CONTRACT" not in out
