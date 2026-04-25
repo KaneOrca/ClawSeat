@@ -194,31 +194,127 @@ def test_stop_engineer_legacy_close_iterm_tab_kwarg_still_works(capsys):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Test 9 (multi-pane safety): only the targeted pane is closed via osascript
+# Test 9 (multi-pane safety): real simulation of 6-session tab
+#
+# Real fake-iTerm model + AppleScript template evaluator.  Closes the model
+# according to the template's actual `close s` / `close t` keyword.
+# Mutation-verified: replacing production `close s` → `close t` collapses
+# all 6 sessions and the assertion correctly fails.
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_close_pane_only_targets_one_session_in_multi_pane_tab():
-    """Simulate 1 tab × 6 sessions: stop_engineer for one seat must invoke osascript
-    with the specific tty; AppleScript template's `close s` (not `close t`) ensures
-    only that single pane is closed, leaving 5 sibling panes intact."""
-    svc = _make_service()
-    session_target = _make_session("install-builder-1-claude")
+import re
 
-    captured_args: list[tuple] = []
 
-    def fake_close(tty: str) -> dict:
-        captured_args.append(("close_called", tty))
-        return {"status": "ok", "detail": None}
+class FakeITermSession:
+    """Fake iTerm2 session/pane.  alive=False after close()."""
+    def __init__(self, tty: str) -> None:
+        self.tty = tty
+        self.alive = True
 
-    with (
-        patch.object(aas, "_get_tmux_tty", return_value="/dev/ttys100"),
-        patch.object(aas, "_close_iterm_pane_by_tty", side_effect=fake_close),
-        patch.object(svc, "_run_tmux_with_retry"),
-    ):
-        svc.stop_engineer(session_target, close_iterm_pane=True)
 
-    # _close_iterm_pane_by_tty was called exactly once with the target tty
-    assert captured_args == [("close_called", "/dev/ttys100")]
-    # And the AppleScript template uses `close s` so sibling panes (different ttys
-    # not matching /dev/ttys100) are not affected — verified by template inspection
-    assert "close s" in aas._ITERM_CLOSE_SCRIPT_TEMPLATE
+class FakeITermTab:
+    """Fake iTerm2 tab containing N sessions.  Supports both `close s` and `close t` semantics."""
+    def __init__(self, sessions: list[FakeITermSession]) -> None:
+        self.sessions = sessions
+
+    def find_session_by_tty(self, tty: str) -> FakeITermSession | None:
+        for s in self.sessions:
+            if s.tty == tty and s.alive:
+                return s
+        return None
+
+
+def _evaluate_iterm_close_template(template: str, tty: str, tab: FakeITermTab) -> str:
+    """Mini AppleScript-template evaluator.
+
+    Detects the close-action keyword inside the matched-tty block of the
+    production template:
+      - `close s` → close the matching session only (sibling panes survive)
+      - `close t` → close the entire tab (all sibling panes die — the RCA bug)
+
+    Returns "ok" / "not_found" matching osascript output of the production helper.
+    """
+    rendered = template.replace("{tty}", tty)
+    # Search for the action verb on its own line inside the inner repeat block.
+    # The production template puts `close s` (or `close t`) on its own indented line.
+    action_match = re.search(r"^\s+close\s+(s|t)\s*$", rendered, re.MULTILINE)
+    if not action_match:
+        raise ValueError(
+            f"AppleScript template does not contain a `close s` or `close t` action; "
+            f"template:\n{rendered}"
+        )
+    action = action_match.group(1)
+
+    target = tab.find_session_by_tty(tty)
+    if target is None:
+        return "not_found"
+
+    if action == "s":
+        # Close only the matching session/pane.
+        target.alive = False
+    else:  # action == "t"
+        # Close the entire tab — every session dies.
+        for s in tab.sessions:
+            s.alive = False
+    return "ok"
+
+
+def test_close_pane_preserves_5_siblings_real_simulation():
+    """Real 6-session simulation: the production AppleScript template, evaluated
+    against a fake iTerm model, must leave 5 siblings alive when only one pane
+    is targeted.
+
+    Mutation guarantee: if production switches `close s` → `close t`, the
+    evaluator will close all 6 sessions and len(surviving) == 5 fails.
+    """
+    sessions = [FakeITermSession(f"/dev/ttys{i:03d}") for i in range(100, 106)]
+    tab = FakeITermTab(sessions)
+    target_tty = "/dev/ttys102"
+
+    # Read production template as-is (no monkey-patch).
+    template = aas._ITERM_CLOSE_SCRIPT_TEMPLATE
+
+    result = _evaluate_iterm_close_template(template, target_tty, tab)
+    assert result == "ok", f"evaluator should find target tty; got {result!r}"
+
+    surviving = [s for s in tab.sessions if s.alive]
+    closed = [s for s in tab.sessions if not s.alive]
+
+    assert len(surviving) == 5, (
+        f"Expected 5 sibling panes to survive after closing 1; got {len(surviving)}.\n"
+        f"This means the template's close-action verb killed more than the targeted pane.\n"
+        f"surviving ttys: {[s.tty for s in surviving]}"
+    )
+    assert len(closed) == 1, f"Expected exactly 1 closed pane; got {len(closed)}"
+    assert closed[0].tty == target_tty, (
+        f"The closed pane must be the targeted tty; got {closed[0].tty!r}"
+    )
+
+
+def test_close_pane_evaluator_correctly_models_close_t_bug():
+    """Self-test of the evaluator: a template with `close t` MUST kill all siblings.
+
+    This pins the evaluator's mutation-detection capability — without this, a
+    template change from `close s` to `close t` could silently pass."""
+    buggy_template = """\
+tell application "iTerm"
+    repeat with w in windows
+        repeat with t in tabs of w
+            repeat with s in sessions of t
+                if tty of s is "{tty}" then
+                    close t
+                    return "ok"
+                end if
+            end repeat
+        end repeat
+    end repeat
+    return "not_found"
+end tell"""
+    sessions = [FakeITermSession(f"/dev/ttys{i:03d}") for i in range(100, 106)]
+    tab = FakeITermTab(sessions)
+    result = _evaluate_iterm_close_template(buggy_template, "/dev/ttys102", tab)
+    assert result == "ok"
+    surviving = [s for s in tab.sessions if s.alive]
+    assert len(surviving) == 0, (
+        f"`close t` must kill all 6 sessions in the tab; got {len(surviving)} surviving"
+    )
