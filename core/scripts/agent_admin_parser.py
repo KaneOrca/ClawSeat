@@ -410,7 +410,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_stop_eng = session_sub.add_parser("stop-engineer")
     session_stop_eng.add_argument("engineer")
     session_stop_eng.add_argument("--project")
-    session_stop_eng.add_argument("--keep-iterm-tab", action="store_true", help="Skip closing the iTerm tab before killing the tmux session.")
+    session_stop_eng.add_argument("--keep-iterm-tab", action="store_true", help="Skip closing the iTerm pane before killing the tmux session. (Flag name kept for backward compatibility; closes the matching pane only, not the entire tab — see RCA 2026-04-25.)")
     session_stop_eng.set_defaults(func=hooks.cmd_session_stop_engineer)
 
     session_start_project = session_sub.add_parser("start-project")

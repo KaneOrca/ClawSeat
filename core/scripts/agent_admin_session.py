@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -27,13 +28,17 @@ TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 
 # ── iTerm integration ─────────────────────────────────────────────────────────
 
+# AppleScript closes the single iTerm session/pane that owns the given tty —
+# NOT the entire tab.  Closing the tab nukes all sibling panes (the cartooner
+# 6-pane grid disappearance RCA, 2026-04-25).  `close s` targets just that
+# session; remaining panes in the same tab are untouched.
 _ITERM_CLOSE_SCRIPT_TEMPLATE = """\
 tell application "iTerm"
     repeat with w in windows
         repeat with t in tabs of w
             repeat with s in sessions of t
                 if tty of s is "{tty}" then
-                    close t
+                    close s
                     return "ok"
                 end if
             end repeat
@@ -61,11 +66,14 @@ def _get_tmux_tty(session_name: str) -> str | None:
     return None
 
 
-def _close_iterm_tab_by_tty(tty: str) -> dict:
-    """Close the iTerm tab owning the given tty via osascript.
+def _close_iterm_pane_by_tty(tty: str) -> dict:
+    """Close the iTerm pane (session) owning the given tty via osascript.
 
     Returns {"status": "ok"|"not_found"|"error", "detail": str|None}.
     Never raises — all errors are returned in the dict.
+
+    Closes only the matching split/pane, leaving sibling panes in the same
+    tab intact.  See AppleScript template comment for the cartooner RCA.
     """
     script = _ITERM_CLOSE_SCRIPT_TEMPLATE.format(tty=tty)
     try:
@@ -751,32 +759,53 @@ class SessionService:
         recover_script = _REPO_ROOT / "scripts" / "recover-grid.sh"
         if not recover_script.exists():
             return
+        # Append stdout+stderr to a durable log so ancestor / operator can
+        # diagnose silent recover-grid failures (RCA 2026-04-25).
+        log_path = real_user_home() / ".clawseat" / ".agent" / "task-watch" / "grid-recovery.log"
         try:
-            subprocess.run(
-                ["bash", str(recover_script), project],
-                check=False,
-                timeout=10,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as log_fh:
+                log_fh.write(
+                    f"\n=== {datetime.now(timezone.utc).isoformat()} "
+                    f"recover-grid {project} (after {session.session}) ===\n"
+                )
+                log_fh.flush()
+                result = subprocess.run(
+                    ["bash", str(recover_script), project],
+                    check=False,
+                    timeout=30,
+                    stdout=log_fh,
+                    stderr=subprocess.STDOUT,
+                )
+            if result.returncode != 0:
+                print(
+                    f"WARN: recover-grid failed (rc={result.returncode}); see {log_path}",
+                    file=sys.stderr,
+                )
         except Exception as exc:  # noqa: BLE001 silent-ok: hook must not fail start-engineer
-            print(f"warn: grid recovery hook after {session.session}: {exc}", file=sys.stderr)
+            print(f"warn: grid recovery hook after {session.session}: {exc} (log: {log_path})", file=sys.stderr)
 
-    def stop_engineer(self, session: Any, *, close_iterm_tab: bool = False) -> None:
-        if close_iterm_tab:
+    def stop_engineer(self, session: Any, *, close_iterm_pane: bool = False, **legacy_kwargs: Any) -> None:
+        # Backward-compat: callers (incl. agent_admin_commands.py) historically
+        # passed `close_iterm_tab=True`.  Accept both names; new name is correct.
+        if "close_iterm_tab" in legacy_kwargs:
+            close_iterm_pane = close_iterm_pane or bool(legacy_kwargs.pop("close_iterm_tab"))
+        if legacy_kwargs:
+            raise TypeError(f"stop_engineer got unexpected kwargs: {sorted(legacy_kwargs)}")
+        if close_iterm_pane:
             tty = _get_tmux_tty(session.session)
             if tty:
-                result = _close_iterm_tab_by_tty(tty)
+                result = _close_iterm_pane_by_tty(tty)
                 if result["status"] == "ok":
-                    print(f"iterm_tab_closed: tty={tty} session={session.session}")
+                    print(f"iterm_pane_closed: tty={tty} session={session.session}")
                 elif result["status"] == "not_found":
                     print(
-                        f"warn: iterm_tab_not_found: tty={tty} session={session.session}",
+                        f"warn: iterm_pane_not_found: tty={tty} session={session.session}",
                         file=sys.stderr,
                     )
                 else:
                     print(
-                        f"warn: iterm_tab_close_failed: tty={tty} session={session.session} detail={result['detail']}",
+                        f"warn: iterm_pane_close_failed: tty={tty} session={session.session} detail={result['detail']}",
                         file=sys.stderr,
                     )
         self._run_tmux_with_retry(

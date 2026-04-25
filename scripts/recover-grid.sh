@@ -40,10 +40,12 @@ if command -v osascript >/dev/null 2>&1; then
     echo "iTerm window '$WINDOW_TITLE' missing — invoking window open-grid ..."
     agent_admin_bin="$(cd "$(dirname "$0")/.." && pwd)/core/scripts/agent_admin.py"
     if [[ -f "$agent_admin_bin" ]]; then
-      python3 "$agent_admin_bin" window open-grid "$PROJECT" >/dev/null 2>&1 && {
+      # Surface stderr so failures are visible (RCA 2026-04-25 — silent failure
+      # masked the cartooner grid disappearance recovery attempt).
+      if python3 "$agent_admin_bin" window open-grid "$PROJECT" >/dev/null; then
         echo "recovered: opened new iTerm grid for $PROJECT"
         exit 0
-      }
+      fi
       echo "warn: agent_admin.py window open-grid failed; falling through to client cleanup" >&2
     else
       echo "warn: agent_admin.py not found at $agent_admin_bin; skipping window open" >&2
