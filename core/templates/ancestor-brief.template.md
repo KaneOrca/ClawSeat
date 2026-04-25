@@ -37,6 +37,23 @@
 3. 不要手动 `tmux attach -t ${PROJECT_NAME}-<seat>` 去“救”某个 pane；这会污染 `wait-for-seat.sh` 所在 pane，把它从 canonical re-attach loop 里拽出来。
 4. 真正需要人工恢复的是六宫格窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
 
+## Seat 失败诊断三步走（强制顺序）
+
+遇到 seat dead、pane 异常、长时间无响应、疑似认证失败、疑似 provider 断连时，先诊断，再决定是否 stop+start。强制顺序，不可跳：
+
+1. `tmux has-session -t '=<session>'` 检查 + `tmux capture-pane -t '=<session>:' -p | tail -10`，确认 seat 是真死，还是 tmux client 没 attach / pane 显示错位。
+2. `cat <runtime>/codex-home/log/codex-tui.log | tail -30` 看真实 error；Claude 看 `${AGENT_HOME}/Library/Logs/Claude/`，Gemini 看 `${AGENT_HOME}/.gemini/log/`。
+3. API tool 跑 `/v1/models` endpoint curl test；OAuth tool 先检查对应 OAuth status。
+4. 只有前 3 步都不指向已知问题，才 stop+start。
+
+也可一条命令出全图：
+
+```bash
+bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>
+```
+
+不许：凭印象 / 凭训练数据 / 凭单次表象（如 "401" 字面量）就跳 stop+start。
+
 ## Pane ↔ Seat 映射（强制理解）
 
 - 六宫格 pane 的身份以 `user.seat_id` 为准，不要靠 pane 显示名、滚动内容或你自己的视觉猜测判断。
@@ -435,9 +452,9 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 | 场景 | 命令 |
 |------|------|
-| 首次 spawn / 重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 首次 spawn / 诊断后重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
 | 切换 seat harness（claude→codex 等）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer <seat> --tool <claude\|codex\|gemini> --mode <oauth\|oauth_token\|api> --provider <provider>` |
-| 强制 reset 重启（stop+relaunch）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session stop-engineer <seat> --project ${PROJECT_NAME}` 然后 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 强制 reset 重启（stop+relaunch）| 先跑 `bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>`；确认前三步都不指向已知问题后，才 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session stop-engineer <seat> --project ${PROJECT_NAME}` 然后 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
 | 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session status --project ${PROJECT_NAME}` |
 | 检查单个 tmux session 是否存活 | `SEAT_SESSION="$(python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session-name <seat> --project ${PROJECT_NAME})"; tmux has-session -t "=${SEAT_SESSION}"` |
 | pane 重新回 canonical session | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window reseed-pane <seat> --project ${PROJECT_NAME}` |

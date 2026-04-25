@@ -137,7 +137,7 @@ patrol **默认手动触发**，Claude Code 不支持 `/`-前缀 slash token 作
 | # | 动作 | 备注 |
 |---|------|------|
 | P1 | 枚举 `seats_declared`，对每个 session 做 `tmux has-session` | 并发安全 |
-| P2 | 死的 seat 立刻重启；若 `seat_overrides.<role>` 与原运行不同，按新配置起并广播 config-drift-recovery 事件 | 新配置优先 |
+| P2 | dead / 异常 seat 先执行 §3.2 三步走诊断；只有前三步都不指向已知问题才 stop+start；若 `seat_overrides.<role>` 与原运行不同，按新配置起并广播 config-drift-recovery 事件 | 新配置优先，但诊断先于重启 |
 | P3 | 扫 `~/.agents/tasks/<project>/patrol/handoffs/` 新事件 | fingerprint diff |
 | P4 | 根据 `observability.feishu_events_whitelist` 转发事件 | Feishu 只是可选 transport |
 | P5 | 汇总 STATUS.md：alive seat 数、事件时间、uptime | 覆盖式写 |
@@ -148,6 +148,23 @@ patrol **默认手动触发**，Claude Code 不支持 `/`-前缀 slash token 作
 - 所有广播都必须是从巡检结果派生的摘要，而不是控制面命令。
 - Feishu 事件白名单之外的内容不发。
 - 如果 CLI-only mode，P4 仍可跑，但只写内部状态，不发群消息。
+
+### 3.2 Seat 失败诊断三步走（强制顺序）
+
+遇到 seat dead、pane 异常、长时间无响应、疑似认证失败、疑似 provider 断连时，先诊断，再决定是否 stop+start。强制顺序，不可跳：
+
+1. `tmux has-session -t '=<session>'` 检查 + `tmux capture-pane -t '=<session>:' -p | tail -10`，确认 seat 是真死，还是 tmux client 没 attach / pane 显示错位。
+2. `cat <runtime>/codex-home/log/codex-tui.log | tail -30` 看真实 error；Claude 看 `~/Library/Logs/Claude/`，Gemini 看 `~/.gemini/log/`。
+3. API tool 跑 `/v1/models` endpoint curl test；OAuth tool 先检查对应 OAuth status。
+4. 只有前 3 步都不指向已知问题，才 stop+start。
+
+也可一条命令出全图：
+
+```bash
+bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh <project> <seat>
+```
+
+不许：凭印象 / 凭训练数据 / 凭单次表象（如 "401" 字面量）就跳 stop+start。
 
 ## 3.5 Researcher mode（调研员能力 — Agent tool fan-out）
 
