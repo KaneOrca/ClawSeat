@@ -14,12 +14,18 @@ import agent_admin_window  # noqa: E402
 from agent_admin_commands import CommandHandlers, CommandHooks  # noqa: E402
 
 
-def _project(engineers: list[str], *, name: str = "spawn49") -> SimpleNamespace:
+def _project(
+    engineers: list[str],
+    *,
+    name: str = "spawn49",
+    template_name: str = "",
+) -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
         engineers=engineers,
         monitor_session=f"project-{name}-monitor",
         repo_root=str(_REPO),
+        template_name=template_name,
     )
 
 
@@ -78,6 +84,52 @@ def test_build_grid_payload_uses_project_roster_and_wait_for_seat_commands() -> 
         assert commands[seat] == f"bash {_REPO / 'scripts' / 'wait-for-seat.sh'} spawn49 {seat}"
 
 
+def test_build_workers_payload_minimal_3workers() -> None:
+    project = _project(
+        ["memory", "planner", "builder", "designer"],
+        template_name="clawseat-minimal",
+    )
+
+    payload = agent_admin_window.build_workers_payload(project)
+
+    assert payload["title"] == "clawseat-spawn49-workers"
+    assert [pane["label"] for pane in payload["panes"]] == ["planner", "builder", "designer"]
+    assert payload["recipe"] == [[0, True], [1, False]]
+    commands = {pane["label"]: pane["command"] for pane in payload["panes"]}
+    for seat in ("planner", "builder", "designer"):
+        assert commands[seat] == f"bash {_REPO / 'scripts' / 'wait-for-seat.sh'} spawn49 {seat}"
+
+
+def test_build_memories_payload_returns_tabs_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        agent_admin_window,
+        "_tmux_session_names",
+        lambda: ["install-memory", "foo-memory", "machine-memory-claude"],
+    )
+
+    payload = agent_admin_window.build_memories_payload(_project(["memory"]))
+
+    assert payload == {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [
+            {"name": "foo", "command": "tmux attach -t '=foo-memory'"},
+            {"name": "install", "command": "tmux attach -t '=install-memory'"},
+        ],
+        "ensure": True,
+    }
+
+
+def test_build_memories_payload_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        agent_admin_window,
+        "_tmux_session_names",
+        lambda: ["machine-memory-claude", "install-planner-claude"],
+    )
+
+    assert agent_admin_window.build_memories_payload(_project(["memory"])) is None
+
+
 def test_open_grid_recover_skips_driver_when_window_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(["ancestor", "planner"])
     focus_calls: list[str] = []
@@ -96,6 +148,73 @@ def test_open_grid_recover_skips_driver_when_window_exists(monkeypatch: pytest.M
     assert result["recovered"] is True
     assert focus_calls == ["clawseat-spawn49"]
     assert driver_calls == []
+
+
+def test_open_grid_window_minimal_calls_workers_and_memories(monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(
+        ["memory", "planner", "builder", "designer"],
+        template_name="clawseat-minimal",
+    )
+    payloads: list[dict] = []
+
+    monkeypatch.setattr(agent_admin_window, "iterm_window_exists", lambda title: False)
+    monkeypatch.setattr(agent_admin_window, "_tmux_session_names", lambda: ["spawn49-memory"])
+    monkeypatch.setattr(
+        agent_admin_window,
+        "run_iterm_panes_driver",
+        lambda payload: payloads.append(payload) or {"status": "ok", "window_id": payload["title"]},
+    )
+
+    result = agent_admin_window.open_grid_window(project, open_memory=True)
+
+    assert [payload["title"] for payload in payloads] == [
+        "clawseat-spawn49-workers",
+        "clawseat-memories",
+    ]
+    assert [pane["label"] for pane in payloads[0]["panes"]] == ["planner", "builder", "designer"]
+    assert payloads[1]["mode"] == "tabs"
+    assert result["memories"]["status"] == "ok"
+    assert result["memory"]["status"] == "skipped"
+
+
+def test_open_grid_window_default_keeps_v1(monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(["ancestor", "planner", "builder"], template_name="clawseat-default")
+    payloads: list[dict] = []
+
+    monkeypatch.setattr(agent_admin_window, "iterm_window_exists", lambda title: False)
+    monkeypatch.setattr(
+        agent_admin_window,
+        "run_iterm_panes_driver",
+        lambda payload: payloads.append(payload) or {"status": "ok", "window_id": payload["title"]},
+    )
+
+    result = agent_admin_window.open_grid_window(project)
+
+    assert [payload["title"] for payload in payloads] == ["clawseat-spawn49"]
+    assert [pane["label"] for pane in payloads[0]["panes"]] == ["ancestor", "planner", "builder"]
+    assert "memories" not in result
+    assert "memory" not in result
+
+
+def test_open_grid_window_unknown_template_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = _project(["ancestor", "planner"], template_name="custom-foo")
+    payloads: list[dict] = []
+
+    monkeypatch.setattr(agent_admin_window, "iterm_window_exists", lambda title: False)
+    monkeypatch.setattr(
+        agent_admin_window,
+        "run_iterm_panes_driver",
+        lambda payload: payloads.append(payload) or {"status": "ok", "window_id": payload["title"]},
+    )
+
+    result = agent_admin_window.open_grid_window(project)
+
+    assert result["recovered"] is False
+    assert [payload["title"] for payload in payloads] == ["clawseat-spawn49"]
+    assert "unknown template_name 'custom-foo'" in capsys.readouterr().err
 
 
 def test_open_grid_open_memory_emits_second_payload(monkeypatch: pytest.MonkeyPatch) -> None:

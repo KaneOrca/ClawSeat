@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -30,6 +31,14 @@ _ITERM_PANES_DRIVER = Path(__file__).resolve().with_name("iterm_panes_driver.py"
 _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
 _MEMORY_WINDOW_TITLE = "machine-memory-claude"
+_MEMORIES_WINDOW_TITLE = "clawseat-memories"
+_MAX_ITERM_PANES = 8
+_V1_GRID_TEMPLATES = frozenset({
+    "",
+    "clawseat-default",
+    "clawseat-engineering",
+    "clawseat-creative",
+})
 
 # Per-project primary seat ids — the seat that is the user's first dialog
 # entry (orchestrator + memory + research). v1 templates name it "ancestor";
@@ -246,7 +255,153 @@ def build_grid_payload(project: Any, *, wait_for_seat_script: Path | None = None
     return {"title": f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}", "panes": panes}
 
 
+def _worker_attach_pane(
+    *,
+    project_name: str,
+    seat_id: str,
+    wait_script: Path,
+) -> dict[str, str]:
+    return {
+        "label": seat_id,
+        "command": (
+            "bash "
+            + shlex.quote(str(wait_script))
+            + " "
+            + shlex.quote(project_name)
+            + " "
+            + shlex.quote(seat_id)
+        ),
+    }
+
+
+def _workers_recipe(n_total: int) -> list[list[object]]:
+    if n_total < 1:
+        return []
+    n_right = n_total - 1
+    if n_right == 0:
+        return []
+    recipe: list[list[object]] = [[0, True]]
+    if n_right == 1:
+        return recipe
+    if n_right == 2:
+        recipe.append([1, False])
+        return recipe
+
+    cols = (n_right + 1) // 2
+    for col in range(1, cols):
+        recipe.append([col, True])
+    cols_with_bottom = n_right - cols
+    for col in range(cols_with_bottom):
+        recipe.append([col + 1, False])
+    return recipe
+
+
+def _right_worker_order(n_right: int) -> list[int]:
+    if n_right <= 0:
+        return []
+    if n_right == 1:
+        return [0]
+    if n_right == 2:
+        return [0, 1]
+
+    cols = (n_right + 1) // 2
+    ordering: list[int] = []
+    for col in range(cols):
+        user_idx = col * 2
+        if user_idx < n_right:
+            ordering.append(user_idx)
+    for col in range(cols):
+        user_idx = col * 2 + 1
+        if user_idx < n_right:
+            ordering.append(user_idx)
+    return ordering
+
+
+def build_workers_payload(project: Any, *, wait_for_seat_script: Path | None = None) -> dict[str, Any]:
+    wait_script = wait_for_seat_script or _WAIT_FOR_SEAT_SCRIPT
+    workers = _project_grid_seat_ids(project)
+    if "planner" in workers:
+        workers = ["planner", *[seat_id for seat_id in workers if seat_id != "planner"]]
+    if not workers:
+        raise AgentAdminWindowError(f"project {project.name} has no worker seats for v2 workers window")
+    if len(workers) > _MAX_ITERM_PANES:
+        raise AgentAdminWindowError(
+            f"project {project.name} has {len(workers)} worker seats; "
+            f"workers window supports at most {_MAX_ITERM_PANES} panes"
+        )
+
+    main_worker = workers[0]
+    right_workers = workers[1:]
+    panes = [
+        _worker_attach_pane(
+            project_name=project.name,
+            seat_id=main_worker,
+            wait_script=wait_script,
+        )
+    ]
+    for worker_idx in _right_worker_order(len(right_workers)):
+        panes.append(
+            _worker_attach_pane(
+                project_name=project.name,
+                seat_id=right_workers[worker_idx],
+                wait_script=wait_script,
+            )
+        )
+    return {
+        "title": f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers",
+        "panes": panes,
+        "recipe": _workers_recipe(len(panes)),
+    }
+
+
+def _tmux_session_names() -> list[str]:
+    env = os.environ.copy()
+    env.pop("TMUX", None)
+    result = subprocess.run(
+        ["tmux", "ls", "-F", "#{session_name}"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def build_memories_payload(project: Any) -> dict[str, Any] | None:
+    del project  # The shared memories window is built from all live project memory sessions.
+    memory_sessions = sorted(
+        session
+        for session in _tmux_session_names()
+        if session.endswith("-memory") and session != _MEMORY_WINDOW_TITLE
+    )
+    if not memory_sessions:
+        return None
+    return {
+        "mode": "tabs",
+        "title": _MEMORIES_WINDOW_TITLE,
+        "tabs": [
+            {
+                "name": session[: -len("-memory")],
+                "command": f"tmux attach -t '={session}'",
+            }
+            for session in memory_sessions
+        ],
+        "ensure": True,
+    }
+
+
+def ensure_memories_pane(project: Any) -> dict[str, Any]:
+    payload = build_memories_payload(project)
+    if payload is None:
+        return {"status": "skipped", "reason": "no project memory tmux sessions"}
+    return run_iterm_panes_driver(payload)
+
+
 def build_memory_payload() -> dict[str, Any]:
+    """Return the v1-only global machine memory window payload."""
     return {
         "title": _MEMORY_WINDOW_TITLE,
         "panes": [
@@ -349,6 +504,7 @@ def focus_iterm_window(title: str) -> None:
 
 
 def open_memory_window() -> dict[str, Any]:
+    """Open the v1-only global machine memory window."""
     if not tmux_has_session(_MEMORY_WINDOW_TITLE):
         print(
             f"agent_admin_window: memory tmux session missing for {_MEMORY_WINDOW_TITLE}; "
@@ -369,6 +525,29 @@ def open_grid_window(
     recover: bool = False,
     open_memory: bool = False,
 ) -> dict[str, Any]:
+    template_name = str(getattr(project, "template_name", "") or "")
+    if template_name == "clawseat-minimal":
+        window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers"
+        if recover and iterm_window_exists(window_title):
+            focus_iterm_window(window_title)
+            result: dict[str, Any] = {"status": "ok", "window_id": "", "recovered": True}
+        else:
+            result = run_iterm_panes_driver(build_workers_payload(project))
+            result["recovered"] = False
+        result["memories"] = ensure_memories_pane(project)
+        result["memory"] = {
+            "status": "skipped",
+            "reason": "v2 minimal uses memories tabs, not machine-memory-claude",
+        }
+        return result
+
+    if template_name not in _V1_GRID_TEMPLATES:
+        print(
+            f"agent_admin_window: unknown template_name {template_name!r}; "
+            "falling back to v1 grid window",
+            file=sys.stderr,
+        )
+
     window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}"
     if recover and iterm_window_exists(window_title):
         focus_iterm_window(window_title)
