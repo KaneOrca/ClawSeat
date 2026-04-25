@@ -369,7 +369,7 @@ prompt_kind_first_flow() {
 
   printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
   printf '\n选择项目类型 / Choose project mode:\n' >&2
-  printf '  1) 新手 (clawseat-minimal     — 4 seat 全 OAuth 多模型: memory + planner + designer + reviewer)  [default]\n' >&2
+  printf '  1) 新手 (clawseat-minimal     — 4 seat 全 OAuth 多模型: memory + planner + builder + designer)  [default]\n' >&2
   printf '  2) 专家 (clawseat-engineering — 6 seat 工程级: ancestor + planner + builder + reviewer + qa + designer)\n' >&2
 
   local _kind=""
