@@ -63,6 +63,14 @@ tmux kill-session -t install-ancestor
 
 **修复**: banner 内的 `install-ancestor` 全替换为 `${PROJECT}-${PRIMARY_SEAT_ID}` 模板变量
 
+**追加 (2026-04-26 Package A audit)**：planner 跑 grep 时发现更多同类 stale，Package A 有意超出 TODO scope 未动；合并到 #3 一起修：
+- `scripts/install.sh` L1305, L1338, L1351, L1479, L1505 (operator-guide message strings)
+- `scripts/launch-grid.sh:27` — v1 5-seat `SEATS=(ancestor planner builder reviewer qa designer)`
+- `scripts/launch_ancestor.sh:149` — v1 ancestor launcher
+- `core/launchers/agent-launcher.sh:683` — comment
+- `core/scripts/agent_admin_session.py:683` — comment
+均为非运行时关键路径，不阻塞功能，批次 2 处理。
+
 **Owner**: builder-codex
 
 ---
@@ -218,7 +226,62 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 
 ---
 
-### #13 (预留新 issue 编号)
+### #13 v2 split topology 漂移 — 5 个偏离点 — 🟠 HIGH
+
+**operator 实证 (2026-04-26 03:00)**: 跑 `recover-grid.sh install` 后, install-memory 被双 attach (出现在 v1 风格 `clawseat-install` 单窗 + v2 风格 `clawseat-memories` 双窗)。
+
+**根因**: v2 双窗逻辑只在 install.sh shell 函数里 (workers_payload/memories_payload), 没下沉到 Python `agent_admin_window` 模块。任何绕过 install.sh main() 的调用方都回到 v1 单窗。
+
+**5 个偏离点**:
+
+| # | 位置 | 问题 |
+|---|------|------|
+| 漂移 1 | `core/scripts/agent_admin_window.py:215-256` `build_grid_payload()` | 只懂 v1 单窗 (panes[0]=primary seat, panes[N+1]=machine-memory-claude); 没有 v2 split 选项 |
+| 漂移 2 | `core/scripts/agent_admin_window.py:366` `open_grid_window()` | 不区分模板, 永远调 build_grid_payload |
+| 漂移 3 | `scripts/recover-grid.sh:65` | 通过 `agent_admin.py window open-grid` 间接落入漂移 1+2 |
+| 漂移 4 | 缺少 Python API `open_workers_window()` + `ensure_memories_pane()` | v2 双窗逻辑只在 install.sh, 其他调用方没法复用 |
+| 漂移 5 | `agent_admin_window.py:254-255` 把 v1 `machine-memory-claude` 加进 grid | 与 v2 "删除全局 memory seat" 矛盾, 应该不加 |
+
+**统一修复策略**:
+
+1. 把 install.sh 的 `workers_payload()` + `memories_payload()` 逻辑**下沉到 Python**:
+   - 新增 `agent_admin_window.build_workers_payload(project)` (planner main + N-1 workers grid, recipe 含 PRIMARY_SEAT_ID-aware 跳过 primary seat)
+   - 新增 `agent_admin_window.build_memories_payload()` (扫所有 `<project>-memory` tmux session 排 grid_for_n)
+   - 删除 `build_grid_payload()` 里的 v1 行为 OR 加 `template_kind` 参数分支
+
+2. 改 `open_grid_window(project)` 入口:
+   - 读 project 的 template_name (从 `~/.agents/projects/<project>/project.toml`)
+   - clawseat-minimal → 调 `build_workers_payload + ensure_memories_pane` (v2 双窗)
+   - clawseat-{default,engineering,creative} → 保留 `build_grid_payload` (v1 单窗)
+
+3. 新增 `agent_admin_window.ensure_memories_pane(project)` 协议:
+   - 检测 `clawseat-memories` 窗口存在? 不存在则创建带本项目 1 pane
+   - 已存在但本项目 pane 不在? append pane (split or new tab 看 #4 决议)
+   - 已存在且 pane 已在? no-op
+
+4. `recover-grid.sh` 不需要改 (调 open-grid 自动走对路径)
+
+5. install.sh main() clawseat-minimal 分支可以改用 Python helper (代码复用)
+
+**追加修复**:
+- 删除 `agent_admin_window.py:254-255` 把 machine-memory-claude 加进 grid 的代码 (v2 没这个)
+
+**Owner**: builder-codex (实施) + planner-claude (review API 设计)
+
+**关联**:
+- 跟 #4 (memories tabs) 一起做, ensure_memories_pane 实现要支持 tabs 模式
+- 跟 #11 (reseed-pane AppleScript) 不冲突, AppleScript 用法分开
+
+**验收**:
+- `bash scripts/recover-grid.sh install` 后: clawseat-install 窗口**不存在**; install-memory **只 attach 一次** (在 clawseat-memories); clawseat-install-workers 3-pane (planner + builder + designer)
+- `agent_admin window open-grid testbed` 在新项目上同样产出双窗
+- v1 模板 (engineering/default) 仍能正常 open-grid 单窗
+
+---
+
+### #14 (预留新 issue 编号)
+
+### #14 (预留新 issue 编号)
 
 ---
 
@@ -236,6 +299,7 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 - #5 brief session check 修复
 - #11 reseed-pane iterm2 API send_text 失效（改 AppleScript 或加 activate）
 - #12 recover-grid.sh + 辅助脚本 PRIMARY_SEAT_ID 重构漏改
+- #13 agent_admin window open-grid 仍用 v1 单窗 (operator 实证: recover-grid.sh 跑出 v1 拓扑)
 
 ### 批次 2（批次 1 验收通过后）— 🟡
 
@@ -270,5 +334,9 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 1. iTerm clawseat-install-workers 创建时 planner pane 没启动 wait-for-seat（builder/designer 启动了，planner 漏了）→ 已建为 #10 BLOCKER
 2. agent_admin window reseed-pane 走 iterm2 API 路径有 bug：返回成功但 send_text 序列没真正写入空闲 zsh shell。直接用 iTerm AppleScript write text 才生效 → 已建为 #11 HIGH
 3. 这个 bug + 所有 recover-grid.sh / grid-recovery 路径硬编码 install-ancestor 是 v2 minimal 的两个已知 stale 点 → 已建为 #12 HIGH
+
+### 2026-04-26 03:00 — operator 让 ancestor 跑 recover-grid.sh install 救回 workers 视图
+
+**实证发现**: recover-grid.sh + agent_admin window open-grid 走 v1 grid_payload 单窗口路径，与 install.sh main() 已实现的 v2 双窗口拓扑不一致。结果 install-memory 被 attach 了 2 次（v1 风格 clawseat-install + v2 风格 clawseat-memories）→ 已建为 #13 HIGH
 
 ---
