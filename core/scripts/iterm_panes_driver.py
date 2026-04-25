@@ -111,6 +111,11 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, dict[str, An
     """Return (validated_payload, error). Exactly one is non-None."""
     if not isinstance(payload, dict):
         return None, {"status": "error", "reason": "payload must be a JSON object"}
+    mode = payload.get("mode", "panes")
+    if mode == "tabs":
+        return _validate_tabs_payload(payload)
+    if mode != "panes":
+        return None, {"status": "error", "reason": f"unknown mode: {mode!r}"}
     panes = payload.get("panes")
     if not isinstance(panes, list):
         return None, {"status": "error", "reason": "panes must be a list"}
@@ -171,6 +176,54 @@ def _validate_payload(payload: Any) -> tuple[dict[str, Any] | None, dict[str, An
             cleaned_recipe.append((parent_idx, vertical))
         return {"title": title, "panes": cleaned, "send_delay_ms": int(delay), "recipe": cleaned_recipe}, None
     return {"title": title, "panes": cleaned, "send_delay_ms": int(delay)}, None
+
+
+def _validate_tabs_payload(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    title = payload.get("title")
+    if not isinstance(title, str):
+        return None, {"status": "error", "reason": "title must be string for tabs mode"}
+    title = "".join(c for c in title if c.isprintable())[:128]
+    if not title:
+        return None, {"status": "error", "reason": "title must not be empty for tabs mode"}
+
+    tabs = payload.get("tabs")
+    if not isinstance(tabs, list):
+        return None, {"status": "error", "reason": "tabs must be a list"}
+    if not tabs:
+        return None, {"status": "error", "reason": "tabs list is empty"}
+
+    cleaned: list[dict[str, str]] = []
+    for i, tab in enumerate(tabs):
+        if not isinstance(tab, dict):
+            return None, {"status": "error", "reason": f"tab[{i}] must be an object"}
+        name = tab.get("name")
+        command = tab.get("command")
+        if not isinstance(name, str):
+            return None, {"status": "error", "reason": f"tab[{i}].name must be string"}
+        if not name or any(not c.isprintable() for c in name) or len(name) > 64:
+            return None, {
+                "status": "error",
+                "reason": f"tab[{i}].name must be printable and <=64 chars",
+            }
+        if not isinstance(command, str):
+            return None, {"status": "error", "reason": f"tab[{i}].command must be string"}
+        cleaned.append({"name": name, "command": command})
+
+    ensure = payload.get("ensure", True)
+    if not isinstance(ensure, bool):
+        return None, {"status": "error", "reason": "ensure must be bool when provided"}
+
+    delay = payload.get("send_delay_ms", DEFAULT_SEND_DELAY_MS)
+    if not isinstance(delay, (int, float)) or delay < 0 or delay > 5000:
+        delay = DEFAULT_SEND_DELAY_MS
+
+    return {
+        "mode": "tabs",
+        "title": title,
+        "tabs": cleaned,
+        "ensure": ensure,
+        "send_delay_ms": int(delay),
+    }, None
 
 
 async def _safe_close_window(window: Any) -> None:
@@ -289,6 +342,194 @@ async def _build_layout(connection: Any, payload: dict[str, Any]) -> dict[str, A
         return {"status": "error", "reason": f"unexpected: {exc!r}"}
 
 
+async def _window_title(window: Any) -> str:
+    getter = getattr(window, "async_get_variable", None)
+    if getter is not None:
+        try:
+            value = await getter("user.window_title")
+        except Exception:  # noqa: BLE001 best-effort marker lookup
+            value = ""
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    for attr in ("title", "name"):
+        value = getattr(window, attr, "")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+async def _tab_name(tab: Any) -> str:
+    session = getattr(tab, "current_session", None)
+    if session is not None:
+        getter = getattr(session, "async_get_variable", None)
+        if getter is not None:
+            try:
+                value = await getter("user.tab_name")
+            except Exception:  # noqa: BLE001 best-effort metadata lookup
+                value = ""
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    invoker = getattr(tab, "async_invoke_function", None)
+    if invoker is not None:
+        try:
+            value = await invoker("iterm2.get_tab_title()")
+        except Exception:  # noqa: BLE001 older iTerm SDKs may not support this
+            value = ""
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    name = getattr(session, "name", "") if session is not None else ""
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return ""
+
+
+async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None:
+    session = getattr(tab, "current_session", None)
+    if session is None:
+        raise RuntimeError(f"tab {spec['name']!r} has no current session")
+
+    tab_setter = getattr(tab, "async_set_title", None)
+    if tab_setter is not None:
+        try:
+            await tab_setter(spec["name"])
+        except Exception:  # noqa: BLE001 tab title is cosmetic; marker below is durable
+            pass
+
+    try:
+        await session.async_set_name(spec["name"])
+    except Exception:  # noqa: BLE001 title is cosmetic; user.tab_name is the durable marker
+        pass
+
+    setter = getattr(session, "async_set_variable", None)
+    if setter is not None:
+        try:
+            await setter("user.tab_name", spec["name"])
+        except Exception:  # noqa: BLE001 metadata is best-effort
+            pass
+
+    if delay_s > 0:
+        await asyncio.sleep(delay_s)
+
+    command = spec["command"]
+    if command:
+        try:
+            await session.async_send_text(command + "\n")
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"warn: send_text failed for tab {spec['name']!r}: {exc!r}",
+                file=sys.stderr,
+            )
+
+
+async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    title = payload["title"]
+    tabs = payload["tabs"]
+    ensure = payload["ensure"]
+    delay_s = payload["send_delay_ms"] / 1000.0
+
+    try:
+        app = await iterm2.async_get_app(connection)
+    except Exception as exc:  # noqa: BLE001 broad catch is correct: we want to surface
+        return {"status": "error", "reason": f"async_get_app failed: {exc!r}"}
+
+    matching_windows = []
+    for app_window in getattr(app, "windows", []) or []:
+        if await _window_title(app_window) == title:
+            matching_windows.append(app_window)
+    if len(matching_windows) > 1:
+        print(
+            f"warn: multiple iTerm windows named {title!r}; using the first",
+            file=sys.stderr,
+        )
+
+    window = matching_windows[0] if ensure and matching_windows else None
+    created_window = window is None
+    if window is None:
+        try:
+            window = await iterm2.Window.async_create(connection)
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error", "reason": f"async_create window failed: {exc!r}"}
+        if window is None:
+            return {"status": "error", "reason": "iTerm refused to create a window"}
+        try:
+            await window.async_set_title(title)
+        except Exception:  # noqa: BLE001 silent-ok: title is cosmetic, older iTerm may lack it
+            pass
+        setter = getattr(window, "async_set_variable", None)
+        if setter is not None:
+            try:
+                await setter("user.window_title", title)
+            except Exception:  # noqa: BLE001 marker is best-effort
+                pass
+
+    existing_names: set[str] = set()
+    if ensure and not created_window:
+        for tab in getattr(window, "tabs", []) or []:
+            name = await _tab_name(tab)
+            if name:
+                existing_names.add(name)
+
+    tabs_created = 0
+    tabs_skipped = 0
+
+    try:
+        for spec in tabs:
+            if ensure and spec["name"] in existing_names:
+                tabs_skipped += 1
+                continue
+
+            if created_window and tabs_created == 0 and getattr(window, "current_tab", None) is not None:
+                tab = window.current_tab
+            else:
+                try:
+                    tab = await window.async_create_tab()
+                except Exception as exc:  # noqa: BLE001
+                    if created_window:
+                        await _safe_close_window(window)
+                    return {
+                        "status": "error",
+                        "reason": f"create-tab for {spec['name']!r} failed: {exc!r}",
+                        "tabs_created": tabs_created,
+                        "tabs_skipped": tabs_skipped,
+                        "window_id": getattr(window, "window_id", ""),
+                    }
+                if tab is None:
+                    if created_window:
+                        await _safe_close_window(window)
+                    return {
+                        "status": "error",
+                        "reason": f"create-tab for {spec['name']!r} returned None",
+                        "tabs_created": tabs_created,
+                        "tabs_skipped": tabs_skipped,
+                        "window_id": getattr(window, "window_id", ""),
+                    }
+
+            await _configure_tab(tab, spec, delay_s)
+            existing_names.add(spec["name"])
+            tabs_created += 1
+    except Exception as exc:  # noqa: BLE001 - new windows should not be left half-built
+        if created_window:
+            await _safe_close_window(window)
+        return {
+            "status": "error",
+            "reason": f"unexpected: {exc!r}",
+            "tabs_created": tabs_created,
+            "tabs_skipped": tabs_skipped,
+            "window_id": getattr(window, "window_id", ""),
+        }
+
+    return {
+        "status": "ok",
+        "mode": "tabs",
+        "tabs_created": tabs_created,
+        "tabs_skipped": tabs_skipped,
+        "window_id": getattr(window, "window_id", ""),
+    }
+
+
 async def _main(connection):
     raw = sys.stdin.read()
     try:
@@ -302,8 +543,9 @@ async def _main(connection):
         return
     assert validated is not None  # for type checkers
     try:
+        build = _build_tabs_layout if validated.get("mode") == "tabs" else _build_layout
         result = await asyncio.wait_for(
-            _build_layout(connection, validated),
+            build(connection, validated),
             timeout=BUILD_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:

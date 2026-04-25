@@ -1909,8 +1909,7 @@ print(json.dumps({
 PY
 }
 
-# v2 memories_payload: shared "clawseat-memories" window with all known project memory tmux sessions
-# Recipe uses grid_for_n formula (max 2 rows, col-major fill) from RFC-001 §3.1.
+# v2 memories_payload: shared "clawseat-memories" window with one tab per project memory tmux session.
 memories_payload() {
   "$PYTHON_BIN" - <<'PY'
 import json
@@ -1934,54 +1933,19 @@ if n == 0:
     print(json.dumps({"status": "skip", "reason": "no project memory sessions found"}))
     raise SystemExit(0)
 
-# grid_for_n + col-major fill (per RFC §3.1)
-def grid_for_n(k: int) -> tuple:
-    if k == 1: return (1, 1)
-    if k == 2: return (1, 2)
-    return ((k + 1) // 2, 2)
-
-cols, rows = grid_for_n(n)
-
-# Recipe: build top row by vertical splits, then horizontal splits per col
-recipe: list = []
-if n == 1:
-    pass  # no splits
-elif n == 2:
-    recipe = [[0, False]]  # split horizontally (top + bottom)
-else:
-    # Build top row: split pane 0 vertically (cols-1) times
-    for col in range(1, cols):
-        recipe.append([col - 1, True])
-    # Horizontal splits per col (cols with bottom = n - cols)
-    cols_with_bottom = n - cols  # number of cols that have a bottom pane
-    for col in range(cols_with_bottom):
-        recipe.append([col, False])
-
-# Driver order = top row (left-to-right), then bottom row (left-to-right)
-# User intent (col-major): col0_top, col0_bot, col1_top, col1_bot, ...
-# Map driver_pane_idx -> user_idx
-ordering = []
-for col in range(cols):
-    user_idx = col * 2  # top
-    if user_idx < n:
-        ordering.append(user_idx)
-for col in range(cols):
-    user_idx = col * 2 + 1  # bottom
-    if user_idx < n:
-        ordering.append(user_idx)
-
-panes = []
-for driver_idx, user_idx in enumerate(ordering):
-    sess = memory_sessions[user_idx]
-    panes.append({
-        "label": sess,
+tabs = []
+for sess in memory_sessions:
+    project = sess[:-len("-memory")]
+    tabs.append({
+        "name": project,
         "command": f"tmux attach -t '={sess}'",
     })
 
 print(json.dumps({
+    "mode": "tabs",
     "title": "clawseat-memories",
-    "panes": panes,
-    "recipe": recipe,
+    "tabs": tabs,
+    "ensure": True,
 }, ensure_ascii=False))
 PY
 }
@@ -2009,9 +1973,7 @@ main() {
     note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
     open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
 
-    note "Step 7b: rebuild shared memories window (all <project>-memory panes)"
-    # Close existing memories window if any (we rebuild from scratch with current N)
-    osascript -e 'tell application "iTerm2" to close (every window whose name is "clawseat-memories")' 2>/dev/null || true
+    note "Step 7b: ensure shared memories window (tab per project)"
     local _memories_payload
     _memories_payload="$(memories_payload)"
     if [[ -n "$_memories_payload" && "$_memories_payload" != *'"status": "skip"'* ]]; then
