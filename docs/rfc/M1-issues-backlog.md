@@ -357,7 +357,54 @@ if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
 
 ---
 
-### #17 (预留新 issue 编号)
+### #17 install.sh Step 9.5 auto-send 不可靠 — 改 confirm-then-dispatch UX — 🟠 HIGH
+
+**症状（2026-04-26 04:36 arena 实证）**:
+- arena 安装期间 `auto_send_phase_a_kickoff` 卡 2:34，max_polls 走完都没成功 paste
+- 根因可能：arena-memory 用 host oauth 复用 host login 直接 ready，不经过 OAuth 弹窗→关闭流程；send-and-verify 的 ready 检测画面不匹配
+- arena-memory pane 长时间停在 Claude Code start screen（"Welcome back Yu!" + 空 ❯）
+- 等 max_polls 到 fallback 到 banner 也得 3min，UX 差
+
+**operator 提案（2026-04-26 04:38）**:
+> 移除 auto-send 的逻辑，等用户确认项目-memory 就绪；由负责安装的 agent（install-memory）发送同时告诉用户如果失败可以手动复制粘贴 prompt
+
+**修复设计**:
+1. 删除 install.sh `auto_send_phase_a_kickoff()` + Step 9.5 整段
+2. 改成：install.sh 跑完 Step 9（focus pane）后**直接退出**，把 kickoff prompt 写到 `~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt`
+3. install.sh 末尾 banner 给 operator 3 个明确选项:
+   ```
+   ✔ Install complete. <project>-memory pane is ready.
+   To start Phase-A, choose one:
+     A) Existing install-memory will dispatch kickoff to <project>-memory:
+        bash <path>/send-and-verify.sh --project <project> <project>-memory \
+          "$(cat ~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt)"
+     B) Manual paste — open <project>-memory pane, copy the prompt from:
+        cat ~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt
+        and paste into the Claude Code prompt
+     C) install-memory dispatches automatically:
+        say "dispatch arena kickoff" to install-memory in chat
+   ```
+4. 临时手动验证（arena 已用此模式）:
+   ```bash
+   bash send-and-verify.sh --project arena arena-memory "<kickoff text>"
+   ```
+
+**Owner**: builder-codex（删 auto_send + 改 banner） + memory（更新 brief 让新 memory 知道自己是被外部 dispatch 启动的）
+**批次**: batch 2 后续（Package E 可顺手做，operator 拍）
+
+**验收**:
+- 新项目 install 完不再有 9.5 卡死 → install.sh 退出 ≤ 60s
+- operator 看到清晰的 3 选项 banner
+- 选项 A 通过 send-and-verify 一行即发
+- 选项 B 真的能 cat 出可贴的纯文本 prompt（无 ANSI / 编码问题）
+
+**关联**:
+- 这个修法**取代** #2（auto_send 72s→180s 不再相关，整段删了）— #2 可标 superseded by #17
+- 跟 #1 (brief render dynamic) 配合：brief 里描述 spawn worker 的 phase 不变，只是触发方式变 user-initiated
+
+---
+
+### #18 (预留新 issue 编号)
 
 ---
 
