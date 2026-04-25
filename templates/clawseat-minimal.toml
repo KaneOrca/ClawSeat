@@ -23,13 +23,22 @@ description = "v2 self-contained 4-seat project: memory orchestrates from dedica
 # Two iTerm windows per project. Memory gets its own window (user's primary
 # conversation surface). Workers share a 3-pane grid window.
 
+#
+# Per RFC-001 §3 (locked 2026-04-26):
+# - memory pane lives in the GLOBAL "clawseat-memories" window (shared across all projects)
+# - workers (planner + 3 right-side workers) live in per-project "clawseat-<project>-workers"
+# - planner is "main" in workers window: occupies left 50%, others fill right side
+#   using grid_for_n() formula (max 2 rows, expand cols, col-major fill order)
+
 [window_layout]
-memory_window_title  = "{PROJECT}-memory"      # 独立窗口, 1 pane
-workers_window_title = "{PROJECT}-workers"     # 独立窗口, 3 panes
+shared_memories_window_title = "clawseat-memories"            # 全局窗口, 所有项目 memory 在这
+workers_window_title         = "clawseat-{PROJECT}-workers"   # 每项目独立 workers 窗口
 
 [window_layout.workers_grid]
-layout = "tile-3"   # planner top-left | builder top-right | designer bottom-full
-panes = ["planner", "builder", "designer"]
+left_main_seat   = "planner"
+left_main_width  = "50%"
+right_seats      = ["builder", "designer"]   # 用 grid_for_n(N_right) 排列
+right_fill_order = "col-major"               # 先填左列上→下，再下一列
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 

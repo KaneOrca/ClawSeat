@@ -78,23 +78,130 @@ Key insight: **Use each LLM for its strength**. Claude reads/judges. Codex write
 
 ## 3. iTerm Window Topology (multi-project)
 
-```
-        ┌──────────────────────┐    ┌──────────────────────┐
-对话窗口 │  install-memory      │    │  cartooner-memory    │
-        │  ❯ 第一入口          │    │  ❯ 第一入口          │
-        └──────────────────────┘    └──────────────────────┘
+**两类窗口，N 项目 = 1 memories 窗口 + N workers 窗口**：
 
-工人窗口 ┌──────────────────────┐    ┌──────────────────────┐
-        │  install-workers     │    │  cartooner-workers   │
-        │  ┌────────┬────────┐ │    │  ┌────────┬────────┐ │
-        │  │planner │builder │ │    │  │planner │builder │ │
-        │  ├────────┴────────┤ │    │  ├────────┴────────┤ │
-        │  │     designer    │ │    │  │     designer    │ │
-        │  └─────────────────┘ │    │  └─────────────────┘ │
-        └──────────────────────┘    └──────────────────────┘
+```
+窗口 1: clawseat-memories  (全局共享, 所有项目的 memory 都在这)
+       ┌────────────────────────────────────────┐
+       │  install-memory                        │
+       │  ❯ 第一入口                            │
+       │                                        │
+       │                                        │
+       │                                        │
+       │                                        │
+       └────────────────────────────────────────┘
+       
+窗口 2-N: clawseat-<project>-workers  (每个项目独立)
+       ┌──────────────────┬─────────────────────┐
+       │                  │     builder-codex   │
+       │                  │                     │
+       │ planner-claude   ├─────────────────────┤
+       │ (main 50%)       │     designer-gemini │
+       │                  │                     │
+       └──────────────────┴─────────────────────┘
 ```
 
-每加一个项目 = +2 个 iTerm window (1 memory + 1 workers grid)。
+### 3.1 通用栅格公式（max 2 rows，cols expand）
+
+```python
+def grid_for_n(n: int) -> tuple[int, int]:
+    """Returns (cols, rows). Hard cap: max 2 rows. Expand cols only."""
+    if n <= 0: return (0, 0)
+    if n == 1: return (1, 1)
+    if n == 2: return (1, 2)               # 单列垂直堆叠
+    return ((n + 1) // 2, 2)               # n>=3: lock 2 rows, ceil(n/2) cols
+```
+
+| n | cols × rows | 备注 |
+|---|-------------|------|
+| 1 | 1×1 | 满屏 |
+| 2 | 1×2 | 单列垂直堆叠 |
+| 3 | 2×2 (1 empty) | 开始 expand 列 |
+| 4 | 2×2 | 满 |
+| 5 | 3×2 (1 empty) | |
+| 6 | 3×2 | 满 |
+| 7 | 4×2 (1 empty) | |
+| 8 | 4×2 | 满 |
+| ≥9 | ceil(n/2) × 2 | 警告 + 建议 tabs/拆窗 |
+
+### 3.2 Memories 窗口（所有项目 memory 共用）
+
+直接套用通用公式：
+
+```
+N=1                         N=2                         N=3
+┌──────────────────────┐    ┌──────────────────────┐    ┌──────────┬───────────┐
+│  install-memory      │    │  install-memory      │    │ install- │ cartooner-│
+│                      │    ├──────────────────────┤    │ memory   │ memory    │
+│                      │    │  cartooner-memory    │    ├──────────┤           │
+└──────────────────────┘    └──────────────────────┘    │  mor-    │ (empty)   │
+                                                        │  memory  │           │
+                                                        └──────────┴───────────┘
+
+N=4                                         N=6
+┌──────────┬───────────┐                    ┌────────┬────────┬─────┐
+│ install- │ cartooner-│                    │   m1   │   m2   │ m3  │
+│ memory   │ memory    │                    ├────────┼────────┼─────┤
+├──────────┼───────────┤                    │   m4   │   m5   │ m6  │
+│  mor-    │   m4      │                    └────────┴────────┴─────┘
+│  memory  │           │
+└──────────┴───────────┘
+```
+
+填充顺序：col-major（先填左列上→下，再填中列上→下，再填右列上→下）。
+
+新项目 install 时**重排整窗**（teardown old window + create fresh with N+1 panes）。tmux session 持续运行所以无对话历史丢失。
+
+### 3.3 Workers 窗口（planner main + 右侧公式化）
+
+planner 永远占左侧 50%，右侧用通用公式排剩下 N-1 个 worker：
+
+```
+N_total=2 (planner + 1)             N_total=3 (planner + 2 workers; v2 minimal)
+┌──────────────┬──────────────┐     ┌──────────────┬──────────────┐
+│              │              │     │              │   builder    │
+│   planner    │   builder    │     │   planner    ├──────────────┤
+│   (main)     │              │     │   (main)     │   designer   │
+└──────────────┴──────────────┘     └──────────────┴──────────────┘
+
+N_total=4 (planner + 3)             N_total=5 (planner + 4)
+┌──────────────┬───────┬───────┐    ┌──────────────┬───────┬───────┐
+│              │builder│design │    │              │builder│design │
+│   planner    ├───────┼───────┤    │   planner    ├───────┼───────┤
+│   (main)     │review │       │    │   (main)     │review │  qa   │
+└──────────────┴───────┴───────┘    └──────────────┴───────┴───────┘
+```
+
+**布局参数（locked decisions 2026-04-26）**:
+- 左/右宽度比 = **50/50** (固定，所有 N 一致)
+- 右侧 worker 排序 = **按 template 顺序** (builder → designer → reviewer → qa → ...)
+- 右侧填充 = **col-major** (先填左列上→下，再下一列)
+- 默认 active pane = **planner**
+
+新 worker 添加时**重排整窗**。
+
+### 3.4 关键含义
+
+- **N 项目 = N+1 窗口**（不是 v1 设想的 2N，因为 memories 共享）
+- **单一对话入口**：扫一眼 memories 窗口就看到所有项目当前状态
+- **无全局协调者**：跨项目协作通过 `tmux-send <other>-memory ...` 直接 dispatch（无中介）
+- **iTerm pane 只是 client**：tmux session 是 source of truth，pane 关闭/重建不丢对话状态
+
+### 3.5 项目注册表 (新增)
+
+`~/.clawseat/projects.json` 记录所有 active 项目：
+
+```json
+{
+  "version": 1,
+  "projects": [
+    {"name": "install",   "primary_seat": "memory", "tmux_name": "install-memory",   "registered_at": "2026-04-26T01:00:00Z"},
+    {"name": "cartooner", "primary_seat": "memory", "tmux_name": "cartooner-memory", "registered_at": "2026-04-26T02:00:00Z"}
+  ]
+}
+```
+
+install.sh 创建项目时追加；uninstall 时删除。memories 窗口的 build/refresh 读这个文件决定布局。
 
 ---
 
