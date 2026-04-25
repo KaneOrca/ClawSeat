@@ -24,7 +24,12 @@ WORKSPACE=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/apply-koder-overlay.sh [--dry-run] [project] [feishu_group_id]
+Usage: scripts/apply-koder-overlay.sh [OPTIONS] [project] [feishu_group_id]
+
+Options:
+  --dry-run                 Show what would be done without executing runners
+  -q, --quiet               Suppress destructive banner (for CI)
+  -h, --help                Show this help and exit
 EOF
 }
 

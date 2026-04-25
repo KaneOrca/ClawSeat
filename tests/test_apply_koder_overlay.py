@@ -150,53 +150,76 @@ def test_destructive_banner_suppressed_by_quiet(tmp_path: Path) -> None:
 
 
 def test_koder_bind_runner_threads_group_id(tmp_path: Path) -> None:
-    """KODER_BIND_RUNNER must receive --feishu-group-id when FEISHU_GROUP_ID is set."""
+    """KODER_BIND_RUNNER must receive --feishu-group-id when FEISHU_GROUP_ID is set.
+
+    Uses positional arg for group_id (the script's documented CLI surface) and
+    full input sequence (pick=1 + confirm=y) so the script reaches run_koder_bind.
+    """
     real_home = _seed_home(tmp_path)
     args_log = tmp_path / "runner-args.txt"
     runner = _write(
         tmp_path / "bind-runner.sh",
-        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> '{args_log}'\n",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> '{args_log}'\nexit 0\n",
     )
+    init_runner = _write(
+        tmp_path / "init-noop.sh",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+
     result = _run(
-        ["install"],
+        ["install", "oc_test_fixture_1234567890"],   # group_id as positional arg
         real_home=real_home,
-        input_text="1\n",          # select first tenant
+        input_text="1\ny\n",                          # pick=1 + confirm=y
         extra_env={
+            "INIT_KODER_RUNNER": str(init_runner),
             "KODER_BIND_RUNNER": str(runner),
-            "INIT_KODER_RUNNER": str(runner),  # prevent init_koder from running
-            "FEISHU_GROUP_ID": "oc_test_fixture_1234567890",
-            "CONFIGURE_KODER_FEISHU_RUNNER": "true",  # no-op feishu config
+            "CONFIGURE_KODER_FEISHU_RUNNER": "true",  # no-op feishu config (any non-empty)
         },
     )
-    if args_log.exists():
-        args_text = args_log.read_text(encoding="utf-8")
-        assert "--feishu-group-id" in args_text, (
-            f"KODER_BIND_RUNNER must receive --feishu-group-id; args logged:\n{args_text}"
-        )
-        assert "oc_test_fixture_1234567890" in args_text
+
+    # Hard assertions — no `if args_log.exists()` guard.
+    assert result.returncode == 0, f"script failed: rc={result.returncode}\nstderr:\n{result.stderr}"
+    assert args_log.exists(), (
+        f"KODER_BIND_RUNNER stub was never invoked.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+
+    args_text = args_log.read_text(encoding="utf-8")
+    assert "--feishu-group-id" in args_text, (
+        f"KODER_BIND_RUNNER must receive --feishu-group-id; args logged:\n{args_text}"
+    )
+    assert "oc_test_fixture_1234567890" in args_text, (
+        f"--feishu-group-id value not present in runner args:\n{args_text}"
+    )
 
 
 def test_koder_bind_runner_no_flag_when_empty_group_id(tmp_path: Path) -> None:
-    """When FEISHU_GROUP_ID is empty, --feishu-group-id must NOT be passed."""
+    """When no group_id positional arg is supplied, --feishu-group-id must NOT be passed."""
     real_home = _seed_home(tmp_path)
     args_log = tmp_path / "runner-args-empty.txt"
     runner = _write(
         tmp_path / "bind-runner-empty.sh",
-        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> '{args_log}'\n",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> '{args_log}'\nexit 0\n",
     )
+    init_runner = _write(
+        tmp_path / "init-noop-empty.sh",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+
     result = _run(
-        ["install"],
+        ["install"],                                  # no positional group_id
         real_home=real_home,
-        input_text="1\n",
+        input_text="1\ny\n",
         extra_env={
+            "INIT_KODER_RUNNER": str(init_runner),
             "KODER_BIND_RUNNER": str(runner),
-            "INIT_KODER_RUNNER": str(runner),
-            "FEISHU_GROUP_ID": "",
             "CONFIGURE_KODER_FEISHU_RUNNER": "true",
         },
     )
-    if args_log.exists():
-        args_text = args_log.read_text(encoding="utf-8")
-        assert "--feishu-group-id" not in args_text, (
-            f"Empty FEISHU_GROUP_ID must NOT produce --feishu-group-id flag; args:\n{args_text}"
-        )
+
+    assert result.returncode == 0, f"script failed: rc={result.returncode}\nstderr:\n{result.stderr}"
+    assert args_log.exists(), "KODER_BIND_RUNNER stub was never invoked"
+
+    args_text = args_log.read_text(encoding="utf-8")
+    assert "--feishu-group-id" not in args_text, (
+        f"Empty group_id must NOT produce --feishu-group-id flag; args:\n{args_text}"
+    )
