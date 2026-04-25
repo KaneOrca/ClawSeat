@@ -29,8 +29,8 @@ TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 # ── iTerm integration ─────────────────────────────────────────────────────────
 
 # AppleScript closes the single iTerm session/pane that owns the given tty —
-# NOT the entire tab.  Closing the tab nukes all sibling panes (the cartooner
-# 6-pane grid disappearance RCA, 2026-04-25).  `close s` targets just that
+# NOT the entire tab.  Closing the tab nukes all sibling panes (6-pane grid
+# disappearance RCA, 2026-04-25).  `close s` targets just that
 # session; remaining panes in the same tab are untouched.
 _ITERM_CLOSE_SCRIPT_TEMPLATE = """\
 tell application "iTerm"
@@ -73,7 +73,7 @@ def _close_iterm_pane_by_tty(tty: str) -> dict:
     Never raises — all errors are returned in the dict.
 
     Closes only the matching split/pane, leaving sibling panes in the same
-    tab intact.  See AppleScript template comment for the cartooner RCA.
+    tab intact.  See AppleScript template comment for the 2026-04-25 RCA.
     """
     script = _ITERM_CLOSE_SCRIPT_TEMPLATE.format(tty=tty)
     try:
