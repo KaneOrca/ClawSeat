@@ -1836,8 +1836,21 @@ recipe = [[0, True]] + right_recipe(len(right_seats))  # First: planner | right 
 #   pane[1] = right col_0 top (first right worker)
 #   pane[2..cols] = top of subsequent right cols
 #   pane[cols+1..] = bottom row of right cols (col-major)
+#
+# NB: planner is a WORKER (spawned by memory during Phase-A), not the primary
+# seat. Its tmux session does NOT exist when install.sh opens this window —
+# memory will spawn it later. So planner pane MUST use wait-for-seat.sh
+# (polling) like the other workers; using direct `tmux attach` here was bug
+# #10 (workers_payload planner pane errored to zsh on session-not-found).
 panes = [
-    {"label": "planner", "command": f"tmux attach -t '={project}-planner-claude'"},
+    {
+        "label": "planner",
+        "command": "bash "
+        + shlex.quote(wait_script)
+        + " "
+        + shlex.quote(project)
+        + " planner",
+    },
 ]
 # Compute right-side fill order matching recipe pane creation
 n_right = len(right_seats)

@@ -160,18 +160,82 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 
 ---
 
-### #10 (预留新 issue 编号)
+### #10 workers_payload planner pane 错用 tmux attach 而非 wait-for-seat — 🔴 BLOCKER
+
+**症状**:
+- v2 workers_payload() 把 planner pane 的 command 写成 `tmux attach -t '={project}-planner-claude'`
+- 但 planner-claude tmux session 在 install.sh 跑完时**还不存在**（要等 memory seat 在 Phase-A 中 spawn）
+- 结果 planner pane 立刻 tmux attach 失败 → fall through 到 zsh，不会自动 attach 成功后的 planner
+
+**对比 builder/designer**: 它们用 `bash wait-for-seat.sh install builder` 正确轮询直到 session 存在再 attach
+
+**根因**:
+- 我写 workers_payload 时沿用了 v1 grid_payload 的"第一个 pane 是 primary seat 用 tmux attach"模式
+- 但 v1 primary seat (ancestor) 是 Step 5 install.sh 直接 launch 的，已经存在
+- v2 workers 窗口里 planner 不是 primary seat (memory 才是, 在另一个窗口), planner 是要被 memory spawn 的 worker, 与 builder/designer 同地位
+
+**修复**: workers_payload() 把 planner 的 command 也改成 `bash wait-for-seat.sh <project> planner`
+
+**Owner**: ancestor 自己立刻修（这是我新引入的 bug, 不是历史债）
+
+**临时缓解**: install-memory 完成 Phase-A spawn planner-claude 后, operator 手动 close workers 窗口 + 重开（此时 planner-claude session 已存在）
+
+---
+
+### #11 agent_admin window reseed-pane iterm2 API send_text 失效 — 🟠 HIGH
+
+**症状**:
+- `agent_admin window reseed-pane <project> <seat>` 走 iterm2 Python API 路径
+- API 返回 success，但 send_text 序列（Ctrl-C + Ctrl-B+d + 命令）**没真正写入空闲 zsh shell**
+- 直接用 iTerm AppleScript `write text` 才生效
+
+**对比**: install.sh 主流程 open_iterm_window 用的是 iterm_panes_driver.py，用 `async_send_text()` 也是 API 路径——但首次创建 pane 时（pane 刚开就发命令）OK；reseed-pane 是对**已有 idle pane** 发命令时失败
+
+**可能根因**: iterm2 Python API 的 send_text 对刚 attached 的 session 工作，但对 idle 的 zsh 可能需要先获取 keyboard focus 或 send_keys 而不是 send_text
+
+**修复方案候选**:
+- a. reseed-pane 改用 osascript AppleScript "tell application iTerm2 ... write text" (绕开 Python API bug)
+- b. send_text 前先 `await session.async_activate()` 取 focus
+- c. 用 send_keys 模拟物理键盘事件而非文本注入
+
+**Owner**: builder-codex (实施) + planner-claude (测试 reseed-pane 在 v2 minimal 各场景下都工作)
+
+---
+
+### #12 recover-grid.sh + grid-recovery 路径硬编码 install-ancestor — 🟠 HIGH
+
+**症状**:
+- `scripts/recover-grid.sh` 和 `agent_admin_session.py` 内部 grid_recovery_log 等路径全部假设 `${PROJECT}-ancestor`
+- v2 minimal 用 `${PROJECT}-memory`，recover-grid 找不到对的 session 名
+
+**与 issue #10 关系**: 都属于"我之前 PRIMARY_SEAT_ID 重构漏改的硬编码点"批次。我审过 install.sh + agent_admin 主路径但没审 recover-grid.sh 等辅助脚本
+
+**修复**: recover-grid.sh + 所有相关辅助脚本统一查 PRIMARY_SEAT_ID（从 `~/.agents/projects/<project>/project.toml` 或 session.toml 读 first engineer.id）
+
+**Owner**: builder-codex
+
+**关联**: 跟 #10 同根（PRIMARY_SEAT_ID 重构不彻底），可一起 PR
+
+---
+
+### #13 (预留新 issue 编号)
 
 ---
 
 ## 修复批次规划
 
-### 批次 1（4 seat 齐后立刻派）— 🔴+🟠
+### 批次 0（ancestor 立刻自修, 不等 install team）— 🔴 BLOCKER
+
+- **#10** workers_payload planner pane 错用 tmux attach → 改 wait-for-seat（ancestor 自己 fix, 是新引入 bug）
+
+### 批次 1（4 seat 齐后立刻派）— 🟠 HIGH
 
 - #1 brief 模板动态化
 - #2 auto-send 窗口扩展
 - #4 memories 窗口 tabs 改造
 - #5 brief session check 修复
+- #11 reseed-pane iterm2 API send_text 失效（改 AppleScript 或加 activate）
+- #12 recover-grid.sh + 辅助脚本 PRIMARY_SEAT_ID 重构漏改
 
 ### 批次 2（批次 1 验收通过后）— 🟡
 
@@ -200,5 +264,11 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 ### 2026-04-26 02:05 — install-memory 报 ARCH-VIOLATION（brief assert install-ancestor 存在）
 
 → 已建为 issue #5（MEDIUM）。临时决策: ancestor 已发 "proceed" 让 memory 把 brief assertion 视为 stale 继续 Phase-A。
+
+### 2026-04-26 02:25 — install-memory 报 3 个根因（在 phase-a-decisions 之前先告诉 operator）
+
+1. iTerm clawseat-install-workers 创建时 planner pane 没启动 wait-for-seat（builder/designer 启动了，planner 漏了）→ 已建为 #10 BLOCKER
+2. agent_admin window reseed-pane 走 iterm2 API 路径有 bug：返回成功但 send_text 序列没真正写入空闲 zsh shell。直接用 iTerm AppleScript write text 才生效 → 已建为 #11 HIGH
+3. 这个 bug + 所有 recover-grid.sh / grid-recovery 路径硬编码 install-ancestor 是 v2 minimal 的两个已知 stale 点 → 已建为 #12 HIGH
 
 ---
