@@ -1,5 +1,6 @@
 ---
-name: clawseat-ancestor
+name: clawseat-memory
+aliases: [clawseat-ancestor]
 description: "项目级始祖（ancestor）——每项目 singleton、永不退役、永不升级为 koder。启动后读 ancestor-bootstrap.md 执行扩展后的 Phase-A checklist（B1..B7，含 .5 子步，CLI-first），再进入 Phase-B 巡检。operator ↔ ancestor 以 CLI 直接交互为主，Feishu 仅是可选异步广播，koder 只是可选 overlay。"
 version: "0.7"
 status: architect-reviewed
