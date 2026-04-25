@@ -47,6 +47,7 @@ MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
 GUIDE_FILE=""
+KICKOFF_FILE=""
 ANCESTOR_PATROL_PLIST_LABEL=""
 ANCESTOR_PATROL_PLIST_PATH=""
 ANCESTOR_PATROL_LOG_DIR=""
@@ -351,6 +352,7 @@ compute_project_paths() {
   PROJECT_LOCAL_TOML="$HOME/.agents/tasks/$PROJECT/project-local.toml"
   PROJECT_RECORD_PATH="$HOME/.agents/projects/$PROJECT/project.toml"
   GUIDE_FILE="$HOME/.agents/tasks/$PROJECT/OPERATOR-START-HERE.md"
+  KICKOFF_FILE="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/ancestor-kickoff.txt"
   ANCESTOR_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.ancestor-patrol"
   ANCESTOR_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${ANCESTOR_PATROL_PLIST_LABEL}.plist"
   ANCESTOR_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
@@ -1139,7 +1141,8 @@ bootstrap_project_profile() {
       # operator explicitly asked for --reinstall, leaving stale state where
       # project.toml exists but session.toml is missing — causing all
       # downstream `agent_admin session-name` / `send-and-verify --project`
-      # calls (including Step 9.5 auto-send) to fail with SESSION_NOT_FOUND.
+      # calls, including operator-triggered kickoff dispatch, to fail with
+      # SESSION_NOT_FOUND.
       printf 'Project %s exists at %s — --reinstall: wiping project record + sessions to force re-bootstrap.\n' \
         "$PROJECT" "$PROJECT_RECORD_PATH"
       rm -f "$PROJECT_RECORD_PATH"
@@ -1298,52 +1301,59 @@ write_operator_guide() {
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
 
-install.sh 已完成。现在做 5 件事：
+install.sh 已完成。现在按 6 步触发 Phase-A：
 
 1. 切到 iTerm 窗口 "clawseat-$PROJECT" 的 ancestor pane（左上角第一格）
 
-2. **先检查 ancestor pane 是否已经在跑 Phase-A** — Step 9.5 的 auto-send 在大多数情况下已经把下面的 prompt 送进去了：
+2. **先确认 ${PROJECT}-${PRIMARY_SEAT_ID} pane 已就绪** — install.sh 不再自动发送 Phase-A kickoff；kickoff 已写入文件，等待 operator 主动触发：
 
    \`\`\`bash
    tmux capture-pane -t '${PROJECT}-${PRIMARY_SEAT_ID}' -p | tail -15
    \`\`\`
 
-   把 pane 分两类"已接收 kickoff"的信号（任一出现就跳过步骤 3）:
+   如果看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏，先按屏幕提示处理完，再继续。
 
-   **A1. Phase-A 已启动（ancestor 已对 brief 有回应）**:
-     - \`B0\` / \`已读取 brief\` / \`env_scan\` 等 Phase-A 输出
+3. Phase-A kickoff prompt 文件：
 
-   **A2. Claude Code 正在处理刚投递的 kickoff**（对应 scripts/install.sh 的
-   \`ancestor_pane_shows_active_response()\` runtime detector）:
-     - \`Thinking...\` / \`Shell awaiting input\`
-     - 旋转图标: \`✶\` / \`✻\` / \`✢\` / \`✳\` / \`✽\` / \`⏺\`
-     - \`Read N files\` / \`Read N file\`
+   \`\`\`bash
+   cat ${KICKOFF_FILE}
+   \`\`\`
 
-   看到 A1 或 A2 任一 ⇒ Phase-A 已启动或启动中，**跳到步骤 4**（不要重复粘贴！会导致双重输入）
+4. 选择一种触发方式（A/B/C 三选一）：
 
-   其他状态:
-   - 看到空的输入框（\`> \` 或 \`❯ \`）+ 无最近活动 ⇒ auto-send 没成功，继续步骤 3
-   - 看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏 ⇒ 按屏幕提示先过掉（Enter / 选 Yes / 完成 OAuth），然后回到本步骤重新 capture
+   **A) 让当前 install-memory / 安装 agent 通过 transport 发送 kickoff：**
 
-3. 在 ancestor pane 粘贴以下 prompt（ctrl+V 或 cmd+V），粘贴后按 Enter：
+   \`\`\`bash
+   bash ${SEND_AND_VERIFY_SCRIPT} --project ${PROJECT} ${PROJECT}-${PRIMARY_SEAT_ID} "\$(cat "${KICKOFF_FILE}")"
+   \`\`\`
 
----
-读 \$CLAWSEAT_ANCESTOR_BRIEF 开始 Phase-A。
+   **B) 手动粘贴：**
 
-Phase-A 不让 memory 做同步调研。B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件；memory 在 Phase-A 唯一位置是 B7 后接收 phase-a-decisions learnings。
+   \`\`\`bash
+   cat ${KICKOFF_FILE}
+   \`\`\`
 
-然后按 B3 / B3.5 / B5 / B6 / B7 顺序推进；用 agent_admin.py session start-engineer 逐个拉起 seat（不要 fan-out，一个一个来）。
----
+   打开 ${PROJECT}-${PRIMARY_SEAT_ID} pane，把输出复制到 Claude Code prompt，按 Enter。
 
-4. **验证 Phase-A 已启动** — 粘贴后（或如果步骤 2 判断 auto-send 已成功而跳过步骤 3）立刻 re-capture 确认：
+   kickoff 内容要求：
+   - Phase-A 不让 memory 做同步调研。
+   - B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件。
+   - memory 在 Phase-A 唯一位置是 B7 后接收 phase-a-decisions learnings。
+   - 然后按 B3 / B3.5 / B5 / B6 / B7 顺序推进；用 agent_admin.py session start-engineer 逐个拉起 seat（不要 fan-out，一个一个来）。
+
+   **C) 让 install-memory 接手：**
+
+   在 install-memory chat 里说：\`dispatch ${PROJECT} kickoff\`。
+
+5. **验证 Phase-A 已启动** — 触发后立刻 re-capture 确认：
 
    \`\`\`bash
    tmux capture-pane -t '${PROJECT}-${PRIMARY_SEAT_ID}' -p | tail -10
    \`\`\`
 
-   预期看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样。只有确认启动后才能开始步骤 5（否则回步骤 2 重新 classify）。
+   预期看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样。
 
-5. 每走完一步向 ancestor 说"继续"或给修正（provider / chat_id 等）
+6. 每走完一步向 ancestor 说"继续"或给修正（provider / chat_id 等）
 
 ## 如果 ancestor 报 BRIEF_DRIFT_DETECTED
 
@@ -1364,103 +1374,19 @@ phase_a_kickoff_prompt() {
   printf '读 %s 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。\n' "$BRIEF_PATH"
 }
 
-capture_tmux_pane_text() {
-  local session_name="$1"
-  tmux capture-pane -t "=$session_name" -p -S -120 2>/dev/null || true
-}
-
-pane_has_non_whitespace() {
-  local pane_text="$1"
-  printf '%s' "$pane_text" | grep -q '[^[:space:]]'
-}
-
-ancestor_pane_waiting_on_operator() {
-  local pane_text="$1"
-  case "$pane_text" in
-    *"Browser didn't open? Use the url below to sign in"*|\
-    *"Paste code here if prompted >"*|\
-    *"Login successful. Press Enter to continue"*|\
-    *"Accessing workspace:"*|\
-    *"Quick safety check:"*|\
-    *"WARNING: Claude Code running in Bypass Permissions mode"*|\
-    *"OAuth error:"*|\
-    *"Do you trust the files in this folder"*|\
-    *"Trust folder"*)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
-ancestor_pane_shows_active_response() {
-  local pane_text="$1"
-  case "$pane_text" in
-    *"Thinking..."*|*"Shell awaiting input"*|*"✶ "*|*"✻ "*|*"✢ "*|*"✳ "*|*"✽ "*|*"⏺ "*)
-      return 0
-      ;;
-  esac
-  if printf '%s\n' "$pane_text" | grep -Eq '(^|[[:space:]])Read [0-9]+ files?'; then
+persist_phase_a_kickoff_prompt() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] write %s\n' "$KICKOFF_FILE"
     return 0
   fi
-  return 1
-}
 
-pane_contains_text_relaxed() {
-  local pane_text="$1" expected_text="$2" pane_compact="" expected_compact=""
-  pane_compact="$(printf '%s' "$pane_text" | tr -d '[:space:]')"
-  expected_compact="$(printf '%s' "$expected_text" | tr -d '[:space:]')"
-  [[ -n "$expected_compact" && "$pane_compact" == *"$expected_compact"* ]]
-}
-
-auto_send_phase_a_kickoff() {
-  local kickoff="$1" session_name="$PROJECT-$PRIMARY_SEAT_ID"
-  local max_polls=60 poll_seconds=3 post_send_seconds=2 max_send_attempts=3
-  local poll_count=0 send_attempts=0 pane_text="" post_send_text=""
-
-  while [[ "$poll_count" -lt "$max_polls" ]]; do
-    poll_count=$((poll_count + 1))
-    if ! tmux has-session -t "=$session_name" 2>/dev/null; then
-      sleep "$poll_seconds"
-      continue
-    fi
-
-    pane_text="$(capture_tmux_pane_text "$session_name")"
-    if ! pane_has_non_whitespace "$pane_text"; then
-      sleep "$poll_seconds"
-      continue
-    fi
-    if ancestor_pane_waiting_on_operator "$pane_text"; then
-      sleep "$poll_seconds"
-      continue
-    fi
-
-    send_attempts=$((send_attempts + 1))
-    if bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" "$PRIMARY_SEAT_ID" "$kickoff" >/dev/null 2>&1; then
-      sleep "$post_send_seconds"
-      post_send_text="$(capture_tmux_pane_text "$session_name")"
-      if pane_contains_text_relaxed "$post_send_text" "$kickoff"; then
-        note "Phase-A kickoff delivered to $session_name"
-        return 0
-      fi
-      if ancestor_pane_shows_active_response "$post_send_text"; then
-        note "Phase-A kickoff submitted to $session_name"
-        return 0
-      fi
-    fi
-
-    if [[ "$send_attempts" -ge "$max_send_attempts" ]]; then
-      break
-    fi
-    sleep "$poll_seconds"
-  done
-
-  warn "Auto-send could not verify kickoff delivery to $session_name. Use the fallback prompt below."
-  return 1
+  mkdir -p "$(dirname "$KICKOFF_FILE")" || die 30 KICKOFF_DIR_FAILED "unable to create $(dirname "$KICKOFF_FILE")"
+  (umask 077; phase_a_kickoff_prompt >"$KICKOFF_FILE") \
+    || die 30 KICKOFF_WRITE_FAILED "unable to write $KICKOFF_FILE"
+  chmod 600 "$KICKOFF_FILE" || die 30 KICKOFF_CHMOD_FAILED "unable to chmod $KICKOFF_FILE"
 }
 
 print_operator_banner() {
-  local kickoff=""
-  kickoff="$(phase_a_kickoff_prompt)"
   printf '\n'
   printf -- '────────────────────────────────────────────────────────────────\n'
   printf '  ClawSeat install complete / 安装已完成\n'
@@ -1469,56 +1395,37 @@ print_operator_banner() {
   printf '  AGENT (if you are an AI agent running install.sh):\n'
   printf '    You MUST relay this banner to the operator before ending your\n'
   printf '    session. install.sh exiting is NOT the final completion signal —\n'
-  printf '    Phase-A may or may not have started (Step 9.5 auto-send may have\n'
-  printf '    succeeded or skipped); the operator must classify + verify.\n'
+  printf '    Phase-A has NOT been auto-sent. The operator must choose A/B/C\n'
+  printf '    below to trigger kickoff, then verify Phase-A started.\n'
   printf '    See docs/INSTALL.md §0 step 5.\n'
   printf '    向 operator 复述本 banner 是必做步骤，禁止跳过。\n'
   printf '\n'
   printf '  OPERATOR — NEXT STEPS / 操作员下一步:\n'
-  printf '    1. Read the operator guide / 阅读操作员指引:\n'
+  printf '    ✔ Install complete. %s pane is ready or waiting for login/trust confirmation.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '    Phase-A kickoff prompt was saved here:\n'
+  printf '       %s\n' "$KICKOFF_FILE"
+  printf '\n'
+  printf '    Choose one to start Phase-A / 三选一启动 Phase-A:\n'
+  printf '\n'
+  printf '    A) Existing install-memory / current install agent dispatches kickoff:\n'
+  printf '       bash %q --project %q %q "$(cat %q)"\n' \
+    "$SEND_AND_VERIFY_SCRIPT" "$PROJECT" "${PROJECT}-${PRIMARY_SEAT_ID}" "$KICKOFF_FILE"
+  printf '\n'
+  printf '    B) Manual paste / 手动粘贴:\n'
+  printf '       cat %q\n' "$KICKOFF_FILE"
+  printf '       Then paste the output into the %s Claude Code prompt and press Enter.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '\n'
+  printf '    C) Ask install-memory in chat / 在 install-memory chat 里说:\n'
+  printf '       dispatch %s kickoff\n' "$PROJECT"
+  printf '\n'
+  printf '    After A/B/C, verify Phase-A is running / 触发后确认:\n'
+  printf '       tmux capture-pane -t %q -p | tail -10\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '       Expected: B0 / "已读取 brief" / env_scan activity.\n'
+  printf '\n'
+  printf '    Operator guide / 操作员指引:\n'
   printf '       cat %s\n' "$GUIDE_FILE"
   printf '\n'
-  printf '    2. Capture the ancestor pane / 查看 ancestor pane 状态:\n'
-  printf '       tmux capture-pane -t %q -p | tail -15\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
-  printf '\n'
-  printf '    3. Decide: SKIP paste or DO paste / 判断：跳过粘贴 或 执行粘贴\n'
-  printf '       Two kinds of "kickoff already accepted" signal — either one SKIPS step 4.\n'
-  printf '       两类"kickoff 已接收"信号 — 任一出现就跳过步骤 4:\n'
-  printf '       A1. Phase-A is running (ancestor replied to the brief):\n'
-  printf '           Phase-A 已启动 (ancestor 已对 brief 有回应):\n'
-  printf '           · "B0" / "已读取 brief" / env_scan output\n'
-  printf '       A2. Claude Code is processing the kickoff (matches the runtime\n'
-  printf '           detector ancestor_pane_shows_active_response() in scripts/install.sh):\n'
-  printf '           Claude Code 正在处理 kickoff (与 scripts/install.sh 的\n'
-  printf '           ancestor_pane_shows_active_response() 一致):\n'
-  printf '           · "Thinking..." / "Shell awaiting input"\n'
-  printf '           · spinner glyphs: ✶ ✻ ✢ ✳ ✽ ⏺\n'
-  printf '           · "Read N files" / "Read N file"\n'
-  printf '       - If pane sits at ">" or "❯" with no activity → DO step 4\n'
-  printf '         若 pane 静止在空输入框无活动 ⇒ auto-send 未生效，继续步骤 4\n'
-  printf '       - If pane shows any of: Bypass Permissions / Trust folder /\n'
-  printf '         Login / Accessing workspace / Quick safety check\n'
-  printf '         → clear that screen first (Enter / Yes / OAuth), re-capture, then decide\n'
-  printf '         若 pane 有确认屏 ⇒ 先清掉确认屏，重新 capture，再决定\n'
-  printf '\n'
-  printf '    4. Paste the Phase-A kickoff below into the ancestor pane (only if step 3 said DO)\n'
-  printf '       仅在步骤 3 判断需要粘贴时，把下面的 Phase-A kickoff 粘贴到 ancestor pane 并回车\n'
-  printf '\n'
-  printf '    5. Verify Phase-A is running / 确认 Phase-A 已启动:\n'
-  printf '       tmux capture-pane -t %q -p | tail -10\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
-  printf '       Expected / 预期: pane shows B0 / "已读取 brief" / env_scan activity.\n'
-  printf '       Only after this verification passes should you proceed to optional\n'
-  printf '       steps (koder overlay, etc.) or final report.\n'
-  printf '       通过此验证后才能进入后续可选步骤（koder overlay 等）或最终汇报。\n'
-  printf '\n'
   printf -- '────────────────────────────────────────────────────────────────\n'
-  if [[ "$DRY_RUN" != "1" ]]; then
-    printf '  PHASE-A KICKOFF (copy between the lines / 复制以下两条分隔线之间)\n'
-    printf -- '----------------------------------------------------------------\n'
-    printf '%s\n' "$kickoff"
-    printf -- '----------------------------------------------------------------\n'
-    printf '\n'
-  fi
 }
 
 launcher_auth_for_provider() {
@@ -2016,15 +1923,8 @@ main() {
   else
     warn "Skipping primary seat focus because no iTerm grid window was opened."
   fi
-  if [[ "$DRY_RUN" != "1" ]]; then
-    note "Step 9.5: auto-send Phase-A kickoff prompt / 尝试自动发送 Phase-A kickoff"
-    local kickoff=""
-    kickoff="$(phase_a_kickoff_prompt)"
-    if ! auto_send_phase_a_kickoff "$kickoff"; then
-      warn "Phase-A kickoff auto-send skipped or failed — ancestor pane is NOT ready OR tmux send-keys did not verify delivery."
-      warn "auto-send 未完成：ancestor pane 未就绪或验证投递失败。请按 banner 指引手工粘贴 kickoff。"
-    fi
-  fi
+  note "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt"
+  persist_phase_a_kickoff_prompt
   write_operator_guide
   print_operator_banner
 }

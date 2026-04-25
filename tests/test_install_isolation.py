@@ -483,4 +483,9 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "new-session" not in tmux_output
     assert "kill-session -t =smoketest-ancestor" in tmux_output
-    assert "send-keys -t smoketest-ancestor Enter" in tmux_output
+    kickoff_path = home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
+    assert kickoff_path.is_file()
+    assert stat.S_IMODE(kickoff_path.stat().st_mode) == 0o600
+    kickoff_text = kickoff_path.read_text(encoding="utf-8")
+    assert f"读 {expected_brief} 开始 Phase-A" in kickoff_text
+    assert "按 brief 顺序执行 B0-B7" in kickoff_text

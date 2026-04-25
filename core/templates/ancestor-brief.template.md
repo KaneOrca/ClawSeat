@@ -52,6 +52,18 @@
 
 ## Phase-A Steps
 
+### Phase-A kickoff 触发协议
+
+`install.sh` 不再自动把 Phase-A kickoff 发进你的 TUI。启动后先等待 operator / install-memory 主动发送 kickoff，不要假设安装器已经替你发过。
+
+kickoff 文本由 `install.sh` 写入：
+
+```bash
+${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/patrol/handoffs/ancestor-kickoff.txt
+```
+
+operator 可以选择用 `send-and-verify.sh` 发送该文件内容，或手动 `cat` 后粘贴。收到 kickoff 后再按下面 B0-B7 顺序执行。
+
 ### B0 — env_scan LLM 分析（必须向用户汇报）
 
 **B0.pre — 先读 install.sh 已写入的 harness overrides（强制）**：
