@@ -279,9 +279,85 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 
 ---
 
-### #14 (预留新 issue 编号)
+### #14 wait-for-seat.sh TMUX 环境变量继承导致 switch-client fallback — 🟠 HIGH
 
-### #14 (预留新 issue 编号)
+**症状**: designer (或任何 worker) seat session 死掉后，对应 iTerm pane 自动 attach 到 `install-memory` TUI；operator 在那个 pane 的键入进入 memory 输入框。
+
+**根因 (2026-04-26 03:35 install-memory 调研确认)**:
+1. install.sh 在 install-memory tmux session 里运行，spawn workers 窗口时 iTerm 继承了 `TMUX` 环境变量（实测 designer pane tty124 里 `TMUX=/private/tmp/tmux-501/default,29587,162`）
+2. wait-for-seat.sh line 207 跑 `tmux attach -t "=install-designer-gemini"`
+3. tmux 检测到 `TMUX` 已设定 → 把 `attach` 解读为 `switch-client`，而非新建独立 client
+4. 当 designer session 死亡 → tmux 自动把该 client 切回"上一个 session"（install-memory）
+5. pane 显示 install-memory TUI，operator 键入进入 memory 输入框
+
+**修复**: `wait-for-seat.sh` line 207，在 `tmux attach` 前清除 `TMUX`：
+```bash
+# 修复前
+if tmux attach -t "=$TARGET_SESSION"; then
+# 修复后
+if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
+```
+
+**Owner**: builder-codex（1 行 fix）
+**批次**: 批次 1 补丁（HIGH，与 Package B #2 同批或 micro-PR）
+
+---
+
+### #15 v1→v2 词汇漂移大批量清扫 — 🟠 HIGH
+
+**症状**: v1 vocab 在 60+ 文件里残留，导致：
+- skill 自我描述跟 v2 实际行为脱节（如 ancestor SKILL.md:229 说"默认六宫格 Row1-Col1=ancestor"）
+- planner SKILL.md 列死 reviewer/qa 可派 seat（v2 minimal 没有这俩）
+- preflight + skill_registry + profile_validator 硬编码 5-worker
+- README.md 顶层声明 "6 seat roster"
+
+**根因**: v2 RFC §1 §2 vocab（始祖=memory seat / workers+memories 双窗 / template-driven roster）只在新写的代码/文档对齐，老文件没批量同步。
+
+**完整审计**: 见 [docs/rfc/V2-VOCAB-DRIFT-AUDIT.md](V2-VOCAB-DRIFT-AUDIT.md)，6 类分类 + 文件级清单 + 清扫策略。
+
+**修复**: 分 3 个子批次实施
+- **#15.a (批次 2)**: ancestor → memory seat id 重命名 + skill rename + brief 自称统一 + planner SKILL roster 解耦（不再列死 reviewer/qa）
+- **#15.b (批次 3)**: README + ARCHITECTURE + INSTALL.md + ITERM_TMUX_REFERENCE.md + 各 skill 的"六宫格"段全删
+- **#15.c (M4)**: 全局 machine-memory-claude 删除 + PROJECT_BINDING.toml 废弃确认
+
+**Owner**: builder-codex 实施 + planner-claude review + memory 做 vocab 词典 + 验收
+**批次**: 批次 2 (#15.a) / 批次 3 (#15.b) / M4 (#15.c)
+
+**验收**:
+- `grep -r "ancestor" core/ scripts/` 只出现在：兼容性 alias、migration 工具、CHANGELOG/RFC/handoff
+- `grep -r "六宫格\|six-pane" docs/ core/skills/` 返回 0 行
+- `grep -r "machine-memory-claude" core/ scripts/` 每处都有 `# v1 LEGACY (M4 remove)` 注释
+
+---
+
+### #16 memory 汇报协议缺失 — 🟠 HIGH
+
+**症状**: operator 实证 (2026-04-26 03:50) memory chat 是 flowing transcript，混着工具调用块、internal thinking、长 sed、receipt JSON；要滚 80+ 行才知道当前状态。
+
+**根因**: memory 没有显式的汇报协议；现有 `clawseat-ancestor` skill 覆盖 Phase-A bootstrap，但 Phase-B（持续运营）的 reporting / dispatch / backlog ops 没规范化。
+
+**修复**: 落地 [clawseat-memory-reporting skill](../../core/skills/clawseat-memory-reporting/SKILL.md) v1（已写）:
+- L1 STATUS.md 持久状态（schema 见 [references/status-md-schema.md](../../core/skills/clawseat-memory-reporting/references/status-md-schema.md)）
+- L2 chat 尾块 ≤ 5 行结构化
+- L3 backlog detail 文件归属 + issue 模板
+- L4 dispatch 1 行收据
+
+**派工内容**:
+- **memory 立即生效**: 自我规训按本协议汇报（不需 install team 介入）
+- **批次 2 派 builder-codex**: 改 dispatch_task.py / agent_admin 自动 append STATUS.md dispatch log，避免 memory 手动维护出错
+- **批次 2 派 planner-claude**: 把现存 `~/.agents/tasks/install/STATUS.md` 迁移到本 schema
+
+**Owner**: memory（自我规训立即） + builder-codex（自动化）+ planner-claude（migration）
+**批次**: 立即（memory 自律） / 批次 2（自动化 + migration）
+
+**验收**:
+- operator `cat ~/.agents/tasks/install/STATUS.md` ≤ 30s 知道当前状态
+- memory chat 任意一次回复尾块完整
+- 新 issue 发现后 ≤ 5min 出现在 backlog
+
+---
+
+### #17 (预留新 issue 编号)
 
 ---
 
