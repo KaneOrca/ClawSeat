@@ -87,6 +87,8 @@ from _feishu import (  # noqa: F401 — re-export
 
 from _task_io import (  # noqa: F401 — re-export
     append_consumed_ack,
+    append_status_dispatch_event,
+    append_status_dispatch_log,
     append_status_note,
     append_task_to_queue,
     build_completion_message,

@@ -1,10 +1,17 @@
 """Task dispatch/completion file operations — extracted from _common.py."""
 from __future__ import annotations
 
+import os
 import re
+import sys
+from datetime import datetime
 from pathlib import Path
 
-from _utils import CONSUMED_RE, TASK_ROW_RE, read_text, utc_now_iso, write_text
+from _utils import CONSUMED_RE, TASK_ROW_RE, ensure_parent, read_text, utc_now_iso, write_text
+
+
+DISPATCH_LOG_HEADER = "## dispatch log (append-only, last 20)"
+DISPATCH_LOG_LIMIT = 20
 
 
 def build_notify_message(
@@ -102,6 +109,86 @@ def append_status_note(path: Path, note: str) -> None:
         write_text(path, existing.rstrip() + "\n" + block)
     else:
         write_text(path, "# Status\n\n" + block)
+
+
+def _local_now_iso() -> str:
+    return datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    ensure_parent(path)
+    tmp = path.with_name(f"{path.name}.tmp")
+    tmp.write_text(text.rstrip() + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _dispatch_log_bounds(lines: list[str]) -> tuple[int, int]:
+    header_idx = next(
+        (idx for idx, line in enumerate(lines) if line.strip() == DISPATCH_LOG_HEADER),
+        -1,
+    )
+    if header_idx < 0:
+        raise ValueError(f"{DISPATCH_LOG_HEADER!r} section missing")
+    start = header_idx + 1
+    end = len(lines)
+    for idx in range(start, len(lines)):
+        if lines[idx].startswith("## "):
+            end = idx
+            break
+    return start, end
+
+
+def append_status_dispatch_log(path: Path, line: str) -> bool:
+    """Append one line to STATUS.md dispatch log, keeping the newest 20 entries.
+
+    This is deliberately best-effort: callers use it as a noncritical side
+    effect after dispatch/ack success. Any failure is reported to stderr and
+    returns False so the dispatch channel cannot be broken by STATUS.md drift.
+    """
+    try:
+        text = read_text(path)
+        lines = text.splitlines()
+        start, end = _dispatch_log_bounds(lines)
+        entries = [
+            item
+            for item in lines[start:end]
+            if item.strip() and item.strip() != "(none)"
+        ]
+        entries.append(line)
+        entries = entries[-DISPATCH_LOG_LIMIT:]
+
+        new_lines = lines[:start] + [""] + entries
+        if end < len(lines):
+            new_lines += [""] + lines[end:]
+        _atomic_write_text(path, "\n".join(new_lines))
+        return True
+    except Exception as exc:  # noqa: BLE001 side effect must never break dispatch
+        print(f"warn: STATUS.md dispatch log append skipped: {exc}", file=sys.stderr)
+        return False
+
+
+def append_status_dispatch_event(
+    path: Path,
+    *,
+    source: str,
+    task_id: str,
+    target: str | None = None,
+    verdict: str | None = None,
+    commit: str | None = None,
+    timestamp: str | None = None,
+) -> bool:
+    ts = timestamp or _local_now_iso()
+    if target:
+        line = f"- {ts}: {source} dispatched {task_id} to {target}"
+    else:
+        extras = []
+        if verdict:
+            extras.append(f"verdict={verdict}")
+        if commit:
+            extras.append(f"commit={commit}")
+        suffix = f" {' '.join(extras)}" if extras else ""
+        line = f"- {ts}: {source} ack {task_id}{suffix}"
+    return append_status_dispatch_log(path, line)
 
 
 def write_todo(

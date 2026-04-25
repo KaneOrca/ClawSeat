@@ -20,6 +20,7 @@ from _common import (
     _try_announce_planner_event,
     add_notify_args,
     append_consumed_ack,
+    append_status_dispatch_event,
     append_task_to_queue,
     broadcast_feishu_group_message,
     build_delegation_report_text,
@@ -329,6 +330,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary", help="Delivery summary text.")
     parser.add_argument("--status", default="completed", help="Delivery status.")
     parser.add_argument("--verdict", help="Canonical review verdict.")
+    parser.add_argument("--commit", help="Optional commit SHA to include in STATUS.md ack log.")
     parser.add_argument(
         "--frontstage-disposition",
         help="Canonical planner->frontstage outcome: AUTO_ADVANCE or USER_DECISION_NEEDED.",
@@ -378,6 +380,13 @@ def main() -> int:
             seat=args.source,
             primary=receipt_path,
             payload=receipt,
+        )
+        append_status_dispatch_event(
+            profile.status_doc,
+            source=args.source,
+            task_id=args.task_id,
+            verdict=args.verdict,
+            commit=args.commit,
         )
         print(ack_line)
         print(f"receipt: {receipt_path}")
@@ -645,6 +654,13 @@ def main() -> int:
         project=profile.project_name,
         source=args.source,
         disposition=args.frontstage_disposition or "",
+    )
+    append_status_dispatch_event(
+        profile.status_doc,
+        source=args.source,
+        task_id=args.task_id,
+        verdict=args.verdict,
+        commit=args.commit,
     )
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")

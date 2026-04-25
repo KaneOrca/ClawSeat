@@ -1976,6 +1976,7 @@ main() {
     note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
     open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
 
+    [[ ! -f "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" ]] || bash "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" || true
     note "Step 7b: ensure shared memories window (tab per project)"
     local _memories_payload
     _memories_payload="$(memories_payload)"

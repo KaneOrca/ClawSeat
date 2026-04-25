@@ -18,7 +18,7 @@ from _common import (
     _should_announce_planner_event,
     _try_announce_planner_event,
     add_notify_args,
-    append_status_note,
+    append_status_dispatch_event,
     append_task_to_queue,
     assert_target_not_memory,
     broadcast_feishu_group_message,
@@ -396,10 +396,6 @@ def main() -> int:
         status="pending",
         notes=args.notes,
     )
-    append_status_note(
-        profile.status_doc,
-        args.status_note or f"{args.source} dispatched {args.task_id} to {args.target}",
-    )
     receipt = {
         "kind": "dispatch",
         "task_id": args.task_id,
@@ -508,6 +504,12 @@ def main() -> int:
         role_hint=role_hint,
         title=args.title,
         correlation_id=correlation_id,
+    )
+    append_status_dispatch_event(
+        profile.status_doc,
+        source=args.source,
+        task_id=args.task_id,
+        target=args.target,
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
