@@ -1411,7 +1411,7 @@ pane_contains_text_relaxed() {
 
 auto_send_phase_a_kickoff() {
   local kickoff="$1" session_name="$PROJECT-$PRIMARY_SEAT_ID"
-  local max_polls=24 poll_seconds=3 post_send_seconds=2 max_send_attempts=3
+  local max_polls=60 poll_seconds=3 post_send_seconds=2 max_send_attempts=3
   local poll_count=0 send_attempts=0 pane_text="" post_send_text=""
 
   while [[ "$poll_count" -lt "$max_polls" ]]; do
