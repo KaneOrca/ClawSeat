@@ -22,34 +22,98 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 
-def _make_profile(notify_target: str = "planner") -> SimpleNamespace:
+def _make_full_profile(notify_target: str = "planner") -> SimpleNamespace:
+    """Profile mock providing every attribute build_workspace_files reads."""
     return SimpleNamespace(
         heartbeat_owner="koder",
         heartbeat_transport="openclaw",
         active_loop_owner="planner",
         default_notify_target=notify_target,
+        seats=["koder", "planner", "builder"],
+        runtime_seats=["koder", "planner", "builder"],
+        default_start_seats=[],
+        seat_overrides={},
+        seat_roles={"koder": "frontstage-supervisor"},
     )
+
+
+# Sentinel value: NEVER appears in production templates by default.
+# Mutation guarantee — any test that expects this value can ONLY pass when
+# the parameter actually threads through; a hardcoded "planner" mutation fails.
+_NON_DEFAULT_NOTIFY_TARGET = "custom_dispatcher_xyz_5fa3"
 
 
 # ── Fix 1: notify_target threaded through render_soul + render_tools_index ──
 
-def test_render_soul_uses_default_notify_target():
-    """render_soul must substitute notify_target into '<X> 是唯一的下一跳'."""
+def test_render_soul_substitutes_non_default_notify_target():
+    """render_soul must substitute the caller-provided notify_target verbatim.
+
+    Uses a non-default sentinel so a hardcoded "planner" body fails the test —
+    the previous version's `assert "planner" in soul` check passed on hardcoded
+    output too (since "planner" was both the param value AND the literal).
+    """
     import init_koder
-    soul = init_koder.render_soul(notify_target="planner")
-    assert "**planner 是唯一的下一跳**" in soul
-    soul_custom = init_koder.render_soul(notify_target="director")
-    assert "**director 是唯一的下一跳**" in soul_custom
-    assert "**planner 是唯一的下一跳**" not in soul_custom
+    output = init_koder.render_soul(notify_target=_NON_DEFAULT_NOTIFY_TARGET)
+    assert f"**{_NON_DEFAULT_NOTIFY_TARGET} 是唯一的下一跳**" in output, (
+        f"expected non-default notify_target threaded into output; got:\n{output[:500]}"
+    )
+    # Negative: literal "planner" must NOT appear in the substituted slot.
+    assert "**planner 是唯一的下一跳**" not in output, (
+        "hardcoded literal 'planner' detected in substituted slot — parameter threading broken"
+    )
 
 
-def test_render_tools_index_uses_notify_target():
-    """render_tools_index must use notify_target in 'dispatch 目标永远是 ...'."""
+def test_render_tools_index_substitutes_non_default_notify_target():
+    """render_tools_index must use caller-provided notify_target verbatim."""
     import init_koder
-    out = init_koder.render_tools_index(_REPO, heartbeat_owner="koder", notify_target="planner")
-    assert "dispatch 目标永远是 `planner`" in out
-    out_custom = init_koder.render_tools_index(_REPO, heartbeat_owner="koder", notify_target="lead")
-    assert "dispatch 目标永远是 `lead`" in out_custom
+    output = init_koder.render_tools_index(
+        _REPO, heartbeat_owner="koder", notify_target=_NON_DEFAULT_NOTIFY_TARGET,
+    )
+    assert f"dispatch 目标永远是 `{_NON_DEFAULT_NOTIFY_TARGET}`" in output, (
+        f"non-default notify_target must thread into 'dispatch 目标永远是 ...'; got:\n{output[:500]}"
+    )
+    assert "dispatch 目标永远是 `planner`" not in output, (
+        "hardcoded literal 'planner' detected — parameter threading broken"
+    )
+
+
+def test_build_workspace_files_threads_notify_target_through_render_layer(tmp_path: Path):
+    """End-to-end: profile.default_notify_target must reach SOUL.md and TOOLS.md.
+
+    This is the test that catches mutations at the THREADING layer (e.g. hardcoding
+    the call site `notify_target=default_notify_target` → `notify_target="planner"`).
+    Direct render_soul tests bypass that layer; this test exercises it.
+    """
+    import init_koder
+    profile = _make_full_profile(notify_target=_NON_DEFAULT_NOTIFY_TARGET)
+    files = init_koder.build_workspace_files(
+        project="testproject",
+        profile_path=tmp_path / "profile.toml",
+        profile=profile,
+        feishu_group_id="oc_test_fixture_1234567890",
+        workspace_path=tmp_path / ".openclaw" / "workspace-koder",
+    )
+    soul = files["SOUL.md"]
+    tools = files["TOOLS.md"]
+
+    # Positive: non-default value reaches both files
+    assert _NON_DEFAULT_NOTIFY_TARGET in soul, (
+        f"profile.default_notify_target must thread through to SOUL.md; "
+        f"got SOUL.md head:\n{soul[:500]}"
+    )
+    assert _NON_DEFAULT_NOTIFY_TARGET in tools, (
+        f"profile.default_notify_target must thread through to TOOLS.md"
+    )
+
+    # Negative: hardcoded "planner" must NOT appear in the substituted slots.
+    # (Other parts of the file may still mention "planner" — e.g. role examples
+    # in dispatch instructions.  Only assert on the substituted phrase patterns.)
+    assert "**planner 是唯一的下一跳**" not in soul, (
+        "SOUL.md still has hardcoded 'planner 是唯一的下一跳' — threading broken"
+    )
+    assert "dispatch 目标永远是 `planner`" not in tools, (
+        "TOOLS.md still has hardcoded 'dispatch 目标永远是 planner' — threading broken"
+    )
 
 
 # ── Fix 2: --project is required, no default ────────────────────────────────
