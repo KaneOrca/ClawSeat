@@ -19,7 +19,9 @@ interface ChatMessage {
 
 export const CommunityViewV3: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
-  const { setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const { environment, setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const environmentRef = useRef(environment);
+  const mountAmplitudeRef = useRef(environment.waveAmplitude ?? 60);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,10 @@ export const CommunityViewV3: React.FC = () => {
   const seenIds = useRef<Set<number>>(new Set());
   const incomingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const agentPulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    environmentRef.current = environment;
+  }, [environment]);
 
   const loadChat = useCallback(async () => {
     const data = await request<{ messages: ChatMessage[] }>(() => api.chatSince());
@@ -51,9 +57,10 @@ export const CommunityViewV3: React.FC = () => {
       }
 
       if (nextIncoming.some(message => message.is_agent)) {
+        const prevAmp = environmentRef.current.waveAmplitude ?? 60;
         setEnvironment({ waveAmplitude: 66 });
         if (agentPulseTimer.current) clearTimeout(agentPulseTimer.current);
-        agentPulseTimer.current = setTimeout(() => setEnvironment({ waveAmplitude: 60 }), 600);
+        agentPulseTimer.current = setTimeout(() => setEnvironment({ waveAmplitude: prevAmp }), 600);
       }
 
       setMessages(nextMessages);
@@ -68,7 +75,7 @@ export const CommunityViewV3: React.FC = () => {
       clearInterval(interval);
       incomingTimers.current.forEach(clearTimeout);
       if (agentPulseTimer.current) clearTimeout(agentPulseTimer.current);
-      setEnvironment({ waveAmplitude: 60 });
+      setEnvironment({ waveAmplitude: mountAmplitudeRef.current });
     };
   }, [loadChat, setEnvironment]);
 

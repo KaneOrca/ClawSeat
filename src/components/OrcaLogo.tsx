@@ -31,8 +31,9 @@ const ORCA_PARTS: OrcaPart[] = [
 
 export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
   const { variant, isZenMode } = useArena();
-  const { setEnvironment } = usePhysicsRegistry();
+  const { environment, setEnvironment } = usePhysicsRegistry();
   const rootRef = useRef<HTMLSpanElement>(null);
+  const environmentRef = useRef(environment);
   const [sprayActive, setSprayActive] = useState(false);
   const [eyeGlintActive, setEyeGlintActive] = useState(false);
   const [eyeGlintSrc, setEyeGlintSrc] = useState<string | null>(null);
@@ -40,6 +41,10 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
   const scale = size / BASE_HEIGHT;
   const width = BASE_WIDTH * scale;
   const eyeColor = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.aurora.red;
+
+  useEffect(() => {
+    environmentRef.current = environment;
+  }, [environment]);
 
   const parts = useMemo(() => ORCA_PARTS.map(part => ({
     ...part,
@@ -71,11 +76,12 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
 
   useEffect(() => {
     const triggerSpray = () => {
+      const prevAmp = environmentRef.current.waveAmplitude ?? 60;
       setSprayActive(true);
       setEnvironment({ waveAmplitude: 96 });
       window.setTimeout(() => {
         setSprayActive(false);
-        setEnvironment({ waveAmplitude: 60 });
+        setEnvironment({ waveAmplitude: prevAmp });
       }, 220);
     };
 

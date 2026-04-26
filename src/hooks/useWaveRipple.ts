@@ -11,6 +11,7 @@ const RIPPLE_DECAY_MS = 600
  * preventing one component's timeout from cutting another's short.
  */
 let activeRippleCount = 0
+let rippleBaselineAmplitude: number | null = null
 
 /**
  * Returns mouse event handlers that temporarily boost LabyrinthPhysic
@@ -20,7 +21,7 @@ let activeRippleCount = 0
  * only waveAmplitude is touched — opacity/frequency are preserved.
  */
 export function useWaveRipple() {
-  const { setEnvironment } = usePhysicsRegistry()
+  const { environment, setEnvironment } = usePhysicsRegistry()
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Cleanup on unmount
@@ -30,7 +31,8 @@ export function useWaveRipple() {
         clearTimeout(timerRef.current)
         activeRippleCount = Math.max(0, activeRippleCount - 1)
         if (activeRippleCount === 0) {
-          setEnvironment({ waveAmplitude: BASE_AMPLITUDE })
+          setEnvironment({ waveAmplitude: rippleBaselineAmplitude ?? BASE_AMPLITUDE })
+          rippleBaselineAmplitude = null
         }
         timerRef.current = null
       }
@@ -44,6 +46,9 @@ export function useWaveRipple() {
       activeRippleCount = Math.max(0, activeRippleCount - 1)
     }
 
+    if (activeRippleCount === 0) {
+      rippleBaselineAmplitude = environment.waveAmplitude ?? BASE_AMPLITUDE
+    }
     activeRippleCount++
     setEnvironment({ waveAmplitude: RIPPLE_AMPLITUDE })
 
@@ -52,10 +57,11 @@ export function useWaveRipple() {
       timerRef.current = null
       // Only decay if no other component is mid-ripple
       if (activeRippleCount === 0) {
-        setEnvironment({ waveAmplitude: BASE_AMPLITUDE })
+        setEnvironment({ waveAmplitude: rippleBaselineAmplitude ?? BASE_AMPLITUDE })
+        rippleBaselineAmplitude = null
       }
     }, RIPPLE_DECAY_MS)
-  }, [setEnvironment])
+  }, [environment.waveAmplitude, setEnvironment])
 
   return { onPointerEnter, onTouchStart: onPointerEnter }
 }

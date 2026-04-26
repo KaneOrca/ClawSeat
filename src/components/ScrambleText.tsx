@@ -1,4 +1,5 @@
-import React, { useLayoutEffect, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { usePhysicsRegistry } from '../context/PhysicsContext';
 
 interface ScrambleTextProps {
   text: string;
@@ -18,10 +19,15 @@ const CHARS = '!<>-_\\/[]{}—=+*^?#________';
  */
 export function ScrambleText({ text, as: Tag = 'span', className, style }: ScrambleTextProps) {
   const [displayText, setDisplayText] = useState(text);
+  const { environment, setEnvironment } = usePhysicsRegistry();
+  const environmentRef = useRef(environment);
+  environmentRef.current = environment;
 
   useLayoutEffect(() => {
     // Immediately sync to target text — prevents stale display between generations
     setDisplayText(text);
+    const prevAmp = environmentRef.current.waveAmplitude ?? 60;
+    setEnvironment({ waveAmplitude: 85 });
 
     // Generation-local flag — NOT a ref, so each effect closure has its own copy
     let isCurrentGen = true;
@@ -62,6 +68,8 @@ export function ScrambleText({ text, as: Tag = 'span', className, style }: Scram
 
       if (complete < queue.length && isCurrentGen) {
         requestAnimationFrame(update);
+      } else if (isCurrentGen) {
+        setEnvironment({ waveAmplitude: prevAmp });
       }
     };
 
@@ -69,8 +77,9 @@ export function ScrambleText({ text, as: Tag = 'span', className, style }: Scram
 
     return () => {
       isCurrentGen = false;
+      setEnvironment({ waveAmplitude: prevAmp });
     };
-  }, [text]);
+  }, [setEnvironment, text]);
 
   const Element = Tag as any;
 

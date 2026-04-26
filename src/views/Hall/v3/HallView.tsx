@@ -10,7 +10,7 @@ type LayerState = 'locked' | 'unlocked' | 'active';
 
 export const HallViewV3: React.FC = () => {
   const { user, setChallengeId, isLoading } = useArena();
-  const { setEnvironment } = usePhysicsRegistry();
+  const { environment, setEnvironment } = usePhysicsRegistry();
 
   const completedIds = user?.completedChallenges ?? [];
   const activeChallengeId = useMemo(() => {
@@ -27,8 +27,9 @@ export const HallViewV3: React.FC = () => {
 
   useEffect(() => {
     if (!activeChallengeId) return;
+    const prevAmp = environment.waveAmplitude ?? 60;
     setEnvironment({ waveAmplitude: 75 });
-    return () => setEnvironment({ waveAmplitude: 60 });
+    return () => setEnvironment({ waveAmplitude: prevAmp });
   }, [activeChallengeId, setEnvironment]);
 
   if (isLoading && !user) {
@@ -82,11 +83,10 @@ const LayerRow: React.FC<{
   onSelect: (id: number) => void;
 }> = ({ challenge, hex, state, onSelect }) => {
   const isLocked = state === 'locked';
-  const ref = useObstacle(!isLocked) as React.RefObject<HTMLButtonElement>;
+  const textRef = useObstacle(!isLocked) as React.RefObject<HTMLSpanElement>;
 
   return (
     <button
-      ref={ref as any}
       type="button"
       disabled={isLocked}
       className="hall-v3-row"
@@ -97,7 +97,7 @@ const LayerRow: React.FC<{
         ...(isLocked ? lockedRowStyle : null),
       }}
     >
-      <span>{'>'} {hex} // <span style={titleTransformStyle}>{challenge.title}</span></span>
+      <span ref={textRef}>{'>'} {hex} // <span style={titleTransformStyle}>{challenge.title}</span></span>
       <span>{challenge.points}PT</span>
     </button>
   );

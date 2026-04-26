@@ -33,7 +33,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
   return (
     <div data-module="nav" style={navScatterStyle}>
       {/* Logo */}
-      <NavAtom onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
+      <NavAtom onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} obstacle={false}>
         <MagneticSurface pull={0.2} padding={15}>
           <div
             onClick={() => onViewChange('home')}
@@ -165,8 +165,9 @@ const NavAtom: React.FC<{
   children: React.ReactNode;
   onPointerEnter: () => void;
   onTouchStart: () => void;
-}> = ({ children, onPointerEnter, onTouchStart }) => {
-  const ref = useObstacle() as React.RefObject<HTMLSpanElement>;
+  obstacle?: boolean;
+}> = ({ children, onPointerEnter, onTouchStart, obstacle = true }) => {
+  const ref = useObstacle(obstacle) as React.RefObject<HTMLSpanElement>;
   return (
     <span ref={ref as any} style={{ display: 'inline-flex' }} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
       {children}
