@@ -15,6 +15,7 @@ export interface RectObstacle {
   y: number;
   w: number;
   h: number;
+  isClimbing?: boolean;
   /** Per-character sub-rects from measureText decomposition. */
   charRects?: CharRect[];
 }
@@ -55,6 +56,9 @@ export interface PhysicsEffects {
     active: boolean;
     startTime: number;
     duration: number;
+  };
+  recoilVelocity?: {
+    y: number;
   };
 }
 
@@ -373,6 +377,27 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
       prevScrollRef.current = { x: sx, y: sy };
 
+      setEnvironmentRaw(prev => {
+        const recoilY = prev.effects?.recoilVelocity?.y ?? 0;
+        if (Math.abs(recoilY) < 0.01) {
+          if (recoilY === 0) return prev;
+          return {
+            ...prev,
+            effects: {
+              ...prev.effects,
+              recoilVelocity: { y: 0 },
+            },
+          };
+        }
+        return {
+          ...prev,
+          effects: {
+            ...prev.effects,
+            recoilVelocity: { y: recoilY * 0.92 },
+          },
+        };
+      });
+
       if (frameRef.current % POLL_EVERY_N_FRAMES === 0) {
         const tracked = trackedRef.current;
         const visible = visibleRef.current;
@@ -428,7 +453,15 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
             if (r.width < 1 || r.height < 1) return;
 
             const charRects = getCharRects(id, el, r);
-            const obs: RectObstacle = { id, x: r.left, y: r.top, w: r.width, h: r.height, charRects };
+            const obs: RectObstacle = {
+              id,
+              x: r.left,
+              y: r.top,
+              w: r.width,
+              h: r.height,
+              isClimbing: el.dataset.physicsClimbing === 'true',
+              charRects,
+            };
             next.push(obs);
 
             if (!changed) {
@@ -511,6 +544,7 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     effects: {
       transitionProgress: 0,
       transitionFrom: null,
+      recoilVelocity: { y: 0 },
     }
   });
 

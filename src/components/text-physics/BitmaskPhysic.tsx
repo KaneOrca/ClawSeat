@@ -67,13 +67,13 @@ function rectDist(cx: number, cy: number, rx: number, ry: number, rw: number, rh
 /**
  * Feathered alpha for a single rect with noise.
  */
-function featherRect(cx: number, cy: number, rx: number, ry: number, rw: number, rh: number): number {
+function featherRect(cx: number, cy: number, rx: number, ry: number, rw: number, rh: number, featherPx = FEATHER_PX): number {
   const d = rectDist(cx, cy, rx, ry, rw, rh);
   if (d === 0) return OCCLUDED_FLOOR * (0.8 + cellNoise(cx, cy) * 0.2);
-  if (d >= FEATHER_PX) return 1;
+  if (d >= featherPx) return 1;
   const jitter = cellNoise(cx, cy) * 8;
   const dist = Math.max(0, d + jitter);
-  const t = Math.min(1, dist / FEATHER_PX);
+  const t = Math.min(1, dist / featherPx);
   return OCCLUDED_FLOOR + (1 - OCCLUDED_FLOOR) * t * t * (3 - 2 * t);
 }
 
@@ -86,15 +86,16 @@ function getOcclusionAlpha(cx: number, cy: number, obstacles: RectObstacle[]): n
   let minAlpha = 1;
   for (let i = 0; i < obstacles.length; i++) {
     const o = obstacles[i];
+    const featherPx = o.isClimbing ? 30 : FEATHER_PX;
 
     // Quick AABB broad-phase: skip if far from the whole obstacle
     const broadDist = rectDist(cx, cy, o.x, o.y, o.w, o.h);
-    if (broadDist >= FEATHER_PX) continue;
+    if (broadDist >= featherPx) continue;
 
     // If charRects available, mask per-character
     if (o.charRects && o.charRects.length > 0) {
       for (const cr of o.charRects) {
-        const a = featherRect(cx, cy, cr.x, cr.y, cr.w, cr.h);
+        const a = featherRect(cx, cy, cr.x, cr.y, cr.w, cr.h, featherPx);
         minAlpha = Math.min(minAlpha, a);
       }
       continue;
@@ -110,13 +111,13 @@ function getOcclusionAlpha(cx: number, cy: number, obstacles: RectObstacle[]): n
     }
 
     const rawDist = Math.sqrt(dx * dx + dy * dy);
-    if (rawDist < FEATHER_PX) {
+    if (rawDist < featherPx) {
       // Jitter the distance with coordinate noise to break straight edges
       const jitter = cellNoise(cx, cy) * 8; // ±8px wobble
       const dist = Math.max(0, rawDist + jitter);
 
       // Smooth cubic ease for organic falloff (not linear)
-      const t = Math.min(1, dist / FEATHER_PX);
+      const t = Math.min(1, dist / featherPx);
       const eased = t * t * (3 - 2 * t); // smoothstep
       const edgeAlpha = OCCLUDED_FLOOR + (1 - OCCLUDED_FLOOR) * eased;
       minAlpha = Math.min(minAlpha, edgeAlpha);
@@ -205,6 +206,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     const waveAmplitude = env.waveAmplitude ?? 60;
     const baseAlpha = env.opacity ?? baseOpacity;
     const transition = env.effects;
+    const recoilVelY = transition?.recoilVelocity?.y ?? 0;
     const transitionProgress = transition?.transitionProgress ?? 0;
     const transitionFrom = transition?.transitionFrom ?? null;
     const isTransitioning = !!transitionFrom && transitionProgress > 0;
@@ -238,7 +240,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
         // Pixel-perfect mask occlusion (primary), geometric fallback only when no mask
         // Prediction: sample mask at predicted position (where text will be next frame)
         const predX = vp.scrollVelX * 1.5;
-        const predY = vp.scrollVelY * 1.5;
+        const predY = (vp.scrollVelY + recoilVelY) * 1.5;
         let occlusion: number;
         if (maskData && maskW === vp.width) {
           const maskSample = sampleMask(maskData, maskW, cx + predX, cy + predY);
@@ -360,7 +362,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
       ctx.lineWidth = 1;
       // Apply same prediction offset as mask sampling
       const diagPredX = vp.scrollVelX * 1.5;
-      const diagPredY = vp.scrollVelY * 1.5;
+      const diagPredY = (vp.scrollVelY + recoilVelY) * 1.5;
 
       for (const obs of obstacles) {
         // AABB — cyan
