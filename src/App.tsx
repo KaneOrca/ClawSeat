@@ -29,6 +29,10 @@ const Router: React.FC = () => {
       const Home = views.home;
       return <Home />;
     }
+    case 'auth': {
+      const Auth = views.auth;
+      return <Auth />;
+    }
     case 'hall':
     case 'challenges': {
       const Hall = views.hall;

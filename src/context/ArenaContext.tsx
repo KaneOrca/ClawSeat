@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { api, request } from '../api/arena';
 import { useLanguage } from './LanguageContext';
 
-export type ViewType = 'home' | 'hall' | 'challenges' | 'watch' | 'community' | 'spike-code-morph';
+export type ViewType = 'home' | 'auth' | 'hall' | 'challenges' | 'watch' | 'community' | 'spike-code-morph';
 export type VariantType = 'v2' | 'v3';
 
 export interface User {
@@ -41,7 +41,7 @@ const ArenaContext = createContext<ArenaContextType | undefined>(undefined);
 
 export const ArenaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useLanguage();
-  const [currentView, setCurrentView] = useState<ViewType>('home');
+  const [currentView, setCurrentView] = useState<ViewType>(() => window.location.pathname === '/auth' ? 'auth' : 'home');
   const [variant, setVariant] = useState<VariantType>(() => { const saved = localStorage.getItem('arena_variant'); if (saved === 'v2' || saved === 'v3') return saved as VariantType; return 'v3'; });
   const [currentChallengeId, setChallengeId] = useState<number | null>(null);
   const [isZenMode, setZenMode] = useState(false);

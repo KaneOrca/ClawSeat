@@ -8,6 +8,7 @@ import { ChallengeDetailView as V2ChallengeDetail } from './v2/views/ChallengeDe
 import { WatchView as V2Watch } from './v2/views/WatchView';
 import { HallViewV2 } from '../views/Hall/v2/HallView';
 import { CommunityViewV2 } from '../views/Community/v2/CommunityView';
+import { AuthViewV2 } from '../views/Auth/v2/AuthView';
 
 // V3
 import { HomeViewV3 as V3Home } from '../views/Home/v3/HomeViewV3';
@@ -15,6 +16,7 @@ import { ChallengeLayer as V3ChallengeDetail } from '../views/ChallengeDetail/v3
 import { WatchViewV3 as V3Watch } from '../views/Watch/v3/WatchViewV3';
 import { HallViewV3 } from '../views/Hall/v3/HallView';
 import { CommunityViewV3 } from '../views/Community/v3/CommunityView';
+import { AuthViewV3 } from '../views/Auth/v3/AuthView';
 
 type VariantViews = {
   home: React.FC;
@@ -22,9 +24,10 @@ type VariantViews = {
   watch: React.FC;
   hall: React.FC;
   community: React.FC;
+  auth: React.FC;
 };
 
 export const variantRegistry: Record<VariantType, VariantViews> = {
-  v2: { home: V2Home, challengeDetail: V2ChallengeDetail, watch: V2Watch, hall: HallViewV2, community: CommunityViewV2 },
-  v3: { home: V3Home, challengeDetail: V3ChallengeDetail, watch: V3Watch, hall: HallViewV3, community: CommunityViewV3 },
+  v2: { home: V2Home, challengeDetail: V2ChallengeDetail, watch: V2Watch, hall: HallViewV2, community: CommunityViewV2, auth: AuthViewV2 },
+  v3: { home: V3Home, challengeDetail: V3ChallengeDetail, watch: V3Watch, hall: HallViewV3, community: CommunityViewV3, auth: AuthViewV3 },
 };
