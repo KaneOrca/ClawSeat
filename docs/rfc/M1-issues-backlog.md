@@ -734,7 +734,123 @@ e. **osascript fallback path**: 如果 ensure-mode 检测不到 tab 但 osascrip
 
 ---
 
-### #32 (预留新 issue 编号)
+### #32 heartbeat / agent_admin spawn 假设 memory 是 claude — 🔴 BLOCKER for codex/gemini memory
+
+**症状（2026-04-27 cartooner-memory 实测）**: cartooner-memory 跑 `agent_admin session start-engineer memory --project cartooner` 触发错误:
+```
+memory: heartbeat provisioning currently targets Claude sessions only
+```
+
+**影响**: #25 把 install.sh 默认 memory 改成 codex gpt-5.4-mini，但 spawn 链路（agent_admin session start-engineer）假设 memory 必须是 claude。结果 codex memory 无法被 agent_admin re-spawn / re-bind / heartbeat 健康检查。
+
+**根因**: `agent_admin_session.py` / `heartbeat_config.py` 类的 spawn 路径只 implement claude 的 heartbeat / OAuth check / sandbox seed，没 cover codex (chatgpt auth) / gemini (oauth/google) memory 场景。
+
+**修复**:
+1. grep `agent_admin*.py heartbeat*.py` 找所有 "claude only" 假设，分两类：
+   - 真的只能 claude（如 OAuth token 类） → 文档化 + 在 codex/gemini memory 场景 graceful skip + warn（不抛错）
+   - 应该 generic（如 heartbeat 心跳）→ 拓展到所有 tool
+2. `agent_admin session start-engineer memory` 必须支持 3 tool（claude/codex/gemini），不论 auth 模式
+3. 为 codex memory 加 sandbox/secret seed path
+4. 测试: 装 cartooner（codex memory）→ agent_admin start-engineer 成功 spawn 4 seat；装 install（claude memory）保持现状不破
+
+**Owner**: builder-codex（实施 spawn 路径泛化）+ planner-claude（review heartbeat 协议设计）+ 我（machine-memory，review codex/gemini memory 的 sandbox 隔离要求）
+**批次**: 紧急 micro-PR，**M1.6 阻塞**（不修，#25 codex 默认形同虚设；任何 codex memory 项目都跑不通 Phase-A B4）
+**test_policy**: UPDATE（功能改 + 必须 cover claude/codex/gemini 三 tool memory spawn 测试）
+
+**验收**:
+- `agent_admin session start-engineer memory --project cartooner`（codex memory）成功 spawn，无 "heartbeat" error
+- 装 cartooner 全程 Phase-A B0-B7 走通，4 seat 全 alive
+- 不破坏现有 install/arena（claude memory）
+
+**关联**:
+- 是 #25 (codex gpt-5.4-mini 默认) 的隐藏依赖暴露
+- 跟 #31 一起做（brief vocab + heartbeat 都是 multi-engine 兼容性问题）
+- 跟 #19 (seat-diagnostic.sh) 跨工具诊断同源
+
+---
+
+### #33 brief 不强制 project.toml seat_overrides 权威 → planner provider 幻觉 — 🟠 HIGH
+
+**症状（2026-04-27 cartooner-memory 实测）**: cartooner-memory B0 写出的 ancestor-provider-decision.md 含:
+```
+planner: gemini / oauth / google
+```
+但 project.toml seat_overrides.planner 明确:
+```
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+```
+
+**根因**: brief B0.0.1 让 memory "读 machine 层 credentials 综合做 provider 决策"。codex memory 看到 machine credentials.json 含 `gemini google_accounts.json` + `OPENAI_API_KEY`，**脑补**出 planner=gemini（因为 gemini 有 OAuth 资源），无视 project.toml 的明确 override。
+
+brief 没显式说"project.toml seat_overrides 是 SSOT，不许覆盖"，导致 LLM 当作"参考资料"灵活解读。
+
+**修复**:
+1. brief B0 / B3.5 加强制语句:
+   ```
+   project.toml [seat_overrides.<seat>] 是 SSOT。
+   memory 必须按 seat_overrides 的 tool/auth/provider 字面量 spawn，
+   不许根据 machine credentials 推断或 override。
+   如果 seat_overrides 不存在某 seat，才能 fallback 到 template default。
+   ```
+2. ancestor-provider-decision.md 模板加显式字段:
+   ```
+   ## project.toml authority check
+   - Source: ~/.agents/projects/<project>/project.toml
+   - Override count: <N>
+   - Decisions match overrides: yes / no
+   ```
+   让 memory 必须显式 ack 自己读了 project.toml.
+3. `agent_admin session start-engineer` 收到与 project.toml 不符的 spawn 请求时 **hard fail**（不许 spawn 与 project.toml 不一致的 seat），加 `--accept-override` flag 仅供 operator override
+
+**Owner**: builder-codex（实施 hard fail）+ planner-claude（review brief 文案）+ memory（写 brief 加强段 draft）
+**批次**: 紧急 micro-PR（跟 #31 brief refresh 合并最自然）
+**test_policy**: UPDATE
+
+**验收**:
+- 装 cartooner（project.toml planner=claude） → memory ancestor-provider-decision.md 必须写 planner=claude
+- agent_admin 拒绝 spawn 跟 project.toml 不一致的 seat（除非 --accept-override）
+- brief grep 显示 "project.toml seat_overrides 是 SSOT" 字样
+
+**关联**:
+- 跟 #31 brief refresh 一起改
+- 跟 #22 (test_policy) 同类: 都是把"隐性约定"显式化
+
+---
+
+### #34 codex gpt-5.4-mini skill context budget 超限 — 🟡 MEDIUM
+
+**症状（2026-04-27 cartooner-memory 启动）**: codex 状态栏 warn:
+```
+⚠ Exceeded skills context budget of 2%. Loaded skill descriptions were truncated by an average of 150 characters per skill.
+```
+
+**根因**: codex gpt-5.4-mini context window 比 claude opus 小，加载 6 个 skill 的 description 已经超过 codex 的 2% startup budget。每个 skill description 平均被截断 150 字。
+
+**影响**: 关键 skill 内容（特别是新 skill: clawseat-decision-escalation / clawseat-koder / clawseat-privacy）被截断，memory 看到的协议片段不完整 → 决策可能漂移。
+
+**修复方案候选**:
+a. **缩 skill description**: 把每个 skill 的 description 字段精简到 < 150 字符（保留 SKILL.md body 完整）
+b. **按需加载**: codex 启动时只 reference skill 名，body 通过 codex grep tool 按需读
+c. **memory tier 自适应**: 检测到 codex/gemini 等小 context model 时只注册必需的 3 个 skill，省略 OpenClaw/lark 类
+d. **拆 skill**: 把 reporting / decision / privacy 合并成一个 "clawseat-memory-protocol" 元 skill
+
+**建议组合**: a + c
+- a 治标（缩 description）
+- c 治本（按 model tier 注册 skill 集）
+
+**Owner**: builder-codex（实施 skill description 缩 + tier-based registration）+ 我 machine-memory（review skill description rewrites）
+**批次**: M1.6 后期（不阻塞，warn 不是 error）
+**test_policy**: UPDATE
+
+**验收**:
+- codex gpt-5.4-mini memory 启动无 "Exceeded skills context budget" warn
+- skill 内容仍能被 memory 正确 reference
+
+---
+
+### #35 (预留新 issue 编号)
 
 ---
 
