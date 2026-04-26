@@ -17,7 +17,7 @@ export const ChallengeDetailView: React.FC = () => {
 
   const liveManuscriptText = useMemo(() => {
     const core = (safeStr(challenge.title).toUpperCase() + '. ' + t('challengeDetail.body') + ' ' + t('challengeDetail.marginalia') + ' ').repeat(2);
-    const signature = answer ? ` [ SIGNATURE_ECHO: ${answer} ] ` : '';
+    const signature = answer ? ` [ ${t('challengeDetail.v2.signature_echo')}: ${answer} ] ` : '';
     return core + signature.repeat(3);
   }, [challenge.title, t, answer]);
 
@@ -40,10 +40,10 @@ export const ChallengeDetailView: React.FC = () => {
           onClick={() => setChallengeId(null)}
           style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'IBM Plex Mono', fontSize: '11px', textTransform: 'uppercase' }}
         >
-          <ArrowLeft size={14} /> [ Return_to_Archive ]
+          <ArrowLeft size={14} /> {t('challengeDetail.v2.back')}
         </button>
         <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#888' }}>
-          CODEX_REF: {challenge.id} // SEC_LVL: {challenge.difficulty}
+          {t('challengeDetail.v2.codex_ref')}: {challenge.id} // {t('challengeDetail.v2.sec_level')}: {challenge.difficulty}
         </div>
       </div>
 
@@ -69,10 +69,10 @@ export const ChallengeDetailView: React.FC = () => {
             boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
             zIndex: 10
           }}>
-            <h4 style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#888', marginBottom: '1rem' }}>FOLIATION_DATA</h4>
+            <h4 style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#888', marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
             <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '2rem' }}>{challenge.title}</div>
             <div style={{ marginBottom: '2rem' }}>
-              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#aaa' }}>XP_VALUE</span>
+              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#aaa' }}>{t('challengeDetail.v2.xp_value')}</span>
               <div style={{ fontSize: '2rem', fontWeight: 700 }}>{challenge.points}</div>
             </div>
             <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.6, fontStyle: 'italic' }}>
@@ -92,11 +92,11 @@ export const ChallengeDetailView: React.FC = () => {
             padding: '2rem',
             borderLeft: '4px solid #1a1a1a'
           }}>
-            <h3 style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: '#888', textTransform: 'uppercase', marginBottom: '1rem' }}>// Neural_Transcription_Active</h3>
+            <h3 style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: '#888', textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
             <textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder={locale === 'zh-CN' ? "在此落笔..." : "Cast your signature here..."}
+              placeholder={t('challengeDetail.v2.input_placeholder')}
               style={{
                 width: '100%',
                 height: '100px',
@@ -132,7 +132,7 @@ export const ChallengeDetailView: React.FC = () => {
                 textTransform: 'uppercase'
               }}
             >
-              <Edit3 size={16} /> {submitting ? 'RECORDING...' : 'COMMIT_SIGNATURE'}
+              <Edit3 size={16} /> {submitting ? t('challengeDetail.v2.submitting') : t('challengeDetail.v2.submit')}
             </button>
           </div>
         </div>

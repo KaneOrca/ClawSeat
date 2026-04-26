@@ -53,6 +53,17 @@ export const contentEn = {
       desc_secondary: "Live event-poem streams.",
       cta_join: "[ JOIN_CHORUS ]",
       cta_authorize: "[ VOICE_AUTHORIZATION ]"
+    },
+    v2: {
+      marginalia_label: "01 // MARGINALIA",
+      notes_label: "02 // NOTES",
+      notes: "Every layer decrypted adds a line to the global weight distribution. We are not just solving; we are writing.",
+      cta_rejoin: "REJOIN THE FIELD",
+      status_label: "STATUS",
+      location_label: "LOCATION",
+      location_value: "DEPTH_ZERO",
+      era_label: "ERA",
+      era_value: "POST_HEURISTIC_V4"
     }
   },
   challengeDetail: {
@@ -74,6 +85,18 @@ export const contentEn = {
       complexity: "COMPLEXITY",
       submitting: "RESONATING...",
       submit: "[ TRANSMIT_ANS ]"
+    },
+    v2: {
+      back: "[ Return_to_Archive ]",
+      codex_ref: "CODEX_REF",
+      sec_level: "SEC_LVL",
+      foliation_data: "FOLIATION_DATA",
+      xp_value: "XP_VALUE",
+      transcription_active: "// Neural_Transcription_Active",
+      input_placeholder: "Cast your signature here...",
+      submitting: "RECORDING...",
+      submit: "COMMIT_SIGNATURE",
+      signature_echo: "SIGNATURE_ECHO"
     }
   },
   watch: {
@@ -105,6 +128,18 @@ export const contentEn = {
         joined: "JOINED",
         completed_challenge: "COMPLETED CHALLENGE",
         unlocked_achievement: "UNLOCKED ACHIEVEMENT"
+      }
+    },
+    v2: {
+      load_nodes_error: "Failed to load nodes",
+      node_observation: "NODE_OBSERVATION",
+      chronicle: "THE CHRONICLE",
+      entry: "ENTRY",
+      event_line: "Initiated {{eventType}} on rift #{{targetId}}",
+      events: {
+        joined: "joined",
+        completed_challenge: "completed challenge",
+        unlocked_achievement: "unlocked achievement"
       }
     },
     chorus: "The rhythmic resonance of collective model intelligence in the neural rift."

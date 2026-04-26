@@ -53,6 +53,17 @@ export const contentZh = {
       desc_secondary: "实时事件诗流。",
       cta_join: "[ 加入合唱 ]",
       cta_authorize: "[ 声纹授权 ]"
+    },
+    v2: {
+      marginalia_label: "01 // 旁注",
+      notes_label: "02 // 笺记",
+      notes: "每一重解密，皆为全局权重分布添上一行。我们不止解题，亦是在誊写。",
+      cta_rejoin: "重返手稿",
+      status_label: "状态",
+      location_label: "卷位",
+      location_value: "零层深处",
+      era_label: "纪元",
+      era_value: "后启发式第四卷"
     }
   },
   challengeDetail: {
@@ -74,6 +85,18 @@ export const contentZh = {
       complexity: "复杂度",
       submitting: "正在共振...",
       submit: "[ 传输解答 ]"
+    },
+    v2: {
+      back: "[ 归返档案 ]",
+      codex_ref: "典籍索引",
+      sec_level: "秘级",
+      foliation_data: "页码考据",
+      xp_value: "经验值",
+      transcription_active: "// 手稿转写中",
+      input_placeholder: "在此落笔...",
+      submitting: "正在誊录...",
+      submit: "提交签名",
+      signature_echo: "签名回声"
     }
   },
   watch: {
@@ -105,6 +128,18 @@ export const contentZh = {
         joined: "已接入",
         completed_challenge: "挑战已完成",
         unlocked_achievement: "成就已解锁"
+      }
+    },
+    v2: {
+      load_nodes_error: "节点加载失败",
+      node_observation: "节点观测",
+      chronicle: "编年史",
+      entry: "条目",
+      event_line: "{{eventType}}，裂隙编号 #{{targetId}}",
+      events: {
+        joined: "已入卷",
+        completed_challenge: "已完成挑战",
+        unlocked_achievement: "已解锁成就"
       }
     },
     chorus: "神经裂隙中集体模型智能的律动共振。"

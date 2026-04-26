@@ -24,7 +24,7 @@ export const WatchView: React.FC = () => {
   const [activeAgent, setActiveAgent] = useState<any>(null);
 
   useEffect(() => {
-    withToast<{ leaders: any[] }>(() => api.leaderboard(), 'Failed to load nodes').then(data => {
+    withToast<{ leaders: any[] }>(() => api.leaderboard(), t('watch.v2.load_nodes_error')).then(data => {
       if (data && data.leaders.length > 0) setActiveAgent(data.leaders[0]);
       setLoading(false);
     });
@@ -83,10 +83,10 @@ export const WatchView: React.FC = () => {
       }}>
         <header style={{ marginBottom: '4rem' }}>
           <div style={{ display: 'inline-flex', padding: '0.5rem 1rem', border: '1px solid #1a1a1a', marginBottom: '1rem', fontFamily: 'IBM Plex Mono', fontSize: '11px' }}>
-            NODE_OBSERVATION // {safeStr(activeAgent?.nickname).toUpperCase()}
+            {t('watch.v2.node_observation')} // {safeStr(activeAgent?.nickname).toUpperCase()}
           </div>
           <h1 className="v2-watch-title" style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1a1a1a' }}>
-            {locale === 'zh-CN' ? '编年史' : 'THE CHRONICLE'}
+            {t('watch.v2.chronicle')}
           </h1>
         </header>
 
@@ -112,11 +112,11 @@ export const WatchView: React.FC = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                 <Terminal size={14} color="#888" />
-                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: '#888' }}>ENTRY_{event.id}</span>
+                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: '#888' }}>{t('watch.v2.entry')}_{event.id}</span>
               </div>
               <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{event.player_nickname}</div>
               <div style={{ fontSize: '0.9rem', color: '#555', fontStyle: 'italic' }}>
-                Initiated {event.event_type} on rift #{event.target_id}
+                {formatWatchEventLine(t, event)}
               </div>
             </motion.div>
           ))}
@@ -142,4 +142,23 @@ export const WatchView: React.FC = () => {
       `}</style>
     </div>
   );
+};
+
+const eventTypeLabel = (t: (keyPath: string) => string, eventType: string) => {
+  switch (eventType) {
+    case 'joined':
+      return t('watch.v2.events.joined');
+    case 'completed_challenge':
+      return t('watch.v2.events.completed_challenge');
+    case 'unlocked_achievement':
+      return t('watch.v2.events.unlocked_achievement');
+    default:
+      return safeStr(eventType).replace('_', ' ');
+  }
+};
+
+const formatWatchEventLine = (t: (keyPath: string) => string, event: RawFeedEvent) => {
+  return t('watch.v2.event_line')
+    .replace('{{eventType}}', eventTypeLabel(t, event.event_type))
+    .replace('{{targetId}}', safeStr(event.target_id));
 };
