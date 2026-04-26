@@ -38,6 +38,7 @@ export const ChallengeDetailView: React.FC = () => {
       {/* HEADER RAIL */}
       <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4rem', borderBottom: '1px solid rgba(0,0,0,0.1)', paddingBottom: '1rem' }}>
         <PretextButton
+          className="challenge-v2-back"
           config={{
             label: t('challengeDetail.v2.back'),
             engine: 'labyrinth',
@@ -46,7 +47,7 @@ export const ChallengeDetailView: React.FC = () => {
             color: '#888',
             onTrigger: () => setChallengeId(null),
           }}
-          style={{ color: '#888', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'IBM Plex Mono', fontSize: '11px', textTransform: 'uppercase' }}
+          style={{ color: '#888', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'IBM Plex Mono', fontSize: '11px', textTransform: 'uppercase', transition: 'transform 180ms ease, color 180ms ease, text-shadow 180ms ease' }}
         >
           <ArrowLeft size={14} /> {t('challengeDetail.v2.back')}
         </PretextButton>
@@ -120,6 +121,7 @@ export const ChallengeDetailView: React.FC = () => {
               }}
             />
             <button
+              className="challenge-v2-submit"
               onClick={handleSubmit}
               disabled={submitting || !answer.trim()}
               style={{
@@ -137,7 +139,8 @@ export const ChallengeDetailView: React.FC = () => {
                 fontSize: '11px',
                 fontWeight: 700,
                 letterSpacing: '0.1em',
-                textTransform: 'uppercase'
+                textTransform: 'uppercase',
+                transition: 'transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease'
               }}
             >
               <Edit3 size={16} /> {submitting ? t('challengeDetail.v2.submitting') : t('challengeDetail.v2.submit')}
@@ -145,6 +148,28 @@ export const ChallengeDetailView: React.FC = () => {
           </div>
         </div>
       </div>
+      <style>{`
+        .challenge-v2-back:hover,
+        .challenge-v2-back:focus-visible {
+          color: #1a1a1a !important;
+          transform: translateX(-2px);
+          text-shadow: 0 0 10px rgba(26, 26, 26, 0.18);
+        }
+
+        .challenge-v2-back:active {
+          transform: translateX(-4px) scale(0.98);
+        }
+
+        .challenge-v2-submit:hover:not(:disabled),
+        .challenge-v2-submit:focus-visible:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 18px rgba(26, 26, 26, 0.18);
+        }
+
+        .challenge-v2-submit:active:not(:disabled) {
+          transform: translateY(1px) scale(0.98);
+        }
+      `}</style>
     </div>
   );
 };
