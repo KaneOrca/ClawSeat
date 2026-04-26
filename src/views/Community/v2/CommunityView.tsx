@@ -3,6 +3,7 @@ import { api, request } from '../../../api/arena';
 import { useArena } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
+import { tokens } from '../../../design/tokens';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
 
@@ -15,8 +16,6 @@ interface ChatMessage {
   time?: string;
   is_agent?: boolean;
 }
-
-const MANUSCRIPT_ACTIVE_RED = '#b53021';
 
 export const CommunityViewV2: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
@@ -72,7 +71,7 @@ export const CommunityViewV2: React.FC = () => {
         id: `community-v2-agent-${message.id}`,
         text: `[AGENT] ${safeStr(message.content)}`,
         lineIndex: 8 + index * 3,
-        color: MANUSCRIPT_ACTIVE_RED,
+        color: tokens.colors.aurora.red,
         opacity: 0.9,
       });
     });
@@ -138,7 +137,7 @@ export const CommunityViewV2: React.FC = () => {
           disabled={!user || !input.trim()}
           style={{
             ...sendStyle,
-            color: user && input.trim() ? MANUSCRIPT_ACTIVE_RED : 'rgba(26,26,26,0.35)',
+            color: user && input.trim() ? tokens.colors.aurora.red : 'rgba(26,26,26,0.35)',
             cursor: user && input.trim() ? 'pointer' : 'not-allowed',
           }}
         >
@@ -203,7 +202,7 @@ const MessageAnnotation: React.FC<{ message: ChatMessage; index: number; isIncom
 const containerStyle: React.CSSProperties = {
   minHeight: '100vh',
   padding: '4rem 2rem 7rem',
-  color: '#1a1a1a',
+  color: tokens.colors.text.primary,
   fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
   position: 'relative',
 };
@@ -251,21 +250,21 @@ const messageContainerStyle: React.CSSProperties = {
 const messageStyle: React.CSSProperties = {
   fontSize: '15px',
   lineHeight: 1.6,
-  color: '#1a1a1a',
+  color: tokens.colors.text.primary,
 };
 
 const agentMessageStyle: React.CSSProperties = {
   fontSize: '32px',
   fontStyle: 'italic',
   fontWeight: 700,
-  color: MANUSCRIPT_ACTIVE_RED,
+  color: tokens.colors.aurora.red,
   lineHeight: 1.2,
   margin: '1rem 0',
 };
 
 const incomingMessageStyle: React.CSSProperties = {
   filter: 'blur(0.4px)',
-  textShadow: `0 0 18px ${MANUSCRIPT_ACTIVE_RED}55`,
+  textShadow: `0 0 18px ${tokens.colors.aurora.red}55`,
 };
 
 const authorStyle: React.CSSProperties = {
@@ -295,7 +294,7 @@ const inputStyle: React.CSSProperties = {
   padding: '0.5rem 0',
   fontFamily: "'Playfair Display', serif",
   fontSize: '16px',
-  color: '#1a1a1a',
+  color: tokens.colors.text.primary,
   outline: 'none',
 };
 
