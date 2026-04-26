@@ -5,9 +5,6 @@ import { PhysicsProvider } from './context/PhysicsContext';
 import { MainLayout } from './layouts/MainLayout';
 import { variantRegistry } from './variants/registry';
 
-// Shared Views (not variant-specific)
-import { CommunityView } from './views/Community/CommunityView';
-
 import './index.css';
 
 const CodeMorphRoute = React.lazy(() =>
@@ -41,8 +38,10 @@ const Router: React.FC = () => {
       const Watch = views.watch;
       return <Watch />;
     }
-    case 'community':
-      return <CommunityView />;
+    case 'community': {
+      const Community = views.community;
+      return <Community />;
+    }
     default: {
       const Home = views.home;
       return <Home />;
