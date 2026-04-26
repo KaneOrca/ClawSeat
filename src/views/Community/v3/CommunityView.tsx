@@ -20,6 +20,8 @@ interface ChatMessage {
 export const CommunityViewV3: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
   const { environment, setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const labelRef = useObstacle() as React.RefObject<HTMLDivElement>;
+  const inputRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const environmentRef = useRef(environment);
   const mountAmplitudeRef = useRef(environment.waveAmplitude ?? 60);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -111,7 +113,7 @@ export const CommunityViewV3: React.FC = () => {
         transition: `opacity 0.8s ${tokens.transitions.easing}`,
       }}
     >
-      <div style={labelStyle}>COMMUNITY_V3 // VERTICAL_SOLOIST_TRACE</div>
+      <div ref={labelRef} style={labelStyle}>COMMUNITY_V3 // VERTICAL_SOLOIST_TRACE</div>
 
       <div className="community-v3-trace" style={traceStyle}>
         {loading ? (
@@ -130,7 +132,7 @@ export const CommunityViewV3: React.FC = () => {
         )}
       </div>
 
-      <div className="community-v3-input" style={inputContainerStyle}>
+      <div ref={inputRef} className="community-v3-input" style={inputContainerStyle}>
         <input
           type="text"
           value={input}
@@ -211,7 +213,7 @@ const containerStyle: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  position: 'fixed',
+  position: 'absolute',
   top: '2rem',
   left: '2rem',
   fontSize: tokens.sizes.micro,
@@ -248,15 +250,12 @@ const emptyStyle: React.CSSProperties = {
 };
 
 const inputContainerStyle: React.CSSProperties = {
-  position: 'fixed',
-  bottom: '2rem',
-  left: '50%',
-  transform: 'translateX(-50%)',
+  position: 'relative',
   width: '60%',
   display: 'flex',
   gap: '1rem',
   borderBottom: `1px solid ${tokens.colors.glass.highlight}`,
-  zIndex: 3,
+  margin: '3rem auto 0',
 };
 
 const inputStyle: React.CSSProperties = {

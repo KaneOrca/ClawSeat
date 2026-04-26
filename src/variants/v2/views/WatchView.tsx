@@ -5,8 +5,8 @@ import { api, request } from '../../../api/arena';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { safeStr } from '../../../utils/safeStr';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal } from 'lucide-react';
 import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
+import { useObstacle } from '../../../hooks/useObstacle';
 
 interface RawFeedEvent {
   id: number;
@@ -93,32 +93,13 @@ export const WatchView: React.FC = () => {
         {/* FEED ENTRIES (Obstacles) */}
         <AnimatePresence>
           {!isZenMode && feed.map((event, i) => (
-            <motion.div
+            <WatchFeedEntry
               key={event.id}
-              initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              style={{
-                position: 'absolute',
-                left: obstacles[i].x,
-                top: obstacles[i].y,
-                width: obstacles[i].w,
-                padding: '2rem',
-                border: '1px solid rgba(0,0,0,0.1)',
-                background: 'rgba(255, 255, 255, 0.9)',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
-                pointerEvents: 'auto'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                <Terminal size={14} color="#888" />
-                <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: '#888' }}>{t('watch.v2.entry')}_{event.id}</span>
-              </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{event.player_nickname}</div>
-              <div style={{ fontSize: '0.9rem', color: '#555', fontStyle: 'italic' }}>
-                {formatWatchEventLine(t, event)}
-              </div>
-            </motion.div>
+              event={event}
+              index={i}
+              obstacle={obstacles[i]}
+              t={t}
+            />
           ))}
         </AnimatePresence>
       </div>
@@ -141,6 +122,44 @@ export const WatchView: React.FC = () => {
         }
       `}</style>
     </div>
+  );
+};
+
+const WatchFeedEntry: React.FC<{
+  event: RawFeedEvent;
+  index: number;
+  obstacle: { x: number; y: number; w: number; h: number };
+  t: (keyPath: string) => string;
+}> = ({ event, index, obstacle, t }) => {
+  const ref = useObstacle() as React.RefObject<HTMLDivElement>;
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, x: index % 2 === 0 ? -20 : 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      style={{
+        position: 'absolute',
+        left: obstacle.x,
+        top: obstacle.y,
+        width: obstacle.w,
+        minHeight: obstacle.h,
+        padding: '0.75rem 0 0.75rem 1.25rem',
+        borderLeft: '1px solid rgba(26,26,26,0.3)',
+        background: 'transparent',
+        boxShadow: 'none',
+        backdropFilter: 'none',
+        pointerEvents: 'auto',
+      }}
+    >
+      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: '#888', marginBottom: '1rem' }}>
+        // {t('watch.v2.entry')}_{event.id}
+      </div>
+      <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{event.player_nickname}</div>
+      <div style={{ fontSize: '0.9rem', color: '#555', fontStyle: 'italic' }}>
+        {formatWatchEventLine(t, event)}
+      </div>
+    </motion.div>
   );
 };
 
