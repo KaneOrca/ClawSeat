@@ -6,7 +6,6 @@ import { MainLayout } from './layouts/MainLayout';
 import { variantRegistry } from './variants/registry';
 
 // Shared Views (not variant-specific)
-import { HallView } from './views/Hall/HallView';
 import { CommunityView } from './views/Community/CommunityView';
 
 import './index.css';
@@ -34,8 +33,10 @@ const Router: React.FC = () => {
       return <Home />;
     }
     case 'hall':
-    case 'challenges':
-      return <HallView />;
+    case 'challenges': {
+      const Hall = views.hall;
+      return <Hall />;
+    }
     case 'watch': {
       const Watch = views.watch;
       return <Watch />;
