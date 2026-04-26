@@ -12,7 +12,7 @@ type LayerState = 'locked' | 'unlocked' | 'active';
 const romanNumerals = ['I.', 'II.', 'III.', 'IV.', 'V.', 'VI.', 'VII.', 'VIII.', 'IX.', 'X.', 'XI.', 'XII.'];
 
 export const HallViewV2: React.FC = () => {
-  const { user, setChallengeId, isLoading } = useArena();
+  const { user, setChallengeId, isLoading, isZenMode } = useArena();
   const { t } = useLanguage();
   const { registerSoloist, unregisterSoloist } = usePhysicsRegistry();
   const profileRef = useObstacle() as React.RefObject<HTMLDivElement>;
@@ -55,7 +55,15 @@ export const HallViewV2: React.FC = () => {
   if (!user) return null;
 
   return (
-    <div className="page-hall hall-v2-classical-codex" style={containerStyle}>
+    <div
+      className="page-hall hall-v2-classical-codex"
+      style={{
+        ...containerStyle,
+        opacity: isZenMode ? 0.05 : 1,
+        pointerEvents: isZenMode ? 'none' : 'auto',
+        transition: 'opacity 0.8s ease',
+      }}
+    >
       <div ref={profileRef} style={profileStyle}>
         <div style={eyebrowStyle}>{t('hall.title')}</div>
         <div style={nameStyle}>{user.nickname}</div>

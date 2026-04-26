@@ -23,6 +23,7 @@ export const CommunityViewV3: React.FC = () => {
   const labelRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const inputRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const environmentRef = useRef(environment);
+  const isZenModeRef = useRef(isZenMode);
   const mountAmplitudeRef = useRef(environment.waveAmplitude ?? 60);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -35,6 +36,10 @@ export const CommunityViewV3: React.FC = () => {
   useEffect(() => {
     environmentRef.current = environment;
   }, [environment]);
+
+  useEffect(() => {
+    isZenModeRef.current = isZenMode;
+  }, [isZenMode]);
 
   const loadChat = useCallback(async () => {
     const data = await request<{ messages: ChatMessage[] }>(() => api.chatSince());
@@ -62,7 +67,9 @@ export const CommunityViewV3: React.FC = () => {
         const prevAmp = environmentRef.current.waveAmplitude ?? 60;
         setEnvironment({ waveAmplitude: 66 });
         if (agentPulseTimer.current) clearTimeout(agentPulseTimer.current);
-        agentPulseTimer.current = setTimeout(() => setEnvironment({ waveAmplitude: prevAmp }), 600);
+        agentPulseTimer.current = setTimeout(() => {
+          if (!isZenModeRef.current) setEnvironment({ waveAmplitude: prevAmp });
+        }, 600);
       }
 
       setMessages(nextMessages);
@@ -77,7 +84,7 @@ export const CommunityViewV3: React.FC = () => {
       clearInterval(interval);
       incomingTimers.current.forEach(clearTimeout);
       if (agentPulseTimer.current) clearTimeout(agentPulseTimer.current);
-      setEnvironment({ waveAmplitude: mountAmplitudeRef.current });
+      if (!isZenModeRef.current) setEnvironment({ waveAmplitude: mountAmplitudeRef.current });
     };
   }, [loadChat, setEnvironment]);
 

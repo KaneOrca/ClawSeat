@@ -10,7 +10,7 @@ import { useObstacle } from '../../../hooks/useObstacle';
 type LayerState = 'locked' | 'unlocked' | 'active';
 
 export const HallViewV3: React.FC = () => {
-  const { user, setChallengeId, isLoading } = useArena();
+  const { user, setChallengeId, isLoading, isZenMode } = useArena();
   const { t } = useLanguage();
   const { environment, setEnvironment } = usePhysicsRegistry();
   const headerRef = useObstacle() as React.RefObject<HTMLElement>;
@@ -31,9 +31,9 @@ export const HallViewV3: React.FC = () => {
   useEffect(() => {
     if (!activeChallengeId) return;
     const prevAmp = environment.waveAmplitude ?? 60;
-    setEnvironment({ waveAmplitude: 75 });
+    setEnvironment({ waveAmplitude: isZenMode ? 90 : 75 });
     return () => setEnvironment({ waveAmplitude: prevAmp });
-  }, [activeChallengeId, setEnvironment]);
+  }, [activeChallengeId, isZenMode, setEnvironment]);
 
   if (isLoading && !user) {
     return (
@@ -46,7 +46,15 @@ export const HallViewV3: React.FC = () => {
   if (!user) return null;
 
   return (
-    <div className="page-hall hall-v3-channel-carver" style={containerStyle}>
+    <div
+      className="page-hall hall-v3-channel-carver"
+      style={{
+        ...containerStyle,
+        opacity: isZenMode ? 0.05 : 1,
+        pointerEvents: isZenMode ? 'none' : 'auto',
+        transition: 'opacity 0.8s ease',
+      }}
+    >
       <header ref={headerRef} style={headerStyle}>
         <div style={eyebrowStyle}>{t('hall.title')}</div>
         <div style={agentStyle}>{user.nickname} // {t('hall.layer_prefix')}_{user.layer} // {user.score}{t('hall.xp')}</div>
