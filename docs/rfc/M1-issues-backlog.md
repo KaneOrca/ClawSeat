@@ -445,7 +445,7 @@ if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
 
 ---
 
-### #22 dispatch_task / 包 objective 缺显式 test_policy 字段 — 🟠 HIGH
+### #22 dispatch_task / 包 objective 缺显式 test_policy 字段 — ✅ DONE (c45f989)
 
 **症状（2026-04-26 05:30 Package P1 实证）**: builder 完成 #17 实现后 blocked 在 `tests/test_install_isolation.py:486`（断言 auto-send 副作用），不敢动 test 因为 batch 2 objective 写过 "DON'T touch tests"。但 batch 2 是 vocab rename（test 用 v1 fixture，确实不许动），Package P 是功能重构（test 必须跟代码改）—— builder 把 batch 2 规则**静默继承**到 P 上下文，导致卡链。
 
