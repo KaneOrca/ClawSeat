@@ -421,7 +421,7 @@ def test_install_dry_run_uses_agent_launcher(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     output = result.stdout + result.stderr
-    assert "agent-launcher.sh --headless --tool claude" in output
+    assert "agent-launcher.sh --headless --tool codex --auth chatgpt" in output
     assert "tmux new-session" not in output
 
 

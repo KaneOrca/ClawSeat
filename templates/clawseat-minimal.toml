@@ -69,10 +69,12 @@ dispatch_authority = true          # 派工给本项目 workers
 escalation_authority = true        # 跨项目协作: 直接 tmux-send <other>-memory dispatch
 review_authority = false           # 代码审查交给 planner (Claude 思维强)
 
-tool = "claude"                    # 固定 (memory 需要 Claude 长上下文 + 思维)
+tool = "codex"                     # 默认 Codex ChatGPT auth; 可用 install.sh --memory-tool claude 覆盖
 auth_mode = "oauth"
-provider = "anthropic"
-# model: 用 OAuth 默认 (Claude Pro 订阅最高档)
+provider = "openai"
+model = "gpt-5.4-mini"
+default_tool = "codex"
+default_model = "gpt-5.4-mini"
 
 # Memory skill 配置 (M1 placeholder, M2 接成熟方案)
 [engineers.memory_skill]

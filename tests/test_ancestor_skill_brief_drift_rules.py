@@ -24,8 +24,7 @@ def test_skill_and_install_guide_document_brief_drift_handling() -> None:
     assert "Brief immutability" in skill_text
     assert "no hot-reload" in skill_text or "hot-reload" in skill_text
 
-    assert "## 如果 ancestor 报 BRIEF_DRIFT_DETECTED" in install_text
-    assert "ancestor 在每个 B 步开始前会先跑" in install_text
-    assert "${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh" in install_text
+    assert "## 如果 ${PRIMARY_SEAT_ID} seat 报 BRIEF_DRIFT_DETECTED" in install_text
+    assert "${PRIMARY_SEAT_ID} seat 在每个 B 步开始前会先跑 brief drift check hook" in install_text
     assert "tmux kill-session -t ${PROJECT}-ancestor" in install_text
     assert "continue" in install_text or "继续" in install_text

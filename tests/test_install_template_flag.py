@@ -63,6 +63,28 @@ def test_template_default_when_omitted(tmp_path: Path) -> None:
     assert "clawseat-minimal" in result.stdout, f"expected default template in output:\n{result.stdout}"
 
 
+def test_memory_tool_defaults_to_codex(tmp_path: Path) -> None:
+    """clawseat-minimal launches the memory primary seat with Codex by default."""
+    result = _run(["--project", "memcodex", "--template", "clawseat-minimal", "--dry-run"], tmp_path)
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "memory-tool=codex auth=chatgpt model=gpt-5.4-mini; skip Claude provider selection" in output
+    assert "agent-launcher.sh --headless --tool codex --auth chatgpt" in output
+    assert "LAUNCHER_CUSTOM_MODEL=gpt-5.4-mini" in output
+
+
+def test_memory_tool_claude_override(tmp_path: Path) -> None:
+    """--memory-tool claude keeps the memory primary seat on the Claude launcher path."""
+    result = _run(
+        ["--project", "memclaude", "--template", "clawseat-minimal", "--memory-tool", "claude", "--dry-run"],
+        tmp_path,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "agent-launcher.sh --headless --tool claude" in output
+    assert "--auth chatgpt" not in output
+
+
 def test_bootstrap_template_path_follows_template_flag(tmp_path: Path) -> None:
     """BOOTSTRAP_TEMPLATE_PATH must use the --template value, not the hardcoded default.
 

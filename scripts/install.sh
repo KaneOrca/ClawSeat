@@ -59,6 +59,8 @@ FORCE_PROVIDER_CHOICE="${CLAWSEAT_INSTALL_PROVIDER:-}"
 FORCE_BASE_URL=""
 FORCE_API_KEY=""
 FORCE_MODEL=""
+MEMORY_TOOL="${CLAWSEAT_MEMORY_TOOL:-codex}"
+MEMORY_MODEL="${CLAWSEAT_MEMORY_MODEL:-gpt-5.4-mini}"
 STATUS_FILE=""
 PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
@@ -290,6 +292,8 @@ parse_args() {
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
+      --memory-tool) MEMORY_TOOL="$2"; shift 2 ;;
+      --memory-model) MEMORY_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
@@ -306,7 +310,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -315,6 +319,11 @@ PY
     clawseat-minimal|clawseat-default|clawseat-engineering|clawseat-creative) ;;
     *) die 2 INVALID_TEMPLATE "--template must be clawseat-minimal | clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
+  case "$MEMORY_TOOL" in
+    claude|codex) ;;
+    *) die 2 INVALID_MEMORY_TOOL "--memory-tool must be claude | codex, got: $MEMORY_TOOL" ;;
+  esac
+  [[ -n "$MEMORY_MODEL" ]] || die 2 INVALID_MEMORY_MODEL "--memory-model must not be empty"
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
     [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
   fi
@@ -463,6 +472,10 @@ normalize_provider_choice() {
   if [[ -n "$FORCE_PROVIDER_CHOICE" && ! "$FORCE_PROVIDER_CHOICE" =~ ^[0-9]+$ ]]; then
     FORCE_PROVIDER_CHOICE=""
   fi
+}
+
+memory_primary_uses_codex() {
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "codex" ]]
 }
 
 ensure_host_deps() {
@@ -668,9 +681,20 @@ select_provider_candidate() {
 }
 
 select_provider() {
-  note "Step 3: ancestor provider"
+  note "Step 3: primary seat provider"
   local mode="" label="" key="" base="" reply=""
   local -a candidates=()
+
+  if memory_primary_uses_codex; then
+    remember_provider_selection oauth
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf 'Project: %s\n' "$PROJECT"
+      printf '[dry-run] memory-tool=codex auth=chatgpt model=%s; skip Claude provider selection\n' "$MEMORY_MODEL"
+    else
+      printf 'Using memory tool: codex (auth=chatgpt, model=%s); skipping Claude provider selection.\n' "$MEMORY_MODEL"
+    fi
+    return
+  fi
 
   if [[ -n "$FORCE_PROVIDER" && -z "$FORCE_BASE_URL" && -n "$FORCE_API_KEY" ]]; then
     case "$FORCE_PROVIDER" in
@@ -948,10 +972,20 @@ EOF
 }
 
 write_project_local_toml() {
-  local seat_auth_mode seat_provider seat_model seat
+  local seat_auth_mode seat_provider seat_model seat primary_tool primary_auth primary_provider primary_model
   seat_auth_mode="$(seat_auth_mode_for_provider_mode)"
   seat_provider="$(seat_provider_for_provider_mode)"
   seat_model="$(seat_model_for_provider_mode || true)"
+  primary_tool="claude"
+  primary_auth="$seat_auth_mode"
+  primary_provider="$seat_provider"
+  primary_model="$seat_model"
+  if memory_primary_uses_codex; then
+    primary_tool="codex"
+    primary_auth="oauth"
+    primary_provider="openai"
+    primary_model="$MEMORY_MODEL"
+  fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] write %s\n' "$PROJECT_LOCAL_TOML"
@@ -972,12 +1006,12 @@ seat_order = [$_seat_order_str]
 [[overrides]]
 id = "$PRIMARY_SEAT_ID"
 session_name = "$PROJECT-$PRIMARY_SEAT_ID"
-tool = "claude"
-auth_mode = "$seat_auth_mode"
-provider = "$seat_provider"
+tool = "$primary_tool"
+auth_mode = "$primary_auth"
+provider = "$primary_provider"
 EOF
-  if [[ -n "$seat_model" ]]; then
-    printf 'model = "%s"\n' "$seat_model" >>"$PROJECT_LOCAL_TOML"
+  if [[ -n "$primary_model" ]]; then
+    printf 'model = "%s"\n' "$primary_model" >>"$PROJECT_LOCAL_TOML"
   fi
 
   for seat in "${PENDING_SEATS[@]}"; do
@@ -1315,9 +1349,9 @@ write_operator_guide() {
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
 
-install.sh 已完成。现在按 6 步触发 Phase-A：
+install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 workers 窗口 + shared memories 窗口；legacy template 可能仍使用单窗口布局。
 
-1. 切到 iTerm 窗口 "clawseat-$PROJECT" 的 ancestor pane（左上角第一格）
+1. 切到 primary seat：\`${PROJECT}-${PRIMARY_SEAT_ID}\`。v2 minimal 通常在 \`clawseat-memories\` 窗口的项目 tab；legacy template 可能在项目窗口中。
 
 2. **先确认 ${PROJECT}-${PRIMARY_SEAT_ID} pane 已就绪** — install.sh 不再自动发送 Phase-A kickoff；kickoff 已写入文件，等待 operator 主动触发：
 
@@ -1347,11 +1381,11 @@ install.sh 已完成。现在按 6 步触发 Phase-A：
    cat ${KICKOFF_FILE}
    \`\`\`
 
-   打开 ${PROJECT}-${PRIMARY_SEAT_ID} pane，把输出复制到 Claude Code prompt，按 Enter。
+   打开 ${PROJECT}-${PRIMARY_SEAT_ID} pane，把输出复制到 primary seat prompt，按 Enter。
 
    kickoff 内容要求：
    - Phase-A 不让 memory 做同步调研。
-   - B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件。
+   - B2.5 / B5 都按 brief 由 ${PRIMARY_SEAT_ID} seat 自己 Read openclaw / binding 文件。
    - memory 在 Phase-A 唯一位置是 B7 后接收 phase-a-decisions learnings。
    - 然后按 B3 / B3.5 / B5 / B6 / B7 顺序推进；用 agent_admin.py session start-engineer 逐个拉起 seat（不要 fan-out，一个一个来）。
 
@@ -1367,7 +1401,7 @@ install.sh 已完成。现在按 6 步触发 Phase-A：
 
    预期看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样。
 
-6. 每走完一步向 ancestor 说"继续"或给修正（provider / chat_id 等）
+6. 每走完一步向 ${PRIMARY_SEAT_ID} seat 说"继续"或给修正（provider / chat_id 等）
 
 ## 项目注册表
 
@@ -1378,15 +1412,15 @@ install.sh 已完成。现在按 6 步触发 Phase-A：
 python3 ${PROJECTS_REGISTRY_SCRIPT} unregister ${PROJECT}
 \`\`\`
 
-## 如果 ancestor 报 BRIEF_DRIFT_DETECTED
+## 如果 ${PRIMARY_SEAT_ID} seat 报 BRIEF_DRIFT_DETECTED
 
-ancestor 在每个 B 步开始前会先跑 `${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh`。这只能检测 brief 是否在你启动后被更新，不能让运行中的 Claude Code 热更新 system prompt。
+${PRIMARY_SEAT_ID} seat 在每个 B 步开始前会先跑 brief drift check hook。这只能检测 brief 是否在你启动后被更新，不能让运行中的 agent 热更新 system prompt。
 
 推荐处理：
 
 1. \`tmux kill-session -t ${PROJECT}-${PRIMARY_SEAT_ID}\`
-2. 重新启动 ancestor（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
-3. 让 ancestor 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
+2. 重新启动 primary seat（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
+3. 让 ${PRIMARY_SEAT_ID} seat 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
 
 如果你暂时不 restart，也可以继续按旧 brief 跑，但它不会自动感知后续改动。
 EOF
@@ -1436,7 +1470,7 @@ print_operator_banner() {
   printf '\n'
   printf '    B) Manual paste / 手动粘贴:\n'
   printf '       cat %q\n' "$KICKOFF_FILE"
-  printf '       Then paste the output into the %s Claude Code prompt and press Enter.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '       Then paste the output into the %s primary seat prompt and press Enter.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
   printf '\n'
   printf '    C) Ask install-memory in chat / 在 install-memory chat 里说:\n'
   printf '       dispatch %s kickoff\n' "$PROJECT"
@@ -1460,6 +1494,24 @@ launcher_auth_for_provider() {
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for launcher auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
   esac
+}
+
+launcher_tool_for_seat() {
+  local seat_id="${1:-}"
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_codex; then
+    printf '%s\n' "codex"
+    return
+  fi
+  printf '%s\n' "claude"
+}
+
+launcher_auth_for_seat() {
+  local seat_id="${1:-}"
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_codex; then
+    printf '%s\n' "chatgpt"
+    return
+  fi
+  launcher_auth_for_provider
 }
 
 launcher_custom_env_file_for_session() {
@@ -1538,8 +1590,9 @@ ensure_tmux_session_alive() {
 }
 
 launch_seat() {
-  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file=""
-  auth_mode="$(launcher_auth_for_provider)"
+  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file="" launcher_tool=""
+  launcher_tool="$(launcher_tool_for_seat "$seat_id")"
+  auth_mode="$(launcher_auth_for_seat "$seat_id")"
   custom_env_file="$(launcher_custom_env_file_for_session "$session")"
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -1553,7 +1606,10 @@ launch_seat() {
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
   cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   [[ -n "$seat_id" ]] && cmd+=("CLAWSEAT_SEAT=$seat_id")
-  cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool claude --auth "$auth_mode" --dir "$cwd" --session "$session")
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" == "codex" && -n "$MEMORY_MODEL" ]]; then
+    cmd+=("LAUNCHER_CUSTOM_MODEL=$MEMORY_MODEL")
+  fi
+  cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool "$launcher_tool" --auth "$auth_mode" --dir "$cwd" --session "$session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
   [[ "$DRY_RUN" == "1" ]] && cmd+=(--dry-run)
 

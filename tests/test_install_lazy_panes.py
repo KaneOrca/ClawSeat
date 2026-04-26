@@ -160,7 +160,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     assert guide_path.is_file()
     guide_text = guide_path.read_text(encoding="utf-8")
     assert "Phase-A 不让 memory 做同步调研" in guide_text
-    assert "B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件" in guide_text
+    assert "B2.5 / B5 都按 brief 由 ancestor seat 自己 Read openclaw / binding 文件" in guide_text
     assert "B7 后接收 phase-a-decisions learnings" in guide_text
     assert "agent_admin.py session start-engineer" in guide_text
     assert "第一步：让 memory 做 openclaw 生态调研（brief B2.6）" not in guide_text
