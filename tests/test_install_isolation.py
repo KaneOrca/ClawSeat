@@ -458,7 +458,7 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     expected_sessions = ["smoketest-ancestor"]
     assert [record["session"] for record in records] == expected_sessions
 
-    expected_root_dir = str(root)
+    expected_launcher_dir = str(home / ".agents" / "workspaces" / "smoketest" / "memory")
     expected_brief = str(home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "ancestor-bootstrap.md")
 
     for record in records:
@@ -469,7 +469,7 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
         assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
         assert record["custom_model"] == "MiniMax-M2.7-highspeed"
         assert record["clawseat_root"] == str(root)
-        assert record["dir"] == expected_root_dir
+        assert record["dir"] == expected_launcher_dir
         assert record["runtime_home"] == str(
             home / ".agent-runtime" / "identities" / "claude" / "api" / f"custom-{record['session']}" / "home"
         )

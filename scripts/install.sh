@@ -1894,7 +1894,7 @@ main() {
   fi
   ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
-  launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
+  launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
   register_project_registry
   install_ancestor_patrol_plist

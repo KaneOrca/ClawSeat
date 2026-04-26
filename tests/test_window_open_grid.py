@@ -101,6 +101,7 @@ def test_build_workers_payload_minimal_3workers() -> None:
 
 
 def test_build_memories_payload_returns_tabs_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(agent_admin_window.projects_registry, "enumerate_projects", lambda: [])
     monkeypatch.setattr(
         agent_admin_window,
         "_tmux_session_names",
@@ -121,6 +122,7 @@ def test_build_memories_payload_returns_tabs_payload(monkeypatch: pytest.MonkeyP
 
 
 def test_build_memories_payload_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(agent_admin_window.projects_registry, "enumerate_projects", lambda: [])
     monkeypatch.setattr(
         agent_admin_window,
         "_tmux_session_names",
