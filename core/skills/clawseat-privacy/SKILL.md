@@ -1,6 +1,6 @@
 ---
 name: clawseat-privacy
-description: "用户隐私 KB 强制 pre-action 协议（RFC-002 §9）。所有 seat 在 commit / Feishu broadcast / 外部 publish 前必须读 ~/.agents/memory/machine/privacy.md，命中黑名单 hard fail。无 override。"
+description: "Pre-commit check gate; blocks exposure of secrets, API keys, tokens."
 version: "1.0"
 status: draft
 author: machine-memory

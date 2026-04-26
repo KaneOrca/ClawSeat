@@ -20,22 +20,21 @@ def test_install_creates_new_skill_symlinks(tmp_path: Path) -> None:
     result = _run_install(root, home, py_stubs, project="h3skills")
     assert result.returncode == 0, result.stderr
 
-    skill_homes = (
-        home / ".agents" / "skills",
-        home / ".gemini" / "skills",
-        home / ".codex" / "skills",
-    )
-    for skills_home in skill_homes:
-        for skill in (
-            "clawseat-memory",
-            "clawseat-decision-escalation",
-            "clawseat-koder",
-            "clawseat-privacy",
-            "clawseat-memory-reporting",
-        ):
+    core_skills = ("clawseat-memory", "clawseat-decision-escalation")
+    extended_skills = ("clawseat-koder", "clawseat-privacy", "clawseat-memory-reporting")
+
+    for skill in (*core_skills, *extended_skills):
+        link = home / ".agents" / "skills" / skill
+        assert link.is_symlink()
+        assert os.readlink(link) == str(root / "core" / "skills" / skill)
+
+    for skills_home in (home / ".gemini" / "skills", home / ".codex" / "skills"):
+        for skill in core_skills:
             link = skills_home / skill
             assert link.is_symlink()
             assert os.readlink(link) == str(root / "core" / "skills" / skill)
+        for skill in extended_skills:
+            assert not (skills_home / skill).exists()
 
 
 def test_install_skill_symlinks_are_idempotent(tmp_path: Path) -> None:
@@ -45,8 +44,8 @@ def test_install_skill_symlinks_are_idempotent(tmp_path: Path) -> None:
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
     assert (home / ".agents" / "skills" / "clawseat-privacy").is_symlink()
-    assert (home / ".gemini" / "skills" / "clawseat-memory-reporting").is_symlink()
-    assert (home / ".codex" / "skills" / "clawseat-memory-reporting").is_symlink()
+    assert not (home / ".gemini" / "skills" / "clawseat-memory-reporting").exists()
+    assert not (home / ".codex" / "skills" / "clawseat-memory-reporting").exists()
 
 
 def test_install_leaves_existing_clawseat_memory_symlink(tmp_path: Path) -> None:
@@ -74,3 +73,15 @@ def test_install_creates_gemini_and_codex_skill_dirs(tmp_path: Path) -> None:
         assert os.readlink(skills_home / "clawseat-memory") == str(
             root / "core" / "skills" / "clawseat-memory"
         )
+
+
+def test_load_all_skills_restores_extended_tier_for_small_tool_dirs(tmp_path: Path) -> None:
+    root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
+    result = _run_install(root, home, py_stubs, project="h3loadall", load_all_skills=True)
+    assert result.returncode == 0, result.stderr
+
+    for skills_home in (home / ".gemini" / "skills", home / ".codex" / "skills"):
+        for skill in ("clawseat-koder", "clawseat-privacy", "clawseat-memory-reporting"):
+            link = skills_home / skill
+            assert link.is_symlink()
+            assert os.readlink(link) == str(root / "core" / "skills" / skill)

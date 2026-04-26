@@ -44,6 +44,8 @@ def _run_install(
     *,
     project: str = "h3privacy",
     repo_root: Path | None = None,
+    memory_tool: str = "codex",
+    load_all_skills: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     args = [
         "bash",
@@ -52,11 +54,15 @@ def _run_install(
         project,
         "--template",
         "clawseat-default",
+        "--memory-tool",
+        memory_tool,
         "--provider",
         "minimax",
     ]
     if repo_root is not None:
         args.extend(["--repo-root", str(repo_root)])
+    if load_all_skills:
+        args.append("--load-all-skills")
     return subprocess.run(
         args,
         input="\n",

@@ -1,6 +1,6 @@
 ---
 name: clawseat-decision-escalation
-description: "决策升级链协议（RFC-002 §4-§7）：planner → memory 升级 + memory 自决 / peer 协商 / Feishu 升级三选一 + decision_payload 通信契约 + koder 翻译协议。所有 memory / planner / koder seat 必须实施。"
+description: "Routes decisions blocked by automation to operator; enforces 3-option gate."
 version: "1.0"
 status: draft
 author: machine-memory

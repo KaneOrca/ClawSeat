@@ -1,6 +1,6 @@
 ---
 name: koder-frontstage
-description: Optional Feishu reverse-channel adapter for the user-facing koder seat. Use only when the project explicitly enables the Feishu overlay; otherwise koder stays off the critical path and follows the CLI/state.db route.
+description: "Optional Feishu overlay for user-facing koder; project-enabled only."
 ---
 
 # Koder Frontstage

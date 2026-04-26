@@ -1,6 +1,6 @@
 ---
 name: clawseat-koder
-description: "Feishu 端双向翻译者（zero state, zero decision authority）。读项目/任务文档 → render 通俗易懂的 Feishu decision card；用户按钮/文字回复 → 翻译为 agent-friendly prompt 转发 project-memory。1 per Feishu group。OpenClaw lark plugin 实现层。"
+description: "Surveys codebase patterns and names; assists code context distillation."
 version: "1.0"
 status: draft
 author: machine-memory

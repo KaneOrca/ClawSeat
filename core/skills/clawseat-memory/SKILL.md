@@ -1,7 +1,7 @@
 ---
 name: clawseat-memory
 aliases: [clawseat-ancestor]
-description: "L3 project-memory——每项目 singleton，默认以 codex gpt-5.4-mini 跑项目战术层：backlog、STATUS、dispatch、ack、patrol、decision escalation 和 privacy pre-action gate。启动后读 ancestor-bootstrap.md 兼容 brief 执行 Phase-A（保留 B3.5 spawn 流程），随后进入 RFC-002 L3 patrol。"
+description: "L3 project-memory hub; orchestrates install-memory workflow per RFC-002."
 version: "0.8"
 related_skills:
   - clawseat-decision-escalation

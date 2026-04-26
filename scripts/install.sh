@@ -10,6 +10,7 @@ PYTHON_BIN_WAS_SET="${PYTHON_BIN+1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
 ENABLE_AUTO_PATROL=0
+LOAD_ALL_SKILLS=0
 CALLER_HOME="${HOME:-}"
 
 # HOME is intentionally rebound once for the whole script: keep CALLER_HOME only
@@ -297,6 +298,7 @@ parse_args() {
       --memory-model) MEMORY_MODEL="$2"; MEMORY_MODEL_EXPLICIT=1; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
+      --load-all-skills) LOAD_ALL_SKILLS=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
       --reset-harness-memory)
         "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
@@ -311,7 +313,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -1201,32 +1203,75 @@ EOF
   chmod 600 "$privacy_path" || die 31 PRIVACY_KB_CHMOD_FAILED "unable to chmod $privacy_path"
 }
 
-install_skill_symlinks() {
-  note "Step 5.8: install ClawSeat skill symlinks"
-  local skill target link skills_home
-  local -a skill_homes=("$HOME/.agents/skills" "$HOME/.gemini/skills" "$HOME/.codex/skills")
-  local -a skills=(clawseat-memory clawseat-decision-escalation clawseat-koder clawseat-privacy clawseat-memory-reporting)
-  if [[ "$DRY_RUN" == "1" ]]; then
-    for skills_home in "${skill_homes[@]}"; do
-      printf '[dry-run] mkdir -p %q\n' "$skills_home"
-      for skill in "${skills[@]}"; do
-        printf '[dry-run] ln -sfn %q %q\n' "$REPO_ROOT/core/skills/$skill" "$skills_home/$skill"
-      done
-    done
-    return 0
-  fi
-  for skills_home in "${skill_homes[@]}"; do
-    mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
-    for skill in "${skills[@]}"; do
-      target="$REPO_ROOT/core/skills/$skill"
-      link="$skills_home/$skill"
-      if [[ ! -d "$target" ]]; then
-        warn "skill symlink skipped; missing skill directory: $target"
+symlink_skills() {
+  local skills_home="$1"; shift
+  local skill target link
+  mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
+  for skill in "$@"; do
+    target="$REPO_ROOT/core/skills/$skill"
+    link="$skills_home/$skill"
+    if [[ ! -d "$target" ]]; then
+      warn "skill symlink skipped; missing skill directory: $target"
+      continue
+    fi
+    ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
+  done
+}
+
+remove_skill_symlinks() {
+  local skills_home="$1"; shift
+  local skill link target
+  for skill in "$@"; do
+    link="$skills_home/$skill"
+    if [[ -L "$link" ]]; then
+      target="$(readlink "$link" || true)"
+      if [[ "$target" != "$REPO_ROOT/core/skills/"* ]]; then
+        warn "skill symlink cleanup skipped; unmanaged link: $link -> $target"
         continue
       fi
-      ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
-    done
+      rm -f "$link" || die 31 SKILL_SYMLINK_FAILED "unable to remove skipped skill link $link"
+    fi
   done
+}
+
+install_skill_tier_for_home() {
+  local tool="$1" skills_home="$2"; shift 2
+  local -a core_skills=(clawseat-memory clawseat-decision-escalation)
+  local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting)
+  local -a selected_skills=("${core_skills[@]}")
+
+  if [[ "$tool" == "claude" || "$LOAD_ALL_SKILLS" == "1" ]]; then
+    selected_skills+=("${extended_skills[@]}")
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] mkdir -p %q\n' "$skills_home"
+    local skill
+    for skill in "${selected_skills[@]}"; do
+      printf '[dry-run] ln -sfn %q %q\n' "$REPO_ROOT/core/skills/$skill" "$skills_home/$skill"
+    done
+    if [[ "$tool" != "claude" && "$LOAD_ALL_SKILLS" != "1" ]]; then
+      for skill in "${extended_skills[@]}"; do
+        printf '[dry-run] rm -f %q\n' "$skills_home/$skill"
+      done
+    fi
+    return 0
+  fi
+
+  symlink_skills "$skills_home" "${selected_skills[@]}"
+  if [[ "$tool" != "claude" && "$LOAD_ALL_SKILLS" != "1" ]]; then
+    remove_skill_symlinks "$skills_home" "${extended_skills[@]}"
+  fi
+}
+
+install_skills_by_tier() {
+  note "Step 5.8: install ClawSeat skill symlinks"
+  install_skill_tier_for_home claude "$HOME/.agents/skills"
+  install_skill_tier_for_home gemini "$HOME/.gemini/skills"
+  install_skill_tier_for_home codex "$HOME/.codex/skills"
+  if [[ "$LOAD_ALL_SKILLS" != "1" && "$MEMORY_TOOL" != "claude" ]]; then
+    note "Extended skills skipped for $MEMORY_TOOL (context budget); use --load-all-skills to override"
+  fi
 }
 
 install_privacy_pre_commit_hook() {
@@ -2090,7 +2135,7 @@ main() {
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
   ensure_privacy_kb_template
-  install_skill_symlinks
+  install_skills_by_tier
   install_privacy_pre_commit_hook
   register_project_registry
   install_ancestor_patrol_plist

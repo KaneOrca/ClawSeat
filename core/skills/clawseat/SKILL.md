@@ -1,6 +1,6 @@
 ---
 name: clawseat
-description: Canonical product entrypoint for ClawSeat. Use this skill when OpenClaw, Feishu, Claude Code, or Codex should load ClawSeat as an installable workflow and route to the v0.7 `scripts/install.sh` playbook.
+description: "Product entrypoint; routes ClawSeat installs and runtime handoffs."
 ---
 
 # ClawSeat

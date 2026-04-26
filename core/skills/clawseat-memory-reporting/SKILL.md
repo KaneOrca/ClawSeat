@@ -1,6 +1,6 @@
 ---
 name: clawseat-memory-reporting
-description: "memory seat（始祖）对 operator 的汇报协议：STATUS.md 持久状态 + chat 尾块短摘要 + backlog detail 转储 + dispatch 1 行收据。解决 v2 早期 memory chat 是 flowing transcript、operator 要滚 80 行才知道当前状态的问题。"
+description: "Logs dispatch/completion events; maintains project STATUS.md registry."
 version: "1.0"
 status: draft
 author: memory
