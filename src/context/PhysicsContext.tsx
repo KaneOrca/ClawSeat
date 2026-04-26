@@ -51,6 +51,11 @@ export interface EnvironmentSettings {
 export interface PhysicsEffects {
   transitionProgress: number;
   transitionFrom: VariantType | null;
+  alignmentPulse?: {
+    active: boolean;
+    startTime: number;
+    duration: number;
+  };
 }
 
 interface PhysicsContextType {

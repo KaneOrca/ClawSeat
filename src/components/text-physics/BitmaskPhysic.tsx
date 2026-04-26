@@ -214,6 +214,11 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
       : transitionFrom === 'v2'
         ? transitionProgress
         : 1 - transitionProgress;
+    const alignmentPulse = transition?.alignmentPulse;
+    const alignElapsed = alignmentPulse?.active ? time - alignmentPulse.startTime : 0;
+    const alignDuration = alignmentPulse?.duration ?? 600;
+    const alignPhase = alignmentPulse?.active ? Math.min(1, Math.max(0, alignElapsed / alignDuration)) : 1;
+    const alignP = alignmentPulse?.active ? Math.sin(alignPhase * Math.PI) : 0;
 
     const surgeNorm = Math.max(0, (waveAmplitude - 60) / 60);
     const effectiveWaveAmp = 60 + surgeNorm * 60;
@@ -315,17 +320,39 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
         if (isTransitioning && transitionFrom === 'v2') {
           const digitalNoiseA = cellNoise(col * 17 + t * 40, row * 19 - t * 30);
           const digitalNoiseB = cellNoise(col * 23 - t * 35, row * 29 + t * 45);
-          drawX += digitalNoiseA * transitionJitter * 20;
-          drawY += digitalNoiseB * transitionJitter * 20;
+          drawX += digitalNoiseA * transitionJitter * 20 * (1 - alignP);
+          drawY += digitalNoiseB * transitionJitter * 20 * (1 - alignP);
         }
 
         // Color: cyan/purple neural gradient with depth shift
-        const hue = 200 + fsin(flowA * 0.5 + t * 0.2) * 60 + hueDistort * fsin(t * 2 + col * 0.1);
+        const baseHue = 200 + fsin(flowA * 0.5 + t * 0.2) * 60 + hueDistort * fsin(t * 2 + col * 0.1);
+        const hue = baseHue + (280 - baseHue) * alignP * 0.15;
         const sat = 60 + mouseFactor * 20;
         const lightness = 50 + depthFade * 20 + mouseFactor * 15 + surgeNorm * 10;
         ctx.fillStyle = `hsla(${hue}, ${sat}%, ${lightness}%, ${Math.min(1, alpha)})`;
         ctx.fillText(char, drawX, drawY);
       }
+    }
+
+    if (alignP > 0.01) {
+      ctx.save();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `hsla(190, 100%, 50%, ${alignP * 0.1})`;
+      for (let col = 0; col < cols; col += 4) {
+        const x = col * CELL_W + CELL_W * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (let row = 0; row < rows; row += 4) {
+        const y = row * CELL_H + CELL_H * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     // ── Diagnostic alignment lines ────────────────────────────────────

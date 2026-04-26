@@ -18,6 +18,7 @@ interface RawFeedEvent {
   player_nickname: string;
   event_type: KnownFeedEventType | (string & {});
   target_id: string;
+  achievement_name?: string;
   created_at: number;
 }
 
@@ -52,6 +53,8 @@ export const WatchViewV3: React.FC = () => {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [sessionSteps, setSessionSteps] = useState<SessionStep[]>([]);
   const lastFeedLength = useRef(0);
+  const seenFeedIds = useRef<Set<number>>(new Set());
+  const achievementPulseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Feed soloist registration
   useEffect(() => {
@@ -102,9 +105,58 @@ export const WatchViewV3: React.FC = () => {
       if (data && data.leaders.length > 0) setActiveAgent(data.leaders[0]);
       setLoading(false);
     });
+    const triggerAchievementPulse = (event: RawFeedEvent) => {
+      if (achievementPulseTimeout.current) clearTimeout(achievementPulseTimeout.current);
+
+      const achievementName = safeStr(event.achievement_name ?? event.target_id).toUpperCase();
+      setEnvironment({
+        effects: {
+          alignmentPulse: {
+            active: true,
+            startTime: performance.now(),
+            duration: 600,
+          },
+        },
+      });
+      registerSoloist({
+        id: 'achievement-nickname',
+        text: safeStr(event.player_nickname).toUpperCase(),
+        lineIndex: 10,
+        color: tokens.colors.aurora.purple,
+        opacity: 1,
+      });
+      registerSoloist({
+        id: 'achievement-name',
+        text: `[ ACHIEVEMENT_UNLOCKED ] :: ${achievementName}`,
+        lineIndex: 11,
+        color: tokens.colors.aurora.cyan,
+        opacity: 1,
+      });
+
+      achievementPulseTimeout.current = setTimeout(() => {
+        unregisterSoloist('achievement-nickname');
+        unregisterSoloist('achievement-name');
+        setEnvironment({
+          effects: {
+            alignmentPulse: {
+              active: false,
+              startTime: 0,
+              duration: 600,
+            },
+          },
+        });
+      }, 600);
+    };
     const poll = async () => {
       const feedData = await request<{ feed: RawFeedEvent[] }>(() => api.feed(1));
       if (feedData && feedData.feed) {
+        const newEvents = feedData.feed.filter(event => !seenFeedIds.current.has(event.id));
+        const achievementEvent = newEvents.find(event => event.event_type === 'unlocked_achievement');
+        newEvents.forEach(event => seenFeedIds.current.add(event.id));
+
+        if (achievementEvent) {
+          triggerAchievementPulse(achievementEvent);
+        }
         if (feedData.feed.length > lastFeedLength.current) {
           setEnvironment({ waveAmplitude: 100 });
           setTimeout(() => setEnvironment({ waveAmplitude: 60 }), 800);
@@ -115,7 +167,21 @@ export const WatchViewV3: React.FC = () => {
     };
     poll();
     const interval = setInterval(poll, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (achievementPulseTimeout.current) clearTimeout(achievementPulseTimeout.current);
+      unregisterSoloist('achievement-nickname');
+      unregisterSoloist('achievement-name');
+      setEnvironment({
+        effects: {
+          alignmentPulse: {
+            active: false,
+            startTime: 0,
+            duration: 600,
+          },
+        },
+      });
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
