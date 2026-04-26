@@ -475,6 +475,22 @@ if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
 
 ---
 
+### #24 memory seat CWD 錯用 PROJECT_REPO_ROOT 而非 MEMORY_WORKSPACE — 🔴 BLOCKER
+
+**症状 (2026-04-26 smoke test)**:
+- testbed-v2-memory 在 clawseat-v2 worktree 啟動（--dir $PROJECT_REPO_ROOT）
+- Claude Code 往上找到 /Users/ywf/coding/CLAUDE.md（cartooner/openclaw workspace 規則）
+- memory seat 沒有 ClawSeat 身份 / 角色指示
+
+**根因**: install.sh line 1897 `launch_seat` 傳 PROJECT_REPO_ROOT 而非 MEMORY_WORKSPACE；
+MEMORY_WORKSPACE=$HOME/.agents/workspaces/$PROJECT/memory 有正確的 CLAUDE.md 但沒被用。
+
+**修復**: line 1897 改 MEMORY_WORKSPACE，fix-24-memory-seat-cwd commit 中處理。
+
+**Owner**: builder-codex（已修）
+
+---
+
 ### #23 (预留新 issue 编号)
 
 ---
