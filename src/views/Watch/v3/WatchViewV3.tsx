@@ -11,10 +11,12 @@ import { MagneticSurface } from '../../../components/MagneticSurface';
 import { useWaveRipple } from '../../../hooks/useWaveRipple';
 import { ArrowLeft, Radio } from 'lucide-react';
 
+type KnownFeedEventType = 'joined' | 'completed_challenge' | 'unlocked_achievement';
+
 interface RawFeedEvent {
   id: number;
   player_nickname: string;
-  event_type: string;
+  event_type: KnownFeedEventType | (string & {});
   target_id: string;
   created_at: number;
 }
@@ -60,7 +62,7 @@ export const WatchViewV3: React.FC = () => {
         id: `watch-event-${i}`,
         text: `${safeStr(event.player_nickname).toUpperCase()} :: ${safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_${safeStr(event.target_id) || '?'}`,
         lineIndex: 12 + i * 4,
-        color: event.event_type === 'success' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
+        color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
       });
     });
     return () => { ids.forEach(id => unregisterSoloist(id)); };
@@ -263,7 +265,7 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelec
           onTouchStart={onTouchStart}
           style={{
             ...feedEventStyle,
-            color: event.event_type === 'success' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
+            color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
           }}
         >
           {safeStr(event.player_nickname).toUpperCase()} :: {safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_{safeStr(event.target_id) || '?'}
