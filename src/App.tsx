@@ -11,6 +11,10 @@ import { CommunityView } from './views/Community/CommunityView';
 
 import './index.css';
 
+const CodeMorphRoute = React.lazy(() =>
+  import('./spike/CodeMorphRoute').then(module => ({ default: module.CodeMorphRoute }))
+);
+
 /**
  * Router component handles conditional view rendering based on ArenaContext.
  */
@@ -45,6 +49,29 @@ const Router: React.FC = () => {
   }
 };
 
+const AppContent: React.FC = () => {
+  const { currentView } = useArena();
+  const isCodeMorphSpike = import.meta.env.DEV && (
+    currentView === 'spike-code-morph' ||
+    window.location.pathname === '/spike/code-morph' ||
+    new URLSearchParams(window.location.search).get('spike') === 'code-morph'
+  );
+
+  if (isCodeMorphSpike) {
+    return (
+      <React.Suspense fallback={null}>
+        <CodeMorphRoute />
+      </React.Suspense>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <Router />
+    </MainLayout>
+  );
+};
+
 /**
  * App entry point wraps the application in the state provider and main layout.
  */
@@ -53,9 +80,7 @@ function App() {
     <LanguageProvider>
       <ArenaProvider>
         <PhysicsProvider>
-          <MainLayout>
-            <Router />
-          </MainLayout>
+          <AppContent />
         </PhysicsProvider>
       </ArenaProvider>
     </LanguageProvider>

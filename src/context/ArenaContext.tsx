@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { api, request } from '../api/arena';
 import { useLanguage } from './LanguageContext';
 
-export type ViewType = 'home' | 'hall' | 'challenges' | 'watch' | 'community';
+export type ViewType = 'home' | 'hall' | 'challenges' | 'watch' | 'community' | 'spike-code-morph';
 export type VariantType = 'v2' | 'v3';
 
 export interface User {
