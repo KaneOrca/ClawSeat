@@ -123,6 +123,32 @@ export const HomeView: React.FC = () => {
           letter-spacing: 0.3em;
           opacity: 0.7;
         }
+        @media (max-width: 768px) {
+          .v2-home [data-module="home-hero"] {
+            order: 1;
+          }
+          .v2-home [data-module="marginalia-01"],
+          .v2-home [data-module="marginalia-02"] {
+            position: static !important;
+            left: auto !important;
+            top: auto !important;
+            width: auto !important;
+            display: block;
+            margin-top: 2rem;
+            text-align: left !important;
+            order: 2;
+          }
+          .v2-home [data-module="marginalia-02"] {
+            order: 3;
+          }
+          .v2-home [data-module="home-hero"] + * {
+            margin-top: 2rem;
+          }
+          .v2-home > div > div {
+            display: flex;
+            flex-direction: column;
+          }
+        }
       `}</style>
     </div>
   );
