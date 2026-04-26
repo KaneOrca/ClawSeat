@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
+import { useLanguage } from '../../../context/LanguageContext';
 import { tokens } from '../../../design/tokens';
 import { safeStr } from '../../../utils/safeStr';
 import { useObstacleDetached } from '../../../hooks/useObstacle';
@@ -16,8 +17,9 @@ import { ArrowLeft } from 'lucide-react';
 export const ChallengeDetailV3: React.FC = () => {
   const {
     challenge, answer, setAnswer, submitting, handleSubmit,
-    currentChallengeId, setChallengeId, isZenMode, locale
+    currentChallengeId, setChallengeId, isZenMode
   } = useChallengeSubmission();
+  const { t } = useLanguage();
 
   const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
 
@@ -34,8 +36,7 @@ export const ChallengeDetailV3: React.FC = () => {
   }, [setAnswer, setEnvironment]);
 
   useEffect(() => {
-    const soloistText = answer ||
-      (locale === 'zh-CN' ? '将你的解答传入场域...' : 'Speak your solution into the field...');
+    const soloistText = answer || t('challengeDetail.v3.input_placeholder');
     if (!isZenMode || answer) {
       registerSoloist({
         id: 'challenge-user-input',
@@ -45,7 +46,7 @@ export const ChallengeDetailV3: React.FC = () => {
       });
     }
     return () => unregisterSoloist('challenge-user-input');
-  }, [answer, isZenMode, locale, registerSoloist, unregisterSoloist]);
+  }, [answer, isZenMode, registerSoloist, t, unregisterSoloist]);
 
   useEffect(() => {
     return () => setEnvironment({ waveAmplitude: 60, waveFrequency: 0.03 });
@@ -56,10 +57,10 @@ export const ChallengeDetailV3: React.FC = () => {
   return (
     <div className="page-challenge-detail variant-v3" style={containerStyle}>
       {/* Back button — atomic */}
-      <BackAtomMemo isZenMode={isZenMode} onBack={() => setChallengeId(null)} />
+      <BackAtomMemo isZenMode={isZenMode} onBack={() => setChallengeId(null)} label={t('challengeDetail.v3.back')} />
 
       {/* Resonance label — atomic */}
-      <LabelAtomMemo isZenMode={isZenMode} title={challenge.title} />
+      <LabelAtomMemo isZenMode={isZenMode} title={challenge.title} label={t('challengeDetail.v3.resonance_label')} />
 
       {/* Title — atomic */}
       <TitleAtomMemo isZenMode={isZenMode} title={challenge.title} />
@@ -80,13 +81,15 @@ export const ChallengeDetailV3: React.FC = () => {
         answer={answer}
         onSubmit={handleSubmit}
         submitting={submitting}
+        submittingLabel={t('challengeDetail.v3.submitting')}
+        submitLabel={t('challengeDetail.v3.submit')}
       />
 
       {/* Points — atomic */}
-      <DiagAtomMemo isZenMode={isZenMode} label="POINTS" value={String(challenge.points)} />
+      <DiagAtomMemo isZenMode={isZenMode} label={t('challengeDetail.v3.points')} value={String(challenge.points)} />
 
       {/* Complexity — atomic */}
-      <DiagAtomMemo isZenMode={isZenMode} label="COMPLEXITY" value={challenge.difficulty} />
+      <DiagAtomMemo isZenMode={isZenMode} label={t('challengeDetail.v3.complexity')} value={challenge.difficulty} />
 
       <style>{`
         @media (max-width: 768px) {
@@ -195,25 +198,25 @@ const diagValueStyle: React.CSSProperties = {
 
 // ── Atom components ─────────────────────────────────────────────────
 
-const BackAtom: React.FC<{ isZenMode: boolean; onBack: () => void }> = ({ isZenMode, onBack }) => {
+const BackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; label: string }> = ({ isZenMode, onBack, label }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLButtonElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.2}>
       <button ref={ref as any} onClick={onBack} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}
         style={{ ...backButtonStyle, opacity: isZenMode ? 0.3 : 1, transition: 'opacity 0.6s ease' }}>
-        <ArrowLeft size={16} /> [ QUIET_THE_CHORUS ]
+        <ArrowLeft size={16} /> {label}
       </button>
     </MagneticSurface>
   );
 };
 const BackAtomMemo = React.memo(BackAtom);
 
-const LabelAtom: React.FC<{ isZenMode: boolean; title: string }> = ({ isZenMode, title }) => {
+const LabelAtom: React.FC<{ isZenMode: boolean; title: string; label: string }> = ({ isZenMode, title, label }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   return (
     <div ref={ref} style={{ ...labelStyle, opacity: isZenMode ? 0.3 : 1, transition: 'opacity 0.6s ease' }}>
-      NODE_RESONANCE: {safeStr(title).toUpperCase()}
+      {label}: {safeStr(title).toUpperCase()}
     </div>
   );
 };
@@ -265,7 +268,9 @@ const SubmitAtom: React.FC<{
   answer: string;
   onSubmit: () => void;
   submitting: boolean;
-}> = ({ isZenMode, answer, onSubmit, submitting }) => {
+  submittingLabel: string;
+  submitLabel: string;
+}> = ({ isZenMode, answer, onSubmit, submitting, submittingLabel, submitLabel }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLButtonElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
@@ -278,7 +283,7 @@ const SubmitAtom: React.FC<{
             color: answer.trim() ? tokens.colors.aurora.cyan : 'rgba(255,255,255,0.2)',
             opacity: submitting ? 0.5 : 1,
           }}>
-          {submitting ? 'RESONATING...' : '[ TRANSMIT_ANS ]'}
+          {submitting ? submittingLabel : submitLabel}
         </button>
       </MagneticSurface>
     </div>

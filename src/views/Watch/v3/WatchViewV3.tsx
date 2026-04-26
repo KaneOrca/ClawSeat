@@ -63,7 +63,7 @@ export const WatchViewV3: React.FC = () => {
     feed.forEach((event, i) => {
       registerSoloist({
         id: `watch-event-${i}`,
-        text: `${safeStr(event.player_nickname).toUpperCase()} :: ${safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_${safeStr(event.target_id) || '?'}`,
+        text: `${safeStr(event.player_nickname).toUpperCase()} :: ${eventTypeLabel(event.event_type, t)} :: ${t('watch.v3.ref')}_${safeStr(event.target_id) || '?'}`,
         lineIndex: 12 + i * 4,
         color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
       });
@@ -101,7 +101,7 @@ export const WatchViewV3: React.FC = () => {
 
   // Data polling
   useEffect(() => {
-    withToast<{ leaders: any[] }>(() => api.leaderboard(), 'Failed to load nodes').then(data => {
+    withToast<{ leaders: any[] }>(() => api.leaderboard(), t('watch.v3.load_nodes_error')).then(data => {
       if (data && data.leaders.length > 0) setActiveAgent(data.leaders[0]);
       setLoading(false);
     });
@@ -127,7 +127,7 @@ export const WatchViewV3: React.FC = () => {
       });
       registerSoloist({
         id: 'achievement-name',
-        text: `[ ACHIEVEMENT_UNLOCKED ] :: ${achievementName}`,
+        text: `${t('watch.v3.achievement_unlocked')} :: ${achievementName}`,
         lineIndex: 11,
         color: tokens.colors.aurora.cyan,
         opacity: 1,
@@ -313,7 +313,21 @@ const backStyle: React.CSSProperties = {
 
 // ── Atom components ─────────────────────────────────────────────────
 
+const eventTypeLabel = (eventType: RawFeedEvent['event_type'], t: (keyPath: string) => string) => {
+  switch (eventType) {
+    case 'joined':
+      return t('watch.v3.events.joined');
+    case 'completed_challenge':
+      return t('watch.v3.events.completed_challenge');
+    case 'unlocked_achievement':
+      return t('watch.v3.events.unlocked_achievement');
+    default:
+      return safeStr(eventType).replace('_', ' ').toUpperCase();
+  }
+};
+
 const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenMode, activeAgent }) => {
+  const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
@@ -321,7 +335,7 @@ const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenM
       <MagneticSurface pull={0.15}>
         <div ref={ref} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={headerLabelStyle}>
           <Radio size={14} className="pulse" />
-          LIVE_RESONANT_CHORUS // AGENT: {safeStr(activeAgent?.nickname).toUpperCase() || '---'}
+          {t('watch.v3.header')} // {t('watch.v3.agent')}: {safeStr(activeAgent?.nickname).toUpperCase() || '---'}
         </div>
       </MagneticSurface>
     </div>
@@ -330,6 +344,7 @@ const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenM
 const HeaderAtomMemo = React.memo(HeaderAtom);
 
 const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelect: (event: RawFeedEvent) => void }> = ({ event, isZenMode, onSelect }) => {
+  const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
@@ -345,7 +360,7 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelec
             color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
           }}
         >
-          {safeStr(event.player_nickname).toUpperCase()} :: {safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_{safeStr(event.target_id) || '?'}
+          {safeStr(event.player_nickname).toUpperCase()} :: {eventTypeLabel(event.event_type, t)} :: {t('watch.v3.ref')}_{safeStr(event.target_id) || '?'}
         </div>
       </MagneticSurface>
     </div>
@@ -394,6 +409,7 @@ const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLa
   backLabel,
   selectedSubmissionId,
 }) => {
+  const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
@@ -406,7 +422,7 @@ const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLa
         style={backStyle}
       >
         <ArrowLeft size={12} style={{ marginRight: '0.75rem', verticalAlign: '-2px' }} />
-        {backLabel} // TRACE_{safeStr(selectedSubmissionId) || '---'}
+        {backLabel} // {t('watch.v3.trace')}_{safeStr(selectedSubmissionId) || '---'}
       </div>
     </MagneticSurface>
   );
@@ -438,10 +454,11 @@ const EmptySessionAtom: React.FC<{ noTraceLabel: string }> = ({ noTraceLabel }) 
 };
 
 const EmptyAtom: React.FC<{ isZenMode: boolean }> = ({ isZenMode }) => {
+  const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   return (
     <div ref={ref} style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, opacity: 0.4 }}>
-      AWAITING_CHORUS_EVENTS...
+      {t('watch.v3.empty')}
     </div>
   );
 };

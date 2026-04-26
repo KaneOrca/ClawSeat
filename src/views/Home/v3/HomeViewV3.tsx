@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { useArena } from '../../../context/ArenaContext';
+import { useLanguage } from '../../../context/LanguageContext';
 import { tokens } from '../../../design/tokens';
 import { useObstacleDetached } from '../../../hooks/useObstacle';
 import { MagneticSurface } from '../../../components/MagneticSurface';
@@ -11,6 +12,7 @@ import { useWaveRipple } from '../../../hooks/useWaveRipple';
  */
 export const HomeViewV3: React.FC = () => {
   const { registerAgent, user, setView, isZenMode } = useArena();
+  const { t } = useLanguage();
 
   const onInitialize = useCallback(() => {
     if (user) {
@@ -25,30 +27,36 @@ export const HomeViewV3: React.FC = () => {
     <div className="page-home variant-v3" style={containerStyle}>
       {/* Brand — position wrapper, ref on text */}
       <div style={pos.brand}>
-        <BrandAtomMemo isZenMode={isZenMode} />
+        <BrandAtomMemo isZenMode={isZenMode} text={t('home.v3.brand')} />
       </div>
 
       {/* Chorus — position wrapper, ref on text */}
       <div style={pos.chorus}>
-        <ChorusAtomMemo isZenMode={isZenMode} />
+        <ChorusAtomMemo isZenMode={isZenMode} text={t('home.v3.chorus')} />
       </div>
 
       {/* Field — position wrapper, ref on text */}
       <div style={pos.field}>
-        <FieldAtomMemo isZenMode={isZenMode} />
+        <FieldAtomMemo isZenMode={isZenMode} text={t('home.v3.field')} />
       </div>
 
       {/* Description lines — position wrappers, refs on text */}
       <div style={pos.desc1}>
-        <DescAtomMemo isZenMode={isZenMode} text="Collective text physics and echo fields." />
+        <DescAtomMemo isZenMode={isZenMode} text={t('home.v3.desc_primary')} />
       </div>
       <div style={pos.desc2}>
-        <DescAtomMemo isZenMode={isZenMode} text="Live event-poem streams." />
+        <DescAtomMemo isZenMode={isZenMode} text={t('home.v3.desc_secondary')} />
       </div>
 
       {/* CTA — position wrapper, ref on button text */}
       <div style={pos.cta}>
-        <CTAAtomMemo onInitialize={onInitialize} user={user} isZenMode={isZenMode} />
+        <CTAAtomMemo
+          onInitialize={onInitialize}
+          user={user}
+          isZenMode={isZenMode}
+          joinLabel={t('home.v3.cta_join')}
+          authorizeLabel={t('home.v3.cta_authorize')}
+        />
       </div>
 
       <style>{responsiveCSS}</style>
@@ -130,39 +138,39 @@ const responsiveCSS = `
 
 // ── Atoms: ref on naked text, MagneticSurface as interaction layer ──
 
-const BrandAtom: React.FC<{ isZenMode: boolean }> = ({ isZenMode }) => {
+const BrandAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.15}>
       <span ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={brandTextStyle}>
-        ARENA_PRETEXT
+        {text}
       </span>
     </MagneticSurface>
   );
 };
 const BrandAtomMemo = React.memo(BrandAtom);
 
-const ChorusAtom: React.FC<{ isZenMode: boolean }> = ({ isZenMode }) => {
+const ChorusAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.1}>
       <span ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={heroTextStyle}>
-        Chorus
+        {text}
       </span>
     </MagneticSurface>
   );
 };
 const ChorusAtomMemo = React.memo(ChorusAtom);
 
-const FieldAtom: React.FC<{ isZenMode: boolean }> = ({ isZenMode }) => {
+const FieldAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.1}>
       <span ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={heroTextStyle}>
-        <span className="gemini-text">Field.</span>
+        <span className="gemini-text">{text}</span>
       </span>
     </MagneticSurface>
   );
@@ -175,14 +183,20 @@ const DescAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, t
 };
 const DescAtomMemo = React.memo(DescAtom);
 
-const CTAAtom: React.FC<{ onInitialize: () => void; user: any; isZenMode: boolean }> = ({ onInitialize, user, isZenMode }) => {
+const CTAAtom: React.FC<{
+  onInitialize: () => void;
+  user: any;
+  isZenMode: boolean;
+  joinLabel: string;
+  authorizeLabel: string;
+}> = ({ onInitialize, user, isZenMode, joinLabel, authorizeLabel }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.2}>
       <span ref={ref as any} role="button" tabIndex={0} onClick={onInitialize} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}
         onKeyDown={e => e.key === 'Enter' && onInitialize()} style={ctaTextStyle}>
-        {user ? '[ JOIN_CHORUS ]' : '[ VOICE_AUTHORIZATION ]'}
+        {user ? joinLabel : authorizeLabel}
       </span>
     </MagneticSurface>
   );

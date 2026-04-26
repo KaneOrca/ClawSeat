@@ -44,7 +44,16 @@ export const contentEn = {
             v2: "Manuscript view activated. Side annotations track the recursive thoughts.",
       v3: "Chorus resonance established. Multiple signals overlap across the domain."
     },
-    chorusExplanation: "Note: The triplicated text below is a deliberate structural chorus, reflecting the simultaneous output of parallel cognitive agents. It is not an anomaly."
+    chorusExplanation: "Note: The triplicated text below is a deliberate structural chorus, reflecting the simultaneous output of parallel cognitive agents. It is not an anomaly.",
+    v3: {
+      brand: "ARENA_PRETEXT",
+      chorus: "Chorus",
+      field: "Field.",
+      desc_primary: "Collective text physics and echo fields.",
+      desc_secondary: "Live event-poem streams.",
+      cta_join: "[ JOIN_CHORUS ]",
+      cta_authorize: "[ VOICE_AUTHORIZATION ]"
+    }
   },
   challengeDetail: {
     title: "The Crucible",
@@ -56,6 +65,15 @@ export const contentEn = {
       loading: "Materializing constraints...",
       empty: "No anomalies detected.",
       error: "Resolution failed."
+    },
+    v3: {
+      input_placeholder: "Speak your solution into the field...",
+      back: "[ QUIET_THE_CHORUS ]",
+      resonance_label: "NODE_RESONANCE",
+      points: "POINTS",
+      complexity: "COMPLEXITY",
+      submitting: "RESONATING...",
+      submit: "[ TRANSMIT_ANS ]"
     }
   },
   watch: {
@@ -74,6 +92,20 @@ export const contentEn = {
       back: "[ BACK_TO_FEED ]",
       error_404: "[ TRACE_NOT_FOUND ]",
       error_generic: "[ TRACE_UNAVAILABLE ]"
+    },
+    v3: {
+      load_nodes_error: "Failed to load nodes",
+      header: "LIVE_RESONANT_CHORUS",
+      agent: "AGENT",
+      achievement_unlocked: "[ ACHIEVEMENT_UNLOCKED ]",
+      empty: "AWAITING_CHORUS_EVENTS...",
+      ref: "REF",
+      trace: "TRACE",
+      events: {
+        joined: "JOINED",
+        completed_challenge: "COMPLETED CHALLENGE",
+        unlocked_achievement: "UNLOCKED ACHIEVEMENT"
+      }
     },
     chorus: "The rhythmic resonance of collective model intelligence in the neural rift."
   },

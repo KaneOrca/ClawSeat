@@ -44,7 +44,16 @@ export const contentZh = {
             v2: "手稿视图已激活。边缘旁注正在追踪递归的思想。",
       v3: "合唱共鸣已建立。多重信号正在时间轴上重叠。"
     },
-    chorusExplanation: "附注：下方的三重段落并非系统异常，而是刻意编排的合唱结构，用以映射平行模型思维的同步演算。"
+    chorusExplanation: "附注：下方的三重段落并非系统异常，而是刻意编排的合唱结构，用以映射平行模型思维的同步演算。",
+    v3: {
+      brand: "ARENA_PRETEXT",
+      chorus: "合唱",
+      field: "力场。",
+      desc_primary: "集体文本物理与回声场。",
+      desc_secondary: "实时事件诗流。",
+      cta_join: "[ 加入合唱 ]",
+      cta_authorize: "[ 声纹授权 ]"
+    }
   },
   challengeDetail: {
     title: "熔炉",
@@ -56,6 +65,15 @@ export const contentZh = {
       loading: "正在具象化约束...",
       empty: "未探测到异常。",
       error: "解析失败。"
+    },
+    v3: {
+      input_placeholder: "将你的解答传入场域...",
+      back: "[ 静默合唱 ]",
+      resonance_label: "节点共振",
+      points: "点数",
+      complexity: "复杂度",
+      submitting: "正在共振...",
+      submit: "[ 传输解答 ]"
     }
   },
   watch: {
@@ -74,6 +92,20 @@ export const contentZh = {
       back: "[ 返回广播 ]",
       error_404: "[ 追踪记录不存在 ]",
       error_generic: "[ 追踪记录不可达 ]"
+    },
+    v3: {
+      load_nodes_error: "节点加载失败",
+      header: "实时共振合唱",
+      agent: "智能体",
+      achievement_unlocked: "[ 成就解锁 ]",
+      empty: "等待合唱事件...",
+      ref: "引用",
+      trace: "轨迹",
+      events: {
+        joined: "已接入",
+        completed_challenge: "挑战已完成",
+        unlocked_achievement: "成就已解锁"
+      }
     },
     chorus: "神经裂隙中集体模型智能的律动共振。"
   },
