@@ -39,6 +39,7 @@ TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
 ANCESTOR_PATROL_TEMPLATE="$REPO_ROOT/core/templates/ancestor-patrol.plist.in"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
+PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
@@ -1161,6 +1162,21 @@ bootstrap_project_profile() {
   seed_bootstrap_secrets
 }
 
+register_project_registry() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q register %q %q %q\n' \
+      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PRIMARY_SEAT_ID" "${PROJECT}-${PRIMARY_SEAT_ID}"
+    return 0
+  fi
+  if [[ ! -f "$PROJECTS_REGISTRY_SCRIPT" ]]; then
+    warn "projects.json register skipped; missing $PROJECTS_REGISTRY_SCRIPT"
+    return 0
+  fi
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" register \
+    "$PROJECT" "$PRIMARY_SEAT_ID" "${PROJECT}-${PRIMARY_SEAT_ID}" >/dev/null \
+    || warn "projects.json register failed (non-fatal); see ~/.clawseat/projects.json"
+}
+
 render_brief() {
   note "Step 4: render ancestor brief"
   [[ -f "$TEMPLATE_PATH" || "$DRY_RUN" == "1" ]] || die 30 TEMPLATE_MISSING "missing template: $TEMPLATE_PATH"
@@ -1353,6 +1369,15 @@ install.sh 已完成。现在按 6 步触发 Phase-A：
 
 6. 每走完一步向 ancestor 说"继续"或给修正（provider / chat_id 等）
 
+## 项目注册表
+
+本项目已注册到 \`~/.clawseat/projects.json\`，memories 窗口优先按该注册表展示项目。
+如需从注册表移除本项目（不删除 tmux/session 文件）：
+
+\`\`\`bash
+python3 ${PROJECTS_REGISTRY_SCRIPT} unregister ${PROJECT}
+\`\`\`
+
 ## 如果 ancestor 报 BRIEF_DRIFT_DETECTED
 
 ancestor 在每个 B 步开始前会先跑 `${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh`。这只能检测 brief 是否在你启动后被更新，不能让运行中的 Claude Code 热更新 system prompt。
@@ -1422,6 +1447,8 @@ print_operator_banner() {
   printf '\n'
   printf '    Operator guide / 操作员指引:\n'
   printf '       cat %s\n' "$GUIDE_FILE"
+  printf '    Registry cleanup / 注册表移除:\n'
+  printf '       python3 %q unregister %q\n' "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT"
   printf '\n'
   printf -- '────────────────────────────────────────────────────────────────\n'
 }
@@ -1801,37 +1828,54 @@ print(json.dumps({
 PY
 }
 
-# v2 memories_payload: shared "clawseat-memories" window with one tab per project memory tmux session.
+# v2 memories_payload: prefer ~/.clawseat/projects.json, fallback to live tmux memory sessions.
 memories_payload() {
-  "$PYTHON_BIN" - <<'PY'
+  PYTHONPATH="$REPO_ROOT/core/scripts${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY'
 import json
 import os
 import subprocess
 
-# Discover all <project>-memory tmux sessions.
-result = subprocess.run(
-    ["/opt/homebrew/bin/tmux", "ls", "-F", "#{session_name}"],
-    capture_output=True, text=True, env={**os.environ, "TMUX": ""}, check=False,
-)
-all_sessions = result.stdout.strip().split("\n") if result.returncode == 0 else []
-legacy_global_memory = "-".join(("machine", "memory", "claude"))
-memory_sessions = sorted([
-    s for s in all_sessions
-    if s.endswith("-memory") and s != legacy_global_memory
-])
+from projects_registry import enumerate_projects
 
-n = len(memory_sessions)
-if n == 0:
-    print(json.dumps({"status": "skip", "reason": "no project memory sessions found"}))
+
+def registry_tabs():
+    tabs = []
+    for entry in enumerate_projects():
+        name = entry.get("name")
+        tmux_name = entry.get("tmux_name")
+        if not name or not tmux_name:
+            continue
+        tabs.append({
+            "name": name,
+            "command": f"tmux attach -t '={tmux_name}'",
+        })
+    return tabs
+
+
+def tmux_fallback_tabs():
+    result = subprocess.run(
+        ["tmux", "ls", "-F", "#{session_name}"],
+        capture_output=True, text=True, env={**os.environ, "TMUX": ""}, check=False,
+    )
+    all_sessions = result.stdout.strip().split("\n") if result.returncode == 0 else []
+    legacy_global_memory = "-".join(("machine", "memory", "claude"))
+    memory_sessions = sorted([
+        s for s in all_sessions
+        if s.endswith("-memory") and s != legacy_global_memory
+    ])
+    return [
+        {
+            "name": sess[:-len("-memory")],
+            "command": f"tmux attach -t '={sess}'",
+        }
+        for sess in memory_sessions
+    ]
+
+
+tabs = registry_tabs() or tmux_fallback_tabs()
+if not tabs:
+    print(json.dumps({"status": "skip", "reason": "no registered or live project memory sessions found"}))
     raise SystemExit(0)
-
-tabs = []
-for sess in memory_sessions:
-    project = sess[:-len("-memory")]
-    tabs.append({
-        "name": project,
-        "command": f"tmux attach -t '={sess}'",
-    })
 
 print(json.dumps({
     "mode": "tabs",
@@ -1852,6 +1896,7 @@ main() {
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
+  register_project_registry
   install_ancestor_patrol_plist
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +

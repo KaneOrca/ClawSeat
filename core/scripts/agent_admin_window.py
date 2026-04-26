@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import projects_registry
+
 
 class AgentAdminWindowError(Exception):
     pass
@@ -371,24 +373,34 @@ def _tmux_session_names() -> list[str]:
 
 
 def build_memories_payload(project: Any) -> dict[str, Any] | None:
-    del project  # The shared memories window is built from all live project memory sessions.
-    memory_sessions = sorted(
-        session
-        for session in _tmux_session_names()
-        if session.endswith("-memory") and session != _MEMORY_WINDOW_TITLE
-    )
-    if not memory_sessions:
-        return None
-    return {
-        "mode": "tabs",
-        "title": _MEMORIES_WINDOW_TITLE,
-        "tabs": [
+    del project  # The shared memories window is built from all registered project memory sessions.
+    tabs = [
+        {
+            "name": entry["name"],
+            "command": f"tmux attach -t '={entry['tmux_name']}'",
+        }
+        for entry in projects_registry.enumerate_projects()
+        if entry.get("name") and entry.get("tmux_name")
+    ]
+    if not tabs:
+        memory_sessions = sorted(
+            session
+            for session in _tmux_session_names()
+            if session.endswith("-memory") and session != _MEMORY_WINDOW_TITLE
+        )
+        tabs = [
             {
                 "name": session[: -len("-memory")],
                 "command": f"tmux attach -t '={session}'",
             }
             for session in memory_sessions
-        ],
+        ]
+    if not tabs:
+        return None
+    return {
+        "mode": "tabs",
+        "title": _MEMORIES_WINDOW_TITLE,
+        "tabs": tabs,
         "ensure": True,
     }
 
