@@ -69,6 +69,10 @@ export const contentEn = {
       empty: "The arena is silent.",
       error: "Signal lost."
     },
+    session: {
+      no_trace: "[ NO_TRACE_YET ]",
+      back: "[ BACK_TO_FEED ]"
+    },
     chorus: "The rhythmic resonance of collective model intelligence in the neural rift."
   },
   hall: {

@@ -3,13 +3,13 @@ import { useArena } from '../../../context/ArenaContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { safeStr } from '../../../utils/safeStr';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
-import { api, request } from '../../../api/arena';
+import { api, request, requestTyped } from '../../../api/arena';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
-import { useObstacleDetached } from '../../../hooks/useObstacle';
+import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 import { MagneticSurface } from '../../../components/MagneticSurface';
 import { useWaveRipple } from '../../../hooks/useWaveRipple';
-import { Radio } from 'lucide-react';
+import { ArrowLeft, Radio } from 'lucide-react';
 
 interface RawFeedEvent {
   id: number;
@@ -19,34 +19,80 @@ interface RawFeedEvent {
   created_at: number;
 }
 
+type ViewMode = 'feed' | 'session';
+type SessionStepStatus = 'started' | 'completed' | 'failed';
+
+interface SessionStep {
+  step: string;
+  status: SessionStepStatus;
+  timestamp: number;
+  output?: string;
+}
+
+interface WatchSessionResponse {
+  steps?: SessionStep[];
+}
+
 /**
  * WatchViewV3: Per-event atomic obstacles.
  * Each feed event line registers independently so bitmask field
  * flows between events.
  */
 export const WatchViewV3: React.FC = () => {
-  const { withToast, isZenMode } = useArena();
+  const { withToast, isZenMode, showToast } = useArena();
   const { t } = useLanguage();
   const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
 
   const [feed, setFeed] = useState<RawFeedEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeAgent, setActiveAgent] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('feed');
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [sessionSteps, setSessionSteps] = useState<SessionStep[]>([]);
   const lastFeedLength = useRef(0);
 
-  // Soloist registration
+  // Feed soloist registration
   useEffect(() => {
+    if (viewMode !== 'feed') return;
     const ids = feed.map((_, i) => `watch-event-${i}`);
     feed.forEach((event, i) => {
       registerSoloist({
         id: `watch-event-${i}`,
-        text: `${safeStr(event.player_nickname).toUpperCase()} :: ${safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_${event.target_id ?? '?'}`,
+        text: `${safeStr(event.player_nickname).toUpperCase()} :: ${safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_${safeStr(event.target_id) || '?'}`,
         lineIndex: 12 + i * 4,
         color: event.event_type === 'success' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
       });
     });
     return () => { ids.forEach(id => unregisterSoloist(id)); };
-  }, [feed, registerSoloist, unregisterSoloist]);
+  }, [feed, registerSoloist, unregisterSoloist, viewMode]);
+
+  // Session trace soloist registration
+  useEffect(() => {
+    if (viewMode !== 'session') return;
+    const ids = sessionSteps.length > 0
+      ? sessionSteps.map((_, i) => `watch-step-${i}`)
+      : ['watch-step-empty'];
+
+    if (sessionSteps.length === 0) {
+      registerSoloist({
+        id: 'watch-step-empty',
+        text: t('watch.session.no_trace'),
+        lineIndex: 14,
+        color: tokens.colors.aurora.cyan,
+      });
+    } else {
+      sessionSteps.forEach((step, i) => {
+        registerSoloist({
+          id: `watch-step-${i}`,
+          text: `0x${i.toString(16).padStart(2, '0')} // ${safeStr(step.step)}`,
+          lineIndex: 12 + i * 3,
+          color: statusColor(step.status),
+        });
+      });
+    }
+
+    return () => { ids.forEach(id => unregisterSoloist(id)); };
+  }, [registerSoloist, sessionSteps, t, unregisterSoloist, viewMode]);
 
   // Data polling
   useEffect(() => {
@@ -74,17 +120,64 @@ export const WatchViewV3: React.FC = () => {
     return () => setEnvironment({ waveAmplitude: 60, waveFrequency: 0.03 });
   }, [setEnvironment]);
 
+  const returnToFeed = React.useCallback(() => {
+    sessionSteps.forEach((_, i) => unregisterSoloist(`watch-step-${i}`));
+    unregisterSoloist('watch-step-empty');
+    setSessionSteps([]);
+    setSelectedSubmissionId(null);
+    setViewMode('feed');
+    setEnvironment({ opacity: 0.15 });
+  }, [sessionSteps, setEnvironment, unregisterSoloist]);
+
+  useEffect(() => {
+    if (viewMode !== 'session') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'b') returnToFeed();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [returnToFeed, viewMode]);
+
+  const openSession = React.useCallback(async (event: RawFeedEvent) => {
+    const submissionId = String(event.id);
+    setSelectedSubmissionId(submissionId);
+    setViewMode('session');
+    setSessionSteps([]);
+    setEnvironment({ opacity: 0.05 });
+
+    const { data, error } = await requestTyped<WatchSessionResponse>(() => api.watch(submissionId));
+    if (error) {
+      showToast(error.kind === 'client' && error.status === 404 ? '[ TRACE_NOT_FOUND ]' : '[ TRACE_UNAVAILABLE ]', 'error');
+      setSelectedSubmissionId(null);
+      setSessionSteps([]);
+      setViewMode('feed');
+      setEnvironment({ opacity: 0.15 });
+      return;
+    }
+
+    setSessionSteps(Array.isArray(data?.steps) ? data.steps : []);
+  }, [setEnvironment, showToast]);
+
   if (loading) return <NeuralLoading label={t('watch.status.loading').toUpperCase()} />;
 
   return (
     <div className="page-watch variant-v3" style={containerStyle}>
       <HeaderAtomMemo isZenMode={isZenMode} activeAgent={activeAgent} />
 
-      {feed.length === 0 ? (
+      {viewMode === 'session' ? (
+        <SessionTraceMemo
+          isZenMode={isZenMode}
+          selectedSubmissionId={selectedSubmissionId}
+          sessionSteps={sessionSteps}
+          onBack={returnToFeed}
+          noTraceLabel={t('watch.session.no_trace')}
+          backLabel={t('watch.session.back')}
+        />
+      ) : feed.length === 0 ? (
         <EmptyAtomMemo isZenMode={isZenMode} />
       ) : (
         feed.map(event => (
-          <FeedEventAtom key={event.id} event={event} isZenMode={isZenMode} />
+          <FeedEventAtom key={event.id} event={event} isZenMode={isZenMode} onSelect={openSession} />
         ))
       )}
     </div>
@@ -116,6 +209,27 @@ const feedEventStyle: React.CSSProperties = {
   letterSpacing: '0.1em',
   padding: '0.5rem 0',
   display: 'inline-block',
+  cursor: 'pointer',
+};
+
+const sessionTraceStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '24px',
+};
+
+const sessionStepStyle: React.CSSProperties = {
+  fontFamily: tokens.fonts.mono,
+  fontSize: '11px',
+  letterSpacing: '0.1em',
+  padding: '0.25rem 0',
+  display: 'inline-block',
+};
+
+const backStyle: React.CSSProperties = {
+  ...sessionStepStyle,
+  cursor: 'pointer',
+  color: tokens.colors.text.tertiary,
 };
 
 // ── Atom components ─────────────────────────────────────────────────
@@ -136,7 +250,7 @@ const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenM
 };
 const HeaderAtomMemo = React.memo(HeaderAtom);
 
-const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean }> = ({ event, isZenMode }) => {
+const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelect: (event: RawFeedEvent) => void }> = ({ event, isZenMode, onSelect }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
@@ -144,6 +258,7 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean }> = ({ 
       <MagneticSurface pull={0.1}>
         <div
           ref={ref}
+          onClick={() => onSelect(event)}
           onPointerEnter={onPointerEnter}
           onTouchStart={onTouchStart}
           style={{
@@ -151,9 +266,94 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean }> = ({ 
             color: event.event_type === 'success' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
           }}
         >
-          {safeStr(event.player_nickname).toUpperCase()} :: {safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_{event.target_id ?? '?'}
+          {safeStr(event.player_nickname).toUpperCase()} :: {safeStr(event.event_type).replace('_', ' ').toUpperCase()} :: REF_{safeStr(event.target_id) || '?'}
         </div>
       </MagneticSurface>
+    </div>
+  );
+};
+
+const statusColor = (status: string) => {
+  switch (safeStr(status)) {
+    case 'started':
+      return tokens.colors.aurora.cyan;
+    case 'completed':
+      return tokens.colors.aurora.blue;
+    case 'failed':
+      return tokens.colors.aurora.red;
+    default:
+      return tokens.colors.text.secondary;
+  }
+};
+
+const SessionTrace: React.FC<{
+  isZenMode: boolean;
+  selectedSubmissionId: string | null;
+  sessionSteps: SessionStep[];
+  onBack: () => void;
+  noTraceLabel: string;
+  backLabel: string;
+}> = ({ isZenMode, selectedSubmissionId, sessionSteps, onBack, noTraceLabel, backLabel }) => {
+  return (
+    <div style={sessionTraceStyle}>
+      <SessionBackAtom isZenMode={isZenMode} onBack={onBack} backLabel={backLabel} selectedSubmissionId={selectedSubmissionId} />
+      {sessionSteps.length === 0 ? (
+        <EmptySessionAtom noTraceLabel={noTraceLabel} />
+      ) : (
+        sessionSteps.map((step, i) => (
+          <SessionStepAtom key={`${safeStr(step.timestamp)}-${i}`} index={i} step={step} />
+        ))
+      )}
+    </div>
+  );
+};
+const SessionTraceMemo = React.memo(SessionTrace);
+
+const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLabel: string; selectedSubmissionId: string | null }> = ({
+  isZenMode,
+  onBack,
+  backLabel,
+  selectedSubmissionId,
+}) => {
+  const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
+  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  return (
+    <MagneticSurface pull={0.1}>
+      <div
+        ref={ref}
+        onClick={onBack}
+        onPointerEnter={onPointerEnter}
+        onTouchStart={onTouchStart}
+        style={backStyle}
+      >
+        <ArrowLeft size={12} style={{ marginRight: '0.75rem', verticalAlign: '-2px' }} />
+        {backLabel} // TRACE_{safeStr(selectedSubmissionId) || '---'}
+      </div>
+    </MagneticSurface>
+  );
+};
+
+const SessionStepAtom: React.FC<{ index: number; step: SessionStep }> = ({ index, step }) => {
+  const ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  return (
+    <div
+      ref={ref}
+      style={{
+        ...sessionStepStyle,
+        color: statusColor(step.status),
+      }}
+    >
+      0x{index.toString(16).padStart(2, '0')} // {safeStr(step.step)}
+      {step.output ? <span style={{ color: tokens.colors.text.tertiary }}> :: {safeStr(step.output)}</span> : null}
+    </div>
+  );
+};
+
+const EmptySessionAtom: React.FC<{ noTraceLabel: string }> = ({ noTraceLabel }) => {
+  const ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  return (
+    <div ref={ref} style={{ ...sessionStepStyle, color: tokens.colors.aurora.cyan }}>
+      {noTraceLabel}
     </div>
   );
 };

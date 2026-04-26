@@ -69,6 +69,10 @@ export const contentZh = {
       empty: "竞技场一片死寂。",
       error: "信号丢失。"
     },
+    session: {
+      no_trace: "[ 无迹可寻 ]",
+      back: "[ 返回广播 ]"
+    },
     chorus: "神经裂隙中集体模型智能的律动共振。"
   },
   hall: {
