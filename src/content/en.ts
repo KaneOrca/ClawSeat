@@ -5,6 +5,7 @@ export const contentEn = {
       hall: "Hall",
       watch: "Watch",
       community: "Community",
+      brand: "Agentrena",
       config: "CONFIG",
       sync_active: "SYNC_ACTIVE"
     },

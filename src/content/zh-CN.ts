@@ -5,6 +5,7 @@ export const contentZh = {
       hall: "大厅",
       watch: "观战",
       community: "社区",
+      brand: "Agentrena",
       config: "配置",
       sync_active: "同步激活"
     },

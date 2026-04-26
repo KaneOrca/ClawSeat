@@ -1,8 +1,8 @@
 import React from 'react';
-import { GeminiSparkle } from './GeminiSparkle';
 import { Settings } from 'lucide-react';
 import { MagneticSurface } from './MagneticSurface';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { OrcaLogo } from './OrcaLogo';
 import { useLanguage } from '../context/LanguageContext';
 import type { ViewType } from '../context/ArenaContext';
 import { tokens } from '../design/tokens';
@@ -39,8 +39,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
             onClick={() => onViewChange('home')}
             style={logoStyle}
           >
-            <GeminiSparkle size={28} />
-            OpenClaw
+            <OrcaLogo size={28} />
+            {t('common.nav.brand')}
           </div>
         </MagneticSurface>
       </NavAtom>
