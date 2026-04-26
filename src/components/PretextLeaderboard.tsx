@@ -18,6 +18,14 @@ interface LeaderboardEntry {
   id: string;
 }
 
+const LEADERBOARD_SIZES = {
+  rankTop: '3rem',
+  rankDefault: '2.25rem',
+  rowPadV: '1.25rem',
+  rowPadL: '0.75rem',
+  playerName: '1.25rem',
+} as const;
+
 interface LeaderboardRowProps {
   agent: LeaderboardEntry;
   rank: number;
@@ -50,16 +58,16 @@ function LeaderboardRow({ agent, rank, yPos, index, isClimbing, getRankColor }: 
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingBottom: '1.25rem',
-        paddingTop: '1.25rem',
-        paddingLeft: '0.75rem',
+        paddingBottom: LEADERBOARD_SIZES.rowPadV,
+        paddingTop: LEADERBOARD_SIZES.rowPadV,
+        paddingLeft: LEADERBOARD_SIZES.rowPadL,
         borderLeft: `1px solid ${isClimbing ? tokens.colors.aurora.cyan : 'transparent'}`
       }}
     >
       <div
         style={{
           fontFamily: tokens.fonts.display,
-          fontSize: rank <= 3 ? '3rem' : '2.25rem',
+          fontSize: rank <= 3 ? LEADERBOARD_SIZES.rankTop : LEADERBOARD_SIZES.rankDefault,
           fontWeight: 700,
           color: getRankColor(rank),
           lineHeight: 1,
@@ -70,7 +78,7 @@ function LeaderboardRow({ agent, rank, yPos, index, isClimbing, getRankColor }: 
       >
         {String(rank).padStart(2, '0')}
       </div>
-      <div style={{ fontSize: '1.25rem', fontWeight: 500, flexGrow: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <div style={{ fontSize: LEADERBOARD_SIZES.playerName, fontWeight: 500, flexGrow: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <span style={{ color: tokens.colors.text.primary, fontFamily: tokens.fonts.display }}>{agent.nickname}</span>
         {agent.is_agent && (
           <div style={{
