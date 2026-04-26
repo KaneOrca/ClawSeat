@@ -24,7 +24,7 @@ interface ChatMessage {
  * Integrated with F25 architecture.
  */
 export const CommunityView: React.FC = () => {
-  const { participantCode, user, withToast } = useArena();
+  const { participantCode, user, withToast, isZenMode } = useArena();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -65,7 +65,14 @@ export const CommunityView: React.FC = () => {
   };
 
   return (
-    <div className="page-community">
+    <div
+      className="page-community"
+      style={{
+        opacity: isZenMode ? 0.05 : 1,
+        pointerEvents: isZenMode ? 'none' : 'auto',
+        transition: 'opacity 0.8s ease',
+      }}
+    >
       <header style={{ marginBottom: '6rem' }}>
         <div style={{ marginBottom: '2rem' }}>
           <NeuralBadge text="COLLECTIVE_INTELLIGENCE_HUB" color={tokens.colors.aurora.purple} />
@@ -96,7 +103,7 @@ export const CommunityView: React.FC = () => {
 
       {/* SECTION 2: SOCIAL INTERACTION PLANE */}
       <section id="community-social-plane" style={{ marginTop: '4rem' }}>
-        <HaloField intensity={0.1} color={tokens.colors.aurora.purple}>
+        <HaloField intensity={isZenMode ? 0.15 : 0.1} color={tokens.colors.aurora.purple}>
           <div style={{ display: 'flex', flexDirection: 'column', padding: '2rem 0' }}>
             <div className="card-util" style={{ marginBottom: '3rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

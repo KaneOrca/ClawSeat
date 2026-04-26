@@ -9,7 +9,7 @@ const V2_CONFIG = {
   color: '#1a1a1a',
   opacity: 0.8,
   environment: { waveAmplitude: 0, ambientColor: 'rgba(26, 26, 26, 0.4)', opacity: 0.3 },
-  zenEnvironment: { waveAmplitude: 0, ambientColor: 'rgba(26, 26, 26, 0.4)', opacity: 0.6 },
+  zenEnvironment: { waveAmplitude: 90, ambientColor: 'rgba(26, 26, 26, 0.4)', opacity: 0.6 },
   cleanupEnvironment: { ambientColor: undefined },
 } as const;
 
@@ -35,7 +35,7 @@ export const HomeView: React.FC = () => {
 
       <div
         style={{
-          opacity: isZenMode ? 0 : 1,
+          opacity: isZenMode ? 0.05 : 1,
           transition: 'opacity 0.8s ease',
           pointerEvents: isZenMode ? 'none' : 'auto'
         }}

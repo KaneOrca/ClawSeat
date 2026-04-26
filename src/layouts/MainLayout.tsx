@@ -52,6 +52,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       if (e.key.toLowerCase() === 'z') {
         const next = !isZenMode;
         setZenMode(next);
+        setEnvironment(next ? { waveAmplitude: 90, opacity: 0.3 } : { waveAmplitude: 60, opacity: 0.15 });
         showToast(next ? 'ZEN_MODE_ACTIVATED' : 'UI_RESTORED', 'success');
       }
       if (e.key.toLowerCase() === 'd') {
