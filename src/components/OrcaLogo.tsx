@@ -20,7 +20,12 @@ interface OrcaPart {
 
 const BASE_WIDTH = 60;
 const BASE_HEIGHT = 36;
-const MAX_PULL = 4;
+const MAX_PULL = 12;
+const SPRAY_INTERVAL_MS = 3500;
+const SPRAY_DURATION_MS = 220;
+const SPRAY_AMP = 120;
+const GLINT_INTERVAL_MS = 4200;
+const GLINT_DURATION_MS = 250;
 
 const ORCA_PARTS: OrcaPart[] = [
   { id: 'body', top: 14, left: 10, width: 36, height: 14 },
@@ -29,7 +34,7 @@ const ORCA_PARTS: OrcaPart[] = [
   { id: 'snout', top: 18, left: 40, width: 12, height: 8 },
 ];
 
-export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
+export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   const { variant, isZenMode } = useArena();
   const { environment, setEnvironment } = usePhysicsRegistry();
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -41,6 +46,8 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
   const scale = size / BASE_HEIGHT;
   const width = BASE_WIDTH * scale;
   const eyeColor = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.aurora.red;
+  const haloColor = variant === 'v3' ? `${tokens.colors.aurora.cyan}44` : `${tokens.colors.aurora.red}33`;
+  const haloBlur = sprayActive ? 8 : 4;
 
   useEffect(() => {
     environmentRef.current = environment;
@@ -64,9 +71,10 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
       const dy = event.clientY - centerY;
       const dist = Math.hypot(dx, dy) || 1;
       const pull = Math.min(dist / 300, 1);
+      const easedPull = Math.sqrt(pull);
       setOffset({
-        x: (dx / dist) * pull * MAX_PULL,
-        y: (dy / dist) * pull * MAX_PULL,
+        x: (dx / dist) * easedPull * MAX_PULL,
+        y: (dy / dist) * easedPull * MAX_PULL,
       });
     };
 
@@ -78,22 +86,22 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
     const triggerSpray = () => {
       const prevAmp = environmentRef.current.waveAmplitude ?? 60;
       setSprayActive(true);
-      setEnvironment({ waveAmplitude: 96 });
+      setEnvironment({ waveAmplitude: SPRAY_AMP });
       window.setTimeout(() => {
         setSprayActive(false);
         setEnvironment({ waveAmplitude: prevAmp });
-      }, 220);
+      }, SPRAY_DURATION_MS);
     };
 
-    const interval = window.setInterval(triggerSpray, 7000);
+    const interval = window.setInterval(triggerSpray, SPRAY_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [setEnvironment]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       setEyeGlintActive(true);
-      window.setTimeout(() => setEyeGlintActive(false), 200);
-    }, 8000);
+      window.setTimeout(() => setEyeGlintActive(false), GLINT_DURATION_MS);
+    }, GLINT_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -132,6 +140,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
         width,
         height: size,
         transform: `translate(${offset.x}px, ${offset.y}px)`,
+        filter: `drop-shadow(0 0 ${haloBlur}px ${haloColor})`,
       }}
     >
       {parts.map(part => (
@@ -155,6 +164,12 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 32, className }) => {
         }}
         />
       )}
+      <style>{`
+        @keyframes orcaTailWag {
+          0%, 100% { transform: rotate(-20deg); }
+          50% { transform: rotate(-12deg); }
+        }
+      `}</style>
     </span>
   );
 };
@@ -171,6 +186,7 @@ const OrcaObstaclePart: React.FC<{ part: OrcaPart; active: boolean }> = ({ part,
         width: part.width,
         height: part.height,
         transform: part.rotate ? `rotate(${part.rotate}deg)` : undefined,
+        animation: part.id === 'tail' ? 'orcaTailWag 3.2s ease-in-out infinite' : undefined,
       }}
     />
   );
