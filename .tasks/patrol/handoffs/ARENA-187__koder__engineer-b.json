@@ -1,0 +1,10 @@
+{
+  "kind": "unblock",
+  "message": "[arena-pretext-ui] ARENA-187 unblock from koder to engineer-b: ARENA-187 \u7d27\u6025\u8bca\u65ad\u4efb\u52a1\u5df2\u7b49\u5f85\u8f83\u957f\u65f6\u95f4\u3002\u8bf7\u786e\u8ba4\u6536\u5230\u5e76\u5728\u5b8c\u6210\u540e\u901a\u8fc7 dispatch_task.py \u56de\u62a5\u7ed3\u679c\u3002\u95ee\u9898\u6458\u8981\uff1a1) \u529f\u80fd\u6587\u672c DOM \u5143\u7d20 z-index \u9ad8\u4e8e canvas \u7269\u7406\u5c42\uff0c\u6d6e\u5728\u4e0a\u65b9\u800c\u975e\u5d4c\u5165\uff1b2) \u65e0\u9f20\u6807\u4ea4\u4e92\u65f6\u70b9\u9635\u80cc\u666f\u9759\u6b62\u65e0\u6d41\u52a8\u52a8\u753b\u3002 Reply to koder if follow-up or completion is required.",
+  "notified_at": "2026-04-14T03:21:11+00:00",
+  "project": "arena-pretext-ui",
+  "reply_to": "koder",
+  "source": "koder",
+  "target": "engineer-b",
+  "task_id": "ARENA-187"
+}

@@ -1,0 +1,14 @@
+{
+  "delivered_at": "2026-04-12T19:47:23+00:00",
+  "delivery_path": "/Users/ywf/coding/arena-pretext-ui/.tasks/engineer-d/DELIVERY.md",
+  "frontstage_disposition": null,
+  "kind": "completion",
+  "next_action": null,
+  "notified_at": "2026-04-12T19:47:27+00:00",
+  "notify_message": "ARENA-023 complete from engineer-d to engineer-b. Read /Users/ywf/coding/arena-pretext-ui/.tasks/engineer-d/DELIVERY.md and write a durable Consumed ACK when handled.",
+  "source": "engineer-d",
+  "target": "engineer-b",
+  "task_id": "ARENA-023",
+  "user_summary": null,
+  "verdict": null
+}

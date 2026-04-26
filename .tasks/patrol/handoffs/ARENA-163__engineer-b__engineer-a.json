@@ -1,0 +1,12 @@
+{
+  "assigned_at": "2026-04-13T20:19:06+00:00",
+  "kind": "dispatch",
+  "notified_at": "2026-04-13T20:19:11+00:00",
+  "notify_message": "ARENA-163 assigned from engineer-b to engineer-a. Read /Users/ywf/coding/arena-pretext-ui/.tasks/engineer-a/TODO.md. When complete, reply to engineer-b via DELIVERY + notify.",
+  "reply_to": "engineer-b",
+  "source": "engineer-b",
+  "target": "engineer-a",
+  "task_id": "ARENA-163",
+  "title": "\u7269\u7406\u52a0\u56fa V7\uff1a\u6eda\u52a8\u540c\u6b65\u4e0e\u5750\u6807\u9884\u6d4b",
+  "todo_path": "/Users/ywf/coding/arena-pretext-ui/.tasks/engineer-a/TODO.md"
+}

@@ -1,0 +1,14 @@
+{
+  "delivered_at": "2026-04-13T21:45:30+00:00",
+  "delivery_path": "/Users/ywf/coding/arena-pretext-ui/.tasks/engineer-d/DELIVERY.md",
+  "frontstage_disposition": "USER_DECISION_NEEDED",
+  "kind": "completion",
+  "next_action": "Route back to engineer-a for another dense-scroll timing fix, then re-dispatch QA.",
+  "notified_at": "2026-04-13T21:45:35+00:00",
+  "notify_message": "ARENA-174 complete from engineer-d to engineer-b. Read /Users/ywf/coding/arena-pretext-ui/.tasks/engineer-d/DELIVERY.md and write a durable Consumed ACK when handled.",
+  "source": "engineer-d",
+  "target": "engineer-b",
+  "task_id": "ARENA-174",
+  "user_summary": "ARENA-174 QA failed. Hall mount is fixed, but dense long-distance Chrome scrolling still drops visible text mask coverage.",
+  "verdict": "FAIL"
+}

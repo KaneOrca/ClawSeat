@@ -1,0 +1,9 @@
+{
+  "kind": "unblock",
+  "message": "ARENA-090 unblock from koder to engineer-b: Patrol check-in: frontend restoration path is now past crash recovery and waiting on ARENA-090 QA after ARENA-089 approval. Please keep the chain moving to close QA promptly, then continue with explicit end-to-end functional verification across Home, Hall, Watch, Detail, navigation, version switching, interaction-driven background/bitmask effects, and responsive behavior. If QA finds any residual black rectangles, broken text-background interaction, or runtime regressions, split follow-up fixes immediately and keep the restoration chain active until the site is truly usable end-to-end. Reply to koder if follow-up or completion is required.",
+  "notified_at": "2026-04-12T22:46:15+00:00",
+  "reply_to": "koder",
+  "source": "koder",
+  "target": "engineer-b",
+  "task_id": "ARENA-090"
+}

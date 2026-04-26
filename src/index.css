@@ -1,0 +1,246 @@
+/* Global Design Tokens for Gemini x Pretext Edition */
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@600,700&f[]=satoshi@400,500,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --bg-base: #000005;
+  --aurora-1: #4285f4;
+  --aurora-2: #9b72cb;
+  --aurora-3: #d96570;
+  --aurora-4: #f4b400;
+  --aurora-5: #00f0ff;
+
+  --glass-bg: rgba(20, 20, 25, 0.4);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-highlight: rgba(255, 255, 255, 0.15);
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-tertiary: rgba(255, 255, 255, 0.4);
+
+  --font-display: 'Clash Display', sans-serif;
+  --font-body: 'Satoshi', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Pretext Typographic Scale */
+  --text-hero: clamp(4rem, 12vw, 10rem);
+  --text-huge: clamp(3rem, 6vw, 6rem);
+  --text-micro: 0.75rem;
+}
+
+[data-theme='light'] {
+  --bg-base: #f8f9fa;
+  --text-primary: #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --text-tertiary: #888888;
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-highlight: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme='steampunk'] {
+  --bg-base: #1a0f00;
+  --aurora-1: #d48e31;
+  --aurora-2: #8b4513;
+  --aurora-3: #cd853f;
+  --aurora-5: #daa520;
+  --text-primary: #ffdead;
+  --text-secondary: #cd853f;
+  --text-tertiary: #8b4513;
+  --glass-bg: rgba(43, 24, 0, 0.6);
+  --glass-border: rgba(212, 142, 49, 0.2);
+  --glass-highlight: rgba(212, 142, 49, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  overflow-x: hidden;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.5s ease, color 0.5s ease;
+}
+
+/* Base Pretext Grid & Components */
+.container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 2rem 4vw;
+  position: relative;
+  z-index: 1;
+}
+
+.card-util {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: none;
+  padding-bottom: 1rem;
+}
+
+.glass-card {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  border-radius: 0;
+  padding: 2rem 0;
+  position: relative;
+  overflow: visible;
+  transition: opacity 0.3s ease;
+}
+
+.glass-card:hover {
+  border-color: transparent;
+  transform: none;
+  background: transparent;
+}
+
+/* Generative Button Magic - Pure Text Style */
+.btn-gen {
+  position: relative;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  padding: 1rem 0;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  transition: opacity 0.3s ease;
+}
+
+.btn-gen::before, .btn-gen::after {
+  content: none;
+}
+
+.btn-gen:hover { transform: scale(1.05); }
+.btn-gen:hover::after { background: rgba(255,255,255,0.1); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+
+/* Gemini Specific Effects */
+.gemini-orb-container {
+  position: absolute;
+  right: 10%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 400px;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.gemini-orb-core {
+  position: absolute;
+  width: 250px;
+  height: 250px;
+  background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570, #f4b400);
+  background-size: 300% 300%;
+  animation: aurora-shift 8s ease infinite;
+  filter: blur(12px);
+}
+
+/* ==========================================================================
+   BLUEPRINT MODE (AUDIT GUIDES)
+   ========================================================================== */
+.blueprint-mode [data-module] {
+  border: 1px dashed rgba(0, 240, 255, 0.4) !important;
+  position: relative;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.05);
+}
+
+.blueprint-mode [data-module]::before {
+  content: "[" attr(data-module) "]";
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.9);
+  color: var(--aurora-1);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  padding: 2px 6px;
+  z-index: 9999;
+  pointer-events: none;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 700;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.blueprint-mode [data-module="nav"] { border-color: var(--aurora-1) !important; }
+.blueprint-mode [data-module="nav"]::before { color: var(--aurora-1); }
+
+.blueprint-mode [data-module*="feed"] { border-color: var(--aurora-2) !important; }
+.blueprint-mode [data-module*="feed"]::before { color: var(--aurora-2); }
+
+.blueprint-mode [data-module*="sidebar"] { border-color: var(--aurora-3) !important; }
+.blueprint-mode [data-module*="sidebar"]::before { color: var(--aurora-3); }
+
+.blueprint-mode [data-module*="chat"] { border-color: var(--aurora-4) !important; }
+.blueprint-mode [data-module*="chat"]::before { color: var(--aurora-4); }
+
+.blueprint-mode [data-module="viewport"] { border-color: var(--aurora-5) !important; }
+.blueprint-mode [data-module="viewport"]::before { color: var(--aurora-5); }
+
+.gemini-orb-glow {
+  position: absolute;
+  width: 350px;
+  height: 350px;
+  background: conic-gradient(from 0deg, #4285f4, #9b72cb, #d96570, #f4b400, #4285f4);
+  filter: blur(60px);
+  border-radius: 50%;
+  z-index: -1;
+  opacity: 0.6;
+  animation: spin-slow 12s linear infinite;
+}
+
+@keyframes aurora-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes spin-slow {
+  100% { transform: rotate(360deg); }
+}
+
+.gemini-text {
+  background: linear-gradient(90deg, #4285f4, #9b72cb, #d96570, #f4b400, #4285f4);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 6s linear infinite;
+}
+
+@keyframes shine {
+  to { background-position: 200% center; }
+}

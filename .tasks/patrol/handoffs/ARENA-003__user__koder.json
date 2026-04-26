@@ -1,0 +1,11 @@
+{
+  "assigned_at": "2026-04-12T14:30:11+00:00",
+  "kind": "dispatch",
+  "notified_at": "2026-04-12T14:30:15+00:00",
+  "notify_message": "ARENA-003 assigned. Read /Users/ywf/coding/arena-pretext-ui/.tasks/koder/TODO.md and continue as koder.",
+  "source": "user",
+  "target": "koder",
+  "task_id": "ARENA-003",
+  "title": "\u5c06 arena \u7684 engineer-a \u5207\u6362\u4e3a Claude Code CLI OAuth \u5e76\u91cd\u65b0\u62c9\u8d77",
+  "todo_path": "/Users/ywf/coding/arena-pretext-ui/.tasks/koder/TODO.md"
+}

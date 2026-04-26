@@ -1,0 +1,9 @@
+{
+  "kind": "reminder",
+  "message": "ARENA-ISOLATION-001 reminder from system to engineer-d: Arena project isolation refresh: stay inside arena-pretext-ui only. Default to dispatch_task.py / complete_handoff.py. If direct send-and-verify.sh is unavoidable, always pass --project arena-pretext-ui or use canonical arena session names. Do not route any notice or completion to cartooner seats.",
+  "notified_at": "2026-04-12T19:12:35+00:00",
+  "reply_to": null,
+  "source": "system",
+  "target": "engineer-d",
+  "task_id": "ARENA-ISOLATION-001"
+}

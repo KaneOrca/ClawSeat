@@ -1,0 +1,11 @@
+{
+  "assigned_at": "2026-04-12T12:32:42+00:00",
+  "kind": "dispatch",
+  "notified_at": "2026-04-12T12:32:46+00:00",
+  "notify_message": "ARENA-001 assigned. Read /Users/ywf/coding/arena-pretext-ui/.tasks/koder/TODO.md and continue as koder.",
+  "source": "user",
+  "target": "koder",
+  "task_id": "ARENA-001",
+  "title": "\u81ea\u68c0\u5e76\u81ea\u914d\u7f6e koder skill \u4e0e heartbeat",
+  "todo_path": "/Users/ywf/coding/arena-pretext-ui/.tasks/koder/TODO.md"
+}
