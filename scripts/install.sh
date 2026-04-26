@@ -1180,6 +1180,107 @@ seed_bootstrap_secrets() {
   done
 }
 
+ensure_privacy_kb_template() {
+  note "Step 5.7: ensure machine privacy KB"
+  local privacy_path="$HOME/.agents/memory/machine/privacy.md"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] ensure %s exists with mode 0600\n' "$privacy_path"
+    return 0
+  fi
+  if [[ -e "$privacy_path" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$privacy_path")" || die 31 PRIVACY_KB_DIR_FAILED "unable to create $(dirname "$privacy_path")"
+  (umask 077; cat >"$privacy_path" <<'EOF'
+# Privacy KB
+# Operator manually maintains. Lines starting with BLOCK: are forbidden patterns.
+# Example: BLOCK: sk-
+# Example: BLOCK: ghp_
+EOF
+  ) || die 31 PRIVACY_KB_WRITE_FAILED "unable to write $privacy_path"
+  chmod 600 "$privacy_path" || die 31 PRIVACY_KB_CHMOD_FAILED "unable to chmod $privacy_path"
+}
+
+install_skill_symlinks() {
+  note "Step 5.8: install ClawSeat skill symlinks"
+  local skills_home="$HOME/.agents/skills"
+  local skill target link
+  local -a skills=(clawseat-decision-escalation clawseat-koder clawseat-privacy)
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] mkdir -p %q\n' "$skills_home"
+    for skill in "${skills[@]}"; do
+      printf '[dry-run] ln -sfn %q %q\n' "$REPO_ROOT/core/skills/$skill" "$skills_home/$skill"
+    done
+    printf '[dry-run] verify existing %q\n' "$skills_home/clawseat-memory"
+    return 0
+  fi
+  mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
+  for skill in "${skills[@]}"; do
+    target="$REPO_ROOT/core/skills/$skill"
+    link="$skills_home/$skill"
+    if [[ ! -d "$target" ]]; then
+      warn "skill symlink skipped; missing skill directory: $target"
+      continue
+    fi
+    ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
+  done
+  if [[ ! -e "$skills_home/clawseat-memory" && ! -L "$skills_home/clawseat-memory" ]]; then
+    warn "clawseat-memory skill symlink not found at $skills_home/clawseat-memory; leaving unchanged per compatibility contract"
+  fi
+}
+
+install_privacy_pre_commit_hook() {
+  note "Step 5.9: install privacy pre-commit hook"
+  local hook_path="" hook_dir="" local_hook="" candidate="" idx=0 privacy_script="$REPO_ROOT/core/scripts/privacy-check.sh"
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] install privacy pre-commit hook for repo %q\n' "$PROJECT_REPO_ROOT"
+    return 0
+  fi
+  if [[ ! -f "$privacy_script" ]]; then
+    warn "privacy pre-commit hook skipped; missing privacy-check helper: $privacy_script"
+    return 0
+  fi
+  if ! git -C "$PROJECT_REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    warn "privacy pre-commit hook skipped; not a git worktree: $PROJECT_REPO_ROOT"
+    return 0
+  fi
+  hook_path="$(git -C "$PROJECT_REPO_ROOT" rev-parse --git-path hooks/pre-commit)"
+  [[ "$hook_path" == /* ]] || hook_path="$PROJECT_REPO_ROOT/$hook_path"
+  hook_dir="$(dirname "$hook_path")"
+  mkdir -p "$hook_dir" || die 31 PRIVACY_HOOK_DIR_FAILED "unable to create $hook_dir"
+
+  if [[ -f "$hook_path" ]] && grep -q 'CLAWSEAT_PRIVACY_CHECK_BEGIN' "$hook_path" 2>/dev/null; then
+    chmod +x "$hook_path" || true
+    return 0
+  fi
+
+  if [[ -e "$hook_path" || -L "$hook_path" ]]; then
+    candidate="${hook_path}.clawseat-local"
+    while [[ -e "$candidate" || -L "$candidate" ]]; do
+      idx=$((idx + 1))
+      candidate="${hook_path}.clawseat-local.$idx"
+    done
+    mv "$hook_path" "$candidate" || die 31 PRIVACY_HOOK_PRESERVE_FAILED "unable to preserve existing hook: $hook_path"
+    chmod +x "$candidate" || true
+    local_hook="$candidate"
+  fi
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'set -euo pipefail\n'
+    printf '# CLAWSEAT_PRIVACY_CHECK_BEGIN\n'
+    printf 'bash %q\n' "$privacy_script"
+    printf '# CLAWSEAT_PRIVACY_CHECK_END\n'
+    if [[ -n "$local_hook" ]]; then
+      printf 'if [[ -x %q ]]; then\n' "$local_hook"
+      printf '  %q "$@"\n' "$local_hook"
+      printf 'fi\n'
+    fi
+  } >"$hook_path" || die 31 PRIVACY_HOOK_WRITE_FAILED "unable to write $hook_path"
+  chmod +x "$hook_path" || die 31 PRIVACY_HOOK_CHMOD_FAILED "unable to chmod $hook_path"
+}
+
 bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
@@ -1988,6 +2089,9 @@ main() {
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
+  ensure_privacy_kb_template
+  install_skill_symlinks
+  install_privacy_pre_commit_hook
   register_project_registry
   install_ancestor_patrol_plist
 

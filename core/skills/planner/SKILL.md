@@ -1,6 +1,9 @@
 ---
 name: planner
 description: Dispatch / consumption / merge hub for ClawSeat chains. Owns dispatch_authority for the worker seats declared in project.toml engineers (minimal default = builder + designer; clawseat-default still gets reviewer + qa); does not own seat lifecycle or operator CLI surface.
+related_skills:
+  - clawseat-decision-escalation
+  - clawseat-privacy
 ---
 
 # Planner
