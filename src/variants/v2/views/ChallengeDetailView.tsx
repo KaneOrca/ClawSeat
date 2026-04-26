@@ -33,7 +33,6 @@ export const ChallengeDetailView: React.FC = () => {
       position: 'relative',
       overflowX: 'hidden'
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* HEADER RAIL */}
       <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4rem', borderBottom: '1px solid rgba(0,0,0,0.1)', paddingBottom: '1rem' }}>

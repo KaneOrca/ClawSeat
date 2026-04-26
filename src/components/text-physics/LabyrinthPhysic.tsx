@@ -17,7 +17,7 @@ interface Span {
   end: number;
 }
 
-const PADDING = 15;
+const PADDING = 8;
 const MIN_SPAN_WIDTH = 20;
 
 /**
@@ -131,6 +131,7 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
     const currentAlpha = env.opacity ?? opacity;
     const currentWaveAmp = env.waveAmplitude ?? 60;
+    const surgeNorm = Math.max(0, (currentWaveAmp - 60) / 60);
 
     let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
     let currentY = 0;
@@ -211,7 +212,7 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
         switch (variant) {
           case 'v2': {
-            const v2Alpha = (currentAlpha * 0.4) + (halftone * 0.2) + (mouseFactor * 0.6);
+            const v2Alpha = 0.05 + Math.pow(mouseFactor, 3) * 0.8;
             ctx.fillStyle = env.ambientColor || `rgba(40, 30, 20, ${Math.min(1, v2Alpha)})`;
             break;
           }
@@ -251,8 +252,15 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
         ctx.font = `900 ${variant === 'v2' ? '32px' : '48px'} ${variant === 'v2' ? 'serif' : 'sans-serif'}`;
         ctx.fillStyle = soloist.color || '#fff';
-        ctx.globalAlpha = soloist.opacity ?? (0.3 + 0.7 * mouseFactor);
+        ctx.globalAlpha = 0.3 + surgeNorm * 0.7;
+        const soloistCtx = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
+        if (surgeNorm > 0.8) {
+          ctx.filter = `blur(${surgeNorm * 2}px)`;
+          soloistCtx.letterSpacing = `${surgeNorm * 10}px`;
+        }
         ctx.fillText(soloist.text, lineData.x, soloist.lineIndex * lineHeight - 10);
+        ctx.filter = 'none';
+        soloistCtx.letterSpacing = '0px';
         ctx.globalAlpha = 1;
       }
     });

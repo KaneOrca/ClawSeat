@@ -60,7 +60,6 @@ export const WatchView: React.FC = () => {
       position: 'relative',
       overflow: 'hidden'
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* BACKGROUND CHRONICLE PHYSICS */}
       <div style={{ position: 'absolute', inset: '4rem', zIndex: 1, opacity: isZenMode ? 0.95 : 0.8 }}>

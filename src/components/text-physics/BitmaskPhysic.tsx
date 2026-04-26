@@ -202,11 +202,14 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     const rows = Math.ceil(height / CELL_H);
     const t = time * 0.001;
     const mouse = mouseRef.current;
-    const amp = env.waveAmplitude ?? 60;
+    const waveAmplitude = env.waveAmplitude ?? 60;
     const baseAlpha = env.opacity ?? baseOpacity;
 
-    const surgeNorm = Math.max(0, (amp - 60) / 60);
-    const freqMult = 1 + surgeNorm * 2;
+    const surgeNorm = Math.max(0, (waveAmplitude - 60) / 60);
+    const effectiveWaveAmp = 60 + surgeNorm * 60;
+    const effectiveWaveFreq = 0.05 * (1 + surgeNorm * 2);
+    const freqMult = effectiveWaveFreq / 0.05;
+    const ampMult = effectiveWaveAmp / 60;
     const hueDistort = surgeNorm * 40;
 
     for (let row = 0; row < rows; row++) {
@@ -261,7 +264,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
 
         // Mouse repulsion: push data away from cursor, leave a void
         const repulsion = mouseFactor * mouseFactor * 2;
-        const flowStrength = (flowA * flowA + flowB * flowB) * 0.25;
+        const flowStrength = (flowA * flowA + flowB * flowB) * 0.25 * ampMult;
         const density = Math.max(0, flowStrength - repulsion);
 
         // Depth layer: cells far from center are darker (3D depth effect)
@@ -285,14 +288,14 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
 
         // Alpha: void at center, ring glow at edge, normal field beyond
         // Ring function: peaks at mouseFactor≈0.5, zero at center (1.0) and far (0.0)
-        // Ring glow: peaks at mouseFactor≈0.7 (~90px), hugs the void edge
-        const ringDist = mouseFactor - 0.7;
-        const ringGlow = Math.exp(-ringDist * ringDist * 40) * mouseFactor;
+        // Ring glow: peaks near the void edge, narrowed to read as a crisp field boundary.
+        const ringDist = mouseFactor - 0.82;
+        const ringGlow = Math.exp(-ringDist * ringDist * 160) * mouseFactor * 1.8;
         // Center suppression: hard zero when deep inside void
         const voidMask = density > 0.01 ? 1 : 0;
         const rawAlpha = baseAlpha * depthFade * (
           density * (0.3 + flowStrength * 0.7) +  // normal field contribution
-          ringGlow * 0.5 * voidMask                 // edge glow (only where some data exists)
+          ringGlow * 0.6 * voidMask                 // edge glow (only where some data exists)
         );
         const alpha = rawAlpha * occlusion * voidFade;
         if (alpha < 0.01) continue;

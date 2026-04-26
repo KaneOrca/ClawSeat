@@ -32,7 +32,6 @@ export const HomeView: React.FC = () => {
       fontFamily: "'Playfair Display', serif",
       overflow: 'auto'
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       <div
         style={{
