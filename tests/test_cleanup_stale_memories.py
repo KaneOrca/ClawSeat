@@ -51,7 +51,9 @@ def test_cleanup_script_builds_defensive_applescript(tmp_path: Path) -> None:
     assert 'exists process "iTerm2"' in script
     assert 'application "iTerm2"' in script
     assert 'candidateTitle is "clawseat-memories"' in script
-    assert 'variable named "user.window_title"' in script
+    assert "set activeSession to current session of activeTab" in script
+    assert 'tell activeSession to set markerValue to variable named "user.window_title"' in script
+    assert "on memoryWindowMarker" not in script
     assert "close w" in script
 
 

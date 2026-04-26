@@ -59,6 +59,10 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
         root / "core" / "scripts" / "seat_claude_template.py",
     )
     shutil.copy2(
+        _REPO / "core" / "scripts" / "projects_registry.py",
+        root / "core" / "scripts" / "projects_registry.py",
+    )
+    shutil.copy2(
         _REPO / "core" / "lib" / "real_home.py",
         root / "core" / "lib" / "real_home.py",
     )
@@ -424,7 +428,14 @@ def test_install_dry_run_uses_agent_launcher(tmp_path: Path) -> None:
 def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh"), "--project", "smoketest"],
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "smoketest",
+            "--template",
+            "clawseat-default",
+        ],
         input="\n",
         capture_output=True,
         text=True,

@@ -56,7 +56,15 @@ def _run_install(
     agent_admin_log = tmp_path / "agent_admin.jsonl"
     iterm_payload_log = tmp_path / "iterm_payload.jsonl"
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh"), "--project", project, *args],
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            project,
+            "--template",
+            "clawseat-default",
+            *args,
+        ],
         input=input_text,
         capture_output=True,
         text=True,
@@ -85,7 +93,14 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
     _write_xcode_scan_script(root, api_key="sk-xcode-menu")
 
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh"), "--project", "xcodemenu50"],
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "xcodemenu50",
+            "--template",
+            "clawseat-default",
+        ],
         input="1\n",
         capture_output=True,
         text=True,

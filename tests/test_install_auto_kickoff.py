@@ -46,7 +46,14 @@ def _run_install(
     args = ["bash", str(root / "scripts" / "install.sh")]
     if dry_run:
         args.append("--dry-run")
-    args.extend(["--project", "kickoff50", "--provider", "minimax"])
+    args.extend([
+        "--project",
+        "kickoff50",
+        "--template",
+        "clawseat-default",
+        "--provider",
+        "minimax",
+    ])
 
     result = subprocess.run(
         args,

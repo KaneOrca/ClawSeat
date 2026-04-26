@@ -15,21 +15,6 @@ if ! command -v osascript >/dev/null 2>&1; then
 fi
 
 if ! output="$(osascript <<'APPLESCRIPT' 2>&1
-on memoryWindowMarker(w)
-  set markerValue to ""
-  try
-    set markerValue to variable named "user.window_title" of w
-  end try
-  if markerValue is "" then
-    try
-      set firstTab to item 1 of tabs of w
-      set firstSession to item 1 of sessions of firstTab
-      set markerValue to variable named "user.window_title" of firstSession
-    end try
-  end if
-  return markerValue as text
-end memoryWindowMarker
-
 tell application "System Events"
   set itermRunning to exists process "iTerm2"
 end tell
@@ -45,13 +30,13 @@ tell application "iTerm2"
     try
       set candidateTitle to name of w as text
     end try
-    if candidateTitle is "" then
-      try
-        set candidateTitle to default name of w as text
-      end try
-    end if
     if candidateTitle is "clawseat-memories" then
-      set markerValue to my memoryWindowMarker(w)
+      set markerValue to ""
+      try
+        set activeTab to current tab of w
+        set activeSession to current session of activeTab
+        tell activeSession to set markerValue to variable named "user.window_title"
+      end try
       if markerValue is "" then
         close w
         set closedCount to closedCount + 1

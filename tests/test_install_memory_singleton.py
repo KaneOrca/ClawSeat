@@ -115,7 +115,10 @@ def test_install_ignores_existing_legacy_memory_daemon_and_window(tmp_path: Path
     assert "set-option -t machine-memory-claude" not in tmux_log_text
 
     payloads = _read_jsonl(iterm_payload_log)
-    assert [payload["title"] for payload in payloads] == ["clawseat-singleton50"]
+    assert [payload["title"] for payload in payloads] == [
+        "clawseat-singleton50-workers",
+        "clawseat-memories",
+    ]
 
 
 def test_install_does_not_start_legacy_memory_daemon_when_missing(tmp_path: Path) -> None:
@@ -132,7 +135,10 @@ def test_install_does_not_start_legacy_memory_daemon_when_missing(tmp_path: Path
     assert [record["session"] for record in records] == ["singleton51-ancestor"]
 
     payloads = _read_jsonl(iterm_payload_log)
-    assert [payload["title"] for payload in payloads] == ["clawseat-singleton51"]
+    assert [payload["title"] for payload in payloads] == [
+        "clawseat-singleton51-workers",
+        "clawseat-memories",
+    ]
 
 
 def test_install_memory_hook_is_noop_when_existing(tmp_path: Path) -> None:
