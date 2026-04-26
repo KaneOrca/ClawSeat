@@ -6,6 +6,7 @@ import { useObstacleDetached } from '../../../hooks/useObstacle';
 import { useWaveRipple } from '../../../hooks/useWaveRipple';
 import { MagneticSurface } from '../../../components/MagneticSurface';
 import { useChallengeSubmission } from '../../../hooks/useChallengeSubmission';
+import { PretextEditorial } from '../../../components/PretextEditorial';
 import { ArrowLeft } from 'lucide-react';
 
 /**
@@ -62,6 +63,9 @@ export const ChallengeDetailV3: React.FC = () => {
 
       {/* Title — atomic */}
       <TitleAtomMemo isZenMode={isZenMode} title={challenge.title} />
+
+      {/* Challenge description — PretextEditorial reveal */}
+      <DescriptionAtomMemo isZenMode={isZenMode} text={challenge.description} />
 
       {/* Textarea — atomic */}
       <TextareaAtomMemo
@@ -123,6 +127,13 @@ const titleStyle: React.CSSProperties = {
   letterSpacing: '-0.04em',
   marginTop: '2rem',
   display: 'inline-block',
+};
+
+const descriptionStyle: React.CSSProperties = {
+  maxWidth: '760px',
+  marginTop: '2rem',
+  marginBottom: '1rem',
+  opacity: 0.82,
 };
 
 const textareaStyle: React.CSSProperties = {
@@ -208,6 +219,21 @@ const TitleAtom: React.FC<{ isZenMode: boolean; title: string }> = ({ isZenMode,
   );
 };
 const TitleAtomMemo = React.memo(TitleAtom);
+
+const DescriptionAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
+  return (
+    <div style={{ ...descriptionStyle, opacity: isZenMode ? 0.05 : descriptionStyle.opacity }}>
+      <PretextEditorial
+        text={safeStr(text)}
+        width={760}
+        lineHeight={24}
+        fontDef={`400 16px ${tokens.fonts.body}`}
+        color={tokens.colors.text.secondary}
+      />
+    </div>
+  );
+};
+const DescriptionAtomMemo = React.memo(DescriptionAtom);
 
 const TextareaAtom: React.FC<{
   isZenMode: boolean;

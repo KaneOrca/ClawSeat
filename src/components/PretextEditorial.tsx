@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { prepareWithSegments, layoutNextLineRange, materializeLineRange } from '@chenglou/pretext';
+import { tokens } from '../design/tokens';
 
 interface PretextEditorialProps {
   text: string;
@@ -11,6 +12,19 @@ interface PretextEditorialProps {
   style?: React.CSSProperties;
   color?: string;
   delay?: number;
+  revealProgress?: number;
+}
+
+const HEX = '0123456789ABCDEF';
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function edgeJitter(lineIndex: number, charIndex: number, diff: number) {
+  if (diff >= 0.1) return 0;
+  const seed = Math.sin((lineIndex + 1) * 19.19 + (charIndex + 1) * 37.37);
+  return seed * 2.5 * (1 - diff / 0.1);
 }
 
 /**
@@ -25,11 +39,16 @@ export const PretextEditorial: React.FC<PretextEditorialProps> = ({
   className = '',
   style,
   color = 'var(--text-secondary)',
-  delay = 0
+  delay = 0,
+  revealProgress
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [lines, setLines] = useState<string[]>([]);
   const [containerWidth, setContainerWidth] = useState(width);
+  const [internalRevealProgress, setInternalRevealProgress] = useState(0);
+  const hasRevealedRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const reveal = revealProgress ?? internalRevealProgress;
 
   const prepared = useMemo(() => {
     try {
@@ -73,6 +92,49 @@ export const PretextEditorial: React.FC<PretextEditorialProps> = ({
     }
   }, [prepared, containerWidth, text]);
 
+  useEffect(() => {
+    if (revealProgress !== undefined || !containerRef.current) return;
+
+    const node = containerRef.current;
+    const startReveal = () => {
+      if (hasRevealedRef.current) return;
+      hasRevealedRef.current = true;
+
+      const duration = 800;
+      const delayMs = delay * 1000;
+      const startAt = performance.now() + delayMs;
+
+      const step = (now: number) => {
+        if (now < startAt) {
+          rafRef.current = requestAnimationFrame(step);
+          return;
+        }
+
+        const p = clamp((now - startAt) / duration, 0, 1);
+        setInternalRevealProgress(p);
+        if (p < 1) {
+          rafRef.current = requestAnimationFrame(step);
+        } else {
+          rafRef.current = null;
+        }
+      };
+
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(entry => entry.isIntersecting)) startReveal();
+    }, { threshold: 0.15 });
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [delay, revealProgress]);
+
+  const textCols = useMemo(() => Math.max(1, ...lines.map(line => line.length)), [lines]);
+
   return (
     <div 
       ref={containerRef} 
@@ -99,7 +161,31 @@ export const PretextEditorial: React.FC<PretextEditorialProps> = ({
               whiteSpace: 'pre',
             }}
           >
-            {line}
+            {Array.from(line).map((char, charIndex) => {
+              const lineBase = lines.length > 1 ? index / lines.length : 0;
+              const slotProgress = clamp(lineBase + (charIndex / textCols) / Math.max(1, lines.length), 0, 1);
+              const diff = Math.abs(reveal - slotProgress);
+              const isResolved = reveal > slotProgress;
+              const isTextSlot = char.trim().length > 0;
+              const dormantChar = isTextSlot ? HEX[(index * 7 + charIndex) % HEX.length] : '\u00a0';
+
+              return (
+                <span
+                  key={`${index}-${charIndex}`}
+                  style={{
+                    display: 'inline-block',
+                    minWidth: char === ' ' ? '0.35em' : undefined,
+                    fontFamily: isResolved ? undefined : tokens.fonts.mono,
+                    color,
+                    opacity: isResolved ? 1 : (isTextSlot ? 0.25 : 0.1),
+                    transform: `translateX(${edgeJitter(index, charIndex, diff)}px)`,
+                    transition: 'opacity 80ms linear',
+                  }}
+                >
+                  {isResolved ? (char === ' ' ? '\u00a0' : char) : dormantChar}
+                </span>
+              );
+            })}
           </motion.div>
         ))}
       </AnimatePresence>
