@@ -201,6 +201,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         <AnimatePresence>
           {isLoading && (
             <motion.div 
+              className="layout-loading-chip"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
@@ -254,6 +255,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         <AnimatePresence>
           {toast && (
             <motion.div
+              className="layout-toast"
               initial={{ opacity: 0, y: 30, x: '-50%' }}
               animate={{ opacity: 1, y: 0, x: '-50%' }}
               exit={{ opacity: 0, y: -20, x: '-50%' }}
@@ -272,6 +274,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
             >
               <div style={{ 
+                maxWidth: '100%',
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '1.5rem', 
@@ -308,6 +311,30 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: ${tokens.colors.aurora.blue}; }
+
+        @media (max-width: 768px) {
+          .plane-content {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+          }
+          .layout-loading-chip {
+            bottom: 1rem !important;
+            right: 1rem !important;
+          }
+          footer[data-module="footer"] {
+            margin-top: 4rem !important;
+            padding: 2rem 0 !important;
+          }
+          .layout-toast {
+            max-width: calc(100vw - 2rem) !important;
+            width: max-content;
+            letter-spacing: 0.08em !important;
+          }
+          .layout-toast > div {
+            gap: 0.75rem !important;
+            padding: 0.75rem 1rem !important;
+          }
+        }
       `}</style>
     </div>
   );

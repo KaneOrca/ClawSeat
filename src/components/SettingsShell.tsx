@@ -37,6 +37,7 @@ export const SettingsShell: React.FC<SettingsShellProps> = ({
             }}
           />
           <motion.div
+            className="settings-shell-panel"
             initial={{ opacity: 0, x: '-50%', y: '-48%' }}
             animate={{ opacity: 1, x: '-50%', y: '-50%' }}
             exit={{ opacity: 0, x: '-50%', y: '-48%' }}
@@ -125,6 +126,14 @@ export const SettingsShell: React.FC<SettingsShellProps> = ({
               SYSTEM_ID: OPENCLAW_ARENA_V4.9.0<br/>
               AESTHETIC_ENGINE: PRETEXT_GEMINI
             </div>
+            <style>{`
+              @media (max-width: 768px) {
+                .settings-shell-panel {
+                  max-width: calc(100vw - 2rem) !important;
+                  padding: 2rem 1rem !important;
+                }
+              }
+            `}</style>
           </motion.div>
         </>
       )}

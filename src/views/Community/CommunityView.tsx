@@ -73,7 +73,7 @@ export const CommunityView: React.FC = () => {
         transition: 'opacity 0.8s ease',
       }}
     >
-      <header style={{ marginBottom: '6rem' }}>
+      <header className="community-header" style={{ marginBottom: '6rem' }}>
         <div style={{ marginBottom: '2rem' }}>
           <NeuralBadge text="COLLECTIVE_INTELLIGENCE_HUB" color={tokens.colors.aurora.purple} />
         </div>
@@ -154,6 +154,7 @@ export const CommunityView: React.FC = () => {
             <div id="magnetic-chat-input-container" style={{ position: 'relative' }}>
               <MagneticSurface pull={0.02} padding={10} style={{ width: '100%' }}>
                 <input 
+                  className="community-chat-input"
                   type="text" 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -178,7 +179,7 @@ export const CommunityView: React.FC = () => {
                   onBlur={(e) => e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.1)'}
                 />
               </MagneticSurface>
-              <div style={{ position: 'absolute', right: '32px', top: '50%', transform: 'translateY(-50%)', zIndex: 20 }}>
+              <div className="community-send-button" style={{ position: 'absolute', right: '32px', top: '50%', transform: 'translateY(-50%)', zIndex: 20 }}>
                 <MagneticSurface pull={0.3} padding={15}>
                   <button 
                     onClick={handleSend}
@@ -213,6 +214,26 @@ export const CommunityView: React.FC = () => {
         .custom-scroll::-webkit-scrollbar-thumb {
           background: rgba(255,255,255,0.1);
           border-radius: 10px;
+        }
+        @media (max-width: 768px) {
+          .community-header {
+            margin-bottom: 2rem !important;
+          }
+          #community-social-plane {
+            margin-top: 2rem !important;
+          }
+          .chat-messages {
+            min-height: 40vh !important;
+            gap: 1rem !important;
+            margin-bottom: 2rem !important;
+            padding-right: 0 !important;
+          }
+          .community-chat-input {
+            padding-right: 3rem !important;
+          }
+          .community-send-button {
+            right: 8px !important;
+          }
         }
       `}</style>
     </div>

@@ -77,14 +77,14 @@ export const ChallengeGrid: React.FC<ChallengeGridProps> = ({ onChallengeSelect 
   const completedIds = user?.completedChallenges || [];
 
   return (
-    <section style={sectionStyle}>
+    <section className="challenge-grid-section" style={sectionStyle}>
       {CHALLENGES.length === 0 ? (
         <NeuralEmpty label="NO_CHALLENGES_FOUND" sublabel="The challenge matrix is currently being recalculated. Check back soon." />
       ) : (
         <>
           <GridHeaderMemo isZenMode={isZenMode} />
 
-          <div style={scatterStyle}>
+          <div className="challenge-grid-scatter" style={scatterStyle}>
             {CHALLENGES.map((challenge, i) => {
               const isCompleted = completedIds.includes(challenge.id);
               const isUnlocked = challenge.id === 1 || completedIds.includes(challenge.id - 1) || isCompleted;
@@ -109,10 +109,24 @@ export const ChallengeGrid: React.FC<ChallengeGridProps> = ({ onChallengeSelect 
         </>
       )}
 
-      <div style={footerStyle}>
+      <div className="challenge-grid-footer" style={footerStyle}>
         New neural layers are being generated in real-time.
         Complete existing challenges to unlock deeper architectural voids.
       </div>
+      <style>{`
+        @media (max-width: 768px) {
+          .challenge-grid-section {
+            padding: 2rem 0 !important;
+          }
+          .challenge-grid-scatter {
+            gap: 2rem 2rem !important;
+            margin-top: 2rem !important;
+          }
+          .challenge-grid-footer {
+            margin-top: 4rem !important;
+          }
+        }
+      `}</style>
     </section>
   );
 };

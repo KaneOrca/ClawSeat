@@ -87,6 +87,19 @@ export const ChallengeDetailV3: React.FC = () => {
 
       {/* Complexity — atomic */}
       <DiagAtomMemo isZenMode={isZenMode} label="COMPLEXITY" value={challenge.difficulty} />
+
+      <style>{`
+        @media (max-width: 768px) {
+          .page-challenge-detail.variant-v3 {
+            padding: 2rem 1rem !important;
+          }
+          .challenge-v3-diag {
+            display: block !important;
+            margin-right: 0 !important;
+            margin-top: 1rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
@@ -276,7 +289,7 @@ const SubmitAtomMemo = React.memo(SubmitAtom);
 const DiagAtom: React.FC<{ isZenMode: boolean; label: string; value: string }> = ({ isZenMode, label, value }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{
+    <div ref={ref} className="challenge-v3-diag" style={{
       display: 'inline-block',
       marginRight: '4rem',
       marginTop: '2rem',

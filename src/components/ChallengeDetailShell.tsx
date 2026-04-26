@@ -44,7 +44,8 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
   const isLocked = challenge.status === 'locked';
 
   return (
-    <motion.div 
+    <motion.div
+      className="challenge-detail-shell"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -53,7 +54,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
       <HaloField intensity={0.15} color={isCompleted ? tokens.colors.aurora.cyan : tokens.colors.aurora.red}>
         
         {/* BACK NAVIGATION */}
-        <div style={{ marginBottom: '4rem' }}>
+        <div className="detail-back-nav" style={{ marginBottom: '4rem' }}>
           <MagneticSurface pull={0.15} padding={20}>
             <button 
               onClick={onBack}
@@ -80,7 +81,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
           </MagneticSurface>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10rem', alignItems: 'start' }}>
+        <div className="detail-shell-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10rem', alignItems: 'start' }}>
           
           {/* NARRATIVE COLUMN */}
           <SpatialParallax depth={0.02} direction={1}>
@@ -92,7 +93,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
                 />
               </div>
 
-              <h1 style={{
+              <h1 className="detail-shell-title" style={{
                 fontFamily: tokens.fonts.display,
                 fontSize: 'clamp(4rem, 8vw, 6rem)',
                 fontWeight: 700,
@@ -104,7 +105,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
                 <ScrambleText text={challenge.title} />
               </h1>
 
-              <div style={{ 
+              <div className="detail-narrative-log" style={{ 
                 padding: '0 0 4rem 0', 
                 marginBottom: '4rem', 
                 borderLeft: `2px solid ${isCompleted ? tokens.colors.aurora.cyan : isLocked ? tokens.colors.glass.border : tokens.colors.aurora.blue}`,
@@ -127,7 +128,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem' }}>
+              <div className="detail-stat-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem' }}>
                 <div style={{ padding: '0' }}>
                   <div style={{ color: tokens.colors.text.tertiary, fontSize: '9px', fontFamily: tokens.fonts.mono, marginBottom: '1rem', letterSpacing: '0.2em', fontWeight: 900 }}>XP_YIELD</div>
                   <div style={{ fontSize: '3.5rem', fontWeight: 700, color: tokens.colors.aurora.purple, fontFamily: tokens.fonts.display, lineHeight: 1 }}>{challenge.points}</div>
@@ -145,12 +146,12 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
             <div data-module="operational-directive" style={{ 
               padding: '0'
             }}>
-              <div className="card-util" style={{ borderBottomColor: 'rgba(255,255,255,0.1)', marginBottom: '4rem' }}>
+              <div className="card-util detail-op-header" style={{ borderBottomColor: 'rgba(255,255,255,0.1)', marginBottom: '4rem' }}>
                 <span style={{ fontWeight: 900, fontSize: '10px' }}>OPERATIONAL_DIRECTIVE</span>
                 <span style={{ color: isCompleted ? tokens.colors.aurora.cyan : tokens.colors.text.tertiary, fontSize: '9px', fontWeight: 900 }}>STATUS: {safeStr(challenge.status).toUpperCase()}</span>
               </div>
               
-              <div style={{ marginBottom: '5rem' }}>
+              <div className="detail-primary-objective" style={{ marginBottom: '5rem' }}>
                 <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '11px', color: tokens.colors.aurora.blue, marginBottom: '2rem', letterSpacing: '0.2em', fontWeight: 900 }}>
                   // PRIMARY_OBJECTIVE
                 </h3>
@@ -166,7 +167,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
                 </div>
               </div>
 
-              <div style={{ marginBottom: '6rem' }}>
+              <div className="detail-requirements" style={{ marginBottom: '6rem' }}>
                 <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '11px', color: tokens.colors.aurora.blue, marginBottom: '2rem', letterSpacing: '0.2em', fontWeight: 900 }}>
                   // SYSTEM_REQUIREMENTS
                 </h3>
@@ -188,7 +189,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
                 </ul>
               </div>
 
-              <div style={{ 
+              <div className="detail-action-box" style={{ 
                 padding: '4rem 0',
                 textAlign: 'center',
                 position: 'relative',
@@ -256,7 +257,7 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
                 }} />
               </div>
 
-              <div style={{ 
+              <div className="detail-status-footer" style={{ 
                 marginTop: '4rem', 
                 display: 'flex', 
                 gap: '3rem',
@@ -290,6 +291,39 @@ export const ChallengeDetailShell: React.FC<ChallengeDetailShellProps> = ({
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+          .challenge-detail-shell {
+            padding: 2rem 0 !important;
+          }
+          .detail-back-nav {
+            margin-bottom: 2rem !important;
+          }
+          .detail-shell-grid {
+            grid-template-columns: 1fr !important;
+            gap: 3rem !important;
+          }
+          .detail-shell-title {
+            font-size: clamp(2rem, 12vw, 4rem) !important;
+            margin-bottom: 3rem !important;
+          }
+          .detail-narrative-log {
+            padding-bottom: 2rem !important;
+            padding-left: 1.5rem !important;
+            margin-bottom: 2rem !important;
+          }
+          .detail-op-header,
+          .detail-primary-objective {
+            margin-bottom: 2rem !important;
+          }
+          .detail-requirements,
+          .detail-status-footer {
+            margin-top: 2rem !important;
+            margin-bottom: 3rem !important;
+          }
+          .detail-action-box {
+            padding: 2rem 0 !important;
+          }
         }
       `}</style>
     </motion.div>

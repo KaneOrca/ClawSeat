@@ -144,6 +144,7 @@ export const PretextEditorial: React.FC<PretextEditorialProps> = ({
       <AnimatePresence>
         {lines.map((line, index) => (
           <motion.div
+            className="pretext-editorial-line"
             key={`${index}-${line.substring(0, 10)}`}
             initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -189,6 +190,15 @@ export const PretextEditorial: React.FC<PretextEditorialProps> = ({
           </motion.div>
         ))}
       </AnimatePresence>
+      <style>{`
+        @media (max-width: 768px) {
+          .pretext-editorial-line {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

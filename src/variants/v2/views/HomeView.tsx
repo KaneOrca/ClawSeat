@@ -124,8 +124,14 @@ export const HomeView: React.FC = () => {
           opacity: 0.7;
         }
         @media (max-width: 768px) {
+          .v2-home {
+            padding: 1rem !important;
+          }
           .v2-home [data-module="home-hero"] {
             order: 1;
+            margin-top: 5vh !important;
+            margin-left: 0 !important;
+            max-width: 100% !important;
           }
           .v2-home [data-module="marginalia-01"],
           .v2-home [data-module="marginalia-02"] {

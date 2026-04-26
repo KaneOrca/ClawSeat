@@ -72,7 +72,7 @@ export const WatchView: React.FC = () => {
         />
       </div>
 
-      <div style={{ 
+      <div className="v2-watch-content" style={{ 
         position: 'relative', 
         zIndex: 10, 
         maxWidth: '1000px', 
@@ -85,7 +85,7 @@ export const WatchView: React.FC = () => {
           <div style={{ display: 'inline-flex', padding: '0.5rem 1rem', border: '1px solid #1a1a1a', marginBottom: '1rem', fontFamily: 'IBM Plex Mono', fontSize: '11px' }}>
             NODE_OBSERVATION // {safeStr(activeAgent?.nickname).toUpperCase()}
           </div>
-          <h1 style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1a1a1a' }}>
+          <h1 className="v2-watch-title" style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1a1a1a' }}>
             {locale === 'zh-CN' ? '编年史' : 'THE CHRONICLE'}
           </h1>
         </header>
@@ -127,6 +127,17 @@ export const WatchView: React.FC = () => {
         .v2-watch {
           background-image: radial-gradient(#dcdcdc 0.5px, transparent 0.5px);
           background-size: 30px 30px;
+        }
+        @media (max-width: 768px) {
+          .v2-watch {
+            padding: 1rem !important;
+          }
+          .v2-watch-content {
+            max-width: 100% !important;
+          }
+          .v2-watch-title {
+            font-size: 2rem !important;
+          }
         }
       `}</style>
     </div>

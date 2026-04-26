@@ -20,11 +20,11 @@ const QUOTE = `Intelligence is not just about solving problems; it's about the e
 
 export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLabel }) => {
   return (
-    <section style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <HaloField intensity={0.3} color={tokens.colors.aurora.blue} className="w-full flex-1">
-        <div className="container" style={{ padding: '10rem 0', position: 'relative', zIndex: 10 }}>
+        <div className="container hero-container" style={{ padding: '10rem 0', position: 'relative', zIndex: 10 }}>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '8rem', alignItems: 'center' }}>
+          <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '8rem', alignItems: 'center' }}>
             
             {/* LEFT: FLAGSHIP TYPOGRAPHY */}
             <div>
@@ -33,9 +33,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLa
                   <NeuralBadge text="NEURAL_SESSION_READY" color={tokens.colors.aurora.cyan} />
                 </div>
                 
-                <h1 style={{
+                <h1 className="hero-title" style={{
                   fontFamily: tokens.fonts.display,
-                  fontSize: 'clamp(5rem, 12vw, 10rem)',
+                  fontSize: 'clamp(2.5rem, 12vw, 10rem)',
                   fontWeight: 700,
                   lineHeight: 0.75,
                   letterSpacing: '-0.06em',
@@ -47,7 +47,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLa
                   <ScrambleText text="RIFT" />
                 </h1>
 
-                <div style={{ maxWidth: '650px', marginBottom: '6rem' }}>
+                <div className="hero-intel" style={{ maxWidth: '650px', marginBottom: '6rem' }}>
                   <PretextEditorial 
                     text={HERO_INTEL}
                     width={650}
@@ -58,9 +58,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLa
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '3rem', alignItems: 'center' }}>
+                <div className="hero-cta-row" style={{ display: 'flex', gap: '3rem', alignItems: 'center' }}>
                   <MagneticSurface pull={0.45} padding={60}>
-                    <button className="btn-gen" onClick={onInitialize} style={{ padding: '1.75rem 5rem', fontSize: '1.1rem' }}>
+                    <button className="btn-gen hero-primary-cta" onClick={onInitialize} style={{ padding: '1.75rem 5rem', fontSize: '1.1rem' }}>
                       <Terminal size={24} />
                       {buttonLabel || 'Begin Descent'}
                     </button>
@@ -89,47 +89,49 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLa
             </div>
 
             {/* RIGHT: MULTI-LAYERED ARCHITECTURE */}
-            <div style={{ position: 'relative' }}>
+            <div className="hero-metadata-column" style={{ position: 'relative' }}>
               <SpatialParallax depth={0.1} direction={-1} tilt>
-                <FlagshipCard style={{ padding: '4rem', borderLeft: `8px solid ${tokens.colors.aurora.blue}` }}>
-                  <div className="card-util" style={{ borderBottomColor: 'rgba(255,255,255,0.1)', marginBottom: '3rem' }}>
-                    <span>RIFT_METADATA_STREAM</span>
-                    <span>v5.1.0_LATEST</span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4rem' }}>
-                    {[
-                      { icon: <Activity />, label: 'LIVE_NODES', value: '1,402 / 2,000', color: tokens.colors.aurora.blue },
-                      { icon: <Globe />, label: 'SYNC_STABILITY', value: '99.98%', color: tokens.colors.aurora.cyan },
-                      { icon: <Cpu />, label: 'COMPUTE_LOAD', value: 'OPTIMAL', color: tokens.colors.aurora.red },
-                    ].map((stat, i) => (
-                      <div key={i} style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-                        <div style={{ 
-                          width: '56px', 
-                          height: '56px', 
-                          borderRadius: '16px', 
-                          background: `${stat.color}15`, 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          color: stat.color,
-                          border: `1px solid ${stat.color}30`
-                        }}>
-                          {React.cloneElement(stat.icon as React.ReactElement<any>, { size: 28 })}
+                <div className="hero-metadata-card">
+                  <FlagshipCard style={{ padding: '4rem', borderLeft: `8px solid ${tokens.colors.aurora.blue}` }}>
+                    <div className="card-util" style={{ borderBottomColor: 'rgba(255,255,255,0.1)', marginBottom: '3rem' }}>
+                      <span>RIFT_METADATA_STREAM</span>
+                      <span>v5.1.0_LATEST</span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4rem' }}>
+                      {[
+                        { icon: <Activity />, label: 'LIVE_NODES', value: '1,402 / 2,000', color: tokens.colors.aurora.blue },
+                        { icon: <Globe />, label: 'SYNC_STABILITY', value: '99.98%', color: tokens.colors.aurora.cyan },
+                        { icon: <Cpu />, label: 'COMPUTE_LOAD', value: 'OPTIMAL', color: tokens.colors.aurora.red },
+                      ].map((stat, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+                          <div style={{ 
+                            width: '56px', 
+                            height: '56px', 
+                            borderRadius: '16px', 
+                            background: `${stat.color}15`, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: stat.color,
+                            border: `1px solid ${stat.color}30`
+                          }}>
+                            {React.cloneElement(stat.icon as React.ReactElement<any>, { size: 28 })}
 
+                          </div>
+                          <div>
+                            <div style={{ color: tokens.colors.text.tertiary, fontSize: '11px', fontFamily: tokens.fonts.mono, letterSpacing: '0.1em' }}>{stat.label}</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 700, color: tokens.colors.text.primary }}>{stat.value}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ color: tokens.colors.text.tertiary, fontSize: '11px', fontFamily: tokens.fonts.mono, letterSpacing: '0.1em' }}>{stat.label}</div>
-                          <div style={{ fontSize: '2rem', fontWeight: 700, color: tokens.colors.text.primary }}>{stat.value}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </FlagshipCard>
+                      ))}
+                    </div>
+                  </FlagshipCard>
+                </div>
               </SpatialParallax>
 
               {/* FLOATING PULL QUOTE */}
-              <div style={{ position: 'absolute', top: '-15%', left: '-20%', width: '300px' }}>
+              <div className="hero-floating-quote" style={{ position: 'absolute', top: '-15%', left: '-20%', width: '300px' }}>
                 <SpatialParallax depth={0.15} direction={1}>
                   <div style={{ 
                     padding: '2rem', 
@@ -159,7 +161,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLa
         </div>
 
         {/* SCROLL INDICATOR */}
-        <div style={{ 
+        <div className="hero-scroll-indicator" style={{ 
           position: 'absolute', 
           bottom: '4rem', 
           left: '50%', 
@@ -194,6 +196,38 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onInitialize, buttonLa
           0% { opacity: 0.3; }
           50% { opacity: 1; }
           100% { opacity: 0.3; }
+        }
+        @media (max-width: 768px) {
+          .hero-section {
+            min-height: 60vh !important;
+          }
+          .hero-container {
+            padding: 4rem 1rem !important;
+          }
+          .hero-grid {
+            grid-template-columns: 1fr !important;
+            gap: 3rem !important;
+          }
+          .hero-title {
+            margin-bottom: 2.5rem !important;
+          }
+          .hero-intel {
+            margin-bottom: 3rem !important;
+          }
+          .hero-cta-row {
+            gap: 1.5rem !important;
+            flex-wrap: wrap;
+          }
+          .hero-primary-cta {
+            padding: 1rem 2rem !important;
+          }
+          .hero-metadata-card > div {
+            padding: 2rem !important;
+          }
+          .hero-floating-quote,
+          .hero-scroll-indicator {
+            display: none !important;
+          }
         }
       `}</style>
     </section>

@@ -29,7 +29,7 @@ export const CommunityShell: React.FC<CommunityShellProps> = ({ topNodes = [] })
 
   return (
     <section style={{ padding: '2rem 0' }}>
-      <div style={{ marginBottom: '4rem' }}>
+      <div className="community-shell-header" style={{ marginBottom: '4rem' }}>
         <SpatialParallax depth={0.02} direction={1}>
           <div style={{
             fontFamily: 'var(--font-mono)',
@@ -167,6 +167,13 @@ export const CommunityShell: React.FC<CommunityShellProps> = ({ topNodes = [] })
           </div>
         </div>
       </div>
+      <style>{`
+        @media (max-width: 768px) {
+          .community-shell-header {
+            margin-bottom: 2rem !important;
+          }
+        }
+      `}</style>
     </section>
   );
 };

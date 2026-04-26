@@ -248,6 +248,17 @@ export const WatchViewV3: React.FC = () => {
           <FeedEventAtom key={event.id} event={event} isZenMode={isZenMode} onSelect={openSession} />
         ))
       )}
+
+      <style>{`
+        @media (max-width: 768px) {
+          .page-watch.variant-v3 {
+            padding: 2rem 1rem !important;
+          }
+          .watch-v3-header {
+            margin-bottom: 1rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
@@ -306,7 +317,7 @@ const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenM
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
-    <div style={{ marginBottom: '3rem', opacity: isZenMode ? 0.3 : 0.8, transition: 'opacity 0.6s ease' }}>
+    <div className="watch-v3-header" style={{ marginBottom: '3rem', opacity: isZenMode ? 0.3 : 0.8, transition: 'opacity 0.6s ease' }}>
       <MagneticSurface pull={0.15}>
         <div ref={ref} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={headerLabelStyle}>
           <Radio size={14} className="pulse" />

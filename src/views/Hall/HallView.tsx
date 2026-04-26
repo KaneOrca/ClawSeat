@@ -31,6 +31,13 @@ export const HallView: React.FC = () => {
       <section id="hall-challenge-plane" data-module="challenge-grid">
         <ChallengeGrid onChallengeSelect={setChallengeId} />
       </section>
+      <style>{`
+        @media (max-width: 768px) {
+          .hall-profile-island {
+            margin-bottom: 2rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
@@ -76,7 +83,7 @@ const ProfileIsland: React.FC<{ user: User; isZenMode: boolean }> = ({ user, isZ
   const scoreRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
-    <div style={{ marginBottom: '4rem' }}>
+    <div className="hall-profile-island" style={{ marginBottom: '4rem' }}>
       {/* Nickname — ref on h1 text, not wrapper */}
       <MagneticSurface pull={0.1}>
         <h1 ref={nameRef as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={nicknameStyle}>

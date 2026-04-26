@@ -64,7 +64,7 @@ const TextVariantSwitcherInner: React.FC<TextVariantSwitcherProps> = ({ isZenMod
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
 
   return (
-    <div style={containerStyle}>
+    <div className="text-variant-switcher" style={containerStyle}>
       <div ref={ref} style={islandStyle}>
         <span style={separatorStyle}>[</span>
         {VARIANTS.map((v, i) => (
@@ -80,6 +80,14 @@ const TextVariantSwitcherInner: React.FC<TextVariantSwitcherProps> = ({ isZenMod
         ))}
         <span style={separatorStyle}>]</span>
       </div>
+      <style>{`
+        @media (max-width: 768px) {
+          .text-variant-switcher {
+            right: 1rem !important;
+            bottom: 1rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

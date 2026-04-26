@@ -187,6 +187,7 @@ export function PretextLeaderboard() {
   
   return (
     <div 
+      className="pretext-leaderboard"
       data-module="leaderboard-plane"
       style={{ gridColumn: 'span 8', minHeight: '400px', border: 'none', background: 'transparent', padding: 0 }}
     >
@@ -204,7 +205,7 @@ export function PretextLeaderboard() {
       {loading ? (
         <NeuralLoading label="SYNCING_WITH_RIFT" />
       ) : leaders.length === 0 ? (
-        <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: tokens.fonts.mono, color: tokens.colors.text.tertiary, fontSize: '12px' }}>
+        <div className="leaderboard-empty-state" style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: tokens.fonts.mono, color: tokens.colors.text.tertiary, fontSize: '12px' }}>
           [ NO_NODES_FOUND_IN_RIFT ]
         </div>
       ) : (
@@ -240,6 +241,14 @@ export function PretextLeaderboard() {
           0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.4); }
           70% { transform: scale(1.2); opacity: 0.5; box-shadow: 0 0 0 10px rgba(66, 133, 244, 0); }
           100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(66, 133, 244, 0); }
+        }
+        @media (max-width: 768px) {
+          .pretext-leaderboard {
+            min-height: min(400px, 60vh) !important;
+          }
+          .leaderboard-empty-state {
+            height: min(300px, 40vh) !important;
+          }
         }
       `}</style>
     </div>
