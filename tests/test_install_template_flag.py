@@ -85,6 +85,19 @@ def test_memory_tool_claude_override(tmp_path: Path) -> None:
     assert "--auth chatgpt" not in output
 
 
+def test_memory_tool_gemini_override(tmp_path: Path) -> None:
+    """--memory-tool gemini launches the memory primary seat with Gemini OAuth."""
+    result = _run(
+        ["--project", "memgemini", "--template", "clawseat-minimal", "--memory-tool", "gemini", "--dry-run"],
+        tmp_path,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "memory-tool=gemini auth=oauth; skip Claude provider selection" in output
+    assert "agent-launcher.sh --headless --tool gemini --auth oauth" in output
+    assert "LAUNCHER_CUSTOM_MODEL" not in output
+
+
 def test_bootstrap_template_path_follows_template_flag(tmp_path: Path) -> None:
     """BOOTSTRAP_TEMPLATE_PATH must use the --template value, not the hardcoded default.
 

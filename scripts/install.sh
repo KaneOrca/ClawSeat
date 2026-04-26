@@ -61,6 +61,7 @@ FORCE_API_KEY=""
 FORCE_MODEL=""
 MEMORY_TOOL="${CLAWSEAT_MEMORY_TOOL:-codex}"
 MEMORY_MODEL="${CLAWSEAT_MEMORY_MODEL:-gpt-5.4-mini}"
+MEMORY_MODEL_EXPLICIT=0
 STATUS_FILE=""
 PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
@@ -293,7 +294,7 @@ parse_args() {
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --memory-tool) MEMORY_TOOL="$2"; shift 2 ;;
-      --memory-model) MEMORY_MODEL="$2"; shift 2 ;;
+      --memory-model) MEMORY_MODEL="$2"; MEMORY_MODEL_EXPLICIT=1; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
@@ -310,7 +311,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -320,8 +321,8 @@ PY
     *) die 2 INVALID_TEMPLATE "--template must be clawseat-minimal | clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
   case "$MEMORY_TOOL" in
-    claude|codex) ;;
-    *) die 2 INVALID_MEMORY_TOOL "--memory-tool must be claude | codex, got: $MEMORY_TOOL" ;;
+    claude|codex|gemini) ;;
+    *) die 2 INVALID_MEMORY_TOOL "--memory-tool must be claude | codex | gemini, got: $MEMORY_TOOL" ;;
   esac
   [[ -n "$MEMORY_MODEL" ]] || die 2 INVALID_MEMORY_MODEL "--memory-model must not be empty"
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
@@ -476,6 +477,24 @@ normalize_provider_choice() {
 
 memory_primary_uses_codex() {
   [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "codex" ]]
+}
+
+memory_primary_uses_gemini() {
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "gemini" ]]
+}
+
+memory_primary_skips_claude_provider() {
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" != "claude" ]]
+}
+
+memory_effective_model() {
+  case "$MEMORY_TOOL" in
+    codex) printf '%s\n' "$MEMORY_MODEL" ;;
+    gemini)
+      [[ "$MEMORY_MODEL_EXPLICIT" == "1" ]] && printf '%s\n' "$MEMORY_MODEL" || true
+      ;;
+    *) return 0 ;;
+  esac
 }
 
 ensure_host_deps() {
@@ -685,13 +704,21 @@ select_provider() {
   local mode="" label="" key="" base="" reply=""
   local -a candidates=()
 
-  if memory_primary_uses_codex; then
+  if memory_primary_skips_claude_provider; then
     remember_provider_selection oauth
     if [[ "$DRY_RUN" == "1" ]]; then
       printf 'Project: %s\n' "$PROJECT"
-      printf '[dry-run] memory-tool=codex auth=chatgpt model=%s; skip Claude provider selection\n' "$MEMORY_MODEL"
+      if memory_primary_uses_codex; then
+        printf '[dry-run] memory-tool=codex auth=chatgpt model=%s; skip Claude provider selection\n' "$MEMORY_MODEL"
+      else
+        printf '[dry-run] memory-tool=gemini auth=oauth; skip Claude provider selection\n'
+      fi
     else
-      printf 'Using memory tool: codex (auth=chatgpt, model=%s); skipping Claude provider selection.\n' "$MEMORY_MODEL"
+      if memory_primary_uses_codex; then
+        printf 'Using memory tool: codex (auth=chatgpt, model=%s); skipping Claude provider selection.\n' "$MEMORY_MODEL"
+      else
+        printf 'Using memory tool: gemini (auth=oauth); skipping Claude provider selection.\n'
+      fi
     fi
     return
   fi
@@ -980,11 +1007,14 @@ write_project_local_toml() {
   primary_auth="$seat_auth_mode"
   primary_provider="$seat_provider"
   primary_model="$seat_model"
-  if memory_primary_uses_codex; then
-    primary_tool="codex"
+  if memory_primary_skips_claude_provider; then
+    primary_tool="$MEMORY_TOOL"
     primary_auth="oauth"
-    primary_provider="openai"
-    primary_model="$MEMORY_MODEL"
+    case "$MEMORY_TOOL" in
+      codex) primary_provider="openai" ;;
+      gemini) primary_provider="google" ;;
+    esac
+    primary_model="$(memory_effective_model)"
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -1498,8 +1528,8 @@ launcher_auth_for_provider() {
 
 launcher_tool_for_seat() {
   local seat_id="${1:-}"
-  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_codex; then
-    printf '%s\n' "codex"
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_skips_claude_provider; then
+    printf '%s\n' "$MEMORY_TOOL"
     return
   fi
   printf '%s\n' "claude"
@@ -1509,6 +1539,10 @@ launcher_auth_for_seat() {
   local seat_id="${1:-}"
   if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_codex; then
     printf '%s\n' "chatgpt"
+    return
+  fi
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_gemini; then
+    printf '%s\n' "oauth"
     return
   fi
   launcher_auth_for_provider
@@ -1591,8 +1625,10 @@ ensure_tmux_session_alive() {
 
 launch_seat() {
   local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file="" launcher_tool=""
+  local launcher_model=""
   launcher_tool="$(launcher_tool_for_seat "$seat_id")"
   auth_mode="$(launcher_auth_for_seat "$seat_id")"
+  launcher_model="$(memory_effective_model)"
   custom_env_file="$(launcher_custom_env_file_for_session "$session")"
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -1606,8 +1642,8 @@ launch_seat() {
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
   cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   [[ -n "$seat_id" ]] && cmd+=("CLAWSEAT_SEAT=$seat_id")
-  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" == "codex" && -n "$MEMORY_MODEL" ]]; then
-    cmd+=("LAUNCHER_CUSTOM_MODEL=$MEMORY_MODEL")
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" != "claude" && -n "$launcher_model" ]]; then
+    cmd+=("LAUNCHER_CUSTOM_MODEL=$launcher_model")
   fi
   cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool "$launcher_tool" --auth "$auth_mode" --dir "$cwd" --session "$session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
