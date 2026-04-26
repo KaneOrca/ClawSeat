@@ -20,11 +20,22 @@ def test_install_creates_new_skill_symlinks(tmp_path: Path) -> None:
     result = _run_install(root, home, py_stubs, project="h3skills")
     assert result.returncode == 0, result.stderr
 
-    skills_home = home / ".agents" / "skills"
-    for skill in ("clawseat-decision-escalation", "clawseat-koder", "clawseat-privacy"):
-        link = skills_home / skill
-        assert link.is_symlink()
-        assert os.readlink(link) == str(root / "core" / "skills" / skill)
+    skill_homes = (
+        home / ".agents" / "skills",
+        home / ".gemini" / "skills",
+        home / ".codex" / "skills",
+    )
+    for skills_home in skill_homes:
+        for skill in (
+            "clawseat-memory",
+            "clawseat-decision-escalation",
+            "clawseat-koder",
+            "clawseat-privacy",
+            "clawseat-memory-reporting",
+        ):
+            link = skills_home / skill
+            assert link.is_symlink()
+            assert os.readlink(link) == str(root / "core" / "skills" / skill)
 
 
 def test_install_skill_symlinks_are_idempotent(tmp_path: Path) -> None:
@@ -34,6 +45,8 @@ def test_install_skill_symlinks_are_idempotent(tmp_path: Path) -> None:
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
     assert (home / ".agents" / "skills" / "clawseat-privacy").is_symlink()
+    assert (home / ".gemini" / "skills" / "clawseat-memory-reporting").is_symlink()
+    assert (home / ".codex" / "skills" / "clawseat-memory-reporting").is_symlink()
 
 
 def test_install_leaves_existing_clawseat_memory_symlink(tmp_path: Path) -> None:
@@ -48,3 +61,16 @@ def test_install_leaves_existing_clawseat_memory_symlink(tmp_path: Path) -> None
     assert result.returncode == 0, result.stderr
     assert memory_link.is_symlink()
     assert os.readlink(memory_link) == str(memory_target)
+
+
+def test_install_creates_gemini_and_codex_skill_dirs(tmp_path: Path) -> None:
+    root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
+    result = _run_install(root, home, py_stubs, project="h3multi")
+    assert result.returncode == 0, result.stderr
+
+    for skills_home in (home / ".gemini" / "skills", home / ".codex" / "skills"):
+        assert skills_home.is_dir()
+        assert (skills_home / "clawseat-memory").is_symlink()
+        assert os.readlink(skills_home / "clawseat-memory") == str(
+            root / "core" / "skills" / "clawseat-memory"
+        )

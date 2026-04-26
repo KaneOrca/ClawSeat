@@ -1203,30 +1203,30 @@ EOF
 
 install_skill_symlinks() {
   note "Step 5.8: install ClawSeat skill symlinks"
-  local skills_home="$HOME/.agents/skills"
-  local skill target link
-  local -a skills=(clawseat-memory clawseat-decision-escalation clawseat-koder clawseat-privacy)
+  local skill target link skills_home
+  local -a skill_homes=("$HOME/.agents/skills" "$HOME/.gemini/skills" "$HOME/.codex/skills")
+  local -a skills=(clawseat-memory clawseat-decision-escalation clawseat-koder clawseat-privacy clawseat-memory-reporting)
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] mkdir -p %q\n' "$skills_home"
-    for skill in "${skills[@]}"; do
-      printf '[dry-run] ln -sfn %q %q\n' "$REPO_ROOT/core/skills/$skill" "$skills_home/$skill"
+    for skills_home in "${skill_homes[@]}"; do
+      printf '[dry-run] mkdir -p %q\n' "$skills_home"
+      for skill in "${skills[@]}"; do
+        printf '[dry-run] ln -sfn %q %q\n' "$REPO_ROOT/core/skills/$skill" "$skills_home/$skill"
+      done
     done
-    printf '[dry-run] verify existing %q\n' "$skills_home/clawseat-memory"
     return 0
   fi
-  mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
-  for skill in "${skills[@]}"; do
-    target="$REPO_ROOT/core/skills/$skill"
-    link="$skills_home/$skill"
-    if [[ ! -d "$target" ]]; then
-      warn "skill symlink skipped; missing skill directory: $target"
-      continue
-    fi
-    ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
+  for skills_home in "${skill_homes[@]}"; do
+    mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
+    for skill in "${skills[@]}"; do
+      target="$REPO_ROOT/core/skills/$skill"
+      link="$skills_home/$skill"
+      if [[ ! -d "$target" ]]; then
+        warn "skill symlink skipped; missing skill directory: $target"
+        continue
+      fi
+      ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
+    done
   done
-  if [[ ! -e "$skills_home/clawseat-memory" && ! -L "$skills_home/clawseat-memory" ]]; then
-    warn "clawseat-memory skill symlink not found at $skills_home/clawseat-memory; leaving unchanged per compatibility contract"
-  fi
 }
 
 install_privacy_pre_commit_hook() {

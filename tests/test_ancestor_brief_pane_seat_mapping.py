@@ -14,7 +14,7 @@ def test_ancestor_brief_contains_pane_seat_mapping_section() -> None:
     assert "Pane ↔ Seat 映射（强制理解）" in text
     assert "user.seat_id" in text
     assert "list-panes" in text
-    assert "Row1-Col1 = ancestor" in text
+    assert "Row1-Col1 = memory / primary seat" in text
     assert "Row2-Col3 = designer" in text
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import sys
 from typing import Any, Callable
 
 import agent_admin_window as window_ops
@@ -31,8 +32,42 @@ class CommandHandlers:
     def _session_supports_heartbeat_provisioning(self, session: Any) -> bool:
         return str(getattr(session, "tool", "") or "") == "claude"
 
+    def _validate_project_seat_override(self, session: Any, *, accept_override: bool = False) -> None:
+        project_name = str(getattr(session, "project", "") or "").strip()
+        engineer_id = str(getattr(session, "engineer_id", "") or "").strip()
+        if not project_name or not engineer_id:
+            return
+        project = self.hooks.load_project_or_current(project_name)
+        overrides = getattr(project, "seat_overrides", None) or {}
+        if not isinstance(overrides, dict):
+            return
+        override = overrides.get(engineer_id)
+        if not isinstance(override, dict) or not override:
+            return
+        fields = ("tool", "auth_mode", "provider")
+        for field in fields:
+            expected = str(override.get(field, "") or "").strip()
+            if not expected:
+                continue
+            actual = str(getattr(session, field, "") or "").strip()
+            if expected == actual:
+                continue
+            message = (
+                f"project.toml seat_override requires {field}={expected} "
+                f"but got {field}={actual or '<unset>'}. "
+                "Use --accept-override to bypass."
+            )
+            if accept_override:
+                print(f"warn: {message}", file=sys.stderr)
+                return
+            raise self.hooks.error_cls(f"error: {message}")
+
     def session_start_engineer(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
+        self._validate_project_seat_override(
+            session,
+            accept_override=bool(getattr(args, "accept_override", False)),
+        )
         self.hooks.session_service.start_engineer(session, reset=args.reset)
         if self._session_supports_heartbeat_provisioning(session):
             try:
@@ -122,6 +157,9 @@ class CommandHandlers:
             sessions_to_start.append(
                 self.hooks.resolve_engineer_session(eid, project_name=project_name)
             )
+        accept_override = bool(getattr(args, "accept_override", False))
+        for session in sessions_to_start:
+            self._validate_project_seat_override(session, accept_override=accept_override)
 
         # Phase 1 — parallel tmux start.
         def _start_one(session: Any) -> tuple[str, Exception | None]:

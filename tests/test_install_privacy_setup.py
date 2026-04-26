@@ -24,7 +24,13 @@ def _prepare_h3_fake_root(tmp_path: Path) -> tuple[Path, Path, Path]:
         root / "core" / "scripts" / "privacy-check.sh",
         "#!/usr/bin/env bash\nexit 0\n",
     )
-    for skill in ("clawseat-decision-escalation", "clawseat-koder", "clawseat-privacy", "clawseat-memory"):
+    for skill in (
+        "clawseat-memory",
+        "clawseat-decision-escalation",
+        "clawseat-koder",
+        "clawseat-privacy",
+        "clawseat-memory-reporting",
+    ):
         skill_dir = root / "core" / "skills" / skill
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(f"# {skill}\n", encoding="utf-8")

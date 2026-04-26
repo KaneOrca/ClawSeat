@@ -77,6 +77,9 @@ def _make_handlers(
     window_mode: str = "tabs-1up",
     fail_ids: set[str] | None = None,
     tool_by_engineer: dict[str, str] | None = None,
+    auth_by_engineer: dict[str, str] | None = None,
+    provider_by_engineer: dict[str, str] | None = None,
+    seat_overrides: dict[str, dict[str, str]] | None = None,
     provision_heartbeat=None,
 ):
     svc = _FakeSessionService()
@@ -86,11 +89,18 @@ def _make_handlers(
 
     def resolve(eid: str, project_name: str | None = None):  # noqa: ARG001
         tool = (tool_by_engineer or {}).get(eid, "claude")
+        auth_mode = (auth_by_engineer or {}).get(eid, "oauth")
+        provider = (provider_by_engineer or {}).get(
+            eid,
+            {"claude": "anthropic", "codex": "openai", "gemini": "google"}.get(tool, "unknown"),
+        )
         return SimpleNamespace(
             engineer_id=eid,
             session=f"{project_name or 'demo'}-{eid}-{tool}",
             project=project_name or "demo",
             tool=tool,
+            auth_mode=auth_mode,
+            provider=provider,
         )
 
     def default_provision_heartbeat(session):  # noqa: ARG001
@@ -102,6 +112,7 @@ def _make_handlers(
             monitor_engineers=monitor_engineers if monitor_engineers is not None else engineer_ids,
             engineers=engineer_ids,
             window_mode=window_mode,
+            seat_overrides=seat_overrides or {},
         )
 
     def load_project_sessions(project_name: str):  # noqa: ARG001
@@ -130,13 +141,13 @@ def _make_handlers(
 
 
 def _args(engineers, **overrides):
-    defaults = dict(project=None, reset=False, no_iterm=False)
+    defaults = dict(project=None, reset=False, no_iterm=False, accept_override=False)
     defaults.update(overrides)
     return SimpleNamespace(engineers=engineers, **defaults)
 
 
 def _start_args(engineer: str, **overrides):
-    defaults = dict(project=None, reset=False)
+    defaults = dict(project=None, reset=False, accept_override=False)
     defaults.update(overrides)
     return SimpleNamespace(engineer=engineer, **defaults)
 
@@ -224,6 +235,97 @@ def test_provision_heartbeat_gracefully_skips_codex_memory(capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "memory: heartbeat skipped for codex session" in out
+
+
+def test_start_engineer_fails_when_project_seat_override_tool_mismatches():
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        seat_overrides={
+            "memory": {
+                "tool": "claude",
+                "auth_mode": "oauth",
+                "provider": "anthropic",
+            }
+        },
+    )
+
+    try:
+        handlers.session_start_engineer(_start_args("memory", project="cartooner"))
+    except RuntimeError as exc:
+        message = str(exc)
+        assert "project.toml seat_override requires tool=claude but got tool=codex" in message
+        assert "Use --accept-override to bypass" in message
+    else:
+        raise AssertionError("expected project.toml seat_override mismatch to fail")
+
+    assert svc.started == []
+
+
+def test_start_engineer_accept_override_bypasses_mismatch(capsys):
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        seat_overrides={
+            "memory": {
+                "tool": "claude",
+                "auth_mode": "oauth",
+                "provider": "anthropic",
+            }
+        },
+    )
+
+    rc = handlers.session_start_engineer(
+        _start_args("memory", project="cartooner", accept_override=True)
+    )
+
+    assert rc == 0
+    assert [eid for eid, _ in svc.started] == ["memory"]
+    assert "warn: project.toml seat_override requires tool=claude but got tool=codex" in capsys.readouterr().err
+
+
+def test_start_engineer_project_seat_override_match_passes():
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        seat_overrides={
+            "memory": {
+                "tool": "codex",
+                "auth_mode": "oauth",
+                "provider": "openai",
+            }
+        },
+    )
+
+    rc = handlers.session_start_engineer(_start_args("memory", project="cartooner"))
+
+    assert rc == 0
+    assert [eid for eid, _ in svc.started] == ["memory"]
+
+
+def test_batch_start_engineer_validates_overrides_before_any_spawn():
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory", "planner"],
+        tool_by_engineer={"memory": "codex", "planner": "claude"},
+        seat_overrides={
+            "planner": {
+                "tool": "codex",
+                "auth_mode": "oauth",
+                "provider": "openai",
+            }
+        },
+    )
+
+    try:
+        handlers.session_batch_start_engineer(
+            _args(["memory", "planner"], project="cartooner", no_iterm=True)
+        )
+    except RuntimeError as exc:
+        assert "project.toml seat_override requires tool=codex but got tool=claude" in str(exc)
+    else:
+        raise AssertionError("expected batch-start-engineer override mismatch to fail")
+
+    assert svc.started == []
 
 
 # ── Invariant 2: Phase 2 fires AFTER all Phase 1 work finishes ───────────────

@@ -362,6 +362,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_start_eng.add_argument("engineer")
     session_start_eng.add_argument("--project")
     session_start_eng.add_argument("--reset", action="store_true")
+    session_start_eng.add_argument(
+        "--accept-override",
+        action="store_true",
+        help="bypass project.toml seat_overrides SSOT mismatch guard",
+    )
     session_start_eng.set_defaults(func=hooks.cmd_session_start_engineer)
 
     session_reseed_sandbox = session_sub.add_parser(
@@ -393,6 +398,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     session_batch_start.add_argument("--project")
     session_batch_start.add_argument("--reset", action="store_true")
+    session_batch_start.add_argument(
+        "--accept-override",
+        action="store_true",
+        help="bypass project.toml seat_overrides SSOT mismatch guard",
+    )
     session_batch_start.add_argument(
         "--no-iterm",
         action="store_true",

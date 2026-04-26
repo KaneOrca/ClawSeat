@@ -13,7 +13,7 @@ def test_spawn49_brief_uses_agent_admin_session_start_engineer() -> None:
     assert "scripts/wait-for-seat.sh" in text
     assert "~/" not in text
     assert "${AGENT_HOME}/.agents/memory/machine/" in text
-    assert "### B2.5 — Bootstrap machine tenants + ancestor 快速概览" in text
+    assert "### B2.5 — Bootstrap machine tenants + project-memory 快速概览" in text
     assert "### B2.6" not in text
     assert "tmux send-keys -t '=machine-memory-claude' \"$MEMORY_PROMPT\" Enter" not in text
     assert "${AGENT_HOME}/.agents/memory/learnings/${PROJECT_NAME}-bootstrap-report.md" not in text
@@ -44,3 +44,14 @@ def test_spawn49_brief_uses_agent_admin_session_start_engineer() -> None:
     assert "gemini cli oauth" in text
     assert "agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]" in text
     assert "agent-launcher.sh --headless --engineer ${seat} --project ${PROJECT_NAME}" not in text
+
+
+def test_brief_uses_v2_memory_vocab_and_project_toml_ssot() -> None:
+    text = _BRIEF_TEMPLATE.read_text(encoding="utf-8")
+
+    for stale in ("始祖 CC", "六宫格", "machine-memory-claude", "clawseat-ancestor/SKILL"):
+        assert stale not in text
+    assert "project.toml SSOT authority" in text
+    assert "seat_overrides" in text
+    assert "Decisions match overrides: yes/no" in text
+    assert "clawseat-memory/SKILL.md" in text

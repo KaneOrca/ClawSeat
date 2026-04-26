@@ -14,7 +14,7 @@ def test_brief_has_five_b5_substeps() -> None:
     assert "#### B5.1 — 选 openclaw agent 做 koder overlay" in text
     assert "#### B5.2 — 飞书 auth pre-flight（按 §5.y 决策树）" in text
     assert "#### B5.3 — 选 sender + 拉群 + 获取 chat_id" in text
-    assert "#### B5.4 — operator 粘贴 chat_id → ancestor bind（4 字段）" in text
+    assert "#### B5.4 — operator 粘贴 chat_id → project-memory bind（4 字段）" in text
     assert "#### B5.5 — verify smoke dispatch" in text
 
 
