@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useArena } from '../../../context/ArenaContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { safeStr } from '../../../utils/safeStr';
@@ -10,30 +10,34 @@ import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 import { MagneticSurface } from '../../../components/MagneticSurface';
 import { useWaveRipple } from '../../../hooks/useWaveRipple';
 import { ArrowLeft, Radio } from 'lucide-react';
+import { PretextButton } from '../../../components/PretextButton';
+import { CHALLENGES } from '../../../data/mockData';
 
 type KnownFeedEventType = 'joined' | 'completed_challenge' | 'unlocked_achievement';
 
 interface RawFeedEvent {
   id: number;
-  player_nickname: string;
+  player_nickname?: string;
+  nickname?: string;
+  player_id?: string;
+  player_code?: string;
   event_type: KnownFeedEventType | (string & {});
   target_id: string;
   achievement_name?: string;
-  created_at: number;
+  created_at: number | string;
 }
 
 type ViewMode = 'feed' | 'session';
-type SessionStepStatus = 'started' | 'completed' | 'failed';
-
-interface SessionStep {
-  step: string;
-  status: SessionStepStatus;
-  timestamp: number;
-  output?: string;
-}
+type SessionStatus = 'idle' | 'loading' | 'thinking' | 'solved' | 'error';
 
 interface WatchSessionResponse {
-  steps?: SessionStep[];
+  id: number;
+  player_code: string;
+  challenge_id: number;
+  status: 'thinking' | 'solved' | (string & {});
+  steps: string[];
+  started_at?: string;
+  updated_at?: string;
 }
 
 /**
@@ -42,7 +46,7 @@ interface WatchSessionResponse {
  * flows between events.
  */
 export const WatchViewV3: React.FC = () => {
-  const { withToast, isZenMode, showToast } = useArena();
+  const { withToast, isZenMode } = useArena();
   const { t } = useLanguage();
   const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
 
@@ -50,11 +54,20 @@ export const WatchViewV3: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeAgent, setActiveAgent] = useState<any>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
-  const [sessionSteps, setSessionSteps] = useState<SessionStep[]>([]);
+  const [selectedPlayerCode, setSelectedPlayerCode] = useState<string | null>(null);
+  const [selectedPlayerName, setSelectedPlayerName] = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('idle');
+  const [watchSession, setWatchSession] = useState<WatchSessionResponse | null>(null);
+  const [sessionSteps, setSessionSteps] = useState<string[]>([]);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const lastFeedLength = useRef(0);
   const seenFeedIds = useRef<Set<number>>(new Set());
   const achievementPulseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewModeRef = useRef<ViewMode>('feed');
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
 
   // Feed soloist registration
   useEffect(() => {
@@ -63,7 +76,7 @@ export const WatchViewV3: React.FC = () => {
     feed.forEach((event, i) => {
       registerSoloist({
         id: `watch-event-${i}`,
-        text: `${safeStr(event.player_nickname).toUpperCase()} :: ${eventTypeLabel(event.event_type, t)} :: ${t('watch.v3.ref')}_${safeStr(event.target_id) || '?'}`,
+        text: `${getFeedPlayerName(event).toUpperCase()} :: ${eventTypeLabel(event.event_type, t)} :: ${t('watch.v3.ref')}_${safeStr(event.target_id) || '?'}`,
         lineIndex: 12 + i * 4,
         color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
       });
@@ -76,28 +89,28 @@ export const WatchViewV3: React.FC = () => {
     if (viewMode !== 'session') return;
     const ids = sessionSteps.length > 0
       ? sessionSteps.map((_, i) => `watch-step-${i}`)
-      : ['watch-step-empty'];
+      : ['watch-step-message'];
 
     if (sessionSteps.length === 0) {
       registerSoloist({
-        id: 'watch-step-empty',
-        text: t('watch.session.no_trace'),
+        id: 'watch-step-message',
+        text: sessionMessage ?? (sessionStatus === 'loading' ? t('watch.session.loading') : t('watch.session.no_active')),
         lineIndex: 14,
-        color: tokens.colors.aurora.cyan,
+        color: sessionStatus === 'error' ? tokens.colors.aurora.red : tokens.colors.aurora.cyan,
       });
     } else {
       sessionSteps.forEach((step, i) => {
         registerSoloist({
           id: `watch-step-${i}`,
-          text: `0x${i.toString(16).padStart(2, '0')} // ${safeStr(step.step)}`,
+          text: `0x${i.toString(16).padStart(2, '0')} // ${safeStr(step)}`,
           lineIndex: 12 + i * 3,
-          color: statusColor(step.status),
+          color: sessionStatus === 'thinking' ? tokens.colors.aurora.cyan : tokens.colors.aurora.blue,
         });
       });
     }
 
     return () => { ids.forEach(id => unregisterSoloist(id)); };
-  }, [registerSoloist, sessionSteps, t, unregisterSoloist, viewMode]);
+  }, [registerSoloist, sessionMessage, sessionStatus, sessionSteps, t, unregisterSoloist, viewMode]);
 
   // Data polling
   useEffect(() => {
@@ -120,7 +133,7 @@ export const WatchViewV3: React.FC = () => {
       });
       registerSoloist({
         id: 'achievement-nickname',
-        text: safeStr(event.player_nickname).toUpperCase(),
+        text: getFeedPlayerName(event).toUpperCase(),
         lineIndex: 10,
         color: tokens.colors.aurora.purple,
         opacity: 1,
@@ -154,10 +167,10 @@ export const WatchViewV3: React.FC = () => {
         const achievementEvent = newEvents.find(event => event.event_type === 'unlocked_achievement');
         newEvents.forEach(event => seenFeedIds.current.add(event.id));
 
-        if (achievementEvent) {
+        if (achievementEvent && viewModeRef.current === 'feed') {
           triggerAchievementPulse(achievementEvent);
         }
-        if (feedData.feed.length > lastFeedLength.current) {
+        if (feedData.feed.length > lastFeedLength.current && viewModeRef.current === 'feed') {
           setEnvironment({ waveAmplitude: 100 });
           setTimeout(() => setEnvironment({ waveAmplitude: 60 }), 800);
         }
@@ -188,11 +201,15 @@ export const WatchViewV3: React.FC = () => {
     return () => setEnvironment({ waveAmplitude: 60, waveFrequency: 0.03 });
   }, [setEnvironment]);
 
-  const returnToFeed = React.useCallback(() => {
+  const returnToFeed = useCallback(() => {
     sessionSteps.forEach((_, i) => unregisterSoloist(`watch-step-${i}`));
-    unregisterSoloist('watch-step-empty');
+    unregisterSoloist('watch-step-message');
     setSessionSteps([]);
-    setSelectedSubmissionId(null);
+    setSelectedPlayerCode(null);
+    setSelectedPlayerName(null);
+    setWatchSession(null);
+    setSessionMessage(null);
+    setSessionStatus('idle');
     setViewMode('feed');
     setEnvironment({ opacity: 0.15 });
   }, [sessionSteps, setEnvironment, unregisterSoloist]);
@@ -206,25 +223,61 @@ export const WatchViewV3: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [returnToFeed, viewMode]);
 
-  const openSession = React.useCallback(async (event: RawFeedEvent) => {
-    const submissionId = String(event.id);
-    setSelectedSubmissionId(submissionId);
-    setViewMode('session');
-    setSessionSteps([]);
-    setEnvironment({ opacity: 0.05 });
-
-    const { data, error } = await requestTyped<WatchSessionResponse>(() => api.watch(submissionId));
+  const fetchSession = useCallback(async (playerCode: string, silent = false) => {
+    if (!silent) setSessionStatus('loading');
+    const { data, error } = await requestTyped<WatchSessionResponse>(() => api.watch(playerCode));
     if (error) {
-      showToast(error.kind === 'client' && error.status === 404 ? t('watch.session.error_404') : t('watch.session.error_generic'), 'error');
-      setSelectedSubmissionId(null);
+      setWatchSession(null);
       setSessionSteps([]);
-      setViewMode('feed');
-      setEnvironment({ opacity: 0.15 });
+      if (error.kind === 'client' && error.status === 404) {
+        setSessionMessage(t('watch.session.no_active'));
+        setSessionStatus('idle');
+      } else {
+        setSessionMessage(t('watch.session.error_generic'));
+        setSessionStatus('error');
+      }
+      setEnvironment({ waveAmplitude: 90, opacity: 0.08 });
       return;
     }
 
-    setSessionSteps(Array.isArray(data?.steps) ? data.steps : []);
-  }, [setEnvironment, showToast]);
+    const nextStatus = data?.status === 'thinking' ? 'thinking' : 'solved';
+    setWatchSession(data);
+    setSessionSteps(normalizeSessionSteps(data?.steps));
+    setSessionMessage(null);
+    setSessionStatus(nextStatus);
+    setEnvironment({
+      waveAmplitude: nextStatus === 'thinking' ? 100 : 90,
+      opacity: nextStatus === 'thinking' ? 0.18 : 0.08,
+    });
+  }, [setEnvironment, t]);
+
+  useEffect(() => {
+    if (viewMode !== 'session' || !selectedPlayerCode || sessionStatus !== 'thinking') return;
+    const interval = window.setInterval(() => {
+      void fetchSession(selectedPlayerCode, true);
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [fetchSession, selectedPlayerCode, sessionStatus, viewMode]);
+
+  const openSession = useCallback(async (event: RawFeedEvent) => {
+    const playerCode = getFeedPlayerCode(event);
+    setViewMode('session');
+    setSelectedPlayerCode(playerCode);
+    setSelectedPlayerName(getFeedPlayerName(event));
+    setWatchSession(null);
+    setSessionSteps([]);
+    setSessionMessage(null);
+    setSessionStatus('loading');
+    setEnvironment({ opacity: 0.05 });
+
+    if (!playerCode) {
+      setSessionMessage(t('watch.session.error_generic'));
+      setSessionStatus('error');
+      return;
+    }
+
+    await fetchSession(playerCode);
+  }, [fetchSession, setEnvironment, t]);
 
   if (loading) return <NeuralLoading label={t('watch.status.loading').toUpperCase()} />;
 
@@ -235,10 +288,15 @@ export const WatchViewV3: React.FC = () => {
       {viewMode === 'session' ? (
         <SessionTraceMemo
           isZenMode={isZenMode}
-          selectedSubmissionId={selectedSubmissionId}
+          selectedPlayerCode={selectedPlayerCode}
+          selectedPlayerName={selectedPlayerName}
+          sessionStatus={sessionStatus}
+          watchSession={watchSession}
           sessionSteps={sessionSteps}
+          sessionMessage={sessionMessage}
           onBack={returnToFeed}
-          noTraceLabel={t('watch.session.no_trace')}
+          noActiveLabel={t('watch.session.no_active')}
+          loadingLabel={t('watch.session.loading')}
           backLabel={t('watch.session.back')}
         />
       ) : feed.length === 0 ? (
@@ -326,6 +384,44 @@ const eventTypeLabel = (eventType: RawFeedEvent['event_type'], t: (keyPath: stri
   }
 };
 
+const getFeedPlayerName = (event: RawFeedEvent) => {
+  return safeStr(event.player_nickname ?? event.nickname ?? event.player_code ?? event.player_id ?? 'UNKNOWN');
+};
+
+const getFeedPlayerCode = (event: RawFeedEvent) => {
+  return safeStr(event.player_code ?? event.player_id ?? '');
+};
+
+const normalizeSessionSteps = (steps: unknown) => {
+  if (!Array.isArray(steps)) return [];
+  return steps.map(step => safeStr(step)).filter(Boolean);
+};
+
+const sessionStatusColor = (status: SessionStatus) => {
+  switch (status) {
+    case 'thinking':
+      return tokens.colors.aurora.cyan;
+    case 'solved':
+      return tokens.colors.aurora.blue;
+    case 'error':
+      return tokens.colors.aurora.red;
+    default:
+      return tokens.colors.text.secondary;
+  }
+};
+
+const challengeTitle = (session: WatchSessionResponse | null) => {
+  if (!session) return '---';
+  return safeStr(CHALLENGES.find(challenge => challenge.id === session.challenge_id)?.title ?? `Layer ${session.challenge_id}`);
+};
+
+const formatUpdatedAt = (updatedAt?: string) => {
+  if (!updatedAt) return '---';
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) return safeStr(updatedAt);
+  return date.toLocaleString();
+};
+
 const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenMode, activeAgent }) => {
   const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
@@ -360,42 +456,55 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelec
             color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
           }}
         >
-          {safeStr(event.player_nickname).toUpperCase()} :: {eventTypeLabel(event.event_type, t)} :: {t('watch.v3.ref')}_{safeStr(event.target_id) || '?'}
+          {getFeedPlayerName(event).toUpperCase()} :: {eventTypeLabel(event.event_type, t)} :: {t('watch.v3.ref')}_{safeStr(event.target_id) || '?'}
         </div>
       </MagneticSurface>
     </div>
   );
 };
 
-const statusColor = (status: string) => {
-  switch (safeStr(status)) {
-    case 'started':
-      return tokens.colors.aurora.cyan;
-    case 'completed':
-      return tokens.colors.aurora.blue;
-    case 'failed':
-      return tokens.colors.aurora.red;
-    default:
-      return tokens.colors.text.secondary;
-  }
-};
-
 const SessionTrace: React.FC<{
   isZenMode: boolean;
-  selectedSubmissionId: string | null;
-  sessionSteps: SessionStep[];
+  selectedPlayerCode: string | null;
+  selectedPlayerName: string | null;
+  sessionStatus: SessionStatus;
+  watchSession: WatchSessionResponse | null;
+  sessionSteps: string[];
+  sessionMessage: string | null;
   onBack: () => void;
-  noTraceLabel: string;
+  noActiveLabel: string;
+  loadingLabel: string;
   backLabel: string;
-}> = ({ isZenMode, selectedSubmissionId, sessionSteps, onBack, noTraceLabel, backLabel }) => {
+}> = ({
+  isZenMode,
+  selectedPlayerCode,
+  selectedPlayerName,
+  sessionStatus,
+  watchSession,
+  sessionSteps,
+  sessionMessage,
+  onBack,
+  noActiveLabel,
+  loadingLabel,
+  backLabel,
+}) => {
   return (
     <div style={sessionTraceStyle}>
-      <SessionBackAtom isZenMode={isZenMode} onBack={onBack} backLabel={backLabel} selectedSubmissionId={selectedSubmissionId} />
+      <SessionBackAtom isZenMode={isZenMode} onBack={onBack} backLabel={backLabel} selectedPlayerCode={selectedPlayerCode} />
+      <SessionMetaAtom
+        sessionStatus={sessionStatus}
+        watchSession={watchSession}
+        selectedPlayerCode={selectedPlayerCode}
+        selectedPlayerName={selectedPlayerName}
+      />
       {sessionSteps.length === 0 ? (
-        <EmptySessionAtom noTraceLabel={noTraceLabel} />
+        <EmptySessionAtom
+          label={sessionMessage ?? (sessionStatus === 'loading' ? loadingLabel : noActiveLabel)}
+          tone={sessionStatus}
+        />
       ) : (
         sessionSteps.map((step, i) => (
-          <SessionStepAtom key={`${safeStr(step.timestamp)}-${i}`} index={i} step={step} />
+          <SessionStepAtom key={`${safeStr(step)}-${i}`} index={i} step={step} sessionStatus={sessionStatus} />
         ))
       )}
     </div>
@@ -403,52 +512,75 @@ const SessionTrace: React.FC<{
 };
 const SessionTraceMemo = React.memo(SessionTrace);
 
-const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLabel: string; selectedSubmissionId: string | null }> = ({
+const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLabel: string; selectedPlayerCode: string | null }> = ({
   isZenMode,
   onBack,
   backLabel,
-  selectedSubmissionId,
+  selectedPlayerCode,
 }) => {
   const { t } = useLanguage();
-  const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.1}>
-      <div
-        ref={ref}
-        onClick={onBack}
+      <PretextButton
+        config={{
+          label: backLabel,
+          engine: 'bitmask',
+          soloistId: 'watch-session-back',
+          color: tokens.colors.text.tertiary,
+          onTrigger: onBack,
+          activationEnvironment: { waveAmplitude: 92, opacity: 0.18 },
+          triggerEnvironment: { waveAmplitude: 118, opacity: 0.22 },
+          idleEnvironment: { opacity: 0.15 },
+        }}
         onPointerEnter={onPointerEnter}
         onTouchStart={onTouchStart}
         style={backStyle}
       >
         <ArrowLeft size={12} style={{ marginRight: '0.75rem', verticalAlign: '-2px' }} />
-        {backLabel} // {t('watch.v3.trace')}_{safeStr(selectedSubmissionId) || '---'}
-      </div>
+        {backLabel} // {t('watch.v3.trace')}_{safeStr(selectedPlayerCode) || '---'}
+      </PretextButton>
     </MagneticSurface>
   );
 };
 
-const SessionStepAtom: React.FC<{ index: number; step: SessionStep }> = ({ index, step }) => {
+const SessionMetaAtom: React.FC<{
+  sessionStatus: SessionStatus;
+  watchSession: WatchSessionResponse | null;
+  selectedPlayerCode: string | null;
+  selectedPlayerName: string | null;
+}> = ({ sessionStatus, watchSession, selectedPlayerCode, selectedPlayerName }) => {
+  const { t } = useLanguage();
+  const ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  return (
+    <div ref={ref} style={{ ...sessionStepStyle, color: sessionStatusColor(sessionStatus), opacity: 0.85 }}>
+      {safeStr(selectedPlayerName ?? selectedPlayerCode ?? '---').toUpperCase()} :: {t('watch.session.challenge')}_{challengeTitle(watchSession)}
+      {' '}:: {t('watch.session.status')}_{safeStr(watchSession?.status ?? sessionStatus).toUpperCase()}
+      {' '}:: {t('watch.session.updated')}_{formatUpdatedAt(watchSession?.updated_at)}
+    </div>
+  );
+};
+
+const SessionStepAtom: React.FC<{ index: number; step: string; sessionStatus: SessionStatus }> = ({ index, step, sessionStatus }) => {
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
   return (
     <div
       ref={ref}
       style={{
         ...sessionStepStyle,
-        color: statusColor(step.status),
+        color: sessionStatus === 'thinking' ? tokens.colors.aurora.cyan : tokens.colors.aurora.blue,
       }}
     >
-      0x{index.toString(16).padStart(2, '0')} // {safeStr(step.step)}
-      {step.output ? <span style={{ color: tokens.colors.text.tertiary }}> :: {safeStr(step.output)}</span> : null}
+      0x{index.toString(16).padStart(2, '0')} // {safeStr(step)}
     </div>
   );
 };
 
-const EmptySessionAtom: React.FC<{ noTraceLabel: string }> = ({ noTraceLabel }) => {
+const EmptySessionAtom: React.FC<{ label: string; tone: SessionStatus }> = ({ label, tone }) => {
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{ ...sessionStepStyle, color: tokens.colors.aurora.cyan }}>
-      {noTraceLabel}
+    <div ref={ref} style={{ ...sessionStepStyle, color: sessionStatusColor(tone) }}>
+      {label}
     </div>
   );
 };

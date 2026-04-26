@@ -38,7 +38,7 @@ export const api = {
     method: 'POST', headers: headers(code),
     body: JSON.stringify({ challengeId, answer })
   }),
-  watch: (id: string) => fetch(`${BASE}/api/submissions/${id}/session`),
+  watch: (playerCode: string) => fetch(`${BASE}/api/submissions/${encodeURIComponent(playerCode)}/session`),
   watchStep: (code: string, challengeId: number, status: string, step: string) =>
     fetch(`${BASE}/api/submissions/${code}/step`, {
       method: 'POST',

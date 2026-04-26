@@ -122,7 +122,12 @@ export const contentEn = {
     },
     session: {
       no_trace: "[ NO_TRACE_YET ]",
+      no_active: "[ NO_ACTIVE_SESSION ]",
+      loading: "[ LOADING_SESSION_TRACE ]",
       back: "[ BACK_TO_FEED ]",
+      challenge: "CHALLENGE",
+      status: "STATUS",
+      updated: "LAST_ACTIVE",
       error_404: "[ TRACE_NOT_FOUND ]",
       error_generic: "[ TRACE_UNAVAILABLE ]"
     },

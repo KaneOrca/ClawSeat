@@ -52,6 +52,21 @@ async function installApiMocks(page: Page) {
     });
   });
 
+  await page.route('**/api/submissions/trace-one/session', async route => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 1,
+        player_code: 'trace-one',
+        challenge_id: 3,
+        status: 'thinking',
+        steps: ['Incorrect attempt.', 'Correct.'],
+        started_at: '2026-04-27T02:00:00.000Z',
+        updated_at: '2026-04-27T02:05:00.000Z',
+      }),
+    });
+  });
+
   await page.route('**/api/submit', async route => {
     await route.fulfill({
       contentType: 'application/json',
@@ -162,6 +177,9 @@ test('watch view loads feed polling without crashing', async ({ page }) => {
   await clickNav(page, /Watch|观战/);
   await expect(page.locator('body')).toContainText('LIVE_RESONANT_CHORUS');
   await expect(page.locator('body')).toContainText('TRACEONE');
+  await page.getByText(/TRACEONE/).click();
+  await expect(page.locator('body')).toContainText('Incorrect attempt.');
+  await expect(page.locator('body')).toContainText(/Surface Breach|Signal Decode|Path Traversal/);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

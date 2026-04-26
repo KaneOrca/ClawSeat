@@ -122,7 +122,12 @@ export const contentZh = {
     },
     session: {
       no_trace: "[ 无迹可寻 ]",
+      no_active: "暂无进行中的 session",
+      loading: "正在读取 session 轨迹",
       back: "[ 返回广播 ]",
+      challenge: "挑战",
+      status: "状态",
+      updated: "最后活动",
       error_404: "[ 追踪记录不存在 ]",
       error_generic: "[ 追踪记录不可达 ]"
     },
