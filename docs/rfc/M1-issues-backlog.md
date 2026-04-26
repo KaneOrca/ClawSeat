@@ -491,7 +491,96 @@ MEMORY_WORKSPACE=$HOME/.agents/workspaces/$PROJECT/memory 有正確的 CLAUDE.md
 
 ---
 
-### #23 (预留新 issue 编号)
+### #25 install.sh 默认 memory 模型改为 codex gpt-5.4-mini — 🟠 HIGH
+
+**来源**: RFC-002 §2.2 + operator 2026-04-26 决策（轻量 model 跑 project-memory）
+
+**当前**: install.sh 默认 memory seat 用 claude oauth + Anthropic（Opus 4.7）
+**目标**: 默认 `--memory-tool codex --memory-model gpt-5.4-mini`；显式 override 可换回 claude opus
+
+**修复**:
+- `scripts/install.sh` parse_args 加 `--memory-tool` `--memory-model` flag
+- `core/templates/clawseat-minimal.toml` 改 memory seat 默认 tool/model
+- install.sh Step 3 select_provider 跳过 claude provider 选择（如果 --memory-tool=codex）
+
+**Owner**: builder-codex
+**批次**: batch 4 (M1.6)
+**test_policy**: UPDATE
+
+**验收**: `bash install.sh --project foo --template clawseat-minimal` 默认装 codex gpt-5.4-mini memory；现有项目 `--reinstall --memory-tool claude --memory-model claude-opus-4-7` 保持现状
+
+**关联**: 跟 #1 brief 动态化协同
+
+---
+
+### #26 4 个新 skill 落地（memory v0.8 / koder v1 / privacy v1 / decision-escalation v1）— 🟠 HIGH
+
+**来源**: RFC-002 §11 M1.6
+
+**已写 draft (machine-memory commit, 见本批次)**:
+- `core/skills/clawseat-decision-escalation/SKILL.md`
+- `core/skills/clawseat-koder/SKILL.md`
+- `core/skills/clawseat-privacy/SKILL.md`
+- `core/schemas/decision-payload.schema.json`
+
+**未做（install team 实施）**:
+1. `clawseat-memory` v0.8 refresh: 现有 SKILL.md 还是 v0.7 ancestor 心智，需重写为 RFC-002 v2.1 架构（§4 决策三选一 / §9 隐私 pre-action / §10 patrol）
+2. 5 个 seat skill 都加 `related_skills: [clawseat-decision-escalation, clawseat-privacy]`
+3. `core/scripts/privacy-check.sh` 实现（详 clawseat-privacy §3）
+4. install.sh 注册 4 个新 skill 软链到 `~/.agents/skills/`
+5. commit pre-commit hook invoke privacy-check.sh
+6. starter `~/.agents/memory/machine/privacy.md` 建文件
+
+**Owner**: planner-claude（review skill content）+ builder-codex（实施 helper + hook + install.sh 注册）
+**批次**: batch 4
+**test_policy**: EXTEND
+
+**验收**: 5 个 seat skill 都 reference 新 skill；privacy-check.sh 拒绝 staged file 含 sk-* 模式；4 个新 skill 启动时被 Claude Code / Codex CLI 加载
+
+---
+
+### #27 per-project patrol launchd plist 实现 — 🟡 MEDIUM (M2 范围)
+
+**来源**: RFC-002 §10
+
+**目标**: 每个项目自己的 launchd plist 定时维护 docs / 偏好 / backlog 健康。
+
+**修复**:
+- 写 `core/templates/patrol-plist.template`（参数化 PROJECT 名）
+- install.sh 装项目时注册 plist 到 `~/Library/LaunchAgents/clawseat.<project>-memory.patrol.plist`
+- uninstall 时删 plist
+- patrol 脚本 `scripts/project-memory-patrol.sh <project>` 实现 §10 5 步动作
+
+**Owner**: builder-codex
+**批次**: M2（不阻塞 M1.6）
+**test_policy**: EXTEND
+
+**验收**: 装一个 testbed 项目，1 天后看 patrol log 有 5 步动作执行；unregister 项目，plist 自动消失；不重蹈 v1 clawseat-patrol 的盲跑
+
+---
+
+### #28 decision_payload 协议 runtime 落地 — 🟠 HIGH
+
+**来源**: RFC-002 §6 + clawseat-decision-escalation skill
+
+**目标**: planner / memory / koder 三方实施 payload schema 通信。
+
+**修复**:
+1. **planner 侧**: 当遇决策点写 payload + tmux-send memory（替代当前自由文本 escalation）
+2. **memory 侧**: 收 payload 时按 §3 6 类判定路径；STATUS.md dispatch log 标 `decided locally / peer / escalated`
+3. **koder 侧**: OpenClaw lark plugin 接 decision_payload，render Feishu card；接 button click + 文字回复，翻译为 prompt
+4. `dispatch_task.py` 加 `--payload-file <path>` flag，自动 schema 校验
+5. 写 `core/scripts/decision-broker.sh`：planner / memory 共用的 payload validation + tmux-send helper
+
+**Owner**: builder-codex（schema validator + helper）+ planner-claude（review）+ koder（OpenClaw lark plugin，跨仓 PR）
+**批次**: M1.6 后期（依赖 #26 skill 先 land）
+**test_policy**: EXTEND
+
+**验收**: planner 升级时写完整 payload schema 校验通过；memory 按 §3 路径走；koder Feishu card render manual smoke 通过；timeout 自动触发
+
+---
+
+### #29 (预留新 issue 编号)
 
 ---
 
