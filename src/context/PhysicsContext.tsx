@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import type { VariantType } from './ArenaContext';
 
 export interface CharRect {
   char: string;
@@ -44,6 +45,12 @@ export interface EnvironmentSettings {
   opacity?: number;
   /** When true, BitmaskPhysic draws obstacle alignment lines. */
   debugAlignment?: boolean;
+  effects?: PhysicsEffects;
+}
+
+export interface PhysicsEffects {
+  transitionProgress: number;
+  transitionFrom: VariantType | null;
 }
 
 interface PhysicsContextType {
@@ -495,11 +502,19 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [environment, setEnvironmentRaw] = useState<EnvironmentSettings>({
     opacity: 0.15,
     waveAmplitude: 60,
-    waveFrequency: 0.03
+    waveFrequency: 0.03,
+    effects: {
+      transitionProgress: 0,
+      transitionFrom: null,
+    }
   });
 
   const mergeEnvironment = useCallback((patch: Partial<EnvironmentSettings>) => {
-    setEnvironmentRaw(prev => ({ ...prev, ...patch }));
+    setEnvironmentRaw(prev => ({
+      ...prev,
+      ...patch,
+      effects: patch.effects ? { ...prev.effects, ...patch.effects } : prev.effects,
+    }));
   }, []);
 
   // ── Provider ──────────────────────────────────────────────────────

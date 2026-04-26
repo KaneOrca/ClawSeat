@@ -204,6 +204,16 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     const mouse = mouseRef.current;
     const waveAmplitude = env.waveAmplitude ?? 60;
     const baseAlpha = env.opacity ?? baseOpacity;
+    const transition = env.effects;
+    const transitionProgress = transition?.transitionProgress ?? 0;
+    const transitionFrom = transition?.transitionFrom ?? null;
+    const isTransitioning = !!transitionFrom && transitionProgress > 0;
+    const transitionJitter = isTransitioning ? Math.max(0, Math.min(1, (waveAmplitude - 60) / 90)) : 0;
+    const transitionAlphaScale = !isTransitioning
+      ? 1
+      : transitionFrom === 'v2'
+        ? transitionProgress
+        : 1 - transitionProgress;
 
     const surgeNorm = Math.max(0, (waveAmplitude - 60) / 60);
     const effectiveWaveAmp = 60 + surgeNorm * 60;
@@ -297,15 +307,24 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
           density * (0.3 + flowStrength * 0.7) +  // normal field contribution
           ringGlow * 0.6 * voidMask                 // edge glow (only where some data exists)
         );
-        const alpha = rawAlpha * occlusion * voidFade;
+        const alpha = rawAlpha * occlusion * voidFade * transitionAlphaScale;
         if (alpha < 0.01) continue;
+
+        let drawX = x;
+        let drawY = y;
+        if (isTransitioning && transitionFrom === 'v2') {
+          const digitalNoiseA = cellNoise(col * 17 + t * 40, row * 19 - t * 30);
+          const digitalNoiseB = cellNoise(col * 23 - t * 35, row * 29 + t * 45);
+          drawX += digitalNoiseA * transitionJitter * 20;
+          drawY += digitalNoiseB * transitionJitter * 20;
+        }
 
         // Color: cyan/purple neural gradient with depth shift
         const hue = 200 + fsin(flowA * 0.5 + t * 0.2) * 60 + hueDistort * fsin(t * 2 + col * 0.1);
         const sat = 60 + mouseFactor * 20;
         const lightness = 50 + depthFade * 20 + mouseFactor * 15 + surgeNorm * 10;
         ctx.fillStyle = `hsla(${hue}, ${sat}%, ${lightness}%, ${Math.min(1, alpha)})`;
-        ctx.fillText(char, x, y);
+        ctx.fillText(char, drawX, drawY);
       }
     }
 

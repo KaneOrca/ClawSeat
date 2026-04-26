@@ -132,6 +132,16 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
     const currentAlpha = env.opacity ?? opacity;
     const currentWaveAmp = env.waveAmplitude ?? 60;
     const surgeNorm = Math.max(0, (currentWaveAmp - 60) / 60);
+    const transition = env.effects;
+    const transitionProgress = transition?.transitionProgress ?? 0;
+    const transitionFrom = transition?.transitionFrom ?? null;
+    const isTransitioning = !!transitionFrom && transitionProgress > 0;
+    const transitionJitter = isTransitioning ? Math.max(0, Math.min(1, (currentWaveAmp - 60) / 90)) : 0;
+    const transitionAlphaScale = !isTransitioning
+      ? 1
+      : transitionFrom === 'v3'
+        ? transitionProgress
+        : 1 - transitionProgress;
 
     let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
     let currentY = 0;
@@ -209,27 +219,34 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
         );
         const mouseFactor = Math.max(0, 1 - distToMouse / 400);
         const halftone = (Math.sin(currentY * 0.3) + Math.sin(startX * 0.3)) * 0.5 + 0.5;
+        let drawX = startX;
+        let drawY = currentY;
+
+        if (isTransitioning && transitionFrom === 'v3') {
+          drawX += Math.sin(time * 0.002 + currentY * 0.1) * transitionJitter * 15;
+          drawY += Math.cos(time * 0.002 + startX * 0.1) * transitionJitter * 15;
+        }
 
         switch (variant) {
           case 'v2': {
             const v2Alpha = 0.05 + Math.pow(mouseFactor, 3) * 0.8;
-            ctx.fillStyle = env.ambientColor || `rgba(40, 30, 20, ${Math.min(1, v2Alpha)})`;
+            ctx.fillStyle = env.ambientColor || `rgba(40, 30, 20, ${Math.min(1, v2Alpha * transitionAlphaScale)})`;
             break;
           }
           case 'v3': {
             const v3Alpha = (currentAlpha * 0.2) + (halftone * 0.2) + (Math.pow(mouseFactor, 1.5) * 1.2);
             const hueShift = Math.sin(time * 0.001) * 20;
-            ctx.fillStyle = env.ambientColor || `hsla(${270 + hueShift}, 70%, 70%, ${Math.min(1, v3Alpha)})`;
+            ctx.fillStyle = env.ambientColor || `hsla(${270 + hueShift}, 70%, 70%, ${Math.min(1, v3Alpha * transitionAlphaScale)})`;
             break;
           }
         }
 
-        ctx.fillText(line.text, startX, currentY);
+        ctx.fillText(line.text, drawX, drawY);
 
         // Store first span position for soloist mapping
         if (!drewAnything) {
           const currentLineIndex = Math.floor(currentY / lineHeight);
-          lineMap.set(currentLineIndex, { text: line.text, x: startX });
+          lineMap.set(currentLineIndex, { text: line.text, x: drawX });
           drewAnything = true;
         }
 

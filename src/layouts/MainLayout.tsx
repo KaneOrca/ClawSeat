@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Navigation } from '../components/Navigation';
 import { AuroraEngine } from '../components/AuroraEngine';
 import { useArena } from '../context/ArenaContext';
@@ -21,9 +21,21 @@ import { usePhysicsRegistry } from '../context/PhysicsContext';
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { currentView, setView, isLoading, toast, variant, setVariant, isZenMode, setZenMode, showToast, isNavVisible } = useArena();
   const { t, locale } = useLanguage();
-  const { setEnvironment } = usePhysicsRegistry();
+  const { environment, setEnvironment } = usePhysicsRegistry();
   const [isBlueprintMode, setBlueprintMode] = React.useState(false);
   const [isAlignmentMode, setAlignmentMode] = React.useState(false);
+  const variantRef = useRef(variant);
+  const transitionFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    variantRef.current = variant;
+  }, [variant]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionFrameRef.current !== null) cancelAnimationFrame(transitionFrameRef.current);
+    };
+  }, []);
 
   const handleOpenSettings = () => {
     console.log('Settings triggered');
@@ -77,6 +89,52 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     };
   }, [variant]);
 
+  const handleVariantChange = useCallback((nextVariant: typeof variant) => {
+    const fromVariant = variantRef.current;
+    if (fromVariant === nextVariant) return;
+
+    if (transitionFrameRef.current !== null) {
+      cancelAnimationFrame(transitionFrameRef.current);
+      transitionFrameRef.current = null;
+    }
+
+    const duration = 1500;
+    const startedAt = performance.now();
+    setEnvironment({
+      waveAmplitude: 150,
+      effects: {
+        transitionFrom: fromVariant,
+        transitionProgress: 0,
+      },
+    });
+    setVariant(nextVariant);
+
+    const step = (now: number) => {
+      const p = Math.min(1, (now - startedAt) / duration);
+      setEnvironment({
+        waveAmplitude: 150 - p * 90,
+        effects: {
+          transitionFrom: p >= 1 ? null : fromVariant,
+          transitionProgress: p >= 1 ? 0 : p,
+        },
+      });
+
+      if (p < 1) {
+        transitionFrameRef.current = requestAnimationFrame(step);
+      } else {
+        transitionFrameRef.current = null;
+      }
+    };
+
+    transitionFrameRef.current = requestAnimationFrame(step);
+  }, [setEnvironment, setVariant, variant]);
+
+  const transition = environment.effects;
+  const isTransitioning = !!transition?.transitionFrom && (transition.transitionProgress ?? 0) > 0;
+  const showBitmask = variant === 'v3' || (isTransitioning && transition?.transitionFrom === 'v3');
+  const showLabyrinth = variant === 'v2' || (isTransitioning && transition?.transitionFrom === 'v2');
+  const labyrinthVariant = variant === 'v2' ? 'v2' : (transition?.transitionFrom === 'v2' ? 'v2' : variant);
+
   return (
     <div className={`product-root ${isBlueprintMode ? 'blueprint-mode' : ''}`} style={{ 
       position: 'relative', 
@@ -96,15 +154,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* PLANE 1: PHYSICS FIELD (above background, below content) */}
       <div className="plane-physics" style={{ position: 'fixed', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
-        {variant === 'v3' ? (
+        {showBitmask && (
           <BitmaskPhysic opacity={isZenMode ? 0.3 : 0.25} />
-        ) : (
+        )}
+        {showLabyrinth && (
           <LabyrinthPhysic
             text={labyrinthText}
             fontDef={locale === 'zh-CN' ? "400 8px 'Noto Sans SC'" : "400 9px Satoshi"}
             lineHeight={locale === 'zh-CN' ? 12 : 10}
             opacity={isZenMode ? 0.12 : 0.06}
-            variant={variant}
+            variant={labyrinthVariant}
           />
         )}
       </div>
@@ -189,7 +248,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* PLANE 4: OVERLAY (Toasts, TextVariantSwitcher) */}
       <div className="plane-overlay" style={{ position: 'fixed', inset: 0, zIndex: 10, pointerEvents: 'none' }}>
-        <TextVariantSwitcher isZenMode={isZenMode} variant={variant} onVariantChange={setVariant} />
+        <TextVariantSwitcher isZenMode={isZenMode} variant={variant} onVariantChange={handleVariantChange} />
         
         <AnimatePresence>
           {toast && (
