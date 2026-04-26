@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _HARNESS_SCRIPTS = _REPO / "core" / "skills" / "gstack-harness" / "scripts"
@@ -425,6 +427,7 @@ def test_start_seat_main_blocks_openclaw_frontstage_self_start(monkeypatch, caps
     assert "'planner'" in out
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 def test_bootstrap_harness_start_skips_openclaw_frontstage_tmux_start(monkeypatch, tmp_path, capsys):
     local_override = tmp_path / "local.toml"
     local_override.write_text("version = 1\n", encoding="utf-8")

@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 _REPO = Path(__file__).resolve().parents[1]
 _SCRIPTS = _REPO / "core" / "skills" / "gstack-harness" / "scripts"
 if str(_SCRIPTS) not in sys.path:
@@ -35,6 +37,7 @@ def test_send_delegation_report_skips_when_feishu_disabled(tmp_path):
     assert "CLAWSEAT_FEISHU_ENABLED=0" in result.stdout
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 def test_send_delegation_report_runs_normally_when_feishu_enabled(tmp_path):
     """Without CLAWSEAT_FEISHU_ENABLED=0, dry-run proceeds normally."""
     env = {k: v for k, v in os.environ.items() if k != "CLAWSEAT_FEISHU_ENABLED"}

@@ -16,9 +16,12 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 
 
 _REPO = Path(__file__).resolve().parents[1]

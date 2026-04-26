@@ -466,6 +466,10 @@ def test_build_tabs_creates_new_window_tabs(no_tmux_calls):
     assert result == {
         "status": "ok",
         "mode": "tabs",
+        "tabs": [
+            {"status": "created", "tab": "install"},
+            {"status": "created", "tab": "cartooner"},
+        ],
         "tabs_created": 2,
         "tabs_skipped": 0,
         "window_id": "w-fake",
@@ -490,7 +494,7 @@ def test_build_tabs_creates_new_window_tabs(no_tmux_calls):
 def test_build_tabs_ensure_skips_existing_marker_and_appends_missing(no_tmux_calls):
     existing = _FakeWindow()
     existing.variables["user.window_title"] = "clawseat-memories"
-    existing.current_tab.current_session.name = "manually-renamed"
+    existing.current_tab.current_session.name = "install-memory (tmux)"
     existing.current_tab.current_session.variables["user.tab_name"] = "install"
     _FakeWindowFactory.app_windows = [existing]
 
@@ -509,6 +513,10 @@ def test_build_tabs_ensure_skips_existing_marker_and_appends_missing(no_tmux_cal
 
     result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
     assert result["status"] == "ok"
+    assert result["tabs"] == [
+        {"status": "skipped", "tab": "install"},
+        {"status": "created", "tab": "cartooner"},
+    ]
     assert result["tabs_created"] == 1
     assert result["tabs_skipped"] == 1
     assert existing.closed is False
@@ -538,9 +546,137 @@ def test_build_tabs_detects_existing_tab_by_session_name_fallback(no_tmux_calls)
 
     result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
     assert result["status"] == "ok"
+    assert result["tabs"] == [{"status": "skipped", "tab": "install"}]
     assert result["tabs_created"] == 0
     assert result["tabs_skipped"] == 1
     assert len(existing.tabs) == 1
+
+
+def test_ensure_tabs_multiple_windows_hard_fails(no_tmux_calls):
+    first = _FakeWindow()
+    first.variables["user.window_title"] = "clawseat-memories"
+    second = _FakeWindow()
+    second.variables["user.window_title"] = "clawseat-memories"
+    _FakeWindowFactory.app_windows = [first, second]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [{"name": "install", "command": "tmux attach -t '=install-memory'"}],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "error"
+    assert "multiple iTerm windows match title" in result["reason"]
+    assert "operator must close stale windows" in result["reason"]
+    assert len(first.tabs) == 1
+    assert len(second.tabs) == 1
+
+
+def test_ensure_tabs_detect_failure_creates_tab(no_tmux_calls, monkeypatch):
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    existing.current_tab.current_session.name = "install-memory (tmux)"
+    _FakeWindowFactory.app_windows = [existing]
+
+    async def empty_tab_name(tab):
+        return ""
+
+    monkeypatch.setattr(driver, "_tab_name", empty_tab_name)
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [{"name": "install", "command": "tmux attach -t '=install-memory'"}],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    assert result["tabs"][0]["status"] == "detect-failure"
+    assert result["tabs"][0]["tab"] == "install"
+    assert "returned empty" in result["tabs"][0]["reason"]
+    assert result["tabs_created"] == 1
+    assert result["tabs_skipped"] == 0
+    assert len(existing.tabs) == 2
+    assert existing.tabs[1].current_session.name == "install"
+    assert existing.tabs[1].current_session.sent_text == ["tmux attach -t '=install-memory'\n"]
+
+
+def test_ensure_tabs_cross_check_rejects_stale_ghost(no_tmux_calls):
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    existing.current_tab.current_session.variables["user.tab_name"] = "cartooner"
+    existing.current_tab.current_session.name = "machine-memory-claude (tmux)"
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [{"name": "cartooner", "command": "tmux attach -t '=cartooner-memory'"}],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    assert result["tabs"][0]["status"] == "detect-failure"
+    assert result["tabs"][0]["tab"] == "cartooner"
+    assert "machine-memory-claude" in result["tabs"][0]["reason"]
+    assert result["tabs_created"] == 1
+    assert result["tabs_skipped"] == 0
+    assert len(existing.tabs) == 2
+    assert existing.current_tab.current_session.sent_text == []
+    assert existing.tabs[1].current_session.name == "cartooner"
+    assert existing.tabs[1].current_session.sent_text == ["tmux attach -t '=cartooner-memory'\n"]
+
+
+def test_ensure_tabs_per_tab_status_aggregation(no_tmux_calls):
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    existing.current_tab.current_session.variables["user.tab_name"] = "install"
+    existing.current_tab.current_session.name = "install-memory (tmux)"
+
+    stale = _FakeTab(_FakeSession(sid="stale"))
+    stale.current_session.variables["user.tab_name"] = "cartooner"
+    stale.current_session.name = "machine-memory-claude (tmux)"
+    existing.tabs.append(stale)
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [
+            {"name": "install", "command": "tmux attach -t '=install-memory'"},
+            {"name": "cartooner", "command": "tmux attach -t '=cartooner-memory'"},
+            {"name": "arena", "command": "tmux attach -t '=arena-memory'"},
+        ],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    assert [entry["status"] for entry in result["tabs"]] == [
+        "skipped",
+        "detect-failure",
+        "created",
+    ]
+    assert [entry["tab"] for entry in result["tabs"]] == ["install", "cartooner", "arena"]
+    assert result["tabs_created"] == 2
+    assert result["tabs_skipped"] == 1
+    assert len(existing.tabs) == 4
 
 
 def test_build_tabs_append_failure_does_not_close_existing_window(no_tmux_calls):

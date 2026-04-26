@@ -94,6 +94,7 @@ def test_p0_0_preflight_help_exits_zero():
     assert r.returncode == 0, f"preflight --help failed:\nSTDOUT:{r.stdout}\nSTDERR:{r.stderr}"
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 def test_p0_0_preflight_install_mode_runs():
     """preflight.py install must reach its skill-check phase without crashing.
 
