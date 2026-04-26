@@ -72,8 +72,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   }, [isZenMode, isBlueprintMode, isAlignmentMode, setZenMode, setEnvironment, showToast]);
 
   const labyrinthText = useMemo(() => {
-    return (t('home.manifesto') + ' ' + t('watch.chorus') + ' ').repeat(10);
-  }, [t]);
+    const source = variant === 'v2'
+      ? t('home.v2.background_field')
+      : `${t('home.manifesto')} ${t('watch.chorus')}`;
+    return `${source} `.repeat(10);
+  }, [t, variant]);
 
   const themeColors = useMemo(() => {
     if (variant === 'v2') {
