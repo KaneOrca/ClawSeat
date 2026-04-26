@@ -374,7 +374,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
     elif engineer.role == "planner-dispatcher":
         lines.extend(
             [
-                "- dispatch via `dispatch_task.py` (not raw tmux); always pass `--intent` to activate the gstack skill",
+                "- dispatch via `dispatch_task.py` (not raw tmux); always pass `--test-policy` and `--intent` to activate the gstack skill",
                 "- stamp durable `Consumed:` ACK before routing the next hop; ACK alone does NOT finish the chain",
                 "- use canonical verdicts: `APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`",
                 "- closeout to koder via `complete_handoff.py --frontstage-disposition AUTO_ADVANCE --user-summary ...`",
@@ -428,6 +428,7 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --objective '<OBJECTIVE>' \\",
+            "  --test-policy UPDATE \\",
             "  --reply-to koder",
             "```",
             "",
@@ -460,6 +461,7 @@ def render_dispatch_playbook_lines(session: Any, project: Any, engineer: Any) ->
             "  --task-id <TASK_ID> \\",
             "  --title '<TITLE>' \\",
             "  --objective '<OBJECTIVE>' \\",
+            "  --test-policy UPDATE \\",
             "  --intent <INTENT_KEY> \\",
             f"  --reply-to {planner_seat}",
             "```",

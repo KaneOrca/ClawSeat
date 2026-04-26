@@ -194,6 +194,7 @@ def dispatch_task_to_planner(
     task_id: str,
     title: str,
     objective: str,
+    test_policy: str = "UPDATE",
     source: str = "koder",
     target: str | None = None,
     reply_to: str | None = None,
@@ -232,6 +233,7 @@ def dispatch_task_to_planner(
         task_id=task_id,
         title=title,
         objective=objective,
+        test_policy=test_policy,
         reply_to=reply_to,
     )
 

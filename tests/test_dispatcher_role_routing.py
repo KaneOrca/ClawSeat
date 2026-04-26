@@ -119,6 +119,7 @@ def _dispatch_cmd(profile: Path, target: str | None = None, target_role: str | N
         "--task-id", task_id,
         "--title", title,
         "--objective", "test objective",
+        "--test-policy", "UPDATE",
         "--reply-to", "planner",
         "--no-notify",
     ]
@@ -473,6 +474,7 @@ def _dispatch_dynamic_cmd(profile: Path, target: str | None = None,
         "--task-id", task_id,
         "--title", "dynamic test task",
         "--objective", "test objective",
+        "--test-policy", "UPDATE",
         "--no-notify",
     ]
     if target:

@@ -175,13 +175,17 @@ def append_status_dispatch_event(
     target: str | None = None,
     verdict: str | None = None,
     commit: str | None = None,
+    test_policy: str | None = None,
     timestamp: str | None = None,
 ) -> bool:
     ts = timestamp or _local_now_iso()
+    extras = []
+    if test_policy:
+        extras.append(f"test_policy={test_policy}")
     if target:
-        line = f"- {ts}: {source} dispatched {task_id} to {target}"
+        suffix = f" {' '.join(extras)}" if extras else ""
+        line = f"- {ts}: {source} dispatched {task_id} to {target}{suffix}"
     else:
-        extras = []
         if verdict:
             extras.append(f"verdict={verdict}")
         if commit:
@@ -202,13 +206,20 @@ def write_todo(
     objective: str,
     source: str,
     reply_to: str,
+    test_policy: str | None = None,
 ) -> None:
+    lines = [
+        f"task_id: {task_id}",
+        f"project: {project}",
+        f"owner: {owner}",
+        f"status: {status}",
+        f"title: {title}",
+    ]
+    if test_policy:
+        lines.append(f"test_policy: {test_policy}")
     text = (
-        f"task_id: {task_id}\n"
-        f"project: {project}\n"
-        f"owner: {owner}\n"
-        f"status: {status}\n"
-        f"title: {title}\n\n"
+        "\n".join(lines)
+        + "\n\n"
         f"# Objective\n\n{objective.strip()}\n\n"
         f"# Dispatch\n\n"
         f"source: {source}\n"
@@ -340,6 +351,7 @@ def append_task_to_queue(
     task_type: str = "unspecified",
     review_required: bool = False,
     correlation_id: str | None = None,
+    test_policy: str | None = None,
 ) -> None:
     existing = read_text(path)
 
@@ -369,6 +381,8 @@ def append_task_to_queue(
     ]
     if correlation_id:
         entry_lines.append(f"correlation_id: {correlation_id}")
+    if test_policy:
+        entry_lines.append(f"test_policy: {test_policy}")
     entry_lines += [
         "",
         "### Objective",

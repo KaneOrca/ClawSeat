@@ -102,6 +102,8 @@ def _run_dispatch(profile: Path, task_id: str) -> subprocess.CompletedProcess[st
             f"test {task_id}",
             "--objective",
             "no-op objective",
+            "--test-policy",
+            "UPDATE",
             "--reply-to",
             "planner",
             "--no-notify",
@@ -149,7 +151,7 @@ def test_dispatch_appends_line(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     entries = _dispatch_log_entries(status.read_text(encoding="utf-8"))
     assert len(entries) == 1
-    assert entries[0].endswith(": planner dispatched status-dispatch to builder")
+    assert entries[0].endswith(": planner dispatched status-dispatch to builder test_policy=UPDATE")
 
 
 def test_complete_appends_ack(tmp_path: Path) -> None:
@@ -161,7 +163,7 @@ def test_complete_appends_ack(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     entries = _dispatch_log_entries(status.read_text(encoding="utf-8"))
-    assert entries[-1].endswith(": builder ack status-ack verdict=APPROVED commit=abc1234")
+    assert entries[-1].endswith(": builder ack status-ack test_policy=UPDATE verdict=APPROVED commit=abc1234")
 
 
 def test_truncation_keeps_last_20(tmp_path: Path) -> None:
@@ -179,7 +181,7 @@ def test_truncation_keeps_last_20(tmp_path: Path) -> None:
     assert "old-00" not in "\n".join(entries)
     assert "old-01" not in "\n".join(entries)
     assert "old-02" not in "\n".join(entries)
-    assert entries[-1].endswith(": planner dispatched status-truncate to builder")
+    assert entries[-1].endswith(": planner dispatched status-truncate to builder test_policy=UPDATE")
 
 
 def test_missing_section_skips(tmp_path: Path) -> None:

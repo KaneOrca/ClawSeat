@@ -363,6 +363,7 @@ bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
 - 不要裸写 `tmux send-keys -t <project>-<seat>`
 - 这个 wrapper 会先解析 canonical session，再做 Enter flush，避免 TUI 吞消息
 - 真正的正式派任务保持结构化，默认走 `core/skills/gstack-harness/scripts/dispatch_task.py`
+- 每次 dispatch 必须带 `--test-policy`；不许跨包继承上一个包的 test 规则。四个取值定义见 `core/skills/clawseat-memory/SKILL.md` 的 dispatch 章节。
 
 ### B7 — 写 STATUS.md
 ```text

@@ -76,6 +76,7 @@ python3 core/skills/gstack-harness/scripts/dispatch_task.py \
   --source koder --target builder-1 \
   --task-id task-001 \
   --objective "实现新的 API 路由" \
+  --test-policy UPDATE \
   --intent ship
 ```
 
@@ -130,6 +131,7 @@ dispatch_task.py \
   --source koder --target planner \
   --task-id task-001 \
   --objective "设计 API 路由架构" \
+  --test-policy UPDATE \
   --intent eng-review
 ```
 
@@ -162,6 +164,7 @@ dispatch_task.py \
   --source koder --target builder-1 \
   --task-id task-001-impl \
   --objective "实现 API 路由架构设计，从 PLANNER_BRIEF.md 读设计文档" \
+  --test-policy UPDATE \
   --intent ship
 ```
 

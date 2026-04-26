@@ -277,6 +277,7 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
             "--task-id", "smoke-announce-e2e",
             "--title", "smoke test",
             "--objective", "verify announce gate",
+            "--test-policy", "UPDATE",
             "--reply-to", "planner",
             "--no-notify",
         ],

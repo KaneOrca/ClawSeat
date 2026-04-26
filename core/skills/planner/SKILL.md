@@ -43,6 +43,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
   --task-id <task_id> \
   --title "<title>" \
   --objective "<objective>" \
+  --test-policy UPDATE \
   --reply-to planner
 ```
 

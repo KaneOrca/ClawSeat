@@ -225,6 +225,7 @@ class ClawseatAdapter:
         task_id: str,
         title: str,
         objective: str,
+        test_policy: str = "UPDATE",
         reply_to: str | None = None,
         profile_path: str | Path | None = None,
         notes: str | None = None,
@@ -242,6 +243,7 @@ class ClawseatAdapter:
                     "task_id": task_id,
                     "title": title,
                     "objective": objective,
+                    "test_policy": test_policy,
                     "reply_to": reply_to,
                     "notes": notes,
                     "status_note": status_note,
@@ -255,6 +257,7 @@ class ClawseatAdapter:
             task_id=task_id,
             title=title,
             objective=objective,
+            test_policy=test_policy,
             reply_to=reply_to,
             profile_path=profile_path,
             notes=notes,
@@ -271,6 +274,7 @@ class ClawseatAdapter:
         task_id: str,
         title: str,
         objective: str,
+        test_policy: str = "UPDATE",
         reply_to: str | None = None,
         profile_path: str | Path | None = None,
         notes: str | None = None,
@@ -293,6 +297,8 @@ class ClawseatAdapter:
             title,
             "--objective",
             objective,
+            "--test-policy",
+            test_policy,
         ]
         if reply_to:
             command.extend(["--reply-to", reply_to])

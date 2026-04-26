@@ -343,10 +343,17 @@ python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/dispatch_task.py \
   --task-id <slug-with-date-suffix> \
   --title "<短标题>" \
   --objective "<任务正文 / 详细描述>" \
+  --test-policy UPDATE \
   [--reply-to ancestor] \
   [--skill-refs path/to/relevant/SKILL.md] \
   [--intent <intent-key>]
 ```
+
+**test_policy 必填** (UPDATE/FREEZE/EXTEND/N/A)：
+- UPDATE: 功能行为改变，test 必须跟着更新
+- FREEZE: vocab/rename/doc，test fixture 不动
+- EXTEND: 新功能，只加 test 不删旧 test
+- N/A: 纯文档、配置、无可测代码
 
 参数要点（**通过 `dispatch_task.py --help` 和 `resolve.dynamic_profile_path()` 随时验证**）：
 

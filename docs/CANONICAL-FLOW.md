@@ -24,6 +24,7 @@ python3 dispatch_task.py \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --objective '<OBJECTIVE>' \
+  --test-policy UPDATE \
   --reply-to <reply_to_seat>
 ```
 

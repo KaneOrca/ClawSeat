@@ -22,6 +22,7 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --objective '<OBJECTIVE>' \
+  --test-policy UPDATE \
   --reply-to koder
 ```
 
@@ -35,6 +36,7 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --objective '<OBJECTIVE>' \
+  --test-policy UPDATE \
   --reply-to planner
 ```
 
