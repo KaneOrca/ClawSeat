@@ -580,7 +580,29 @@ MEMORY_WORKSPACE=$HOME/.agents/workspaces/$PROJECT/memory 有正確的 CLAUDE.md
 
 ---
 
-### #29 (预留新 issue 编号)
+### #29 ancestor-kickoff.txt → memory-kickoff.txt artifact rename — 🟡 MEDIUM (deferred)
+
+**来源**: designer visual QA (pkg-visual-qa-designer-review) MEDIUM #2
+
+**症状**: install.sh 生成的 artifact 文件名仍用 ancestor 词汇：
+- `~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt`
+- `~/.agents/tasks/<project>/patrol/handoffs/ancestor-bootstrap.md`
+- CLAWSEAT_ANCESTOR_BRIEF env var
+
+**缓解**: 这些文件名只影响文件系统可见性和 env var 名字，功能不受影响。
+operator 已知晓，A' 决策时明确 defer（breaking change：现有项目的 kickoff.txt 路径在 OPERATOR-START-HERE 里硬编码）。
+
+**修复时机**: 可以在 M2 期间或单独 micro-PR 处理。改法：
+- install.sh `BRIEF_PATH` / `KICKOFF_PATH` 变量改为 memory-kickoff.txt / bootstrap-brief.md
+- CLAWSEAT_ANCESTOR_BRIEF → CLAWSEAT_MEMORY_BRIEF (加 compat alias)
+- OPERATOR-START-HERE 路径同步
+
+**Owner**: builder-codex
+**批次**: 自选时机（不阻塞 PR merge）
+
+---
+
+### #30 (预留新 issue 编号)
 
 ---
 
