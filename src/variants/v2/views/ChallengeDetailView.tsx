@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ArrowLeft, Edit3 } from 'lucide-react';
+import { PretextButton } from '../../../components/PretextButton';
 import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
 import { useChallengeSubmission } from '../../../hooks/useChallengeSubmission';
 import { safeStr } from '../../../utils/safeStr';
@@ -36,12 +37,19 @@ export const ChallengeDetailView: React.FC = () => {
 
       {/* HEADER RAIL */}
       <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4rem', borderBottom: '1px solid rgba(0,0,0,0.1)', paddingBottom: '1rem' }}>
-        <button
-          onClick={() => setChallengeId(null)}
-          style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'IBM Plex Mono', fontSize: '11px', textTransform: 'uppercase' }}
+        <PretextButton
+          config={{
+            label: t('challengeDetail.v2.back'),
+            engine: 'labyrinth',
+            physicsLineIndex: 6,
+            soloistId: 'challenge-v2-back',
+            color: '#888',
+            onTrigger: () => setChallengeId(null),
+          }}
+          style={{ color: '#888', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'IBM Plex Mono', fontSize: '11px', textTransform: 'uppercase' }}
         >
           <ArrowLeft size={14} /> {t('challengeDetail.v2.back')}
-        </button>
+        </PretextButton>
         <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#888' }}>
           {t('challengeDetail.v2.codex_ref')}: {challenge.id} // {t('challengeDetail.v2.sec_level')}: {challenge.difficulty}
         </div>

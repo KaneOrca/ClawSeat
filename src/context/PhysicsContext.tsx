@@ -58,7 +58,14 @@ export interface PhysicsEffects {
     duration: number;
   };
   recoilVelocity?: {
+    x: number;
     y: number;
+  };
+  catharsis?: {
+    active: boolean;
+    stepId: string;
+    agentNickname: string;
+    timestamp: number;
   };
 }
 
@@ -378,14 +385,15 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prevScrollRef.current = { x: sx, y: sy };
 
       setEnvironmentRaw(prev => {
+        const recoilX = prev.effects?.recoilVelocity?.x ?? 0;
         const recoilY = prev.effects?.recoilVelocity?.y ?? 0;
-        if (Math.abs(recoilY) < 0.01) {
-          if (recoilY === 0) return prev;
+        if (Math.abs(recoilX) < 0.01 && Math.abs(recoilY) < 0.01) {
+          if (recoilX === 0 && recoilY === 0) return prev;
           return {
             ...prev,
             effects: {
               ...prev.effects,
-              recoilVelocity: { y: 0 },
+              recoilVelocity: { x: 0, y: 0 },
             },
           };
         }
@@ -393,7 +401,7 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ...prev,
           effects: {
             ...prev.effects,
-            recoilVelocity: { y: recoilY * 0.92 },
+            recoilVelocity: { x: recoilX * 0.92, y: recoilY * 0.92 },
           },
         };
       });
@@ -544,7 +552,7 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     effects: {
       transitionProgress: 0,
       transitionFrom: null,
-      recoilVelocity: { y: 0 },
+      recoilVelocity: { x: 0, y: 0 },
     }
   });
 

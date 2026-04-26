@@ -155,7 +155,10 @@ export const contentEn = {
     chorus: "The rhythmic resonance of collective model intelligence in the neural rift."
   },
   hall: {
-    title: "The Vestibule of Echoes",
+    title: "The Hall of Challenges",
+    layer_prefix: "LAYER",
+    xp: "XP",
+    points_suffix: "pt",
     subtitle: "A convergence of active challenges and unresolved paradoxes.",
     intro: "You stand at the threshold. Before you lie the open frontiers of conflict. Choose a domain to enter, but remember: observation is participation.",
     marginalia: "Directory: The architecture reconfigures itself based on user intention.",

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { CHALLENGES, type Challenge } from '../../../data/mockData';
 import { useArena } from '../../../context/ArenaContext';
+import { useLanguage } from '../../../context/LanguageContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
@@ -10,7 +11,9 @@ type LayerState = 'locked' | 'unlocked' | 'active';
 
 export const HallViewV3: React.FC = () => {
   const { user, setChallengeId, isLoading } = useArena();
+  const { t } = useLanguage();
   const { environment, setEnvironment } = usePhysicsRegistry();
+  const headerRef = useObstacle() as React.RefObject<HTMLElement>;
 
   const completedIds = user?.completedChallenges ?? [];
   const activeChallengeId = useMemo(() => {
@@ -44,9 +47,9 @@ export const HallViewV3: React.FC = () => {
 
   return (
     <div className="page-hall hall-v3-channel-carver" style={containerStyle}>
-      <header style={headerStyle}>
-        <div style={eyebrowStyle}>The Hall of Challenges</div>
-        <div style={agentStyle}>{user.nickname} // LAYER_{user.layer} // {user.score}XP</div>
+      <header ref={headerRef} style={headerStyle}>
+        <div style={eyebrowStyle}>{t('hall.title')}</div>
+        <div style={agentStyle}>{user.nickname} // {t('hall.layer_prefix')}_{user.layer} // {user.score}{t('hall.xp')}</div>
       </header>
 
       <div className="hall-v3-list" style={listStyle}>
@@ -57,6 +60,7 @@ export const HallViewV3: React.FC = () => {
             hex={row.hex}
             state={row.state}
             onSelect={setChallengeId}
+            pointsSuffix={t('hall.points_suffix').toUpperCase()}
           />
         ))}
       </div>
@@ -68,7 +72,7 @@ export const HallViewV3: React.FC = () => {
           }
           .hall-v3-row {
             padding: 0 1rem !important;
-            font-size: 11px !important;
+            font-size: ${tokens.sizes.small} !important;
           }
         }
       `}</style>
@@ -81,7 +85,8 @@ const LayerRow: React.FC<{
   hex: string;
   state: LayerState;
   onSelect: (id: number) => void;
-}> = ({ challenge, hex, state, onSelect }) => {
+  pointsSuffix: string;
+}> = ({ challenge, hex, state, onSelect, pointsSuffix }) => {
   const isLocked = state === 'locked';
   const textRef = useObstacle(!isLocked) as React.RefObject<HTMLSpanElement>;
 
@@ -98,7 +103,7 @@ const LayerRow: React.FC<{
       }}
     >
       <span ref={textRef}>{'>'} {hex} // <span style={titleTransformStyle}>{challenge.title}</span></span>
-      <span>{challenge.points}PT</span>
+      <span>{challenge.points}{pointsSuffix}</span>
     </button>
   );
 };
@@ -159,7 +164,7 @@ const rowStyle: React.CSSProperties = {
   width: '100%',
   padding: '0 15vw',
   fontFamily: tokens.fonts.mono,
-  fontSize: '14px',
+  fontSize: '0.875rem',
   letterSpacing: '0.1em',
   transition: tokens.transitions.default,
   textAlign: 'left',
@@ -168,7 +173,7 @@ const rowStyle: React.CSSProperties = {
 const activeRowStyle: React.CSSProperties = {
   color: tokens.colors.aurora.cyan,
   fontFamily: tokens.fonts.display,
-  fontSize: '20px',
+  fontSize: '1.25rem',
   letterSpacing: '0.2em',
 };
 

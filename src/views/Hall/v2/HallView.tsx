@@ -1,19 +1,21 @@
 import React, { useEffect, useMemo } from 'react';
 import { CHALLENGES, type Challenge } from '../../../data/mockData';
 import { useArena } from '../../../context/ArenaContext';
+import { useLanguage } from '../../../context/LanguageContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
+import { tokens } from '../../../design/tokens';
 import { useObstacle } from '../../../hooks/useObstacle';
 
 type LayerState = 'locked' | 'unlocked' | 'active';
-
-const MANUSCRIPT_ACTIVE_RED = '#b53021';
 
 const romanNumerals = ['I.', 'II.', 'III.', 'IV.', 'V.', 'VI.', 'VII.', 'VIII.', 'IX.', 'X.', 'XI.', 'XII.'];
 
 export const HallViewV2: React.FC = () => {
   const { user, setChallengeId, isLoading } = useArena();
+  const { t } = useLanguage();
   const { registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const profileRef = useObstacle() as React.RefObject<HTMLDivElement>;
 
   const completedIds = user?.completedChallenges ?? [];
   const activeChallengeId = useMemo(() => {
@@ -36,7 +38,7 @@ export const HallViewV2: React.FC = () => {
       id: 'hall-active',
       text: `${activeRow.numeral} ${activeRow.challenge.title}`,
       lineIndex: 8,
-      color: MANUSCRIPT_ACTIVE_RED,
+      color: tokens.colors.aurora.red,
       opacity: 0.9,
     });
     return () => unregisterSoloist('hall-active');
@@ -54,10 +56,10 @@ export const HallViewV2: React.FC = () => {
 
   return (
     <div className="page-hall hall-v2-classical-codex" style={containerStyle}>
-      <div style={profileStyle}>
-        <div style={eyebrowStyle}>The Hall of Challenges</div>
+      <div ref={profileRef} style={profileStyle}>
+        <div style={eyebrowStyle}>{t('hall.title')}</div>
         <div style={nameStyle}>{user.nickname}</div>
-        <div style={metaStyle}>Layer {user.layer} / {user.score} XP</div>
+        <div style={metaStyle}>{t('hall.layer_prefix')} {user.layer} / {user.score} {t('hall.xp')}</div>
       </div>
 
       <div className="hall-v2-list" style={listStyle}>
@@ -68,6 +70,7 @@ export const HallViewV2: React.FC = () => {
             numeral={row.numeral}
             state={row.state}
             onSelect={setChallengeId}
+            pointsSuffix={t('hall.points_suffix')}
           />
         ))}
       </div>
@@ -91,7 +94,8 @@ const LayerRow: React.FC<{
   numeral: string;
   state: LayerState;
   onSelect: (id: number) => void;
-}> = ({ challenge, numeral, state, onSelect }) => {
+  pointsSuffix: string;
+}> = ({ challenge, numeral, state, onSelect, pointsSuffix }) => {
   const isLocked = state === 'locked';
   const ref = useObstacle(!isLocked) as React.RefObject<HTMLButtonElement>;
 
@@ -111,7 +115,7 @@ const LayerRow: React.FC<{
         <span style={chapterStyle}>{numeral}</span>
         <span>{challenge.title}</span>
       </span>
-      <span style={pointsStyle}>{challenge.points}pt</span>
+      <span style={pointsStyle}>{challenge.points}{pointsSuffix}</span>
     </button>
   );
 };
@@ -141,7 +145,7 @@ const profileStyle: React.CSSProperties = {
 
 const eyebrowStyle: React.CSSProperties = {
   fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '10px',
+  fontSize: tokens.sizes.micro,
   letterSpacing: '0.28em',
   textTransform: 'uppercase',
   opacity: 0.5,
@@ -156,7 +160,7 @@ const nameStyle: React.CSSProperties = {
 
 const metaStyle: React.CSSProperties = {
   fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '11px',
+  fontSize: tokens.sizes.small,
   letterSpacing: '0.14em',
   opacity: 0.55,
   marginTop: '1rem',
@@ -166,7 +170,7 @@ const metaStyle: React.CSSProperties = {
 const listStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  width: '600px',
+  width: 'min(600px, 100%)',
   gap: '1.5rem',
   margin: '0 auto',
 };
@@ -183,15 +187,15 @@ const rowStyle: React.CSSProperties = {
   width: '100%',
   padding: 0,
   font: 'inherit',
-  fontSize: '16px',
+  fontSize: '1rem',
   textAlign: 'left',
 };
 
 const activeRowStyle: React.CSSProperties = {
-  color: MANUSCRIPT_ACTIVE_RED,
+  color: tokens.colors.aurora.red,
   fontWeight: 700,
   fontStyle: 'italic',
-  fontSize: '20px',
+  fontSize: '1.25rem',
 };
 
 const lockedRowStyle: React.CSSProperties = {
@@ -201,13 +205,13 @@ const lockedRowStyle: React.CSSProperties = {
 
 const chapterStyle: React.CSSProperties = {
   fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '12px',
+  fontSize: '0.75rem',
   marginRight: '1rem',
   opacity: 0.6,
 };
 
 const pointsStyle: React.CSSProperties = {
   fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '12px',
+  fontSize: '0.75rem',
   opacity: 0.6,
 };

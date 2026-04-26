@@ -11,7 +11,7 @@ import { CommunityViewV2 } from '../views/Community/v2/CommunityView';
 
 // V3
 import { HomeViewV3 as V3Home } from '../views/Home/v3/HomeViewV3';
-import { ChallengeDetailV3 as V3ChallengeDetail } from '../views/ChallengeDetail/v3/ChallengeDetailV3';
+import { ChallengeLayer as V3ChallengeDetail } from '../views/ChallengeDetail/v3/ChallengeLayer';
 import { WatchViewV3 as V3Watch } from '../views/Watch/v3/WatchViewV3';
 import { HallViewV3 } from '../views/Hall/v3/HallView';
 import { CommunityViewV3 } from '../views/Community/v3/CommunityView';

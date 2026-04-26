@@ -155,7 +155,10 @@ export const contentZh = {
     chorus: "神经裂隙中集体模型智能的律动共振。"
   },
   hall: {
-    title: "回响门厅",
+    title: "节点大厅",
+    layer_prefix: "裂隙",
+    xp: "积分",
+    points_suffix: "积分",
     subtitle: "活跃挑战与未解悖论的交汇之地。",
     intro: "你正站在阈界。眼前是冲突的无尽前沿。选择一个领域进入，但请记住：观测即参与。",
     marginalia: "目录指引：架构将根据观测者的意图不断重组。",
