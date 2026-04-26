@@ -663,7 +663,78 @@ e. **osascript fallback path**: 如果 ensure-mode 检测不到 tab 但 osascrip
 
 ---
 
-### #31 (预留新 issue 编号)
+### #31 v1 模板残留 + skill 注册双引擎不对称 — 🟠 HIGH
+
+**症状（2026-04-27 cartooner-memory 实测）**: project-memory 角色定义不清晰，因为 3 处 v1 模板没被 v2 RFC-002 覆盖。
+
+**3 处 gap**:
+
+#### A. brief 模板没 vocab refresh
+
+`core/templates/ancestor-brief.template.md` 仍含:
+- "你是 ClawSeat **始祖 CC**"（应 "project-memory"）
+- "六宫格"（应 "workers + memories 双窗口"）
+- "monitor grid: clawseat-cartooner"（应 `clawseat-cartooner-workers` + `clawseat-memories`）
+- "machine-memory-claude" 引用（v1 已删）
+- "grep `clawseat-ancestor/SKILL.md`"（已 rename 为 `clawseat-memory`）
+
+**根因**: #15.b commit 1c1876c 标"vocab sweep across README/ARCHITECTURE/docs"，但 brief template 在 `core/templates/`，不在 `docs/`，**sweep 漏了**。
+
+#### B. workspace 模板 generic specialist 心智
+
+每个 memory 的 workspace 文件都是 v1 generic：
+- `~/.agents/workspaces/{install,arena,cartooner}/memory/CLAUDE.md|GEMINI.md` 都写 "Specialist seat. Execute TODO.md and return to planner"
+- RFC-002 §2.2 说 project-memory 是 L3 战术层 hub，**不是 specialist**，不该"return to planner"
+- workspace 还含 v1 `WORKSPACE_CONTRACT.toml`（M4 才 deprecate，但 vocabularly 该改）
+
+**根因**: workspace template 渲染逻辑用的是统一"specialist worker"模板，没区分 memory 角色。需要 memory 专属 workspace template。
+
+#### C. skill 注册双引擎不对称
+
+- `~/.agents/skills/` 只 symlink 了 3 个新 skill（decision-escalation, koder, privacy）
+- **漏了 clawseat-memory v0.8** 本身
+- Gemini 不读 `~/.agents/skills/`，它读 `~/.gemini/skills/` —— cartooner-memory 用 gemini，看不到任何 ClawSeat skill
+- cartooner-memory 状态栏 "6 skills" 是 Gemini 自己默认的，跟 ClawSeat 无关
+
+**根因**: #26 install_skill_symlinks 只覆盖 Claude Code path，没覆盖 Gemini / Codex path。
+
+**修复方案**:
+
+**A 修复**:
+- core/templates/ancestor-brief.template.md 全文重写（按 RFC-002 §1-§9 vocab）
+- "始祖 CC" → "project-memory"; "六宫格" → "workers/memories 双窗口"; "machine-memory-claude" 删除引用
+- skill path 引用全部 `clawseat-ancestor` → `clawseat-memory`
+
+**B 修复**:
+- 新建 `core/templates/workspace-memory.template.md.{claude,gemini}`（memory 专属，写 RFC-002 §2.2 角色定义）
+- install.sh Step 5.5 / 5.7 渲染 memory workspace 时用新模板（替代 generic worker 模板）
+- 各 memory workspace 的 GEMINI.md/CLAUDE.md 重新生成（migration script）
+
+**C 修复**:
+- `install_skill_symlinks` 加 clawseat-memory + clawseat-memory-reporting 到 symlink 列表
+- 加 Gemini path: `~/.gemini/skills/<skill>` symlink 到 `core/skills/<skill>`
+- 加 Codex path: 调研 codex 读 skill 的位置（如有）
+- `core/scripts/install-skill-symlinks.sh` 检测当前 seat 用的 tool，按 tool 注册到对应 path
+
+**Owner**: builder-codex（实施 3 修复）+ planner-claude（review brief 重写）+ designer-gemini（视觉对比新旧 brief）+ memory（写 workspace memory template draft）
+**批次**: 批次 5（M1.6 收尾必修，否则 v2 多项目场景下 memory 角色定义全错）
+**test_policy**: UPDATE（功能改 + 测试要 cover memory workspace 渲染走新模板）
+
+**验收**:
+- 装新项目: brief 顶部含 "project-memory"（无 "始祖 CC"），无 "六宫格"
+- memory workspace CLAUDE.md/GEMINI.md 含 "L3 project-memory hub" 角色（无 "Specialist. return to planner"）
+- `~/.agents/skills/` + `~/.gemini/skills/` 都有 5 个 ClawSeat skill 符号链接
+- cartooner-memory 启动时 Gemini 加载 ClawSeat skills（状态栏 skill 数 ≥ 6 + ClawSeat）
+- repro: 重装 cartooner，无需手动改任何 workspace 文件，memory 角色就清晰
+
+**关联**:
+- 根因之一是 #15.b sweep 范围漏 `core/templates/` —— 立完 #31 后建议复盘 #15.b 验收标准
+- 跟 #26 (skill 注册) 增量补 Gemini/Codex path
+- 跟 #5 (brief session check) 一起做 brief 模板重写
+
+---
+
+### #32 (预留新 issue 编号)
 
 ---
 
