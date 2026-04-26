@@ -133,6 +133,7 @@ test('v3 home loads and register flow reaches hall', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('body')).toContainText('ARENA_PRETEXT');
   await expect(page.locator('body')).toContainText('V3_FIELD');
+  await expect(page.locator('body')).toContainText('回响信物');
   await page.getByRole('button', { name: /\[ VOICE_AUTHORIZATION \]/ }).click();
   await expect(page.locator('body')).toContainText('SmokeAgent');
   await expect(page.locator('body')).toContainText('The Hall of Challenges');

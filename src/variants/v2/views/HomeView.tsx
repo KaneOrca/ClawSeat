@@ -243,14 +243,14 @@ export const HomeView: React.FC = () => {
               }}
               style={{
                 display: 'block',
-                marginTop: 'clamp(2rem, 5vh, 4rem)',
-                maxWidth: '620px',
+                marginTop: 'clamp(2.5rem, 6vh, 4.5rem)',
+                maxWidth: 'min(680px, 100%)',
                 color: MANUSCRIPT_ACTIVE_RED,
                 fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
-                fontSize: 'clamp(1.15rem, 2.7vw, 1.7rem)',
+                fontSize: 'clamp(1rem, 2.1vw, 1.35rem)',
                 fontStyle: 'italic',
                 fontWeight: 500,
-                lineHeight: 1.9,
+                lineHeight: 2.05,
                 textAlign: 'left',
                 textDecoration: 'none',
                 whiteSpace: 'pre-line',

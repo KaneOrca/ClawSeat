@@ -5,6 +5,7 @@ import { tokens } from '../../../design/tokens';
 import { useObstacleDetached } from '../../../hooks/useObstacle';
 import { MagneticSurface } from '../../../components/MagneticSurface';
 import { useWaveRipple } from '../../../hooks/useWaveRipple';
+import { PretextButton } from '../../../components/PretextButton';
 
 /**
  * HomeViewV3: Ultimate atomic composition.
@@ -48,6 +49,11 @@ export const HomeViewV3: React.FC = () => {
         <DescAtomMemo isZenMode={isZenMode} text={t('home.v3.desc_secondary')} />
       </div>
 
+      {/* Agent prompt — functional text, not a card */}
+      <div style={pos.prompt}>
+        <PromptAtomMemo isZenMode={isZenMode} promptLabel={t('home.v2.agent_prompt.body')} onTrigger={() => setView('auth')} />
+      </div>
+
       {/* CTA — position wrapper, ref on button text */}
       <div style={pos.cta}>
         <CTAAtomMemo
@@ -78,7 +84,8 @@ const pos = {
   field:  { position: 'absolute', top: '42vh', left: '22vw' } as React.CSSProperties,
   desc1:  { position: 'absolute', top: '56vh', left: '12vw' } as React.CSSProperties,
   desc2:  { position: 'absolute', top: '59vh', left: '14vw' } as React.CSSProperties,
-  cta:    { position: 'absolute', top: '68vh', right: '15vw' } as React.CSSProperties,
+  prompt: { position: 'absolute', top: '65vh', left: '14vw', width: 'min(640px, 72vw)' } as React.CSSProperties,
+  cta:    { position: 'absolute', top: '82vh', right: '15vw' } as React.CSSProperties,
 };
 
 // ── Typography (on ref'd text elements — no positioning) ────────────
@@ -114,6 +121,20 @@ const ctaTextStyle: React.CSSProperties = {
   letterSpacing: '0.2em',
   cursor: 'pointer',
   textTransform: 'uppercase',
+};
+
+const promptTextStyle: React.CSSProperties = {
+  color: tokens.colors.aurora.cyan,
+  display: 'block',
+  fontFamily: tokens.fonts.mono,
+  fontSize: 'clamp(0.9rem, 2vw, 1.15rem)',
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  lineHeight: 2,
+  textAlign: 'left',
+  textDecoration: 'none',
+  textShadow: '0 0 16px rgba(70, 214, 255, 0.28)',
+  whiteSpace: 'pre-line',
 };
 
 // ── Responsive ──────────────────────────────────────────────────────
@@ -182,6 +203,36 @@ const DescAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, t
   return <span ref={ref as any} style={descTextStyle}>{text}</span>;
 };
 const DescAtomMemo = React.memo(DescAtom);
+
+const PromptAtom: React.FC<{ isZenMode: boolean; promptLabel: string; onTrigger: () => void }> = ({
+  isZenMode,
+  promptLabel,
+  onTrigger,
+}) => {
+  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  return (
+    <MagneticSurface pull={0.12}>
+      <PretextButton
+        config={{
+          label: promptLabel,
+          engine: 'bitmask',
+          physicsLineIndex: 31,
+          soloistId: 'home-v3-agent-prompt',
+          color: tokens.colors.aurora.cyan,
+          opacity: isZenMode ? 0.4 : 0.95,
+          onTrigger,
+          activationEnvironment: { waveAmplitude: 90, opacity: 0.22 },
+          triggerEnvironment: { waveAmplitude: 120, opacity: 0.3 },
+          idleEnvironment: { waveAmplitude: 60, opacity: 0.12 },
+        }}
+        onPointerEnter={onPointerEnter}
+        onTouchStart={onTouchStart}
+        style={promptTextStyle}
+      />
+    </MagneticSurface>
+  );
+};
+const PromptAtomMemo = React.memo(PromptAtom);
 
 const CTAAtom: React.FC<{
   onInitialize: () => void;
