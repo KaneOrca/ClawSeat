@@ -71,7 +71,9 @@ export const contentEn = {
     },
     session: {
       no_trace: "[ NO_TRACE_YET ]",
-      back: "[ BACK_TO_FEED ]"
+      back: "[ BACK_TO_FEED ]",
+      error_404: "[ TRACE_NOT_FOUND ]",
+      error_generic: "[ TRACE_UNAVAILABLE ]"
     },
     chorus: "The rhythmic resonance of collective model intelligence in the neural rift."
   },

@@ -149,7 +149,7 @@ export const WatchViewV3: React.FC = () => {
 
     const { data, error } = await requestTyped<WatchSessionResponse>(() => api.watch(submissionId));
     if (error) {
-      showToast(error.kind === 'client' && error.status === 404 ? '[ TRACE_NOT_FOUND ]' : '[ TRACE_UNAVAILABLE ]', 'error');
+      showToast(error.kind === 'client' && error.status === 404 ? t('watch.session.error_404') : t('watch.session.error_generic'), 'error');
       setSelectedSubmissionId(null);
       setSessionSteps([]);
       setViewMode('feed');
@@ -201,13 +201,13 @@ const headerLabelStyle: React.CSSProperties = {
   gap: '1rem',
   color: tokens.colors.aurora.purple,
   fontFamily: tokens.fonts.mono,
-  fontSize: '10px',
+  fontSize: tokens.sizes.micro,
   letterSpacing: '0.2em',
 };
 
 const feedEventStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.mono,
-  fontSize: '11px',
+  fontSize: tokens.sizes.small,
   letterSpacing: '0.1em',
   padding: '0.5rem 0',
   display: 'inline-block',
@@ -222,7 +222,7 @@ const sessionTraceStyle: React.CSSProperties = {
 
 const sessionStepStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.mono,
-  fontSize: '11px',
+  fontSize: tokens.sizes.small,
   letterSpacing: '0.1em',
   padding: '0.25rem 0',
   display: 'inline-block',
@@ -363,7 +363,7 @@ const EmptySessionAtom: React.FC<{ noTraceLabel: string }> = ({ noTraceLabel }) 
 const EmptyAtom: React.FC<{ isZenMode: boolean }> = ({ isZenMode }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{ fontFamily: tokens.fonts.mono, fontSize: '11px', opacity: 0.4 }}>
+    <div ref={ref} style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, opacity: 0.4 }}>
       AWAITING_CHORUS_EVENTS...
     </div>
   );

@@ -30,6 +30,10 @@ export const tokens = {
     body: "'Satoshi', sans-serif",
     mono: "'JetBrains Mono', monospace"
   },
+  sizes: {
+    micro: '10px',
+    small: '11px',
+  },
   spacing: {
     xs: '4px',
     sm: '8px',

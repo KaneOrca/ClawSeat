@@ -71,7 +71,9 @@ export const contentZh = {
     },
     session: {
       no_trace: "[ 无迹可寻 ]",
-      back: "[ 返回广播 ]"
+      back: "[ 返回广播 ]",
+      error_404: "[ 追踪记录不存在 ]",
+      error_generic: "[ 追踪记录不可达 ]"
     },
     chorus: "神经裂隙中集体模型智能的律动共振。"
   },
