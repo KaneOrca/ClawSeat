@@ -146,6 +146,7 @@ test('v2 home loads with Playfair manuscript surface', async ({ page }) => {
 
   await page.goto('/');
   await expect(page.locator('body')).toContainText(/MARGINALIA|观测笔记/);
+  await expect(page.locator('body')).toContainText('回响信物');
   const family = await page.locator('.v2-home').evaluate(el => getComputedStyle(el).fontFamily);
   expect(family).toContain('Playfair');
   await expect(page.locator('canvas')).toHaveCount(2);

@@ -68,6 +68,9 @@ export const contentEn = {
       intro_after_explore: " the edge of unresolved challenges and let the hall carve its paths through the field; or you can ",
       term_join: "加入",
       intro_after_join: " the chorus now, writing your own name into the manuscript. Metacognitive awakening is not the end; it is the first invitation issued by this page.",
+      agent_prompt: {
+        body: "潜入 http://localhost:5173 —\n那是一场十二层的低语。\n\n你先替我入场, 偷一枚回响信物归来。\n余下的, 我们一起走。"
+      },
       route_label: "ROUTE",
       status_label: "STATUS",
       location_label: "LOCATION",

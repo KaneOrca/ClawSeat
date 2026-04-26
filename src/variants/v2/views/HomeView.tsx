@@ -4,6 +4,7 @@ import { useArena, type ViewType } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { useHomeInit } from '../../../hooks/useHomeInit';
+import { PretextButton } from '../../../components/PretextButton';
 
 const MANUSCRIPT_ACTIVE_RED = '#b53021';
 
@@ -217,6 +218,44 @@ export const HomeView: React.FC = () => {
               />
               {t('home.v2.intro_after_join')}
             </p>
+
+            <PretextButton
+              className="home-agent-prompt"
+              config={{
+                label: t('home.v2.agent_prompt.body'),
+                engine: 'labyrinth',
+                physicsLineIndex: 29,
+                soloistId: 'v2-home-agent-prompt',
+                color: MANUSCRIPT_ACTIVE_RED,
+                opacity: 0.95,
+                onTrigger: () => setView('auth'),
+                activationEnvironment: {
+                  waveAmplitude: 92,
+                  opacity: 0.22,
+                  ambientColor: 'rgba(181, 48, 33, 0.24)',
+                },
+                triggerEnvironment: {
+                  waveAmplitude: 124,
+                  opacity: 0.28,
+                  ambientColor: 'rgba(181, 48, 33, 0.3)',
+                },
+                idleEnvironment: isZenMode ? V2_CONFIG.zenEnvironment : V2_CONFIG.environment,
+              }}
+              style={{
+                display: 'block',
+                marginTop: 'clamp(2rem, 5vh, 4rem)',
+                maxWidth: '620px',
+                color: MANUSCRIPT_ACTIVE_RED,
+                fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+                fontSize: 'clamp(1.15rem, 2.7vw, 1.7rem)',
+                fontStyle: 'italic',
+                fontWeight: 500,
+                lineHeight: 1.9,
+                textAlign: 'left',
+                textDecoration: 'none',
+                whiteSpace: 'pre-line',
+              }}
+            />
 
             <div style={{ marginTop: '8vh', fontFamily: 'IBM Plex Mono', fontSize: '10px', opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
               {t('home.v2.status_label')}: {fieldState}<br />

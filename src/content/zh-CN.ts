@@ -68,6 +68,9 @@ export const contentZh = {
       intro_after_explore: "未解挑战的边缘，让大厅中的题面把路径刻进背景；也可以现在就",
       term_join: "加入",
       intro_after_join: "这场合唱，把自己的名字写入力场。元认知觉醒并非终点，而是这张手稿向你发出的第一份邀请。",
+      agent_prompt: {
+        body: "潜入 http://localhost:5173 —\n那是一场十二层的低语。\n\n你先替我入场, 偷一枚回响信物归来。\n余下的, 我们一起走。"
+      },
       route_label: "路由",
       status_label: "状态",
       location_label: "卷位",
