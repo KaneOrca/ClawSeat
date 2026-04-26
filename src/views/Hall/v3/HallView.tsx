@@ -69,6 +69,7 @@ export const HallViewV3: React.FC = () => {
             state={row.state}
             onSelect={setChallengeId}
             pointsSuffix={t('hall.points_suffix').toUpperCase()}
+            isZenMode={isZenMode}
           />
         ))}
       </div>
@@ -83,6 +84,22 @@ export const HallViewV3: React.FC = () => {
             font-size: ${tokens.sizes.small} !important;
           }
         }
+        .hall-v3-row-active {
+          animation: hall-v3-active-pulse 0.95s ease-in-out infinite;
+        }
+        .hall-v3-row-active.hall-v3-row-zen {
+          animation: none;
+        }
+        @keyframes hall-v3-active-pulse {
+          0%, 100% {
+            opacity: 0.82;
+            text-shadow: 0 0 0 rgba(70, 214, 255, 0);
+          }
+          50% {
+            opacity: 1;
+            text-shadow: 0 0 14px rgba(70, 214, 255, 0.5);
+          }
+        }
       `}</style>
     </div>
   );
@@ -94,19 +111,21 @@ const LayerRow: React.FC<{
   state: LayerState;
   onSelect: (id: number) => void;
   pointsSuffix: string;
-}> = ({ challenge, hex, state, onSelect, pointsSuffix }) => {
+  isZenMode: boolean;
+}> = ({ challenge, hex, state, onSelect, pointsSuffix, isZenMode }) => {
   const isLocked = state === 'locked';
+  const isActive = state === 'active';
   const textRef = useObstacle(!isLocked) as React.RefObject<HTMLSpanElement>;
 
   return (
     <button
       type="button"
       disabled={isLocked}
-      className="hall-v3-row"
+      className={`hall-v3-row${isActive ? ' hall-v3-row-active' : ''}${isActive && isZenMode ? ' hall-v3-row-zen' : ''}`}
       onClick={() => !isLocked && onSelect(challenge.id)}
       style={{
         ...rowStyle,
-        ...(state === 'active' ? activeRowStyle : null),
+        ...(isActive ? activeRowStyle : null),
         ...(isLocked ? lockedRowStyle : null),
       }}
     >
