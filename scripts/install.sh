@@ -1205,7 +1205,7 @@ install_skill_symlinks() {
   note "Step 5.8: install ClawSeat skill symlinks"
   local skills_home="$HOME/.agents/skills"
   local skill target link
-  local -a skills=(clawseat-decision-escalation clawseat-koder clawseat-privacy)
+  local -a skills=(clawseat-memory clawseat-decision-escalation clawseat-koder clawseat-privacy)
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] mkdir -p %q\n' "$skills_home"
     for skill in "${skills[@]}"; do
