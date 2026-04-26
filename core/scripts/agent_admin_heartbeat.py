@@ -146,8 +146,9 @@ def build_claude_loop_command(manifest: dict) -> str:
 
 # Claude-specific markers used ONLY by provision_session_heartbeat() to decide
 # whether a Claude pane is still in first-run setup (cannot receive /loop yet).
-# This table is intentionally Claude-only because heartbeat provisioning only
-# targets Claude sessions — codex/gemini seats do not participate in heartbeat.
+# This table is intentionally Claude-only because heartbeat provisioning sends
+# Claude /loop commands. Codex/Gemini seats still use the generic launcher; they
+# simply skip this post-start heartbeat adapter.
 #
 # For start_seat's full claude/codex/gemini startup-readiness table, see
 # core/skills/gstack-harness/scripts/_common.py :: CLAUDE_ONBOARDING_MARKERS
@@ -376,7 +377,11 @@ class HeartbeatHandlers:
         dry_run: bool = False,
     ) -> tuple[bool, str]:
         if session.tool != "claude":
-            return False, f"{session.engineer_id}: heartbeat provisioning currently targets Claude sessions only"
+            return (
+                False,
+                f"{session.engineer_id}: heartbeat skipped for {session.tool} session "
+                "(Claude /loop provisioning only)",
+            )
 
         manifest = self.load_manifest(session)
         if not manifest:

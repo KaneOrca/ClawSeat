@@ -28,15 +28,19 @@ class CommandHandlers:
     def __init__(self, hooks: CommandHooks) -> None:
         self.hooks = hooks
 
+    def _session_supports_heartbeat_provisioning(self, session: Any) -> bool:
+        return str(getattr(session, "tool", "") or "") == "claude"
+
     def session_start_engineer(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self.hooks.session_service.start_engineer(session, reset=args.reset)
-        try:
-            provisioned, detail = self.hooks.provision_session_heartbeat(session)
-            if detail:
-                print(detail)
-        except Exception as exc:
-            print(f"heartbeat: {exc}")
+        if self._session_supports_heartbeat_provisioning(session):
+            try:
+                _provisioned, detail = self.hooks.provision_session_heartbeat(session)
+                if detail:
+                    print(detail)
+            except Exception as exc:
+                print(f"heartbeat: {exc}")
         print(session.session)
         return 0
 
@@ -149,10 +153,12 @@ class CommandHandlers:
                         file=sys.stderr,
                     )
 
-        # Best-effort heartbeat provisioning for started Claude sessions. We
-        # do this sequentially after tmux Phase 1 because heartbeat itself
-        # writes per-seat state and is not the hot path.
+        # Best-effort heartbeat provisioning for started Claude sessions. The
+        # heartbeat adapter sends Claude /loop commands; Codex/Gemini seats
+        # are already fully started by the generic launcher path above.
         for session in started:
+            if not self._session_supports_heartbeat_provisioning(session):
+                continue
             try:
                 _provisioned, detail = self.hooks.provision_session_heartbeat(session)
                 if detail:
@@ -198,6 +204,13 @@ class CommandHandlers:
 
     def session_provision_heartbeat(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
+        if not self._session_supports_heartbeat_provisioning(session):
+            tool = str(getattr(session, "tool", "") or "unknown")
+            print(
+                f"{session.engineer_id}: heartbeat skipped for {tool} session "
+                "(Claude /loop provisioning only)"
+            )
+            return 0
         provisioned, detail = self.hooks.provision_session_heartbeat(
             session,
             force=bool(args.force),
