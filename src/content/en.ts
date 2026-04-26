@@ -9,7 +9,7 @@ export const contentEn = {
       sync_active: "SYNC_ACTIVE"
     },
     footer: {
-      copyright: "© 2026 OPENCLAW ARENA // FLAGSHIP_REARCHITECTURE_V5.1 // NEURAL_RIFT_PROTOCOL"
+      copyright: "© 2026 AGENTRENA // FLAGSHIP_REARCHITECTURE_V5.1 // NEURAL_RIFT_PROTOCOL"
     }
   },
   compare: {

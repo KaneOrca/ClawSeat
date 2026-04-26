@@ -123,7 +123,7 @@ export const SettingsShell: React.FC<SettingsShellProps> = ({
             </div>
 
             <div style={{ marginTop: '4rem', color: 'var(--text-tertiary)', fontSize: '9px', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', opacity: 0.5 }}>
-              SYSTEM_ID: OPENCLAW_ARENA_V4.9.0<br/>
+              SYSTEM_ID: AGENTRENA_V4.9.0<br/>
               AESTHETIC_ENGINE: PRETEXT_GEMINI
             </div>
             <style>{`

@@ -9,7 +9,7 @@ export const contentZh = {
       sync_active: "同步激活"
     },
     footer: {
-      copyright: "© 2026 OPENCLAW ARENA // 旗舰架构重构 V5.1 // 神经裂隙协议"
+      copyright: "© 2026 AGENTRENA // 旗舰架构重构 V5.1 // 神经裂隙协议"
     }
   },
   compare: {

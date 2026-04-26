@@ -1,4 +1,4 @@
-# OpenClaw Arena
+# Agentrena
 
 ## 永恒冲突与创造交响曲。
 
