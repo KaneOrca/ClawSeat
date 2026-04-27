@@ -42,7 +42,7 @@ def _run(session: str, message: str) -> subprocess.CompletedProcess[str]:
         ("\x0c", "FF"),
     ],
 )
-def test_message_with_control_char_is_rejected(bad_char: str, name: str) -> None:
+def test_message_with_control_char_is_rejected(bad_char: str, name: str, isolated_tasks_dir) -> None:
     result = _run("koder", f"hello{bad_char}world")
     assert result.returncode == REJECT_RC, (
         f"{name} in message should hit INPUT_REJECTED, got rc={result.returncode}\n"
@@ -71,7 +71,7 @@ def test_message_with_LF_is_allowed() -> None:
         ("\x0c", "FF"),
     ],
 )
-def test_session_name_with_control_char_is_rejected(bad_char: str, name: str) -> None:
+def test_session_name_with_control_char_is_rejected(bad_char: str, name: str, isolated_tasks_dir) -> None:
     """Session names flow straight into tmux commands — every control
     char is rejected, LF included (unlike in $MSG)."""
     result = _run(f"koder{bad_char}pwned", "hi")
@@ -80,7 +80,7 @@ def test_session_name_with_control_char_is_rejected(bad_char: str, name: str) ->
     assert "session" in result.stderr
 
 
-def test_oversized_message_is_rejected() -> None:
+def test_oversized_message_is_rejected(isolated_tasks_dir) -> None:
     result = _run("koder", "x" * 9000)
     assert result.returncode == REJECT_RC
     assert "exceeds" in result.stderr

@@ -285,6 +285,7 @@ PY
 CLAUDE_DEFAULTS_LOADED=0
 CLAUDE_DEFAULT_BASE_URL=""
 CLAUDE_MINIMAX_DEFAULT_BASE_URL=""
+CLAUDE_DEEPSEEK_DEFAULT_BASE_URL=""
 CLAUDE_ARK_DEFAULT_BASE_URL=""
 CLAUDE_XCODE_DEFAULT_BASE_URL=""
 
@@ -292,6 +293,7 @@ load_claude_default_base_urls() {
   [[ "$CLAUDE_DEFAULTS_LOADED" == "1" ]] && return 0
   CLAUDE_DEFAULT_BASE_URL="$(provider_config_value tool-default-base-url claude)"
   CLAUDE_MINIMAX_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude minimax)"
+  CLAUDE_DEEPSEEK_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude deepseek)"
   CLAUDE_ARK_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude ark)"
   CLAUDE_XCODE_DEFAULT_BASE_URL="$(provider_config_value provider-default-base-url claude xcode-best)"
   CLAUDE_DEFAULTS_LOADED=1
@@ -306,6 +308,7 @@ provider_default_base_url() {
   load_claude_default_base_urls
   case "$1" in
     minimax) printf '%s\n' "$CLAUDE_MINIMAX_DEFAULT_BASE_URL" ;;
+    deepseek) printf '%s\n' "$CLAUDE_DEEPSEEK_DEFAULT_BASE_URL" ;;
     ark) printf '%s\n' "$CLAUDE_ARK_DEFAULT_BASE_URL" ;;
     xcode-best) printf '%s\n' "$CLAUDE_XCODE_DEFAULT_BASE_URL" ;;
     anthropic_console) printf '%s\n' "$CLAUDE_DEFAULT_BASE_URL" ;;
@@ -325,7 +328,7 @@ provider_base_or_default() {
 print_provider_url_notice() {
   local mode="$1" base="${2:-}"
   case "$mode" in
-    minimax|ark|xcode-best)
+    minimax|deepseek|ark|xcode-best)
       [[ -n "$base" ]] && printf 'Provider URL will be auto-configured to %s\n' "$base"
       ;;
   esac
@@ -388,7 +391,7 @@ PY
       || die 2 INVALID_FLAGS "--base-url/--api-key 只能配 --provider custom_api 或不传 --provider"
   elif [[ -n "$FORCE_API_KEY" ]]; then
     case "$FORCE_PROVIDER" in
-      minimax|anthropic_console|ark|xcode-best) ;;
+      minimax|anthropic_console|deepseek|ark|xcode-best) ;;
       *)
         die 2 INVALID_FLAGS "--base-url 必须和 --api-key 成对"
         ;;
@@ -397,10 +400,10 @@ PY
   if [[ -n "$FORCE_MODEL" ]]; then
     if [[ -n "$FORCE_BASE_URL" && -n "$FORCE_API_KEY" ]]; then
       :
-    elif [[ -n "$FORCE_API_KEY" && ( "$FORCE_PROVIDER" == "minimax" || "$FORCE_PROVIDER" == "anthropic_console" || "$FORCE_PROVIDER" == "ark" || "$FORCE_PROVIDER" == "xcode-best" ) ]]; then
+    elif [[ -n "$FORCE_API_KEY" && ( "$FORCE_PROVIDER" == "minimax" || "$FORCE_PROVIDER" == "anthropic_console" || "$FORCE_PROVIDER" == "deepseek" || "$FORCE_PROVIDER" == "ark" || "$FORCE_PROVIDER" == "xcode-best" ) ]]; then
       :
     else
-      die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|ark|xcode-best + --api-key"
+      die 2 INVALID_FLAGS "--model 只能与 --base-url/--api-key 一起使用，或配合 --provider minimax|anthropic_console|deepseek|ark|xcode-best + --api-key"
     fi
   fi
   compute_project_paths
@@ -696,6 +699,8 @@ if k:
 k, b = lookup("keys.ANTHROPIC_AUTH_TOKEN.value"), lookup("keys.ANTHROPIC_BASE_URL.value")
 if k and provider_url_matches("claude", "minimax", b):
     add("minimax", "claude-code + minimax (ANTHROPIC_AUTH_TOKEN -> minimaxi)", k, b)
+elif k and provider_url_matches("claude", "deepseek", b):
+    add("deepseek", "claude-code + DeepSeek (ANTHROPIC_AUTH_TOKEN -> deepseek)", k, b)
 elif k and provider_url_matches("claude", "xcode-best", b):
     add("xcode-best", "claude-code + xcode-best (ANTHROPIC_AUTH_TOKEN -> xcode.best)", k, b)
 elif k and b:
@@ -735,6 +740,15 @@ write_provider_env() {
         export_line ANTHROPIC_BASE_URL "$resolved_base"
         export_line ANTHROPIC_AUTH_TOKEN "$key"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
+        echo 'export API_TIMEOUT_MS=3000000'
+        echo 'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
+        echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
+        ;;
+      deepseek)
+        resolved_base="$(provider_base_or_default deepseek "$base")"
+        export_line ANTHROPIC_BASE_URL "$resolved_base"
+        export_line ANTHROPIC_AUTH_TOKEN "$key"
+        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-deepseek-v4-pro}"
         echo 'export API_TIMEOUT_MS=3000000'
         echo 'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
         echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
@@ -790,6 +804,7 @@ select_provider_candidate() {
   IFS=$'\t' read -r mode label key base <<<"${candidates[$((choice-1))]}"
   case "$mode" in
     minimax) remember_provider_selection minimax "$key" "$base" "$(install_provider_default_model minimax)" ;;
+    deepseek) remember_provider_selection deepseek "$key" "$base" "$(install_provider_default_model deepseek)" ;;
     ark) remember_provider_selection ark "$key" "$base" "$(install_provider_default_model ark)" ;;
     xcode-best) remember_provider_selection xcode-best "$key" "$base" "$FORCE_MODEL" ;;
     *) remember_provider_selection "$mode" "$key" "$base" ;;
@@ -839,6 +854,18 @@ select_provider() {
           write_provider_env minimax "$FORCE_API_KEY" "$(provider_base_or_default minimax)"
           print_provider_url_notice minimax "$(provider_base_or_default minimax)"
           printf 'Using forced provider: minimax (base_url=%s)\n' "$(provider_base_or_default minimax)"
+        fi
+        return
+        ;;
+      deepseek)
+        [[ -n "$FORCE_MODEL" ]] || FORCE_MODEL="deepseek-v4-pro"
+        remember_provider_selection deepseek "$FORCE_API_KEY" "$(provider_base_or_default deepseek)" "$FORCE_MODEL"
+        if [[ "$DRY_RUN" == "1" ]]; then
+          printf '[dry-run] force provider=deepseek via explicit api-key and write %s\n' "$PROVIDER_ENV"
+        else
+          write_provider_env deepseek "$FORCE_API_KEY" "$(provider_base_or_default deepseek)"
+          print_provider_url_notice deepseek "$(provider_base_or_default deepseek)"
+          printf 'Using forced provider: deepseek (base_url=%s)\n' "$(provider_base_or_default deepseek)"
         fi
         return
         ;;
@@ -908,6 +935,7 @@ select_provider() {
       forced_found=1
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model "$mode")" ;;
+        deepseek) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model "$mode")" ;;
         ark) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model "$mode")" ;;
         xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
@@ -927,6 +955,7 @@ select_provider() {
     if [[ "$DRY_RUN" == "1" && ${#candidates[@]} -eq 0 ]]; then
       case "$FORCE_PROVIDER" in
         minimax) remember_provider_selection minimax "dry-run-placeholder-key" "$(provider_base_or_default minimax)" "$(install_provider_default_model minimax)" ;;
+        deepseek) remember_provider_selection deepseek "dry-run-placeholder-key" "$(provider_base_or_default deepseek)" "$(install_provider_default_model deepseek)" ;;
         ark) remember_provider_selection ark "dry-run-placeholder-key" "$(provider_base_or_default ark)" "$(install_provider_default_model ark)" ;;
         xcode-best) remember_provider_selection xcode-best "dry-run-placeholder-key" "$(provider_base_or_default xcode-best)" "$FORCE_MODEL" ;;
         custom_api) remember_provider_selection custom_api "dry-run-placeholder-key" "$(claude_tool_default_base_url)" "$FORCE_MODEL" ;;
@@ -949,6 +978,7 @@ select_provider() {
       IFS=$'\t' read -r mode label key base <<<"${candidates[0]}"
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model minimax)" ;;
+        deepseek) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model deepseek)" ;;
         ark) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model ark)" ;;
         xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
@@ -987,6 +1017,7 @@ select_provider() {
       IFS=$'\t' read -r mode label key base <<<"${candidates[$((reply-1))]}"
       case "$mode" in
         minimax) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model minimax)" ;;
+        deepseek) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model deepseek)" ;;
         ark) remember_provider_selection "$mode" "$key" "$base" "$(install_provider_default_model ark)" ;;
         xcode-best) remember_provider_selection "$mode" "$key" "$base" "$FORCE_MODEL" ;;
         *) remember_provider_selection "$mode" "$key" "$base" ;;
@@ -1019,7 +1050,7 @@ select_provider() {
 
 seat_auth_mode_for_provider_mode() {
   case "$PROVIDER_MODE" in
-    minimax|ark|xcode-best|custom_api|anthropic_console) printf '%s\n' "api" ;;
+    minimax|deepseek|ark|xcode-best|custom_api|anthropic_console) printf '%s\n' "api" ;;
     oauth_token) printf '%s\n' "oauth_token" ;;
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for seat auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -1029,6 +1060,7 @@ seat_auth_mode_for_provider_mode() {
 seat_provider_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "minimax" ;;
+    deepseek) printf '%s\n' "deepseek" ;;
     ark) printf '%s\n' "ark" ;;
     xcode-best) printf '%s\n' "xcode-best" ;;
     custom_api|anthropic_console) printf '%s\n' "anthropic-console" ;;
@@ -1040,6 +1072,7 @@ seat_provider_for_provider_mode() {
 seat_model_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
+    deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro}" ;;
     ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
     xcode-best|custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
     *) return 0 ;;
@@ -1226,6 +1259,11 @@ write_bootstrap_secret_file() {
         export_line ANTHROPIC_BASE_URL "$(provider_base_or_default minimax "$PROVIDER_BASE")"
         export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
         ;;
+      deepseek)
+        export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
+        export_line ANTHROPIC_BASE_URL "$(provider_base_or_default deepseek "$PROVIDER_BASE")"
+        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-deepseek-v4-pro}"
+        ;;
       ark)
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
         export_line ANTHROPIC_BASE_URL "$(provider_base_or_default ark "$PROVIDER_BASE")"
@@ -1305,6 +1343,26 @@ ensure_privacy_kb_template() {
 EOF
   ) || die 31 PRIVACY_KB_WRITE_FAILED "unable to write $privacy_path"
   chmod 600 "$privacy_path" || die 31 PRIVACY_KB_CHMOD_FAILED "unable to chmod $privacy_path"
+}
+
+ensure_deepseek_secret_template() {
+  note "Step 5.8: ensure DeepSeek shared secret template"
+  local secret_path="$HOME/.agent-runtime/secrets/claude/deepseek.env"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] ensure %s exists with mode 0600\n' "$secret_path"
+    return 0
+  fi
+  if [[ -e "$secret_path" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$secret_path")" || die 31 DEEPSEEK_SECRET_DIR_FAILED "unable to create $(dirname "$secret_path")"
+  (umask 077; cat >"$secret_path" <<'EOF'
+ANTHROPIC_AUTH_TOKEN=<set-by-operator>
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+ANTHROPIC_MODEL=deepseek-v4-pro
+EOF
+  ) || die 31 DEEPSEEK_SECRET_WRITE_FAILED "unable to write $secret_path"
+  chmod 600 "$secret_path" || die 31 DEEPSEEK_SECRET_CHMOD_FAILED "unable to chmod $secret_path"
 }
 
 symlink_skills() {
@@ -2008,7 +2066,7 @@ print_operator_banner() {
 
 launcher_auth_for_provider() {
   case "$PROVIDER_MODE" in
-    minimax|ark|xcode-best|custom_api|anthropic_console) printf '%s\n' "custom" ;;
+    minimax|deepseek|ark|xcode-best|custom_api|anthropic_console) printf '%s\n' "custom" ;;
     oauth_token) printf '%s\n' "oauth_token" ;;
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for launcher auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
@@ -2044,6 +2102,11 @@ launcher_custom_env_file_for_session() {
       api_key="$PROVIDER_KEY"
       base_url="$(provider_base_or_default minimax "$PROVIDER_BASE")"
       model="${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}"
+      ;;
+    deepseek)
+      api_key="$PROVIDER_KEY"
+      base_url="$(provider_base_or_default deepseek "$PROVIDER_BASE")"
+      model="${PROVIDER_MODEL:-deepseek-v4-pro}"
       ;;
     ark)
       api_key="$PROVIDER_KEY"
@@ -2486,6 +2549,7 @@ main() {
   bootstrap_project_profile
   migrate_project_profile_to_v2
   ensure_privacy_kb_template
+  ensure_deepseek_secret_template
   install_skills_by_tier
   install_privacy_pre_commit_hook
   register_project_registry

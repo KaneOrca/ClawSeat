@@ -29,7 +29,8 @@ if [ -z "$PROJECT" ] && [ "${CLAWSEAT_SEND_ALLOW_NO_PROJECT:-0}" != "1" ]; then
   # ${HOME:-} keeps `set -u` from tripping when callers (e.g. tests that
   # scrub env) don't export HOME. Without a real or fake home, the
   # guardrail cannot enumerate projects and no-ops.
-  TASKS_DIR="${CLAWSEAT_REAL_HOME:-${HOME:-}}/.agents/tasks"
+  TASKS_ROOT="${AGENTS_TASKS_ROOT:-${CLAWSEAT_REAL_HOME:-${HOME:-}}/.agents/tasks}"
+  TASKS_DIR="$TASKS_ROOT"
   # Enumerate projects that declared themselves via PROJECT_BINDING.toml.
   # null-glob safe: if the pattern matches nothing, `set -- $pattern` expands
   # to the literal pattern; guard with a direct file existence check.

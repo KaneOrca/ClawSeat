@@ -317,6 +317,11 @@ PROVIDER_DEFAULTS = {
             "default_model": "MiniMax-M2.7-highspeed",
             "url_markers": ("minimaxi.com",),
         },
+        "deepseek": {
+            "base_url": "https://api.deepseek.com/anthropic",
+            "default_model": "deepseek-v4-pro",
+            "url_markers": ("deepseek.com",),
+        },
         "ark": {
             "base_url": "https://ark.cn-beijing.volces.com/api/coding",
             "default_model": "ark-code-latest",
@@ -514,7 +519,7 @@ SUPPORTED_RUNTIME_MATRIX = {
         # Canonical Claude API providers. Current agent_admin startup routes
         # these through launcher `--auth custom`; legacy shell callers may
         # still use direct `anthropic-console|minimax|xcode` launcher labels.
-        "api": ("xcode-best", "minimax", "ark", "anthropic-console"),
+        "api": ("xcode-best", "minimax", "deepseek", "ark", "anthropic-console"),
         # C5: long-lived token from `claude setup-token` (valid ~1 year).
         # Skips macOS Keychain entirely — avoids the per-seat popup storm
         # caused by each seat having a different HOME (upstream

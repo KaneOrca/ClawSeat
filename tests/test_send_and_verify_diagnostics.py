@@ -61,7 +61,7 @@ def _make_fake_tmux(tmp_path: Path, *, has_session_rc: int = 0, subdir: str = "f
 
 # ─── TMUX_MISSING ────────────────────────────────────────────────────────────
 
-def test_tmux_missing_exit_code_is_1(tmp_path):
+def test_tmux_missing_exit_code_is_1(tmp_path, isolated_tasks_dir):
     """TMUX_MISSING: rc=1."""
     fake_ctl = _make_fake_agentctl(tmp_path)
     result = _run(
@@ -71,7 +71,7 @@ def test_tmux_missing_exit_code_is_1(tmp_path):
     assert result.returncode == 1
 
 
-def test_tmux_missing_stdout_keyword(tmp_path):
+def test_tmux_missing_stdout_keyword(tmp_path, isolated_tasks_dir):
     """TMUX_MISSING: 'TMUX_MISSING' appears in stdout for backward compat."""
     fake_ctl = _make_fake_agentctl(tmp_path)
     result = _run(
@@ -81,7 +81,7 @@ def test_tmux_missing_stdout_keyword(tmp_path):
     assert "TMUX_MISSING" in result.stdout
 
 
-def test_tmux_missing_stderr_reason_and_fix(tmp_path):
+def test_tmux_missing_stderr_reason_and_fix(tmp_path, isolated_tasks_dir):
     """TMUX_MISSING: stderr has reason, searched paths, PATH, and fix hint."""
     fake_ctl = _make_fake_agentctl(tmp_path)
     result = _run(
@@ -95,7 +95,7 @@ def test_tmux_missing_stderr_reason_and_fix(tmp_path):
 
 # ─── SESSION_NOT_FOUND ───────────────────────────────────────────────────────
 
-def test_session_not_found_exit_code_is_1(tmp_path):
+def test_session_not_found_exit_code_is_1(tmp_path, isolated_tasks_dir):
     """SESSION_NOT_FOUND: rc=1."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=0)
     fake_ctl = _make_fake_agentctl(tmp_path, return_empty=True)
@@ -133,7 +133,7 @@ def test_session_not_found_stderr_fields(tmp_path):
 
 # ─── SESSION_DEAD ────────────────────────────────────────────────────────────
 
-def test_session_dead_exit_code_is_1(tmp_path):
+def test_session_dead_exit_code_is_1(tmp_path, isolated_tasks_dir):
     """SESSION_DEAD: rc=1."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=1)
     fake_ctl = _make_fake_agentctl(tmp_path)
@@ -144,7 +144,7 @@ def test_session_dead_exit_code_is_1(tmp_path):
     assert result.returncode == 1
 
 
-def test_session_dead_stdout_keyword(tmp_path):
+def test_session_dead_stdout_keyword(tmp_path, isolated_tasks_dir):
     """SESSION_DEAD: 'SESSION_DEAD' appears in stdout for backward compat."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=1, subdir="deadbin")
     fake_ctl = _make_fake_agentctl(tmp_path)
@@ -155,7 +155,7 @@ def test_session_dead_stdout_keyword(tmp_path):
     assert "SESSION_DEAD" in result.stdout
 
 
-def test_session_dead_stderr_reason_tmux_fix(tmp_path):
+def test_session_dead_stderr_reason_tmux_fix(tmp_path, isolated_tasks_dir):
     """SESSION_DEAD: stderr has reason, tmux_bin, session name, fix hint."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=1, subdir="deadbin2")
     fake_ctl = _make_fake_agentctl(tmp_path)
@@ -170,7 +170,7 @@ def test_session_dead_stderr_reason_tmux_fix(tmp_path):
 
 # ─── SENT success ────────────────────────────────────────────────────────────
 
-def test_sent_success_exit_0(tmp_path):
+def test_sent_success_exit_0(tmp_path, isolated_tasks_dir):
     """Successful send: rc=0."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=0)
     fake_ctl = _make_fake_agentctl(tmp_path)
@@ -181,7 +181,7 @@ def test_sent_success_exit_0(tmp_path):
     assert result.returncode == 0
 
 
-def test_sent_success_stdout_format(tmp_path):
+def test_sent_success_stdout_format(tmp_path, isolated_tasks_dir):
     """Successful send: stdout starts with 'SENT: <session>'."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=0, subdir="sentbin")
     fake_ctl = _make_fake_agentctl(tmp_path)
@@ -194,7 +194,7 @@ def test_sent_success_stdout_format(tmp_path):
 
 # ─── Verbose / debug mode ────────────────────────────────────────────────────
 
-def test_verbose_debug_session_dead_adds_session_list(tmp_path):
+def test_verbose_debug_session_dead_adds_session_list(tmp_path, isolated_tasks_dir):
     """CLAWSEAT_SEND_VERIFY_DEBUG=1: SESSION_DEAD stderr includes tmux_sessions field."""
     fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=1, subdir="debugbin")
     fake_ctl = _make_fake_agentctl(tmp_path)
@@ -208,6 +208,32 @@ def test_verbose_debug_session_dead_adds_session_list(tmp_path):
     )
     assert result.returncode == 1
     assert "tmux_sessions" in result.stderr
+
+
+def test_agents_tasks_root_override_drives_multi_project_guard(tmp_path):
+    tasks_root = tmp_path / "tasks"
+    for name in ("fixture-a", "fixture-b"):
+        project_dir = tasks_root / name
+        project_dir.mkdir(parents=True)
+        (project_dir / "PROJECT_BINDING.toml").write_text(f'project = "{name}"\n', encoding="utf-8")
+    fake_tmux = _make_fake_tmux(tmp_path, has_session_rc=0)
+    fake_ctl = _make_fake_agentctl(tmp_path)
+    result = _run(
+        ["myseat", "hello"],
+        {
+            "TMUX_BIN": fake_tmux,
+            "AGENTCTL_BIN": fake_ctl,
+            "AGENTS_TASKS_ROOT": str(tasks_root),
+            "CLAWSEAT_SEND_ALLOW_NO_PROJECT": "0",
+        },
+    )
+    assert result.returncode == 3
+    assert "PROJECT_REQUIRED" in result.stderr
+    assert f"tasks_dir: {tasks_root}" in result.stderr
+
+
+def test_isolated_tasks_dir_fixture_sets_clean_tasks_root(isolated_tasks_dir):
+    assert os.environ["AGENTS_TASKS_ROOT"] == str(isolated_tasks_dir)
 
 
 # ─── Param error ─────────────────────────────────────────────────────────────

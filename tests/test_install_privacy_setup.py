@@ -112,3 +112,28 @@ def test_install_does_not_overwrite_existing_privacy_template(tmp_path: Path) ->
     result = _run_install(root, home, py_stubs)
     assert result.returncode == 0, result.stderr
     assert privacy.read_text(encoding="utf-8") == "BLOCK: keep-me\n"
+
+
+def test_install_creates_deepseek_secret_template(tmp_path: Path) -> None:
+    root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
+    result = _run_install(root, home, py_stubs)
+    assert result.returncode == 0, result.stderr
+    secret = home / ".agent-runtime" / "secrets" / "claude" / "deepseek.env"
+    assert secret.is_file()
+    assert stat.S_IMODE(secret.stat().st_mode) == 0o600
+    assert secret.read_text(encoding="utf-8") == (
+        "ANTHROPIC_AUTH_TOKEN=<set-by-operator>\n"
+        "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\n"
+        "ANTHROPIC_MODEL=deepseek-v4-pro\n"
+    )
+
+
+def test_install_does_not_overwrite_existing_deepseek_secret(tmp_path: Path) -> None:
+    root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
+    secret = home / ".agent-runtime" / "secrets" / "claude" / "deepseek.env"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("ANTHROPIC_AUTH_TOKEN=real-token\n", encoding="utf-8")
+    secret.chmod(0o600)
+    result = _run_install(root, home, py_stubs)
+    assert result.returncode == 0, result.stderr
+    assert secret.read_text(encoding="utf-8") == "ANTHROPIC_AUTH_TOKEN=real-token\n"

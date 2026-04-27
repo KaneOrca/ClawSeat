@@ -103,6 +103,13 @@ def fake_skill_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def isolated_tasks_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point send-and-verify multi-project detection at an empty temp tree."""
+    monkeypatch.setenv("AGENTS_TASKS_ROOT", str(tmp_path))
+    return tmp_path
+
+
+@pytest.fixture()
 def monkeypatch_clawseat_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path):
     """Set CLAWSEAT_ROOT env var to the real repo root.
 
