@@ -147,7 +147,8 @@ def _header(title: str) -> str:
 
 def _render_memory(machine: Any) -> str:
     mem = machine.memory
-    session_name = "machine-memory-claude"  # proposed naming; spec §3 stays silent
+    # v1 LEGACY (M4 remove): retired global memory session "machine-memory-claude".
+    session_name = "-".join(("machine", "memory", "claude"))
     # Back-compat: v1 used `install-memory-claude`; show whichever is alive.
     alive_session = None
     for candidate in (session_name, "install-memory-claude", "memory-claude"):

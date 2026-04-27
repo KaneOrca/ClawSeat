@@ -334,7 +334,7 @@ Memory executes Phase-A in order:
 | B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
 | B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
 | B3.5-launch-engineers | **Interactive, one-by-one**. For each worker in `planner, builder, designer`: ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
-| B5-verify-feishu-binding | Read `~/.agents/tasks/install/PROJECT_BINDING.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
+| B5-verify-feishu-binding | Read project binding metadata from `~/.agents/projects/install/project.toml` / `project-local.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
 | B6-smoke | If `feishu_group_id` set, memory triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, memory runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<memory + workers>`. |
 
@@ -369,7 +369,7 @@ Sandbox/headless installs:
 Project tool isolation:
 
 - `agent_admin project init-tools <project> --from real-home|empty [--source-project <project>] [--tools ...]` creates or refreshes `~/.agent-runtime/projects/<project>/...`.
-- `agent_admin project switch-identity <project> --tool feishu|gemini|codex --identity ...` only updates `PROJECT_BINDING.toml` and reseeds existing seat sandboxes.
+- `agent_admin project switch-identity <project> --tool feishu|gemini|codex --identity ...` only updates project-local identity metadata and reseeds existing seat sandboxes.
 - `switch-identity` does not call native login CLIs and does not migrate credential payloads such as `~/.agent-runtime/projects/<project>/.gemini/oauth_creds.json` or `.codex/auth.json`.
 - Recommended workflow:
   1. `agent_admin project init-tools <project> --from real-home` or `--source-project <other-project>`
@@ -404,7 +404,7 @@ Flow:
 
 1. Script lists all registered OpenClaw tenants (from `~/.clawseat/machine.toml`).
 2. Operator picks one by number.
-3. Script prints a destructive-confirmation: the chosen agent's `IDENTITY.md`, `SOUL.md`, `TOOLS.md + TOOLS/*`, `MEMORY.md`, `AGENTS.md`, `WORKSPACE_CONTRACT.toml` will be **overwritten** with koder templates (backups auto-taken via `--on-conflict backup`).
+3. Script prints a destructive-confirmation: the chosen agent's `IDENTITY.md`, `SOUL.md`, `TOOLS.md + TOOLS/*`, `MEMORY.md`, `AGENTS.md`, and workspace guide will be **overwritten** with koder templates (backups auto-taken via `--on-conflict backup`).
 4. On confirmation: runs `init_koder.py` → `agent_admin project koder-bind` → `configure_koder_feishu.py`.
 
 Verify:

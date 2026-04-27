@@ -17,8 +17,8 @@ The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 
 | State | Behavior |
 |-------|----------|
-| Existing `install` state with valid profile + binding + runtime metadata | Resume the existing runtime; ancestor remains the project frontstage owner |
-| Existing install state but ancestor session is missing | Relaunch ancestor via the canonical recorded project/session state (`agent_admin session start-engineer ancestor --project <name>` or equivalent L2 path), then return control to ancestor |
+| Existing `install` state with valid profile + binding + runtime metadata | Resume the existing runtime; project memory remains the frontstage owner |
+| Existing install state but memory session is missing | Relaunch memory via the canonical recorded project/session state (`agent_admin session start-engineer memory --project <name>` or equivalent L2 path), then return control to memory |
 | Missing or invalid install state | **Refuse** — point operator at `docs/INSTALL.md` fresh-install path |
 
 `/cs` will NEVER:
@@ -26,8 +26,8 @@ The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 - synthesize a fresh profile or PROJECT_BINDING on its own
 - create the canonical `install` project from scratch
 - start a parallel `install-*` project when the canonical one already exists
-- launch `planner` directly as a shortcut around ancestor
-- bypass ancestor and directly own seat lifecycle
+- launch `planner` directly as a shortcut around memory
+- bypass memory and directly own seat lifecycle
 - treat local re-entry as a substitute for the install playbook
 
 ## Run
@@ -37,11 +37,11 @@ The source of truth is still [`docs/INSTALL.md`](../../../docs/INSTALL.md).
    `Resume / Re-entry` section.
 3. Re-scan and inspect the existing install state; fill only the gaps that
    `docs/INSTALL.md` says are missing.
-4. If ancestor is missing but the project state is valid, relaunch ancestor
+4. If memory is missing but the project state is valid, relaunch memory
    with the runtime tuple already recorded for the project, then stop there.
 5. Report one of:
-   - `resumed` — ancestor/session state already healthy
-   - `relaunched_ancestor` — ancestor was missing and has been brought back
+   - `resumed` — memory/session state already healthy
+   - `relaunched_memory` — memory was missing and has been brought back
    - `refused_missing_state` — no install state exists yet
    - `refused_invalid_state` — state exists but is inconsistent and needs a
      playbook-guided repair
@@ -62,7 +62,7 @@ playbook in [`docs/INSTALL.md`](../../../docs/INSTALL.md).
 - If tmux or PTY support is unavailable, stop cleanly and hand the next terminal
   command back to the operator.
 - For all **post-re-entry** steps (adding seats, Feishu binding, patrol),
-  ancestor owns the flow — do not drive them from `/cs`.
+	  memory owns the flow — do not drive them from `/cs`.
 
 ## References
 

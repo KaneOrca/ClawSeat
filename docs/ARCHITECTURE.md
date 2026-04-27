@@ -140,7 +140,7 @@ which one to edit, use this table before you touch either:
 | Skill | Role | Invoked by | Writes |
 |---|---|---|---|
 | `clawseat` | Product entrypoint. Detects runtime, routes fresh installs to the v0.7 playbook (`scripts/install.sh`), and keeps frontstage semantics straight. | OpenClaw / Feishu / Claude Code / Codex when the user says "启动 ClawSeat" or "install ClawSeat" | Nothing directly; delegates to `clawseat-install` |
-| `clawseat-install` | v0.7 install playbook. Calls `scripts/install.sh` which drives host bootstrap + environment scan + workers window + memories window; memory then runs Phase-A per `docs/INSTALL.md`. | Claude Code / Codex / OpenClaw runtimes when the user asks to install ClawSeat | `~/.agents/profiles/*.toml`, `~/.agents/tasks/<project>/PROJECT_BINDING.toml`, install artifacts under `~/.agents/tasks/<project>/install/`, entry-skill symlinks in `~/.claude/skills/` and `~/.codex/skills/` |
+| `clawseat-install` | v0.7 install playbook. Calls `scripts/install.sh` which drives host bootstrap + environment scan + workers window + memories window; memory then runs Phase-A per `docs/INSTALL.md`. | Claude Code / Codex / OpenClaw runtimes when the user asks to install ClawSeat | `~/.agents/projects/<project>/project.toml`, `project-local.toml`, install artifacts under `~/.agents/tasks/<project>/install/`, entry-skill symlinks in `~/.claude/skills/` and `~/.codex/skills/` |
 | `cs` | Local `/cs` convenience alias (**post-install only**). Re-entry shorthand for the `docs/INSTALL.md` `Resume / Re-entry` section; reuses existing install state and relaunches memory if needed. | User in a local Claude Code / Codex session after install state already exists | Minimal — may relaunch memory/session state, but must not create project/profile/binding from scratch |
 
 The default v2 project story is `memory` / `planner` / `builder` /
@@ -255,8 +255,8 @@ Still outside ClawSeat by design:
 ### Why state.db
 
 Prior to C8, answering "where is seat X and what is it doing?" required grepping
-six separate artefacts: `session.toml`, `WORKSPACE_CONTRACT.toml`,
-`PROJECT_BINDING.toml`, `patrol/handoffs/*.json`, `openclaw.json`, and
+six separate artefacts: `session.toml`, project TOML files,
+`patrol/handoffs/*.json`, `openclaw.json`, and
 `~/.agents/sessions/…`. Four concrete pain points drove the consolidation:
 
 1. **Dispatcher blindness** — `dispatch_task.py` hardcodes `builder-1`; other
@@ -536,7 +536,7 @@ heartbeat_config.py render-plist --project X [--output ~/Library/LaunchAgents/co
 heartbeat_config.py validate --project X
 ```
 
-`set` without `--feishu-group-id` auto-pulls from `PROJECT_BINDING.toml`.
+`set` without `--feishu-group-id` auto-pulls from project binding metadata.
 `set` warns (to stderr) when the bound group has `feishu_external = true`.
 
 ### launchd plist
@@ -572,7 +572,7 @@ lark-cli is sufficient for a one-line message send. The Python tooling
 Bootstrap and reconfigure paths write the profile TOML from a hardcoded
 template. Any field the operator hand-edited is silently overwritten on
 the next regeneration — no warning, no diff, no preserve. This burned us
-twice: `feishu_group_id` (fixed in C2 by moving to `PROJECT_BINDING.toml`)
+twice: `feishu_group_id` (fixed in C2 by moving to project binding metadata)
 and `heartbeat_transport = "openclaw"` (clobbered back to `"tmux"`,
 triggering a phantom tmux session the operator had to manually kill).
 
@@ -853,7 +853,7 @@ runs the migration when the operator is ready.
 
 | Command | Validates | Writes |
 |---|---|---|
-| `project koder-bind --project X --tenant Y` | tenant ∈ machine.toml openclaw_tenants; tenant workspace exists with `WORKSPACE_CONTRACT.toml` | `workspace-Y/WORKSPACE_CONTRACT.toml .project = X` **and** `PROJECT_BINDING.toml extras.openclaw_frontstage_tenant = Y` — atomic-ish (contract rolls back on binding-write failure) |
+| `project koder-bind --project X --tenant Y` | tenant ∈ machine.toml openclaw_tenants; tenant workspace exists | tenant workspace project metadata **and** project-local extras `openclaw_frontstage_tenant = Y` — atomic-ish (tenant metadata rolls back on binding-write failure) |
 | `machine memory show` | — | — (read-only: prints memory service + tmux runtime probe) |
 | `project seat list --project X` | — | — (reads v2 profile, expands `parallel_instances` per §8 → `{role}` singleton or `{role}_{n}` fan-out) |
 | `project validate --project X` | `validate_profile_v2` over the project's profile | — (rc=0 ok, rc=1 errors) |
@@ -893,9 +893,9 @@ Opening a v2 profile cross-validates three things (§4/§5):
 
 1. `profile.openclaw_frontstage_agent` is a key in
    `machine.toml [openclaw_tenants.*]`.
-2. `workspace-<agent>/WORKSPACE_CONTRACT.toml .project` equals
+2. `workspace-<agent>` project metadata equals
    `profile.project_name`.
-3. `PROJECT_BINDING.toml extras.openclaw_frontstage_tenant` (if set)
+3. project-local extras `openclaw_frontstage_tenant` (if set)
    matches the profile's agent.
 
 Any mismatch is a hard validation error. The error message includes the

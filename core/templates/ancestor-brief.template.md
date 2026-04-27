@@ -24,7 +24,7 @@
 - CLAWSEAT_ROOT: `${CLAWSEAT_ROOT}`
 - memory path: `${AGENT_HOME}/.agents/memory/machine/` (credentials/network/openclaw/github/current_context)
 - window topology: workers 窗口 `clawseat-${PROJECT_NAME}-workers` + memories 窗口 `clawseat-memories`
-- grid recovery: `agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]`
+- grid recovery: `agent_admin window open-grid ${PROJECT_NAME} [--recover]`
 - seats 待拉起: ${PENDING_SEATS_HUMAN}
   - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template {CLAWSEAT_TEMPLATE_NAME} --local ...` 建好 project + engineer/session records
   - workers 窗口中的 pane 当前都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
@@ -292,7 +292,7 @@ cat ${AGENT_HOME}/.agents/memory/machine/openclaw.json
 ```
 
 重点看三类信息：
-- `${AGENT_HOME}/.agents/tasks/*/PROJECT_BINDING.toml`（通过 `agent_admin.py project binding-list` 汇总）
+- `${AGENT_HOME}/.agents/projects/*/project.toml` / `project-local.toml`（通过 `agent_admin.py project binding-list` 汇总）
 - `${AGENT_HOME}/.agents/memory/machine/openclaw.json` 的 `agents[]` + `accounts[]`
 - `${AGENT_HOME}/.lark-cli/config.json`（如存在）
 
@@ -302,7 +302,7 @@ project-memory seat (${PRIMARY_SEAT_ID}) 自己归纳，不再 `tmux send-keys` 
 1. 本机可用 openclaw agent：name / appId / account / app mode (user/bot) / 当前占用状态
 2. 其他 clawseat 项目的 agent→group 绑定示例
 3. 推荐给 `${PROJECT_NAME}` 的 agent（未被占用 + 命名匹配优先）
-4. `${PROJECT_NAME}` 当前 PROJECT_BINDING.toml 状态
+4. `${PROJECT_NAME}` 当前 project-local binding 状态
 5. 如 `${AGENT_HOME}/.lark-cli/config.json` 存在，可提示 operator 用本机 `lark-cli` 辅助查 `chat_id`
 
 operator 选定 agent 后，先记下要 overlay 的目标，再按需跑：
@@ -508,8 +508,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 | 场景 | 命令 |
 |------|------|
 | **specialist pane 显示 primary seat 内容**（pane 错连） | `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}` |
-| 整个 iTerm 6 宫格窗口丢失 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
-| 同时开 memory 独立窗口 | 加 `--open-memory` flag |
+| 整个 workers window 丢失 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
 
 **诊断 pane 错连**：`tmux list-clients -t '=${PROJECT_NAME}-${PRIMARY_SEAT_ID}'`；若超过 1 个 client 说明 specialist pane 错接到 primary seat 上（详见 `docs/ITERM_TMUX_REFERENCE.md §3.1.1`）。`recover-grid.sh` 幂等安全。
 

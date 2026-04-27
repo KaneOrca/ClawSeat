@@ -29,7 +29,7 @@ TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 # ── iTerm integration ─────────────────────────────────────────────────────────
 
 # AppleScript closes the single iTerm session/pane that owns the given tty —
-# NOT the entire tab.  Closing the tab nukes all sibling panes (6-pane grid
+# NOT the entire tab.  Closing the tab nukes all sibling panes (workers grid
 # disappearance RCA, 2026-04-25).  `close s` targets just that
 # session; remaining panes in the same tab are untouched.
 _ITERM_CLOSE_SCRIPT_TEMPLATE = """\
@@ -680,7 +680,7 @@ class SessionService:
         # Auto-recover iTerm grid pane routing after any specialist seat
         # start / restart. When a seat's canonical tmux session comes up
         # after grid open time, stray grid panes may have attached to the
-        # project's primary seat (v1 install-ancestor, v2 install-memory)
+        # project's primary seat (v2 uses <project>-memory; v1 had an ancestor alias)
         # instead (see scripts/recover-grid.sh / docs
         # ITERM_TMUX_REFERENCE.md §3.1.1). This hook is idempotent:
         # if no misroute exists it prints "ok" and exits 0.

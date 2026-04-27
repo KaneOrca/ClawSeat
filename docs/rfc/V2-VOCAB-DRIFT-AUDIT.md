@@ -12,16 +12,16 @@
 
 | 类别 | 典型关键词 | 影响 | 严重度 |
 |------|-----------|------|--------|
-| A. 全局 memory 单例 | `machine-memory-claude` | v2 已无全局 memory（每项目自带） | 🟡 MEDIUM (M4 才删) |
-| B. 单窗 6-pane 心智 | `六宫格`, `6-pane`, `six-pane` | v2 是 workers + memories 双窗 | 🟠 HIGH (心智混乱) |
-| C. ancestor 命名 | `ancestor`（应为 `memory` seat） | v2 RFC §1 始祖 = memory seat | 🟠 HIGH (大量文档/skill 漂移) |
-| D. v1 配置物件 | `PROJECT_BINDING.toml`, `WORKSPACE_CONTRACT.toml` | v2 用 `project.toml` + `project-local.toml` | 🟡 MEDIUM |
-| E. 5-worker roster | `planner/builder/reviewer/qa/designer` | v2 minimal 是 3-worker (planner+builder+designer) | 🟠 HIGH (issue #1 已专项追) |
-| F. install-ancestor 硬编码 | `install-ancestor`, `install_ancestor` | v2 是 `install-memory` | 🟡 MEDIUM (issue #3/#12 部分覆盖) |
+| A. [DONE] 全局 memory 单例 | `machine-memory-claude` | v2 已无全局 memory（每项目自带） | 🟡 MEDIUM (M4 才删) |
+| B. [DONE] 单窗 6-pane 心智 | `六宫格`, `6-pane`, `six-pane` | v2 是 workers + memories 双窗 | 🟠 HIGH (心智混乱) |
+| C. [DONE] ancestor 命名 | `ancestor`（应为 `memory` seat） | v2 RFC §1 始祖 = memory seat | 🟠 HIGH (大量文档/skill 漂移) |
+| D. [DONE] v1 配置物件 | `PROJECT_BINDING.toml`, `WORKSPACE_CONTRACT.toml` | v2 用 `project.toml` + `project-local.toml` | 🟡 MEDIUM |
+| E. [DONE] 5-worker roster | `planner/builder/reviewer/qa/designer` | v2 minimal 是 template-driven | 🟠 HIGH (issue #1 已专项追) |
+| F. [DONE] install-ancestor 硬编码 | `install-ancestor`, `install_ancestor` | v2 是 `install-memory` | 🟡 MEDIUM (issue #3/#12 部分覆盖) |
 
 ---
 
-## A. 全局 `machine-memory-claude` 引用（待 M4 删）
+## A. [DONE] 全局 `machine-memory-claude` 引用（待 M4 删）
 
 **v2 决议**: 每项目自带 memory seat（`<project>-memory`），全局 `machine-memory-claude` 在 M4 删除。当前是 **legacy compat**，不是要保留的设计。
 
@@ -46,7 +46,7 @@
 
 ---
 
-## B. 单窗 6-pane 心智漂移（应改 v2 双窗）
+## B. [DONE] 单窗 6-pane 心智漂移（应改 v2 双窗）
 
 **v2 决议**: workers 窗口（per project） + memories 窗口（共享）。"六宫格" 已不适用。
 
@@ -72,7 +72,7 @@
 
 ---
 
-## C. ancestor 命名漂移（核心心智问题）
+## C. [DONE] ancestor 命名漂移（核心心智问题）
 
 **v2 决议**: 始祖 = SEAT 类型，每项目 1 个；tmux 名 `<project>-memory`（不是 `<project>-ancestor`）。`ancestor` 一词只用于设计文档说明"始祖角色"，**实际文件/变量/seat id 都用 `memory`**。
 
@@ -110,7 +110,7 @@
 
 ---
 
-## D. v1 配置物件 `PROJECT_BINDING.toml` / `WORKSPACE_CONTRACT.toml`
+## D. [DONE] v1 配置物件 `PROJECT_BINDING.toml` / `WORKSPACE_CONTRACT.toml`
 
 **v2 决议**: 项目配置在 `~/.agents/projects/<project>/project.toml` + `project-local.toml`；不再用 PROJECT_BINDING / WORKSPACE_CONTRACT。
 
@@ -130,7 +130,7 @@
 
 ---
 
-## E. 5-worker roster 漂移（issue #1 已追，本审计补全清单）
+## E. [DONE] 5-worker roster 漂移（issue #1 已追，本审计补全清单）
 
 **v2 决议**: minimal = 3-worker (planner+builder+designer)；engineering/creative 模板可以保留 5-worker 但要明确文档化。
 
@@ -169,7 +169,7 @@
 
 ---
 
-## F. `install-ancestor` 硬编码（issue #3/#12 部分覆盖）
+## F. [DONE] `install-ancestor` 硬编码（issue #3/#12 部分覆盖）
 
 **已记录**: issue #3 (banner 文案)、#12 (recover-grid.sh + grid-recovery)、#13 (Python module)。
 

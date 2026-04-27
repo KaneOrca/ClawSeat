@@ -29,10 +29,10 @@ Treat `clawseat` as the product-level entrypoint.
    - local re-entry -> `/cs`
    - OpenClaw bootstrap -> plugin wrapper + same playbook
 5. Keep frontstage semantics consistent:
-   - fresh install -> `ancestor` is the runtime frontstage after `install.sh`
+   - fresh install -> project memory is the runtime frontstage after `install.sh`
    - Feishu / OpenClaw path -> `koder` is only an optional reverse-channel
-     overlay; it is not a replacement for the `ancestor` install frontstage
-6. Once ancestor is prompt-ready, treat ancestor as the runtime owner for seat
+     overlay; it is not a replacement for the project memory install frontstage
+6. Once project memory is prompt-ready, treat memory as the runtime owner for seat
    lifecycle and patrol. Do not invent parallel bootstrap paths.
 
 ## OpenClaw / Feishu Contract
@@ -57,8 +57,8 @@ component.
 
 Then follow [`docs/INSTALL.md`](../../../docs/INSTALL.md). The canonical fresh
 install path is `bash scripts/install.sh`, which performs preflight, machine
-scan, provider selection, ancestor launch, grid bring-up, memory launch, and
-handoff to ancestor. Do not resurrect retired manual bootstrap paths.
+scan, provider selection, memory launch, workers window setup, and handoff to
+project memory. Do not resurrect retired manual bootstrap paths.
 
 **Critical: OpenClaw reverse-channel path**
 
@@ -72,8 +72,8 @@ spawn another `koder`, and do not rewrite the install flow around it.
 - The tmux-backed worker roster comes from the project's `project.toml`
   `engineers` list; minimal defaults to `planner`, `builder`, `designer`,
   while clawseat-default still includes `reviewer` and `qa`
-- Once ancestor is prompt-ready, seat lifecycle and patrol belong to ancestor
-- `koder` is not the install frontstage and is not part of the six-pane grid
+- Once project memory is prompt-ready, seat lifecycle and patrol belong to memory
+- `koder` is not the install frontstage and is not part of the workers window
 
 ## Local Runtime Contract
 
@@ -82,7 +82,7 @@ When the host runtime is local and supports explicit skills:
 - install `clawseat`, `clawseat-install`, and `cs`
 - explain that `clawseat` is the fresh-install product entry
 - explain that `/cs` is only the post-install re-entry shortcut
-- explain that local fresh install hands off to `ancestor`, not directly to
+- explain that local fresh install hands off to project memory, not directly to
   `koder`
 
 ## References

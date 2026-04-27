@@ -1,6 +1,6 @@
 version = 1
 template_name = "gstack-harness"
-description = "Role-first harness template: koder frontstage + planner/builder/reviewer/qa/designer specialists"
+description = "Role-first harness template: koder frontstage plus template-driven specialist workers"
 
 [defaults]
 window_mode = "tabs-1up"

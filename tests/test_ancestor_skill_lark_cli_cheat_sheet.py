@@ -23,6 +23,6 @@ def test_skill_has_real_lark_cli_cheat_sheet() -> None:
     assert "OpenClaw koder overlay 目标" in text
     assert "agent_admin window open-grid" in text
     assert "--recover" in text
-    assert "--open-memory" in text
+    assert "--open-memory" not in text
     assert "feishu_sender_app_id" in text
     assert "openclaw_koder_agent" in text

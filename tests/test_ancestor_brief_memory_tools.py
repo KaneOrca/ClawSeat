@@ -30,6 +30,6 @@ def test_ancestor_skill_has_memory_cli_examples() -> None:
     assert "${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py" in text
     assert "--search \"feishu\"" in text
     assert "--content-file /tmp/${PROJECT_NAME}-phase-a-decision.md" in text
-    assert "不要把 `tmux send-keys` 用在 memory 上" in text
+    assert "不要把 `tmux send-keys` 用在 project memory seat 上" in text
     assert "tmux send-keys -t '=machine-memory-claude' \"...\"" not in text
     assert "query_memory.py --ask" in text

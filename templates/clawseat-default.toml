@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-default"
-description = "Default lazy-spawn install roster: ancestor + planner + builder + reviewer + qa + designer"
+description = "Default lazy-spawn install roster: primary seat plus template-driven worker seats"
 
 [defaults]
 window_mode = "tabs-1up"

@@ -174,7 +174,7 @@ resolve_session() {
 
 print_waiting() {
   printf 'pane is waiting for %s ...\n' "$BASE_SESSION"
-  printf '(seat will appear here once ancestor spawns it)\n'
+  printf '(seat will appear here once project memory spawns it)\n'
 }
 
 print_reconnecting() {

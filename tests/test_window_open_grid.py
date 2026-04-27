@@ -219,12 +219,11 @@ def test_open_grid_window_unknown_template_falls_back(
     assert "unknown template_name 'custom-foo'" in capsys.readouterr().err
 
 
-def test_open_grid_open_memory_emits_second_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_grid_open_memory_is_v1_compat_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(["ancestor", "planner", "builder"])
     payloads: list[dict] = []
 
     monkeypatch.setattr(agent_admin_window, "iterm_window_exists", lambda title: False)
-    monkeypatch.setattr(agent_admin_window, "tmux_has_session", lambda session: session == "machine-memory-claude")
     monkeypatch.setattr(
         agent_admin_window,
         "run_iterm_panes_driver",
@@ -233,10 +232,9 @@ def test_open_grid_open_memory_emits_second_payload(monkeypatch: pytest.MonkeyPa
 
     result = agent_admin_window.open_grid_window(project, open_memory=True)
 
-    assert [payload["title"] for payload in payloads] == ["clawseat-spawn49", "machine-memory-claude"]
+    assert [payload["title"] for payload in payloads] == ["clawseat-spawn49"]
     assert payloads[0]["panes"][0]["command"] == "tmux attach -t '=spawn49-ancestor'"
-    assert payloads[1]["panes"][0]["command"] == "tmux attach -t '=machine-memory-claude'"
-    assert result["memory"]["status"] == "ok"
+    assert result["memory"] == {"status": "skipped", "reason": "global memory window retired"}
 
 
 def test_open_grid_rejects_unregistered_project() -> None:
