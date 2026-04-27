@@ -1,8 +1,9 @@
 ---
 name: socratic-requirements
 description: >
-  koder 的统一 intake skill。在读代码或提方案之前，先判定用户意图类型，
-  再用对应方法论完成需求澄清。
+  Koder（Feishu 新手通道）与 Memory（tmux 熟手通道）共享的 intake
+  clarification skill。在读代码或提方案之前，先判定用户意图类型，再用对应方法论
+  完成需求澄清。
   两条路径：
   - 创作类（视频/图片/音频/文案/设计）→ capability-catalog 匹配 + 收敛式选项提问
   - 工程/产品类（功能/架构/重构/想法/brainstorm）→ 诊断式深度提问 + 前提挑战 + 方案对比
@@ -234,54 +235,6 @@ N. 其他（请描述）
 
 ---
 
-## Report Mode（planner updates）
-
-当 sender metadata 表明消息来自 planner 时，切换到 report mode。目标不是继续澄清需求，
-而是把工程状态翻译成用户能直接理解的一行 AUTO decision report：
-
-```text
-[Action] [Reason 1 sentence]
-```
-
-不加 preamble，不问批准，不写"我建议"。Memory 此时作为用户代理，报告当前最优动作和理由。
-
-如果 planner 消息包含 goal drift signal，停止普通 AUTO report，改用 recall card 让用户重新校准。
-Goal drift recall 是 report mode 唯一需要用户选择的路径。
-
-Reference: `references/report-mode.md`
-
----
-
-## Sender Routing
-
-使用 sender metadata 路由，不靠语义关键词猜测：
-
-```text
-sender == "user"    -> Clarify mode
-sender == "planner" -> Report mode
-sender unknown      -> Clarify mode
-```
-
-Channel 只影响渲染方式：`claude_code_tui` 用 Markdown cards；`feishu` 在 recall card
-需要用户输入时可用原生卡片。路由结论必须先于内容判断。
-
----
-
-## Drift Detection / Goal Drift
-
-Memory 只在四类 goal drift signal 跨过阈值时打断 AUTO reporting：
-
-- 范围蔓延：scope lock 后出现新需求，或实现面显著超过原 brief
-- 里程碑超期：阻塞时间超过计划阈值
-- 假设过时：依赖、默认工具、分支状态、外部 API 或策略变化使原计划失效
-- 焦点偏移：当前工作不再映射到 north-star goal 或 accepted milestone
-
-使用 recall card 时最多给 3 个选项。普通 AUTO decision 不请求 approval。
-
-Reference: `references/drift-signals.md` and `references/tui-card-format.md`
-
----
-
 ## UX / Language Layer
 
 User-facing wording follows:
@@ -289,5 +242,4 @@ User-facing wording follows:
 - `references/shared-tone.md`：中文优先、低噪声、直接判断
 - `references/i18n.md`：语言镜像和术语查询顺序
 - `references/glossary-global.toml`：基础术语表，project glossary 可覆盖
-- `references/tui-card-format.md`：info / recall / reflection card 格式
-- `references/north-star-schema.toml`：north-star 记录字段
+- `references/capability-catalog.yaml`：创作/工程能力匹配与摘要合同

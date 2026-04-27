@@ -60,11 +60,19 @@ class OpenClawTenant:
 
 
 @dataclass
+class FeishuRouting:
+    chat_id: str
+    bound_projects: list[str] = field(default_factory=list)
+    default_project: str = ""
+
+
+@dataclass
 class MachineConfig:
     version: int
     memory: MemoryService
     tenants: dict[str, OpenClawTenant]
     source_path: Path
+    feishu_routing: dict[str, FeishuRouting] = field(default_factory=dict)
 
 
 # ── Path helpers ─────────────────────────────────────────────────────
@@ -118,6 +126,14 @@ def _serialize_machine(cfg: MachineConfig) -> str:
         if tenant.description:
             lines.append(f'description = "{_escape(tenant.description)}"')
 
+    for chat_id, routing in sorted(cfg.feishu_routing.items()):
+        lines.append("")
+        lines.append(f"[feishu_routing.{chat_id}]")
+        projects = "[" + ", ".join(f'"{_escape(project)}"' for project in routing.bound_projects) + "]"
+        lines.append(f"bound_projects = {projects}")
+        if routing.default_project:
+            lines.append(f'default_project = "{_escape(routing.default_project)}"')
+
     return "\n".join(lines) + "\n"
 
 
@@ -155,6 +171,25 @@ def _parse_tenants(raw_tenants: dict[str, Any]) -> dict[str, OpenClawTenant]:
     return tenants
 
 
+def _parse_feishu_routing(raw_routes: dict[str, Any]) -> dict[str, FeishuRouting]:
+    routes: dict[str, FeishuRouting] = {}
+    for chat_id, rdata in raw_routes.items():
+        if not isinstance(rdata, dict):
+            raise MachineConfigError(f"feishu_routing {chat_id!r}: expected a table, got {type(rdata).__name__}")
+        bound = [
+            str(project).strip()
+            for project in rdata.get("bound_projects", [])
+            if str(project).strip()
+        ]
+        default_project = str(rdata.get("default_project") or "").strip()
+        routes[str(chat_id)] = FeishuRouting(
+            chat_id=str(chat_id),
+            bound_projects=bound,
+            default_project=default_project,
+        )
+    return routes
+
+
 def _parse_raw(raw: dict[str, Any], source_path: Path) -> MachineConfig:
     services = raw.get("services", {})
     if not isinstance(services, dict) or "memory" not in services:
@@ -162,8 +197,16 @@ def _parse_raw(raw: dict[str, Any], source_path: Path) -> MachineConfig:
     memory = _parse_memory(services["memory"])
     raw_tenants = raw.get("openclaw_tenants", {})
     tenants = _parse_tenants(raw_tenants if isinstance(raw_tenants, dict) else {})
+    raw_routes = raw.get("feishu_routing", {})
+    feishu_routing = _parse_feishu_routing(raw_routes if isinstance(raw_routes, dict) else {})
     version = int(raw.get("version", MACHINE_SCHEMA_VERSION))
-    return MachineConfig(version=version, memory=memory, tenants=tenants, source_path=source_path)
+    return MachineConfig(
+        version=version,
+        memory=memory,
+        tenants=tenants,
+        feishu_routing=feishu_routing,
+        source_path=source_path,
+    )
 
 
 # ── Auto-discovery ────────────────────────────────────────────────────
@@ -198,6 +241,7 @@ def _default_machine(path: Path) -> MachineConfig:
         version=MACHINE_SCHEMA_VERSION,
         memory=MemoryService(),
         tenants=tenants,
+        feishu_routing={},
         source_path=path,
     )
 

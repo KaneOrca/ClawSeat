@@ -53,6 +53,7 @@ class ProjectEntry:
     status: str = "active"
     metadata: dict[str, Any] = field(default_factory=dict)
     repo_path: str = ""
+    seats: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ProjectEntry":
@@ -61,17 +62,28 @@ class ProjectEntry:
         if status not in VALID_STATUSES:
             status = "broken"
         metadata = raw.get("metadata")
+        primary_seat = str(raw.get("primary_seat") or raw.get("primary") or "").strip()
+        tmux_name = str(raw.get("tmux_name") or "").strip()
+        raw_seats = raw.get("seats")
+        seats = (
+            {str(key): str(value) for key, value in raw_seats.items() if str(key).strip() and str(value).strip()}
+            if isinstance(raw_seats, dict)
+            else {}
+        )
+        if primary_seat and tmux_name and primary_seat not in seats:
+            seats[primary_seat] = tmux_name
         return cls(
             name=str(raw.get("name", "")).strip(),
-            primary_seat=str(raw.get("primary_seat") or raw.get("primary") or "").strip(),
+            primary_seat=primary_seat,
             primary_seat_tool=str(raw.get("primary_seat_tool") or "").strip(),
-            tmux_name=str(raw.get("tmux_name") or "").strip(),
+            tmux_name=tmux_name,
             template_name=str(raw.get("template_name") or "").strip(),
             registered_at=registered_at,
             last_access=str(raw.get("last_access") or registered_at),
             status=status,
             metadata=dict(metadata) if isinstance(metadata, dict) else {},
             repo_path=str(raw.get("repo_path") or "").strip(),
+            seats=seats,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -103,6 +115,8 @@ def _normalise_registry(raw: dict[str, Any]) -> dict[str, Any]:
             entry.primary_seat = "memory"
         if not entry.tmux_name:
             entry.tmux_name = f"{entry.name}-{entry.primary_seat}"
+        if entry.primary_seat and entry.tmux_name and entry.primary_seat not in entry.seats:
+            entry.seats[entry.primary_seat] = entry.tmux_name
         projects.append(entry.to_dict())
     projects.sort(key=lambda item: item["name"])
     return {"version": SCHEMA_VERSION, "projects": projects}
@@ -171,6 +185,7 @@ def register_project(
     repo_path: str = "",
     status: str = "active",
     metadata: dict[str, Any] | None = None,
+    seats: dict[str, str] | None = None,
 ) -> ProjectEntry:
     if status not in VALID_STATUSES:
         raise ValueError(f"invalid status {status!r}; expected one of {sorted(VALID_STATUSES)}")
@@ -189,6 +204,7 @@ def register_project(
         status=status,
         metadata={**(existing.metadata if existing else {}), **(metadata or {})},
         repo_path=repo_path or (existing.repo_path if existing else ""),
+        seats={**(existing.seats if existing else {}), **(seats or {})},
     )
     index[name] = entry.to_dict()
     data["projects"] = list(index.values())
@@ -212,6 +228,7 @@ def update_project(
     repo_path: str | None = None,
     template_name: str | None = None,
     primary_seat_tool: str | None = None,
+    seats: dict[str, str] | None = None,
 ) -> ProjectEntry:
     data = load_registry()
     index = _project_index(data)
@@ -230,6 +247,8 @@ def update_project(
         entry.template_name = template_name
     if primary_seat_tool is not None:
         entry.primary_seat_tool = primary_seat_tool
+    if seats is not None:
+        entry.seats = dict(seats)
     index[name] = entry.to_dict()
     data["projects"] = list(index.values())
     atomic_write(data)
@@ -327,6 +346,20 @@ def _metadata_items(items: list[str]) -> dict[str, str]:
     return result
 
 
+def _seat_items(items: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"seat mapping must be seat=session, got {item!r}")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            raise ValueError(f"seat mapping must be seat=session, got {item!r}")
+        result[key] = value
+    return result
+
+
 def _cmd_list(args: argparse.Namespace) -> int:
     entries = enumerate_projects(include_archived=not args.active_only)
     if args.json:
@@ -356,6 +389,7 @@ def _cmd_register(args: argparse.Namespace) -> int:
         repo_path=args.repo_path or "",
         status=args.status,
         metadata=_metadata_items(args.metadata or []),
+        seats=_seat_items(args.seat or []),
     )
     print(json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True))
     return 0
@@ -376,6 +410,7 @@ def _cmd_update(args: argparse.Namespace) -> int:
             repo_path=args.repo_path,
             template_name=args.template_name,
             primary_seat_tool=args.primary_seat_tool,
+            seats=_seat_items(args.seat) if args.seat is not None else None,
         )
     except KeyError:
         print(f"project not found: {args.project}", file=sys.stderr)
@@ -422,6 +457,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_cmd.add_argument("--repo-path", default="")
     register_cmd.add_argument("--status", choices=sorted(VALID_STATUSES), default="active")
     register_cmd.add_argument("--metadata", action="append", default=[])
+    register_cmd.add_argument("--seat", action="append", default=[], help="Seat mapping as seat=session; repeatable.")
     register_cmd.set_defaults(func=_cmd_register)
 
     unregister_cmd = sub.add_parser("unregister")
@@ -435,6 +471,7 @@ def build_parser() -> argparse.ArgumentParser:
     update_cmd.add_argument("--repo-path")
     update_cmd.add_argument("--template-name")
     update_cmd.add_argument("--primary-seat-tool")
+    update_cmd.add_argument("--seat", action="append", help="Replace seat mappings with seat=session entries; repeatable.")
     update_cmd.set_defaults(func=_cmd_update)
 
     touch_cmd = sub.add_parser("touch")

@@ -117,28 +117,15 @@ def test_init_koder_builds_workspace_from_profile_backend_seats(tmp_path):
         feishu_group_id="",
     )
 
-    tools_index = files["TOOLS.md"]
-    tools_seat = files["TOOLS/seat.md"]
-    agents = files["AGENTS.md"]
+    identity = files["IDENTITY.md"]
     memory = files["MEMORY.md"]
+    user = files["USER.md"]
     contract = files["WORKSPACE_CONTRACT.toml"]
 
-    # TOOLS.md is now a slim index — the 禁止 rule is in the hard-rules section.
-    assert "禁止运行 `start_seat.py --seat koder`" in tools_index
-    assert "`TOOLS/seat.md`" in tools_index  # routes to the seat sub-file
-
-    # The seat command details live in TOOLS/seat.md.
-    assert "--seat <planner|reviewer-1>" in tools_seat
-    # backend seat list inside seat.md only names the starting-capable seats.
-    assert "`planner`, `reviewer-1`" in tools_seat
-    assert "`builder-1`" not in tools_seat
-    assert "`qa-1`" not in tools_seat
-
-    assert "Only backend seats may be started from this workspace: `planner`, `reviewer-1`" in agents
-    # OpenClaw-mode caveat now points at TOOLS.md 强制规则; the literal
-    # "never run ..." phrase was deduplicated out of AGENTS.md.
-    assert "`koder`" in agents
-    assert "强制规则" in agents
+    assert sorted(files) == ["IDENTITY.md", "MEMORY.md", "USER.md", "WORKSPACE_CONTRACT.toml"]
+    assert "OUTBOUND" in identity
+    assert "Only backend seats may be started from this workspace: `planner`, `reviewer-1`" in identity
+    assert "detail_level" in user
 
     # MEMORY.md no longer embeds the seat roster; it points at the contract.
     assert "`WORKSPACE_CONTRACT.toml`" in memory
@@ -260,9 +247,10 @@ def test_migrate_profile_emits_materialized_seats(tmp_path):
     )
     text = "\n".join(lines)
 
-    assert 'materialized_seats = ["koder"]' in text
-    assert 'bootstrap_seats = ["koder"]' in text
-    assert 'default_start_seats = ["koder"]' in text
+    assert 'seats = ["planner", "builder-1"]' in text
+    assert 'materialized_seats = ["planner", "builder-1"]' in text
+    assert 'bootstrap_seats = []' in text
+    assert ".openclaw/koder/install-HEARTBEAT_RECEIPT.toml" in text
 
 
 def test_render_console_seat_sets_exposes_runtime_collections():

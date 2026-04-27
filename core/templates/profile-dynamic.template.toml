@@ -18,7 +18,7 @@ heartbeat_owner = ""
 heartbeat_transport = "tmux"
 active_loop_owner = "{{default_notify_target}}"
 default_notify_target = "{{default_notify_target}}"
-heartbeat_receipt = ""
+heartbeat_receipt = "{{heartbeat_receipt}}"
 seats = {{seats}}
 heartbeat_seats = []
 

@@ -78,7 +78,7 @@ def test_render_tools_index_substitutes_non_default_notify_target():
 
 
 def test_build_workspace_files_threads_notify_target_through_render_layer(tmp_path: Path):
-    """End-to-end: profile.default_notify_target must reach SOUL.md and TOOLS.md.
+    """End-to-end: profile.default_notify_target must reach IDENTITY.md.
 
     This is the test that catches mutations at the THREADING layer (e.g. hardcoding
     the call site `notify_target=default_notify_target` → `notify_target="planner"`).
@@ -93,26 +93,19 @@ def test_build_workspace_files_threads_notify_target_through_render_layer(tmp_pa
         feishu_group_id="oc_test_fixture_1234567890",
         workspace_path=tmp_path / ".openclaw" / "workspace-koder",
     )
-    soul = files["SOUL.md"]
-    tools = files["TOOLS.md"]
+    identity = files["IDENTITY.md"]
 
-    # Positive: non-default value reaches both files
-    assert _NON_DEFAULT_NOTIFY_TARGET in soul, (
-        f"profile.default_notify_target must thread through to SOUL.md; "
-        f"got SOUL.md head:\n{soul[:500]}"
-    )
-    assert _NON_DEFAULT_NOTIFY_TARGET in tools, (
-        f"profile.default_notify_target must thread through to TOOLS.md"
+    # Positive: non-default value reaches the four-file workspace identity.
+    assert _NON_DEFAULT_NOTIFY_TARGET in identity, (
+        f"profile.default_notify_target must thread through to IDENTITY.md; "
+        f"got IDENTITY.md head:\n{identity[:500]}"
     )
 
     # Negative: hardcoded "planner" must NOT appear in the substituted slots.
     # (Other parts of the file may still mention "planner" — e.g. role examples
     # in dispatch instructions.  Only assert on the substituted phrase patterns.)
-    assert "**planner 是唯一的下一跳**" not in soul, (
-        "SOUL.md still has hardcoded 'planner 是唯一的下一跳' — threading broken"
-    )
-    assert "dispatch 目标永远是 `planner`" not in tools, (
-        "TOOLS.md still has hardcoded 'dispatch 目标永远是 planner' — threading broken"
+    assert "route work through `planner`" not in identity, (
+        "IDENTITY.md still has hardcoded planner as notify target — threading broken"
     )
 
 
@@ -144,37 +137,33 @@ def test_render_tools_project_uses_workspace_path(tmp_path: Path):
 
 
 def test_render_tools_project_no_hardcoded_workspace_koder():
-    """The hardcoded `~/.openclaw/workspace-koder/WORKSPACE_CONTRACT.toml` literal
-    must not appear anywhere in init_koder.py source."""
+    """The hardcoded OpenClaw koder workspace contract literal must not appear."""
     src = _INIT_KODER.read_text(encoding="utf-8")
     assert ".openclaw/workspace-koder/WORKSPACE_CONTRACT" not in src, (
         "init_koder.py must not hardcode workspace-koder path; use workspace_path arg"
     )
 
 
-# ── Fix 4 + 5: template.toml lists clawseat-koder-frontstage ────────────────
+# ── Koder v2: template.toml lists merged clawseat-koder ─────────────────────
 
-def test_template_toml_lists_clawseat_koder_frontstage():
-    """gstack-harness template.toml koder skills must include clawseat-koder-frontstage."""
+def test_template_toml_lists_merged_clawseat_koder():
+    """gstack-harness template.toml koder skills must include merged clawseat-koder."""
     text = _TEMPLATE.read_text(encoding="utf-8")
-    assert "clawseat-koder-frontstage" in text, (
-        "template.toml koder skills must include clawseat-koder-frontstage"
-    )
+    assert "clawseat-koder/SKILL.md" in text
+    assert "clawseat-koder" + "-frontstage" not in text
 
 
-def test_install_koder_skills_resolves_clawseat_koder_frontstage(tmp_path: Path):
-    """install_koder_skills (driven by template.toml) must produce a symlink for
-    clawseat-koder-frontstage when the source skill exists in the repo."""
+def test_install_koder_skills_resolves_merged_clawseat_koder(tmp_path: Path):
+    """install_koder_skills must produce a symlink for the merged koder skill."""
     import init_koder
     skills_dir = tmp_path / "skills"
     spec = init_koder._find_template_engineer(init_koder.load_template(), "koder")
     init_koder.install_koder_skills(
         skills_dir, _REPO, spec=spec, dry_run=False,
     )
-    # The skill source exists at core/skills/clawseat-koder-frontstage/
-    expected = skills_dir / "clawseat-koder-frontstage"
+    expected = skills_dir / "clawseat-koder"
     assert expected.exists() or expected.is_symlink(), (
-        f"clawseat-koder-frontstage symlink must exist at {expected}; "
+        f"clawseat-koder symlink must exist at {expected}; "
         f"actual contents: {sorted(p.name for p in skills_dir.iterdir())}"
     )
 
