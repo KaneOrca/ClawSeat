@@ -7,6 +7,7 @@ import { safeStr } from '../../../utils/safeStr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
 import { useObstacle } from '../../../hooks/useObstacle';
+import { tokens } from '../../../design/tokens';
 
 interface RawFeedEvent {
   id: number;
@@ -53,10 +54,10 @@ export const WatchView: React.FC = () => {
   return (
     <div className="v2-watch" style={{ 
       minHeight: '100vh', 
-      background: '#fdfcf0', 
-      color: '#1a1a1a', 
+      background: tokens.colors.manuscript.bg,
+      color: tokens.colors.manuscript.ink,
       padding: '4rem',
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: tokens.fonts.manuscript,
       position: 'relative',
       overflow: 'hidden'
     }}>
@@ -68,7 +69,7 @@ export const WatchView: React.FC = () => {
           obstacles={isZenMode ? [] : obstacles} 
           width={window.innerWidth - 128} 
           lineHeight={locale === 'zh-CN' ? 36 : 32} 
-          fontDef={locale === 'zh-CN' ? "400 18px 'Noto Sans SC'" : "400 20px 'Playfair Display'"} 
+          fontDef={locale === 'zh-CN' ? `400 18px ${tokens.fonts.body}` : `400 20px ${tokens.fonts.manuscript}`}
         />
       </div>
 
@@ -82,10 +83,10 @@ export const WatchView: React.FC = () => {
         transition: 'opacity 0.6s ease'
       }}>
         <header style={{ marginBottom: '4rem' }}>
-          <div style={{ display: 'inline-flex', padding: '0.5rem 1rem', border: '1px solid #1a1a1a', marginBottom: '1rem', fontFamily: 'IBM Plex Mono', fontSize: '11px' }}>
+          <div style={{ display: 'inline-flex', padding: '0.5rem 1rem', border: `1px solid ${tokens.colors.manuscript.ink}`, marginBottom: '1rem', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small }}>
             {t('watch.v2.node_observation')} // {safeStr(activeAgent?.nickname).toUpperCase()}
           </div>
-          <h1 className="v2-watch-title" style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#1a1a1a' }}>
+          <h1 className="v2-watch-title" style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: tokens.colors.manuscript.ink }}>
             {t('watch.v2.chronicle')}
           </h1>
         </header>
@@ -152,11 +153,11 @@ const WatchFeedEntry: React.FC<{
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '10px', color: '#888', marginBottom: '1rem' }}>
+      <div style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>
         // {t('watch.v2.entry')}_{event.id}
       </div>
       <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{event.player_nickname}</div>
-      <div style={{ fontSize: '0.9rem', color: '#555', fontStyle: 'italic' }}>
+      <div style={{ fontSize: '0.9rem', color: tokens.colors.manuscript.faint, fontStyle: 'italic' }}>
         {formatWatchEventLine(t, event)}
       </div>
     </motion.div>

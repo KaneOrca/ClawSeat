@@ -4,6 +4,7 @@ import { PretextButton } from '../../../components/PretextButton';
 import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
 import { useChallengeSubmission } from '../../../hooks/useChallengeSubmission';
 import { safeStr } from '../../../utils/safeStr';
+import { tokens } from '../../../design/tokens';
 
 export const ChallengeDetailView: React.FC = () => {
   const {
@@ -27,10 +28,10 @@ export const ChallengeDetailView: React.FC = () => {
   return (
     <div className="v2-challenge-detail" style={{
       minHeight: '100vh',
-      background: '#fdfcf0',
-      color: '#1a1a1a',
+      background: tokens.colors.manuscript.bg,
+      color: tokens.colors.manuscript.ink,
       padding: '4rem',
-      fontFamily: "'Playfair Display', serif",
+      fontFamily: tokens.fonts.manuscript,
       position: 'relative',
       overflowX: 'hidden'
     }}>
@@ -44,14 +45,14 @@ export const ChallengeDetailView: React.FC = () => {
             engine: 'labyrinth',
             physicsLineIndex: 6,
             soloistId: 'challenge-v2-back',
-            color: '#888',
+            color: tokens.colors.manuscript.dim,
             onTrigger: () => setChallengeId(null),
           }}
-          style={{ color: '#888', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'IBM Plex Mono', fontSize: '11px', textTransform: 'uppercase', transition: 'transform 180ms ease, color 180ms ease, text-shadow 180ms ease' }}
+          style={{ color: tokens.colors.manuscript.dim, display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, textTransform: 'uppercase', transition: 'transform 180ms ease, color 180ms ease, text-shadow 180ms ease' }}
         >
           <ArrowLeft size={14} /> {t('challengeDetail.v2.back')}
         </PretextButton>
-        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#888' }}>
+        <div style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim }}>
           {t('challengeDetail.v2.codex_ref')}: {challenge.id} // {t('challengeDetail.v2.sec_level')}: {challenge.difficulty}
         </div>
       </div>
@@ -63,7 +64,7 @@ export const ChallengeDetailView: React.FC = () => {
             obstacles={obstacles}
             width={1000}
             lineHeight={locale === 'zh-CN' ? 40 : 36}
-            fontDef={locale === 'zh-CN' ? "500 20px 'Noto Sans SC'" : "500 22px 'Playfair Display'"}
+            fontDef={locale === 'zh-CN' ? `500 20px ${tokens.fonts.body}` : `500 22px ${tokens.fonts.manuscript}`}
           />
 
           {/* FOLIO BLOCK */}
@@ -78,10 +79,10 @@ export const ChallengeDetailView: React.FC = () => {
             boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
             zIndex: 10
           }}>
-            <h4 style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#888', marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
+            <h4 style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
             <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '2rem' }}>{challenge.title}</div>
             <div style={{ marginBottom: '2rem' }}>
-              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: '11px', color: '#aaa' }}>{t('challengeDetail.v2.xp_value')}</span>
+              <span style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.muted }}>{t('challengeDetail.v2.xp_value')}</span>
               <div style={{ fontSize: '2rem', fontWeight: 700 }}>{challenge.points}</div>
             </div>
             <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.6, fontStyle: 'italic' }}>
@@ -99,9 +100,9 @@ export const ChallengeDetailView: React.FC = () => {
             background: 'rgba(253, 252, 240, 0.8)',
             backdropFilter: 'blur(4px)',
             padding: '2rem',
-            borderLeft: '4px solid #1a1a1a'
+            borderLeft: `4px solid ${tokens.colors.manuscript.ink}`
           }}>
-            <h3 style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', color: '#888', textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
+            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
             <textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
@@ -112,11 +113,11 @@ export const ChallengeDetailView: React.FC = () => {
                 background: 'transparent',
                 border: 'none',
                 fontSize: '1.5rem',
-                fontFamily: 'Satoshi, sans-serif',
+                fontFamily: tokens.fonts.body,
                 padding: '0',
                 outline: 'none',
                 resize: 'none',
-                color: '#1a1a1a',
+                color: tokens.colors.manuscript.ink,
                 borderBottom: '1px dashed #ccc'
               }}
             />
@@ -126,17 +127,17 @@ export const ChallengeDetailView: React.FC = () => {
               disabled={submitting || !answer.trim()}
               style={{
                 marginTop: '1.5rem',
-                background: '#1a1a1a',
+                background: tokens.colors.manuscript.ink,
                 color: '#fff',
                 padding: '0.75rem 2rem',
                 border: 'none',
                 cursor: 'pointer',
-                fontFamily: 'Satoshi, sans-serif',
+                fontFamily: tokens.fonts.body,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.75rem',
                 opacity: submitting ? 0.5 : 1,
-                fontSize: '11px',
+                fontSize: tokens.sizes.small,
                 fontWeight: 700,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -151,7 +152,7 @@ export const ChallengeDetailView: React.FC = () => {
       <style>{`
         .challenge-v2-back:hover,
         .challenge-v2-back:focus-visible {
-          color: #1a1a1a !important;
+          color: ${tokens.colors.manuscript.ink} !important;
           transform: translateX(-2px);
           text-shadow: 0 0 10px rgba(26, 26, 26, 0.18);
         }

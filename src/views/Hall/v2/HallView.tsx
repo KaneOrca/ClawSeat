@@ -38,7 +38,7 @@ export const HallViewV2: React.FC = () => {
       id: 'hall-active',
       text: `${activeRow.numeral} ${activeRow.challenge.title}`,
       lineIndex: 8,
-      color: tokens.colors.aurora.red,
+      color: tokens.colors.manuscript.red,
       opacity: 0.9,
     });
     return () => unregisterSoloist('hall-active');
@@ -161,8 +161,8 @@ const getLayerState = (id: number, completedIds: number[], activeChallengeId?: n
 const containerStyle: React.CSSProperties = {
   minHeight: '100vh',
   padding: '4rem 2rem 6rem',
-  color: '#1a1a1a',
-  fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+  color: tokens.colors.manuscript.ink,
+  fontFamily: tokens.fonts.manuscript,
   position: 'relative',
 };
 
@@ -172,7 +172,7 @@ const profileStyle: React.CSSProperties = {
 };
 
 const eyebrowStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: tokens.fonts.mono,
   fontSize: tokens.sizes.micro,
   letterSpacing: '0.28em',
   textTransform: 'uppercase',
@@ -187,7 +187,7 @@ const nameStyle: React.CSSProperties = {
 };
 
 const metaStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: tokens.fonts.mono,
   fontSize: tokens.sizes.small,
   letterSpacing: '0.14em',
   opacity: 0.55,
@@ -220,7 +220,7 @@ const rowStyle: React.CSSProperties = {
 };
 
 const activeRowStyle: React.CSSProperties = {
-  color: tokens.colors.aurora.red,
+  color: tokens.colors.manuscript.red,
   fontWeight: 700,
   fontStyle: 'italic',
   fontSize: '1.25rem',
@@ -232,14 +232,14 @@ const lockedRowStyle: React.CSSProperties = {
 };
 
 const chapterStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: tokens.fonts.mono,
   fontSize: '0.75rem',
   marginRight: '1rem',
   opacity: 0.6,
 };
 
 const pointsStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: tokens.fonts.mono,
   fontSize: '0.75rem',
   opacity: 0.6,
 };

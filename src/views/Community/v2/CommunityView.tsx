@@ -71,7 +71,7 @@ export const CommunityViewV2: React.FC = () => {
         id: `community-v2-agent-${message.id}`,
         text: `[AGENT] ${safeStr(message.content)}`,
         lineIndex: 8 + index * 3,
-        color: tokens.colors.aurora.red,
+        color: tokens.colors.manuscript.red,
         opacity: 0.9,
       });
     });
@@ -137,7 +137,7 @@ export const CommunityViewV2: React.FC = () => {
           disabled={!user || !input.trim()}
           style={{
             ...sendStyle,
-            color: user && input.trim() ? tokens.colors.aurora.red : 'rgba(26,26,26,0.35)',
+            color: user && input.trim() ? tokens.colors.manuscript.red : 'rgba(26,26,26,0.35)',
             cursor: user && input.trim() ? 'pointer' : 'not-allowed',
           }}
         >
@@ -202,14 +202,14 @@ const MessageAnnotation: React.FC<{ message: ChatMessage; index: number; isIncom
 const containerStyle: React.CSSProperties = {
   minHeight: '100vh',
   padding: '4rem 2rem 7rem',
-  color: tokens.colors.text.primary,
-  fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+  color: tokens.colors.manuscript.ink,
+  fontFamily: tokens.fonts.manuscript,
   position: 'relative',
 };
 
 const labelStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '10px',
+  fontFamily: tokens.fonts.mono,
+  fontSize: tokens.sizes.xs,
   letterSpacing: '0.2em',
   opacity: 0.5,
   marginBottom: '3rem',
@@ -250,26 +250,26 @@ const messageContainerStyle: React.CSSProperties = {
 const messageStyle: React.CSSProperties = {
   fontSize: '15px',
   lineHeight: 1.6,
-  color: tokens.colors.text.primary,
+  color: tokens.colors.manuscript.ink,
 };
 
 const agentMessageStyle: React.CSSProperties = {
-  fontSize: '32px',
+  fontSize: 'clamp(1.75rem, 4vw, 2rem)',
   fontStyle: 'italic',
   fontWeight: 700,
-  color: tokens.colors.aurora.red,
+  color: tokens.colors.manuscript.red,
   lineHeight: 1.2,
   margin: '1rem 0',
 };
 
 const incomingMessageStyle: React.CSSProperties = {
   filter: 'blur(0.4px)',
-  textShadow: `0 0 18px ${tokens.colors.aurora.red}55`,
+  textShadow: `0 0 18px ${tokens.colors.manuscript.red}55`,
 };
 
 const authorStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '11px',
+  fontFamily: tokens.fonts.mono,
+  fontSize: tokens.sizes.small,
   opacity: 0.6,
   display: 'block',
   marginBottom: '0.25rem',
@@ -292,9 +292,9 @@ const inputStyle: React.CSSProperties = {
   border: 'none',
   borderBottom: '1px solid rgba(26, 26, 26, 0.3)',
   padding: '0.5rem 0',
-  fontFamily: "'Playfair Display', serif",
+  fontFamily: tokens.fonts.manuscript,
   fontSize: '16px',
-  color: tokens.colors.text.primary,
+  color: tokens.colors.manuscript.ink,
   outline: 'none',
 };
 
@@ -303,7 +303,7 @@ const sendStyle: React.CSSProperties = {
   border: 'none',
   borderBottom: '1px solid currentColor',
   padding: '0.5rem 0',
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '10px',
+  fontFamily: tokens.fonts.mono,
+  fontSize: tokens.sizes.xs,
   letterSpacing: '0.18em',
 };

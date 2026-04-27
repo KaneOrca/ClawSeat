@@ -23,12 +23,21 @@ export const tokens = {
       bg: 'rgba(20, 20, 25, 0.4)',
       border: 'rgba(255, 255, 255, 0.06)',
       highlight: 'rgba(255, 255, 255, 0.15)'
+    },
+    manuscript: {
+      bg: '#fdfcf0',
+      ink: '#1a1a1a',
+      red: '#b53021',
+      dim: '#888',
+      faint: '#555',
+      muted: '#aaa'
     }
   },
   fonts: {
     display: "'Clash Display', sans-serif",
     body: "'Satoshi', sans-serif",
-    mono: "'JetBrains Mono', monospace"
+    mono: "'JetBrains Mono', monospace",
+    manuscript: "'Playfair Display', 'Noto Serif SC', serif"
   },
   sizes: {
     xxs: '9px',

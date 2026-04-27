@@ -5,13 +5,14 @@ import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { useHomeInit } from '../../../hooks/useHomeInit';
 import { PretextButton } from '../../../components/PretextButton';
+import { tokens } from '../../../design/tokens';
 
-const MANUSCRIPT_ACTIVE_RED = '#b53021';
+const MANUSCRIPT_ACTIVE_RED = tokens.colors.manuscript.red;
 
 const V2_CONFIG = {
   soloistId: 'v2-home-title',
   lineIndex: 10,
-  color: '#1a1a1a',
+  color: tokens.colors.manuscript.ink,
   opacity: 0.8,
   environment: { waveAmplitude: 0, ambientColor: 'rgba(26, 26, 26, 0.4)', opacity: 0.3 },
   zenEnvironment: { waveAmplitude: 90, ambientColor: 'rgba(26, 26, 26, 0.4)', opacity: 0.6 },
@@ -125,7 +126,7 @@ export const HomeView: React.FC = () => {
       background: 'transparent',
       color: 'inherit',
       padding: 'clamp(1.5rem, 6vw, 5rem) 0',
-      fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+      fontFamily: tokens.fonts.manuscript,
       overflow: 'auto'
     }}>
 
@@ -145,8 +146,8 @@ export const HomeView: React.FC = () => {
             width: 'min(30vw, 340px)',
             padding: '1rem 0'
           }}>
-            <h3 style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: '#888', letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.marginalia_label')}</h3>
-            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: '#555' }}>
+            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.marginalia_label')}</h3>
+            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
               {t('home.marginalia')}
             </p>
           </div>
@@ -160,8 +161,8 @@ export const HomeView: React.FC = () => {
             padding: '1rem 0',
             textAlign: 'right'
           }}>
-            <h3 style={{ fontFamily: 'IBM Plex Mono', fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: '#888', letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.notes_label')}</h3>
-            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: '#555' }}>
+            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.notes_label')}</h3>
+            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
               {t('home.v2.notes')}
             </p>
           </div>
@@ -173,7 +174,7 @@ export const HomeView: React.FC = () => {
             maxWidth: '780px',
             marginLeft: 'clamp(0rem, 14vw, 14rem)'
           }}>
-            <NeuralBadge text={t('home.configs.v2')} color="#aaa" />
+            <NeuralBadge text={t('home.configs.v2')} color={tokens.colors.manuscript.muted} />
 
             <div data-module="home-title" style={{ height: '80px', pointerEvents: 'none', visibility: 'hidden' }} />
 
@@ -185,7 +186,7 @@ export const HomeView: React.FC = () => {
                 fontSize: 'clamp(1.1rem, 2.4vw, 1.5rem)',
                 lineHeight: 1.85,
                 textAlign: 'justify',
-                color: '#1a1a1a',
+                color: tokens.colors.manuscript.ink,
                 maxWidth: '100%'
               }}
             >
@@ -246,7 +247,7 @@ export const HomeView: React.FC = () => {
                 marginTop: 'clamp(2.5rem, 6vh, 4.5rem)',
                 maxWidth: 'min(680px, 100%)',
                 color: MANUSCRIPT_ACTIVE_RED,
-                fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+                fontFamily: tokens.fonts.manuscript,
                 fontSize: 'clamp(1rem, 2.1vw, 1.35rem)',
                 fontStyle: 'italic',
                 fontWeight: 500,
@@ -257,7 +258,7 @@ export const HomeView: React.FC = () => {
               }}
             />
 
-            <div style={{ marginTop: '8vh', fontFamily: 'IBM Plex Mono', fontSize: '10px', opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
+            <div style={{ marginTop: '8vh', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
               {t('home.v2.status_label')}: {fieldState}<br />
               {t('home.v2.route_label')}: {activeTermId ? TERM_NAV.find(term => term.id === activeTermId)?.route : '--'}<br />
               {t('home.v2.location_label')}: {t('home.v2.location_value')}<br />

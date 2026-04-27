@@ -5,8 +5,9 @@ import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { PretextButton } from '../../../components/PretextButton';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
+import { tokens } from '../../../design/tokens';
 
-const INK_RED = '#b53021';
+const INK_RED = tokens.colors.manuscript.red;
 
 interface RegisterResponse {
   code: string;
@@ -40,7 +41,7 @@ export const AuthViewV2: React.FC = () => {
       id: 'auth-v2-soloist',
       text: success ? '第一道门已通过，回响已留下印记。' : '请写下你的代号，让手稿避让出入口。',
       lineIndex: success ? 18 : 14,
-      color: success ? INK_RED : '#1a1a1a',
+      color: success ? INK_RED : tokens.colors.manuscript.ink,
       opacity: success ? 1 : 0.75,
     });
     return () => {
@@ -148,8 +149,8 @@ const containerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  color: '#1a1a1a',
-  fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+  color: tokens.colors.manuscript.ink,
+  fontFamily: tokens.fonts.manuscript,
 };
 
 const flowStyle: React.CSSProperties = {
@@ -159,8 +160,8 @@ const flowStyle: React.CSSProperties = {
 };
 
 const eyebrowStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '10px',
+  fontFamily: tokens.fonts.mono,
+  fontSize: tokens.sizes.xs,
   letterSpacing: '0.3em',
   opacity: 0.55,
   marginBottom: '2rem',
@@ -176,7 +177,7 @@ const proseStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   background: 'transparent',
   border: 0,
-  borderBottom: '1px solid #1a1a1a',
+  borderBottom: `1px solid ${tokens.colors.manuscript.ink}`,
   color: INK_RED,
   font: 'inherit',
   fontSize: 'clamp(1.8rem, 5vw, 3.2rem)',
@@ -191,7 +192,7 @@ const inputStyle: React.CSSProperties = {
 const buttonStyle: React.CSSProperties = {
   color: INK_RED,
   display: 'inline-block',
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: tokens.fonts.mono,
   fontSize: '12px',
   fontWeight: 700,
   letterSpacing: '0.2em',
@@ -201,7 +202,7 @@ const buttonStyle: React.CSSProperties = {
 
 const errorStyle: React.CSSProperties = {
   color: INK_RED,
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: tokens.fonts.mono,
   fontSize: '12px',
   letterSpacing: '0.08em',
   marginTop: '2rem',
@@ -214,7 +215,7 @@ const successTextStyle: React.CSSProperties = {
 
 const codeStyle: React.CSSProperties = {
   color: INK_RED,
-  fontFamily: "'Playfair Display', 'Noto Serif SC', serif",
+  fontFamily: tokens.fonts.manuscript,
   fontSize: 'clamp(3rem, 10vw, 6rem)',
   fontStyle: 'italic',
   fontWeight: 900,
@@ -222,8 +223,8 @@ const codeStyle: React.CSSProperties = {
 };
 
 const captionStyle: React.CSSProperties = {
-  fontFamily: "'IBM Plex Mono', monospace",
-  fontSize: '11px',
+  fontFamily: tokens.fonts.mono,
+  fontSize: tokens.sizes.small,
   letterSpacing: '0.12em',
   lineHeight: 1.8,
   opacity: 0.62,
