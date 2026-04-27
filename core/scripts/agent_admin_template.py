@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import textwrap
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -19,6 +21,37 @@ if _CORE_PATH not in sys.path:
 _CORE_SCRIPTS_PATH = str(_REPO_ROOT / "core" / "scripts")
 if _CORE_SCRIPTS_PATH not in sys.path:
     sys.path.insert(0, _CORE_SCRIPTS_PATH)
+
+
+def _clawseat_head_sha() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    sha = result.stdout.strip()
+    return sha if result.returncode == 0 and sha else "unknown"
+
+
+def _workspace_metadata_header() -> str:
+    rendered_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        f"<!-- rendered_from_clawseat_sha={_clawseat_head_sha()} "
+        f"rendered_at={rendered_at} renderer_version=v1 -->"
+    )
+
+
+def _with_workspace_metadata(content: str, header: str) -> str:
+    lines = content.splitlines()
+    if lines and lines[0].startswith("<!-- rendered_from_clawseat_sha="):
+        lines = lines[1:]
+    body = "\n".join(lines).lstrip("\n")
+    return f"{header}\n{body.rstrip()}\n"
 
 
 def _load_role_skill_content(
@@ -442,6 +475,10 @@ class TemplateHandlers:
             rendered["AGENTS.md"] = gemini_memory if tool == "gemini" else claude_memory
             rendered["CLAUDE.md"] = claude_memory
             rendered["GEMINI.md"] = gemini_memory
+        metadata_header = _workspace_metadata_header()
+        for workspace_doc in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+            if workspace_doc in rendered:
+                rendered[workspace_doc] = _with_workspace_metadata(rendered[workspace_doc], metadata_header)
         return rendered
 
     def apply_template(

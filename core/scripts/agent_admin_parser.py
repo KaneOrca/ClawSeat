@@ -56,6 +56,7 @@ class ParserHooks:
     cmd_engineer_rename: Callable[[Any], int]
     cmd_engineer_rebind: Callable[[Any], int]
     cmd_engineer_refresh_workspace: Callable[[Any], int]
+    cmd_engineer_regenerate_workspace: Callable[[Any], int]
     cmd_engineer_secret_set: Callable[[Any], int]
     cmd_tui: Callable[[Any], int]
     # P1 layered-model (see docs/schemas/v0.4-layered-model.md):
@@ -565,6 +566,17 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     refresh_workspace.add_argument("engineer")
     refresh_workspace.add_argument("--project")
     refresh_workspace.set_defaults(func=hooks.cmd_engineer_refresh_workspace)
+
+    regenerate_workspace = engineer_sub.add_parser("regenerate-workspace")
+    regenerate_workspace.add_argument("engineer", nargs="?")
+    regenerate_workspace.add_argument("--all-seats", action="store_true")
+    regenerate_workspace.add_argument("--project", required=True)
+    regenerate_workspace.add_argument(
+        "--yes",
+        action="store_true",
+        help="Assume yes for overwrite prompts after the operator has already approved a bulk re-render.",
+    )
+    regenerate_workspace.set_defaults(func=hooks.cmd_engineer_regenerate_workspace)
 
     secret = engineer_sub.add_parser("secret-set")
     secret.add_argument("engineer")

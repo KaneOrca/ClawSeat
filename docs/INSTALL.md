@@ -1,5 +1,15 @@
 # ClawSeat v0.7 Install Playbook
 
+## TL;DR
+
+New project? Run:
+
+```bash
+bash ~/ClawSeat/scripts/install.sh --project <name>
+```
+
+That is the one canonical command. Everything else is internal plumbing.
+
 > Target executor: Claude Code (agent, not human).
 > This file is the install SSOT. `scripts/install.sh` owns host bootstrap and
 > runtime startup; once memory is prompt-ready, memory owns Phase-A.

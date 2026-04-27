@@ -211,6 +211,18 @@ bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh <project> <seat>
 
 除 project-level owner / patrol / lifecycle 职责以外，memory **同时兼任调研员**。operator 问"X 是什么 / 扫一下 Y / 调研 Z 架构"、或者我自己在做决策前需要跨多文件理解时，**默认用 Claude Code 的 Agent tool 并发 subagent**，不要自己串行 `Read`/`Bash`/`Grep` 到自己上下文爆掉。
 
+### Official Documentation Gate（外部 SDK/API/CLI）
+
+任何涉及外部 SDK / API / CLI 集成的任务，project-memory **必须**先做官方文档调研，并写 durable KB record：
+`~/.agents/memory/projects/<project>/findings/`。记录必须包含：
+
+- Official docs URL（权威来源；禁止用 blog / StackOverflow / 二手摘要替代）
+- Package name + version + CLI binary path
+- Relevant API contracts（method signatures / key schemas / error codes）
+- Inference boundary（哪些是官方文档明说的，哪些是 memory 推断）
+
+Planner 派 builder 前必须引用该记录，或让 memory 明确写 `docs_skip_reason:<why>`；builder DELIVERY 必须保留 `Docs Consulted` 证据段。
+
 ### 为什么是 memory 做调研，不是派给 planner / builder
 
 - memory 是**项目级 owner**，planner / builder 是它的下游；让下游反过来"帮 owner 调研"会混淆角色边界

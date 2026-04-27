@@ -1176,6 +1176,7 @@ CRUD_HANDLERS = CrudHandlers(
         merge_engineer_profile_with_template=merge_engineer_profile_with_template,
         create_session_record=create_session_record,
         apply_template=apply_template,
+        render_template_text=render_template_text,
         ensure_empty_env_file=ensure_empty_env_file,
         ensure_dir=ensure_dir,
         write_text=write_text,
@@ -1264,6 +1265,10 @@ def cmd_engineer_refresh_workspace(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.engineer_refresh_workspace(args)
 
 
+def cmd_engineer_regenerate_workspace(args: argparse.Namespace) -> int:
+    return CRUD_HANDLERS.engineer_regenerate_workspace(args)
+
+
 def cmd_engineer_secret_set(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.engineer_secret_set(args)
 
@@ -1330,6 +1335,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_engineer_rename=cmd_engineer_rename,
     cmd_engineer_rebind=cmd_engineer_rebind,
     cmd_engineer_refresh_workspace=cmd_engineer_refresh_workspace,
+    cmd_engineer_regenerate_workspace=cmd_engineer_regenerate_workspace,
     cmd_engineer_secret_set=cmd_engineer_secret_set,
     cmd_tui=cmd_tui,
     cmd_project_koder_bind=cmd_project_koder_bind,

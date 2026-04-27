@@ -6,6 +6,8 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable
 
@@ -297,6 +299,7 @@ class CrudHooks:
     merge_engineer_profile_with_template: Callable[[Any, dict], Any]
     create_session_record: Callable[..., Any]
     apply_template: Callable[[Any, Any], None]
+    render_template_text: Callable[..., dict[str, str]]
     ensure_empty_env_file: Callable[..., None]
     ensure_dir: Callable[[Path], None]
     write_text: Callable[..., None]
@@ -379,6 +382,12 @@ class CrudHandlers:
             open_detail_windows=bool(args.open_detail_windows) or bool(merged["open_detail_windows"]),
         )
         self.hooks.write_project(project)
+        print(
+            "hint: For a complete project setup (workspace + secrets + skills), use:\n"
+            f"  bash ~/ClawSeat/scripts/install.sh --project {project.name}\n"
+            "agent_admin project create is a low-level primitive; install.sh is the canonical entry.",
+            file=sys.stderr,
+        )
         profile_path = HOME / ".agents" / "profiles" / f"{project_name}-profile-dynamic.toml"
         if not profile_path.exists():
             profile_template = (REPO_ROOT / "core" / "templates" / "profile-dynamic.template.toml").read_text(
@@ -1025,6 +1034,76 @@ class CrudHandlers:
         project = self.hooks.load_project(session.project)
         self.hooks.apply_template(session, project)
         print(f"refreshed\t{session.engineer_id}\t{session.session}\t{session.workspace}")
+        return 0
+
+    @staticmethod
+    def _workspace_doc_hash(text: str) -> str:
+        lines = text.splitlines()
+        if lines and lines[0].startswith("<!-- rendered_from_clawseat_sha="):
+            lines = lines[1:]
+        return sha256(("\n".join(lines).strip() + "\n").encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _confirm_overwrite(path: Path) -> bool:
+        response = input(f"{path} has local changes. Overwrite? (Y/n) ").strip().lower()
+        return response in {"", "y", "yes"}
+
+    def _regenerate_one_workspace(self, session: Any, project: Any, *, assume_yes: bool = False) -> None:
+        workspace = Path(session.workspace)
+        rendered = self.hooks.render_template_text(session.tool, session, project)
+        workspace_docs = {
+            relpath: content
+            for relpath, content in rendered.items()
+            if relpath in {"AGENTS.md", "CLAUDE.md", "GEMINI.md"}
+        }
+        changed_docs: list[Path] = []
+        for relpath, content in workspace_docs.items():
+            path = workspace / relpath
+            if not path.exists():
+                continue
+            existing = path.read_text(encoding="utf-8")
+            if self._workspace_doc_hash(existing) != self._workspace_doc_hash(content):
+                changed_docs.append(path)
+        if changed_docs and not assume_yes:
+            for path in changed_docs:
+                if not self._confirm_overwrite(path):
+                    raise self.hooks.error_cls(f"workspace regenerate aborted by operator: {path}")
+
+        backup_dir = workspace / f".backup-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        backed_up = False
+        for relpath in workspace_docs:
+            path = workspace / relpath
+            if not path.exists():
+                continue
+            target = backup_dir / relpath
+            self.hooks.ensure_dir(target.parent)
+            shutil.copy2(path, target)
+            backed_up = True
+        self.hooks.apply_template(session, project)
+        backup_note = f"\tbackup={backup_dir}" if backed_up else ""
+        print(f"regenerated\t{session.engineer_id}\t{session.session}\t{session.workspace}{backup_note}")
+
+    def engineer_regenerate_workspace(self, args: Any) -> int:
+        project = self.hooks.load_project(args.project)
+        assume_yes = bool(getattr(args, "yes", False))
+        if getattr(args, "all_seats", False):
+            if getattr(args, "engineer", None):
+                raise self.hooks.error_cls("regenerate-workspace accepts either <seat> or --all-seats, not both")
+            sessions = [
+                self.hooks.resolve_engineer_session(engineer_id, project_name=project.name)
+                for engineer_id in project.engineers
+            ]
+        else:
+            if not getattr(args, "engineer", None):
+                raise self.hooks.error_cls("regenerate-workspace requires <seat> or --all-seats")
+            sessions = [
+                self.hooks.resolve_engineer_session(
+                    args.engineer,
+                    project_name=project.name,
+                )
+            ]
+        for session in sessions:
+            self._regenerate_one_workspace(session, project, assume_yes=assume_yes)
         return 0
 
     def engineer_secret_set(self, args: Any) -> int:

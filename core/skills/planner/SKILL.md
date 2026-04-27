@@ -57,6 +57,18 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
 Planner KB 路径：派工、优先级、方案选择记录写到
 `~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`。
 
+### Official Docs Dispatch Gate（external SDK/API/CLI）
+
+Before spawning builder for external SDK/API/CLI tasks:
+
+1. Check whether the explicit task scope involves an external SDK, API, CLI, SaaS client, npm package, pip package, or comparable third-party integration.
+2. If yes, require project-memory to provide a durable official-docs research record reference.
+3. If memory KB already has a current record (<30 days old), reference it in `--notes`.
+4. If no current record exists, dispatch a memory research task first and wait for the KB record before builder dispatch.
+5. `dispatch_task.py --notes` must contain `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`, and external integrations should pass `--task-type external-integration` with `--docs-consulted` or `--docs-skip-reason`.
+
+Do not infer this gate from title keywords alone; it activates when the task scope explicitly involves external SDK/API/CLI work.
+
 派发规则：
 
 - 允许 fan-out。同一 chain 可以同时派多个 specialist。

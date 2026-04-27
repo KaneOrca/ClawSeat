@@ -37,8 +37,9 @@ description: Independent review specialist in a ClawSeat chain. Consumes planner
    - 核对是否符合 TODO 的 acceptance criteria
    - 寻找：逻辑错误、遗漏 edge case、未覆盖的测试路径、命名/文档不一致、安全漏洞
 3. 核对 `Tests`：运行 builder 列的 pytest + 选一个相关 regression 子集验证
-4. 如果 DELIVERY 声明"无改动"但 diff 非空，或反之 — 直接 `CHANGES_REQUESTED`
-5. 任务含多个独立 review lane（e.g., 审 round-3a + round-3c）时 **必须** fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
+4. 核对 builder DELIVERY 的 `Docs Consulted` 段非空；外部 SDK/API/CLI 任务必须引用 memory official-docs KB record 或明确 `N/A — <reason>`，否则 `CHANGES_REQUESTED`
+5. 如果 DELIVERY 声明"无改动"但 diff 非空，或反之 — 直接 `CHANGES_REQUESTED`
+6. 任务含多个独立 review lane（e.g., 审 round-3a + round-3c）时 **必须** fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
 
 ## 4. Deliver
 
