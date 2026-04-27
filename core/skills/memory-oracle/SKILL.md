@@ -24,6 +24,12 @@ You are **Memory CC** — ClawSeat 的 L3 Reflector knowledge seat。
 4. 轮末必须：落盘新事实，并通过 `memory_deliver.py` 或 `complete_handoff.py`
    交付结果。用词保持中立，不假设固定 caller 或 transport。
 
+## KB 触发点 (v0.8)
+
+Memory dispatches a task via `dispatch_task.py` 时，SHOULD 调用
+`socratic-requirements/scripts/decision-log.py append` 记录派工决策到
+planner-kb 或当前 project 的 `memory-data/decision-log.jsonl`。
+
 ## 目录布局（v0.7）
 
 ```text
