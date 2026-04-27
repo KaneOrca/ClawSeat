@@ -44,22 +44,9 @@ from project_binding import (  # noqa: E402
     write_binding,
 )
 
-# Builder-1's machine + validator modules. Import defensively: we are
-# landed on a branch where builder-1's commits may not be present yet.
-try:
-    from machine_config import (  # type: ignore[import-not-found]
-        load_machine,
-        validate_tenant,
-    )
-    _MACHINE_AVAILABLE = True
-except ImportError:  # pragma: no cover — fallback when builder-1 hasn't landed
-    _MACHINE_AVAILABLE = False
+from machine_config import load_machine, validate_tenant  # noqa: E402
 
-    def load_machine(*_a, **_kw):  # type: ignore[no-redef]
-        raise ImportError("core.lib.machine_config unavailable")
-
-    def validate_tenant(*_a, **_kw):  # type: ignore[no-redef]
-        raise ImportError("core.lib.machine_config unavailable")
+_MACHINE_AVAILABLE = True
 
 try:
     from profile_validator import validate_profile_v2  # type: ignore[import-not-found]

@@ -11,11 +11,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORE_LIB = _REPO_ROOT / "core" / "lib"
 if str(_CORE_LIB) not in sys.path:
@@ -23,6 +18,7 @@ if str(_CORE_LIB) not in sys.path:
 
 from real_home import real_user_home  # noqa: E402
 from state import Seat, get_seat, list_seats, open_db, upsert_seat  # noqa: E402
+from utils import load_toml, now_iso  # noqa: E402
 
 
 TOOL_NAMES = {"claude", "codex", "gemini", "minimax", "deepseek", "ark", "gpt-5"}
@@ -42,20 +38,11 @@ class KnownProject:
     seats: set[str]
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Reconcile live tmux sessions into ~/.agents/state.db seats.")
     parser.add_argument("--project", help="Limit reconcile to one project.")
     parser.add_argument("--tmux-output-file", help="Test hook: newline-separated tmux session names.")
     return parser.parse_args(argv)
-
-
-def _load_toml(path: Path) -> dict:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
 
 
 def _real_home() -> Path:
@@ -115,7 +102,7 @@ def _known_projects(home: Path) -> dict[str, KnownProject]:
     if root.is_dir():
         for project_toml in sorted(root.glob("*/project.toml")):
             try:
-                data = _load_toml(project_toml)
+                data = load_toml(project_toml) or {}
             except Exception:
                 continue
             name = str(data.get("name") or project_toml.parent.name).strip()
@@ -192,7 +179,7 @@ def _session_record(home: Path, parsed: ParsedSession) -> dict:
     if not path.is_file():
         return {}
     try:
-        return _load_toml(path)
+        return load_toml(path) or {}
     except Exception:
         return {}
 
@@ -205,12 +192,12 @@ def _project_role(home: Path, parsed: ParsedSession) -> str:
     project_path = _project_root(home) / parsed.project / "project.toml"
     if project_path.is_file():
         try:
-            project = _load_toml(project_path)
+            project = load_toml(project_path) or {}
             template_name = str(project.get("template_name") or "").strip()
             if template_name:
                 template_path = _REPO_ROOT / "templates" / f"{template_name}.toml"
                 if template_path.is_file():
-                    template = _load_toml(template_path)
+                    template = load_toml(template_path) or {}
                     for engineer in template.get("engineers", []):
                         if str(engineer.get("id") or "").strip() == parsed.seat_id:
                             return _normalise_role(str(engineer.get("role") or ""), parsed.seat_id)

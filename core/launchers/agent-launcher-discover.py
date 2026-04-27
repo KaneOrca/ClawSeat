@@ -13,8 +13,12 @@ if str(_REPO_ROOT) not in sys.path:
 _CORE_SCRIPTS = str(_REPO_ROOT / "core" / "scripts")
 if _CORE_SCRIPTS not in sys.path:
     sys.path.insert(0, _CORE_SCRIPTS)
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
 
 from agent_admin_config import tool_default_base_url
+from env_utils import parse_env_file
 from core.lib.real_home import real_user_home
 
 
@@ -112,34 +116,6 @@ def source_rank(path: Path, tool: str, workdir: str) -> tuple[int, int, str]:
 
     depth = len(resolved.parts)
     return (score, depth, str(resolved))
-
-
-def parse_env_file(path: Path) -> dict[str, str]:
-    data: dict[str, str] = {}
-    try:
-        raw = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    except Exception:
-        return data
-
-    for line in raw:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("export "):
-            stripped = stripped[len("export ") :].strip()
-        if "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-        if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
-            value = value[1:-1]
-        value = value.strip()
-        if value:
-            data[key] = value
-    return data
 
 
 def mask_key(value: str) -> str:

@@ -10,20 +10,8 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    try:
-        import tomli as tomllib  # type: ignore
-    except ModuleNotFoundError as _exc:  # pragma: no cover
-        raise ModuleNotFoundError(
-            "clawseat requires Python 3.11+ OR tomli installed for Python <3.11. "
-            "Install with: pip install tomli"
-        ) from _exc
 
 
 # ── Real-user-HOME anchor (SSOT: core/lib/real_home.py) ──────────────
@@ -50,6 +38,19 @@ _REAL_HOME_LIB = Path(__file__).resolve().parents[3] / "lib"
 if str(_REAL_HOME_LIB) not in sys.path:
     sys.path.insert(0, str(_REAL_HOME_LIB))
 from real_home import real_user_home as _real_user_home_ssot  # noqa: E402
+
+if (
+    "tomllib" in sys.modules
+    and sys.modules["tomllib"] is None
+    and "tomli" in sys.modules
+    and sys.modules["tomli"] is None
+):  # pragma: no cover - exercised by isolated import regression test
+    raise ModuleNotFoundError(
+        "clawseat requires Python 3.11+ OR tomli installed for Python <3.11. "
+        "Install with: pip install tomli"
+    )
+
+from utils import load_toml as _core_load_toml, q, q_array  # noqa: E402
 
 
 def _anchored_home() -> Path:
@@ -91,21 +92,10 @@ CONSUMED_RE = re.compile(
 PLACEHOLDER_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
 
-# ── TOML quoting (unified, safe for all strings including newlines) ──
-
-def q(value: object) -> str:
-    """Quote a value for TOML embedding. Uses json.dumps for correct escaping."""
-    return json.dumps(value, ensure_ascii=False)
-
-
-def q_array(values: Iterable[str]) -> str:
-    """Format a list of strings as a TOML array."""
-    return "[" + ", ".join(q(v) for v in values) + "]"
-
-
 # ── Time ─────────────────────────────────────────────────────────────
 
 def utc_now_iso() -> str:
+    from datetime import datetime, timezone
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
@@ -140,10 +130,11 @@ def load_json(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_toml(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    return tomllib.loads(path.read_text(encoding="utf-8"))
+def _load_optional_toml(path: Path) -> dict[str, Any] | None:
+    return _core_load_toml(path, missing_ok=True)
+
+
+load_toml = _load_optional_toml
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:

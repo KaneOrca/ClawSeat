@@ -11,11 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore
-
 
 SCRIPT_PATH = Path(__file__).resolve()
 ENGINE_ROOT = SCRIPT_PATH.parent
@@ -28,6 +23,7 @@ if str(AGENT_ADMIN_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(AGENT_ADMIN_SCRIPTS))
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+from core.lib.utils import load_toml, q, q_array  # noqa: E402
 from core.lib.real_home import real_user_home
 
 import agent_admin_runtime
@@ -127,11 +123,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_toml(path: Path) -> dict[str, Any]:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
-
-
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
@@ -141,14 +132,6 @@ def write_text(path: Path, text: str, mode: int | None = None) -> None:
     path.write_text(text, encoding="utf-8")
     if mode is not None:
         path.chmod(mode)
-
-
-def q(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def q_array(values: list[str]) -> str:
-    return "[" + ", ".join(q(value) for value in values) + "]"
 
 
 def template_search_roots(repo_root: Path) -> list[Path]:

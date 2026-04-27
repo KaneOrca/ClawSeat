@@ -29,6 +29,10 @@ SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parent.parent.parent
 MIGRATION_ROOT = REPO_ROOT / "core" / "migration"
 LEGACY_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
+_CORE_LIB = REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from utils import load_toml  # noqa: E402
 
 COMMAND_SCRIPTS = {
     "dispatch": {
@@ -58,16 +62,11 @@ def usage() -> str:
     )
 
 
-def load_toml(path: Path) -> dict[str, object]:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
-
-
 def is_dynamic_profile(path: Path) -> bool:
     if not path.exists():
         return False
     try:
-        data = load_toml(path)
+        data = load_toml(path) or {}
     except (OSError, tomllib.TOMLDecodeError):
         return False
     dynamic = data.get("dynamic_roster", {})

@@ -24,7 +24,6 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -38,6 +37,8 @@ for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "core" / "lib")):
         sys.path.insert(0, _p)
 
 from openclaw_home import discover_openclaw_home
+from env_utils import parse_env_text as parse_env_file
+from utils import now_iso
 
 
 def _real_user_home() -> Path:
@@ -73,10 +74,6 @@ MACHINE_SUBDIR = "machine"
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def run_cmd(cmd: list[str], *, timeout: float = 10.0) -> str:
     try:
         result = subprocess.run(
@@ -100,29 +97,6 @@ def safe_read(path: Path, *, max_bytes: int = 1_000_000) -> str | None:
         return path.read_text(encoding="utf-8", errors="replace")
     except (OSError, PermissionError):
         return None
-
-
-def parse_env_file(text: str) -> dict[str, str]:
-    """Parse KEY=VALUE lines, skipping comments. Strips surrounding quotes."""
-    result: dict[str, str] = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        # Strip "export " prefix if present
-        if line.startswith("export "):
-            line = line[7:].lstrip()
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
-        # Strip matching quotes
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-            value = value[1:-1]
-        if key:
-            result[key] = value
-    return result
 
 
 def write_json(output_dir: Path, name: str, data: dict) -> Path:

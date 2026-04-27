@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -54,6 +52,10 @@ from agent_admin_config import (
     TOOL_BINARIES,
     WORKSPACES_ROOT,
 )
+_CORE_LIB = REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from utils import load_toml, q, q_array  # noqa: E402
 from agent_admin_crud import CrudHandlers, CrudHooks
 from agent_admin_info import InfoHandlers, InfoHooks
 # agent_admin_legacy is imported lazily inside migrate_legacy / migrate_session_model
@@ -106,13 +108,6 @@ from agent_admin_workspace import (
     workspace_contract_payload,
     render_workspace_contract_text,
 )
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib
-
-
 
 @dataclass
 class Engineer:
@@ -181,14 +176,6 @@ class AgentAdminError(RuntimeError):
     pass
 
 
-def q(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def q_array(values: list[str]) -> str:
-    return "[" + ", ".join(q(v) for v in values) + "]"
-
-
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
@@ -198,11 +185,6 @@ def write_text(path: Path, content: str, mode: int | None = None) -> None:
     path.write_text(content)
     if mode is not None:
         path.chmod(mode)
-
-
-def load_toml(path: Path) -> dict:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
 
 
 def normalize_name(value: str) -> str:

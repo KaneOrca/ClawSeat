@@ -6,15 +6,18 @@ import json
 import os
 import shutil
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CORE_SCRIPTS = str(_REPO_ROOT / "core" / "scripts")
 if _CORE_SCRIPTS not in sys.path:
     sys.path.insert(0, _CORE_SCRIPTS)
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
 
 from agent_admin_config import is_supported_runtime_combo, provider_url_matches  # noqa: E402
+from utils import now_iso  # noqa: E402
 
 
 def real_home() -> Path:
@@ -30,10 +33,6 @@ def real_home() -> Path:
     except Exception:
         pass
     return Path(os.environ.get("HOME", str(Path.home()))).expanduser()
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def env_file_has_key(path: Path, key: str) -> bool:
