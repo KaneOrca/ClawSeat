@@ -1,13 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { VariantType } from './ArenaContext';
+import { getCharRects, type CharRect } from './physics/char-metrics';
+import { renderMask, type MaskBuffer } from './physics/mask-renderer';
+import { trackElementObstacle, untrackElementObstacle } from './physics/obstacle-tracker';
 
-export interface CharRect {
-  char: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+export type { CharRect } from './physics/char-metrics';
 
 export interface RectObstacle {
   id: string;
@@ -72,7 +69,7 @@ export interface PhysicsEffects {
 interface PhysicsContextType {
   obstacles: RectObstacle[];
   obstaclesRef: React.RefObject<RectObstacle[]>;
-  maskRef: React.RefObject<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; width: number; height: number; dirty: boolean } | null>;
+  maskRef: React.RefObject<MaskBuffer | null>;
   /** Mutable viewport state — scroll offset, dimensions, DPR. Updated every frame. */
   viewportRef: React.RefObject<ViewportState>;
   trackObstacle: (id: string, element: HTMLElement) => void;
@@ -93,174 +90,6 @@ const POLL_EVERY_N_FRAMES = 1;
 const CHANGE_THRESHOLD = 1; // px
 const SNAPSHOT_DEBOUNCE_MS = 50;
 const RECOIL_DECAY = 0.92;
-
-// ── CharRect decomposition with caching ─────────────────────────────
-
-interface CharRectCache {
-  text: string;
-  font: string;
-  relRects: { char: string; dx: number; dy: number; w: number; h: number }[];
-}
-
-const _charRectCache = new Map<string, CharRectCache>();
-let _measureCanvas: HTMLCanvasElement | null = null;
-
-/**
- * Decompose a text element into per-character sub-rects.
- * Tries Range API first (handles multi-line/wrapping accurately),
- * falls back to canvas measureText for single-line.
- * Caches relative positions keyed by obstacle ID — only recomputes
- * when textContent or font changes. Static elements cost zero.
- */
-function getCharRects(id: string, el: HTMLElement, bbox: DOMRect): CharRect[] | undefined {
-  const text = el.textContent;
-  if (!text || text.length < 2 || text.length > 100) return undefined;
-
-  const style = getComputedStyle(el);
-  const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-
-  // Cache hit — reuse relative rects, just offset by current bbox
-  const cached = _charRectCache.get(id);
-  if (cached && cached.text === text && cached.font === font) {
-    return cached.relRects.map(r => ({
-      char: r.char,
-      x: bbox.left + r.dx,
-      y: bbox.top + r.dy,
-      w: r.w,
-      h: r.h,
-    }));
-  }
-
-  // Cache miss — compute relative rects
-  const relRects: CharRectCache['relRects'] = [];
-  let measured = false;
-
-  // Strategy 1: Range API (handles multi-line, wrapping, mixed content)
-  const textNode = findFirstTextNode(el);
-  if (textNode && textNode.textContent === text) {
-    try {
-      const range = document.createRange();
-      for (let i = 0; i < text.length; i++) {
-        if (text[i] === ' ' || text[i] === '\n' || text[i] === '\t') continue;
-        range.setStart(textNode, i);
-        range.setEnd(textNode, i + 1);
-        const cr = range.getBoundingClientRect();
-        if (cr.width < 0.5) continue;
-        relRects.push({
-          char: text[i],
-          dx: cr.left - bbox.left,
-          dy: cr.top - bbox.top,
-          w: cr.width,
-          h: cr.height,
-        });
-      }
-      range.detach();
-      measured = relRects.length > 0;
-    } catch {
-      // Range API failed — fall through to measureText
-    }
-  }
-
-  // Strategy 2: Canvas measureText fallback (single-line only)
-  if (!measured) {
-    if (!_measureCanvas) _measureCanvas = document.createElement('canvas');
-    const ctx = _measureCanvas.getContext('2d');
-    if (ctx) {
-      ctx.font = font;
-      let cursorX = 0;
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        const w = ctx.measureText(ch).width;
-        if (ch !== ' ' && ch !== '\n' && ch !== '\t') {
-          relRects.push({ char: ch, dx: cursorX, dy: 0, w, h: bbox.height });
-        }
-        cursorX += w;
-      }
-    }
-  }
-
-  if (relRects.length === 0) return undefined;
-
-  // Store cache
-  _charRectCache.set(id, { text, font, relRects });
-
-  return relRects.map(r => ({
-    char: r.char,
-    x: bbox.left + r.dx,
-    y: bbox.top + r.dy,
-    w: r.w,
-    h: r.h,
-  }));
-}
-
-function findFirstTextNode(el: Node): Text | null {
-  if (el.nodeType === Node.TEXT_NODE) return el as Text;
-  for (let i = 0; i < el.childNodes.length; i++) {
-    const found = findFirstTextNode(el.childNodes[i]);
-    if (found) return found;
-  }
-  return null;
-}
-
-/**
- * Render all visible tracked text elements onto an offscreen canvas as white-on-black.
- * The alpha channel of this mask is sampled by BitmaskPhysic to determine
- * pixel-level occlusion — glyph holes (o, d, e counters) remain transparent.
- */
-function renderMask(
-  tracked: Map<string, HTMLElement>,
-  obstacles: RectObstacle[],
-  bufRef: React.MutableRefObject<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; width: number; height: number; dirty: boolean } | null>,
-) {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-
-  let buf = bufRef.current;
-  if (!buf || buf.width !== w || buf.height !== h) {
-    const canvas = buf?.canvas ?? document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-    buf = { canvas, ctx, width: w, height: h, dirty: false };
-    bufRef.current = buf;
-  }
-
-  const { ctx } = buf;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = 'white';
-  ctx.textBaseline = 'top';
-
-  // Zero-offset rendering — mask coordinates match obstacle coordinates 1:1.
-  // Prediction offset is applied on the sampling side (BitmaskPhysic).
-  for (const obs of obstacles) {
-    // Synchronous AABB visibility: skip obstacles entirely outside viewport
-    if (obs.y + obs.h < 0 || obs.y > h || obs.x + obs.w < 0 || obs.x > w) continue;
-
-    const el = tracked.get(obs.id);
-    if (!el) { if (obs.id === 'system:mouse') ctx.fillRect(obs.x, obs.y, obs.w, obs.h); continue; }
-
-    try {
-      const style = getComputedStyle(el);
-      const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-      ctx.font = font;
-
-      if (obs.charRects && obs.charRects.length > 0) {
-        for (const cr of obs.charRects) {
-          ctx.fillText(cr.char, cr.x, cr.y);
-        }
-      } else {
-        const fontSize = parseFloat(style.fontSize);
-        const yOffset = (obs.h - fontSize) * 0.35;
-        ctx.fillText(el.textContent ?? '', obs.x, obs.y + yOffset);
-      }
-    } catch {
-      // Skip
-    }
-  }
-
-  buf.dirty = true;
-}
 
 export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // ── Obstacle tracking ─────────────────────────────────────────────
@@ -284,50 +113,20 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const prevContentRef = useRef<Map<string, string>>(new Map());
   const obstaclesLiveRef = useRef<RectObstacle[]>([]);
   const mouseObstacleRef = useRef<RectObstacle | null>(null);
-  const maskBufRef = useRef<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; width: number; height: number; dirty: boolean } | null>(null);
+  const maskBufRef = useRef<MaskBuffer | null>(null);
   const [obstaclesSnapshot, setObstaclesSnapshot] = useState<RectObstacle[]>([]);
   const frameRef = useRef(0);
   const firstMaskDoneRef = useRef(false);
   const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ioRef = useRef<IntersectionObserver | null>(null);
 
-  // Lazy-init IntersectionObserver
-  const getIO = useCallback(() => {
-    if (!ioRef.current) {
-      ioRef.current = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            const id = (entry.target as HTMLElement).dataset.obstacleId;
-            if (!id) continue;
-            if (entry.isIntersecting) {
-              visibleRef.current.add(id);
-            } else {
-              visibleRef.current.delete(id);
-            }
-          }
-        },
-        { rootMargin: '50px' }
-      );
-    }
-    return ioRef.current;
+  const trackObstacle = useCallback((id: string, element: HTMLElement) => {
+    trackElementObstacle(id, element, trackedRef, visibleRef, ioRef);
   }, []);
 
-  const trackObstacle = useCallback((id: string, element: HTMLElement) => {
-    element.dataset.obstacleId = id;
-    trackedRef.current.set(id, element);
-    visibleRef.current.add(id); // Assume visible until IO reports otherwise
-    getIO().observe(element);
-  }, [getIO]);
-
   const untrackObstacle = useCallback((id: string) => {
-    const el = trackedRef.current.get(id);
-    if (el) getIO().unobserve(el);
-    trackedRef.current.delete(id);
-    visibleRef.current.delete(id);
-    prevRectsRef.current.delete(id);
-    prevContentRef.current.delete(id);
-    _charRectCache.delete(id);
-  }, [getIO]);
+    untrackElementObstacle(id, trackedRef, visibleRef, prevRectsRef, prevContentRef, ioRef);
+  }, []);
 
   // Cleanup IO on unmount
   useEffect(() => {
