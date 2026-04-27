@@ -309,14 +309,14 @@ const rightPaneStyle: React.CSSProperties = {
 
 const paneLabelStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.mono,
-  fontSize: '10px',
+  fontSize: tokens.sizes.xs,
   color: tokens.colors.text.tertiary,
   marginBottom: tokens.spacing.lg,
 };
 
 const stepStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.mono,
-  fontSize: '13px',
+  fontSize: tokens.sizes.sm,
   lineHeight: 1.7,
   transition: tokens.transitions.slow,
 };
@@ -350,7 +350,7 @@ const signatureStyle: React.CSSProperties = {
 
 const literaryStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.body,
-  fontSize: '18px',
+  fontSize: tokens.sizes.xl,
   lineHeight: 1.85,
   minHeight: '44vh',
   whiteSpace: 'pre-wrap',
@@ -371,7 +371,7 @@ const textareaStyle: React.CSSProperties = {
   borderTop: `1px solid ${tokens.colors.glass.border}`,
   color: tokens.colors.text.primary,
   fontFamily: tokens.fonts.body,
-  fontSize: '17px',
+  fontSize: tokens.sizes.lg,
   outline: 'none',
   resize: 'vertical',
 };

@@ -191,7 +191,7 @@ const rowStyle: React.CSSProperties = {
   width: '100%',
   padding: '0 15vw',
   fontFamily: tokens.fonts.mono,
-  fontSize: '0.875rem',
+  fontSize: tokens.sizes.md,
   letterSpacing: '0.1em',
   transition: tokens.transitions.default,
   textAlign: 'left',
@@ -200,7 +200,7 @@ const rowStyle: React.CSSProperties = {
 const activeRowStyle: React.CSSProperties = {
   color: tokens.colors.aurora.cyan,
   fontFamily: tokens.fonts.display,
-  fontSize: '1.25rem',
+  fontSize: tokens.sizes['2xl'],
   letterSpacing: '0.2em',
 };
 

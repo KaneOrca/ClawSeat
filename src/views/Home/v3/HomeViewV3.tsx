@@ -74,7 +74,7 @@ export const HomeViewV3: React.FC = () => {
 // ── Positioning (on wrappers only — NOT on ref'd elements) ──────────
 
 const containerStyle: React.CSSProperties = {
-  color: 'white',
+  color: tokens.colors.text.primary,
   minHeight: '100vh',
   position: 'relative',
 };
@@ -93,7 +93,7 @@ const pos = {
 
 const brandTextStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.mono,
-  fontSize: '14px',
+  fontSize: tokens.sizes.md,
   fontWeight: 900,
   letterSpacing: '0.3em',
 };

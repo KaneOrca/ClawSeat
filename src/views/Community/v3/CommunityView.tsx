@@ -238,7 +238,7 @@ const traceStyle: React.CSSProperties = {
 };
 
 const rowStyle: React.CSSProperties = {
-  fontSize: '14px',
+  fontSize: tokens.sizes.md,
   letterSpacing: '0.1em',
   display: 'flex',
   gap: '1rem',
@@ -271,7 +271,7 @@ const inputStyle: React.CSSProperties = {
   border: 'none',
   padding: '0.5rem 0',
   fontFamily: tokens.fonts.mono,
-  fontSize: '14px',
+  fontSize: tokens.sizes.md,
   color: tokens.colors.text.primary,
   outline: 'none',
 };

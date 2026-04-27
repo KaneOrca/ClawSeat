@@ -111,7 +111,7 @@ export const ChallengeDetailV3: React.FC = () => {
 
 const containerStyle: React.CSSProperties = {
   minHeight: '100vh',
-  color: '#fff',
+  color: tokens.colors.text.primary,
   padding: '4rem 2rem',
   position: 'relative',
 };
@@ -159,10 +159,10 @@ const textareaStyle: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
   padding: '2rem 0',
-  fontSize: '1.25rem',
-  color: 'rgba(255,255,255,0.9)',
+  fontSize: tokens.sizes['2xl'],
+  color: tokens.colors.text.primary,
   caretColor: tokens.colors.aurora.cyan,
-  fontFamily: "'Outfit', sans-serif",
+  fontFamily: tokens.fonts.body,
   outline: 'none',
   resize: 'none',
   display: 'block',
@@ -173,7 +173,7 @@ const submitStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
   padding: '1rem 0',
-  fontSize: '11px',
+  fontSize: tokens.sizes.small,
   fontFamily: tokens.fonts.mono,
   fontWeight: 700,
   cursor: 'pointer',
@@ -187,7 +187,7 @@ const submitStyle: React.CSSProperties = {
 
 const diagLabelStyle: React.CSSProperties = {
   fontFamily: tokens.fonts.mono,
-  fontSize: '9px',
+  fontSize: tokens.sizes.xxs,
   color: tokens.colors.aurora.purple,
 };
 
@@ -280,7 +280,7 @@ const SubmitAtom: React.FC<{
           disabled={submitting || !answer.trim()}
           style={{
             ...submitStyle,
-            color: answer.trim() ? tokens.colors.aurora.cyan : 'rgba(255,255,255,0.2)',
+            color: answer.trim() ? tokens.colors.aurora.cyan : tokens.colors.text.micro,
             opacity: submitting ? 0.5 : 1,
           }}>
           {submitting ? submittingLabel : submitLabel}

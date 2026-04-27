@@ -31,8 +31,15 @@ export const tokens = {
     mono: "'JetBrains Mono', monospace"
   },
   sizes: {
+    xxs: '9px',
+    xs: '10px',
     micro: '10px',
     small: '11px',
+    sm: '13px',
+    md: '14px',
+    lg: '17px',
+    xl: '18px',
+    '2xl': '1.25rem',
   },
   spacing: {
     xs: '4px',

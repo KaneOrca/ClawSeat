@@ -190,8 +190,8 @@ const proseStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid rgba(70, 214, 255, 0.18)',
+  background: tokens.colors.glass.bg,
+  border: `1px solid ${tokens.colors.glass.border}`,
   color: tokens.colors.aurora.cyan,
   fontFamily: tokens.fonts.display,
   fontSize: 'clamp(2rem, 7vw, 4rem)',
@@ -244,7 +244,7 @@ const codeStyle: React.CSSProperties = {
 const captionStyle: React.CSSProperties = {
   color: tokens.colors.aurora.purple,
   fontFamily: tokens.fonts.mono,
-  fontSize: '10px',
+  fontSize: tokens.sizes.xs,
   letterSpacing: '0.2em',
   lineHeight: 2,
   opacity: 0.78,
