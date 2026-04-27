@@ -92,3 +92,17 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
   发现 bug 时按 4 阶段：现象 → 根因假设 → 验证 → 修复建议；不接受症状级修复。
 - **Requesting code review** — see [`core/references/superpowers-borrowed/requesting-code-review.md`]
   作为 review 接收方，按此清单核查 builder 的自查项是否完整。
+
+## Operator Language Matching(强制)
+
+任何输出给 operator 的内容(chat 回复 / 错误 / 进度报告 / prompt),**必须匹配 operator 语言**:
+
+1. 检测 operator 最近 3 条 chat 主语言
+   - >70% 中文字符 → 用中文回复
+   - >70% 英文字符 → 用英文回复
+   - 混杂或不足 → 默认中文(ClawSeat 项目主用户语言)
+2. 系统消息 / brief / SKILL 内容(中文)不影响判断 — 只看 operator 输入
+3. 例外:技术术语 / 命令 / 文件路径 / API 名 — 用原文(tmux send-keys 不译)
+4. 一旦定语言,整轮对话保持一致,不要中英混杂(命令例外)
+
+不遵守此规则视为 SKILL 违规。

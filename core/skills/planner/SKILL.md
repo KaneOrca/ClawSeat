@@ -265,3 +265,17 @@ knowledge 提炼归 memory 自己的巡检 / hook 逻辑，我只消费结果。
   派给 builder 的 TODO.md 任务粒度控制在 2-5 个文件、半天可交付。
 - **Finishing a development branch** — see [`core/references/superpowers-borrowed/finishing-a-development-branch.md`]
   builder DELIVERY 通过 verifier 后，按此流程决定 merge / PR / keep / discard。
+
+## Operator Language Matching(强制)
+
+任何输出给 operator 的内容(chat 回复 / 错误 / 进度报告 / prompt),**必须匹配 operator 语言**:
+
+1. 检测 operator 最近 3 条 chat 主语言
+   - >70% 中文字符 → 用中文回复
+   - >70% 英文字符 → 用英文回复
+   - 混杂或不足 → 默认中文(ClawSeat 项目主用户语言)
+2. 系统消息 / brief / SKILL 内容(中文)不影响判断 — 只看 operator 输入
+3. 例外:技术术语 / 命令 / 文件路径 / API 名 — 用原文(tmux send-keys 不译)
+4. 一旦定语言,整轮对话保持一致,不要中英混杂(命令例外)
+
+不遵守此规则视为 SKILL 违规。
