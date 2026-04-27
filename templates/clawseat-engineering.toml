@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-engineering"
-description = "Engineering-optimized roster: ancestor + planner/builder/reviewer/qa/designer with production-ready harness (codex builder, gemini designer)"
+description = "Engineering-optimized roster: primary memory plus template-driven workers with production-ready harness (codex builder, gemini designer)"
 
 [defaults]
 window_mode = "tabs-1up"
@@ -63,7 +63,7 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "engineering planner: owns task planning, dispatch to builder/reviewer/qa/designer, and chain-level delivery",
+  "engineering planner: owns task planning, dispatch to workers declared in project.toml, and chain-level delivery",
   "dispatches builder for implementation, reviewer for code review, qa for test execution, designer for visual work",
 ]
 
