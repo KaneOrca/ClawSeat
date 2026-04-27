@@ -1,15 +1,16 @@
 # clawseat-minimal — v2 Self-Contained Project Template
 #
-# 4-seat 自闭环项目单元：
+# 5-seat 自闭环项目单元：
 #   - <project>-memory       (memory + research + decision + dispatch + dialog;
 #                             独立 iTerm 窗口；用户对话第一入口)
 #   - <project>-planner-claude   (规划 + 代码审查; workers 窗口 pane)
 #   - <project>-builder-codex    (代码编写; workers 窗口 pane)
+#   - <project>-qa-claude        (测试执行 + patrol QA; workers 窗口 pane)
 #   - <project>-designer-gemini  (审美判断; workers 窗口 pane)
 #
 # 角色边界（与 v1 重要区别）：
 #   - 没有独立 reviewer seat — planner 自审 (Claude 强项就是判断/审查)
-#   - 没有独立 builder/qa seat — builder 是 codex (强项是写代码)
+#   - QA 是独立 seat，负责测试执行和 patrol QA，不修源码
 #   - 没有 ancestor seat — memory 接管 (memory 是其能力，不是单独 seat)
 #   - 没有全局 memory — 每项目自闭环
 #
@@ -17,11 +18,11 @@
 
 version = 1
 template_name = "clawseat-minimal"
-description = "v2 self-contained 4-seat project: memory orchestrates from dedicated window, planner+builder+designer share 3-pane worker grid"
+description = "v2 self-contained 5-seat project: memory orchestrates from dedicated window, planner+builder+qa+designer share worker grid"
 
 # ── window layout ─────────────────────────────────────────────────────────────
 # Two iTerm windows per project. Memory gets its own window (user's primary
-# conversation surface). Workers share a 3-pane grid window.
+# conversation surface). Workers share a grid window.
 
 #
 # Per RFC-001 §3 (locked 2026-04-26):
@@ -37,7 +38,7 @@ workers_window_title         = "clawseat-{PROJECT}-workers"   # 每项目独立 
 [window_layout.workers_grid]
 left_main_seat   = "planner"
 left_main_width  = "50%"
-right_seats      = ["builder", "designer"]   # 用 grid_for_n(N_right) 排列
+right_seats      = ["builder", "qa", "designer"]   # 用 grid_for_n(N_right) 排列
 right_fill_order = "col-major"               # 先填左列上→下，再下一列
 
 # ── defaults ──────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ right_fill_order = "col-major"               # 先填左列上→下，再下一
 home_mode = "real"               # 所有 seat 默认 REAL_HOME (OAuth 必需)
 dangerously_skip_permissions = true
 window_mode = "split-2"          # memory 独立窗口 + workers grid 窗口
-monitor_max_panes = 4
+monitor_max_panes = 5
 
 # ── seats ─────────────────────────────────────────────────────────────────────
 
@@ -140,6 +141,28 @@ allowed_providers = ["openai", "anthropic", "xcode-best", "minimax", "ark"]
 [engineers.builder.api_defaults]
 provider = "xcode-best"
 
+# ── QA: 测试执行 + patrol 检查 ──────────────────────────────────────────────
+#
+# QA 不修源码；Dispatch 模式跑测试并报告证据，Patrol 模式做文档/代码对齐巡检。
+[[engineers]]
+id = "qa"
+display_name = "QA"
+role = "qa"
+window = "workers"
+window_pane = "middle-right"
+human_facing = false
+qa_authority = true
+review_authority = false
+
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+
+[engineers.qa.alternatives]
+allowed_tools = ["claude"]
+allowed_auth_modes = ["oauth", "api"]
+allowed_providers = ["anthropic", "minimax", "ark"]
+
 # ── Designer: 审美 + 视觉/UX 评审 ────────────────────────────────────────────
 #
 # Designer 不生成代码也不写规划; 它评审视觉效果 + 用户体验 + 美学.
@@ -149,7 +172,7 @@ id = "designer"
 display_name = "Designer"
 role = "aesthetic-reviewer"
 window = "workers"
-window_pane = "bottom-full"
+window_pane = "bottom-right"
 human_facing = false
 review_authority = true            # 审美/视觉侧 review
 
@@ -166,7 +189,7 @@ allowed_providers = ["google", "anthropic", "minimax"]
 #
 # Window 创建顺序:
 #   a. 先创建 memory iTerm 窗口 (1 pane) → launch <project>-memory tmux session
-#   b. 再创建 workers iTerm 窗口 (3 panes) → launch planner / builder / designer
+#   b. 再创建 workers iTerm 窗口 (4 panes) → launch planner / builder / qa / designer
 #   c. memory 窗口默认 focus (用户对话入口)
 #
 # 跨项目 dispatch:
@@ -175,7 +198,7 @@ allowed_providers = ["google", "anthropic", "minimax"]
 #
 # M2 watchdog 与本模板的接口:
 #   - watchdog 监控 memory_window_title + workers_window_title 存在性
-#   - watchdog 监控 4 个 tmux session 健康度
+#   - watchdog 监控 5 个 tmux session 健康度
 #   - memory seat 通过 ~/.clawseat/state/cmdq.jsonl 给 watchdog 派活
 #
 # M3 自定义模板继承示例 (尚未实现):

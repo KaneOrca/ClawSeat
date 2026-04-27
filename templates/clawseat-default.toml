@@ -4,7 +4,7 @@ description = "Default lazy-spawn install roster: ancestor + planner + builder +
 
 [defaults]
 window_mode = "tabs-1up"
-monitor_max_panes = 4
+monitor_max_panes = 5
 open_detail_windows = false
 
 [[engineers]]
