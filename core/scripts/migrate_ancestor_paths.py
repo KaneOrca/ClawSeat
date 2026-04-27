@@ -4,7 +4,10 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
+import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 
@@ -105,12 +108,100 @@ def migrate_launch_agent(home: Path, project: str, changed: list[str]) -> None:
 def patch_profile(path: Path, changed: list[str]) -> None:
     if not path.exists():
         return
+    if migrate_install_profile_seats(path):
+        changed.append(f"patch install profile seats {path}")
     original = path.read_text(encoding="utf-8")
     updated = original.replace('active_loop_owner = "planner"', 'active_loop_owner = "memory"')
     updated = updated.replace('default_notify_target = "planner"', 'default_notify_target = "memory"')
     if updated != original:
         path.write_text(updated, encoding="utf-8")
         changed.append(f"patch {path}")
+
+
+_PROFILE_LIST_KEYS = frozenset({
+    "seats",
+    "materialized_seats",
+    "bootstrap_seats",
+    "heartbeat_seats",
+})
+_PROFILE_LIST_RE = re.compile(r"^(?P<prefix>\s*(?P<key>[A-Za-z_]+)\s*=\s*)\[(?P<body>[^\]]*)\](?P<suffix>\s*(?:#.*)?)$")
+_PROFILE_STRING_RE = re.compile(r'"([^"]*)"')
+
+
+def _backup_profile(path: Path) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    suffix = 1
+    while backup.exists():
+        backup = path.with_name(f"{path.name}.bak.{stamp}.{suffix}")
+        suffix += 1
+    shutil.copy2(path, backup)
+    return backup
+
+
+def _normalize_install_profile_seats(values: list[str]) -> list[str]:
+    renamed = {"builder-1": "builder", "reviewer-1": "reviewer"}
+    out: list[str] = []
+    for value in values:
+        if value == "koder":
+            continue
+        normalized = renamed.get(value, value)
+        if normalized not in out:
+            out.append(normalized)
+    return out
+
+
+def _render_toml_list(values: list[str]) -> str:
+    return "[" + ", ".join(f'"{value}"' for value in values) + "]"
+
+
+def migrate_install_profile_seats(profile_path: Path) -> bool:
+    """Update install-profile-dynamic.toml seat lists from v0.7 to v2.
+
+    This is intentionally text-preserving: it only rewrites direct assignment
+    lines for known seat-list keys and heartbeat_owner. TOML tables such as
+    [seat_overrides.<seat>] are left byte-for-byte intact.
+    """
+    if not profile_path.exists():
+        return False
+
+    original = profile_path.read_text(encoding="utf-8")
+    changed = False
+    output: list[str] = []
+
+    for line in original.splitlines(keepends=True):
+        newline = ""
+        body = line
+        if body.endswith("\n"):
+            newline = "\n"
+            body = body[:-1]
+
+        stripped = body.strip()
+        if stripped.startswith("heartbeat_owner"):
+            updated = re.sub(r'^(?P<prefix>\s*heartbeat_owner\s*=\s*)".*?"', r'\g<prefix>""', body)
+            if updated != body:
+                changed = True
+            output.append(updated + newline)
+            continue
+
+        match = _PROFILE_LIST_RE.match(body)
+        if match and match.group("key") in _PROFILE_LIST_KEYS:
+            values = _PROFILE_STRING_RE.findall(match.group("body"))
+            normalized = _normalize_install_profile_seats(values)
+            rendered = f"{match.group('prefix')}{_render_toml_list(normalized)}{match.group('suffix')}"
+            if rendered != body:
+                changed = True
+            output.append(rendered + newline)
+            continue
+
+        output.append(line)
+
+    if not changed:
+        return False
+
+    _backup_profile(profile_path)
+    profile_path.write_text("".join(output), encoding="utf-8")
+    return True
 
 
 def migrate_project(home: Path, project: str) -> list[str]:

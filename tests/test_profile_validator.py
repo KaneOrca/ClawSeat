@@ -37,7 +37,7 @@ def _minimal_v2_profile(*, frontstage_agent: str = "yu", seats: list | None = No
         "profile_name": "install",
         "project_name": "install",
         "openclaw_frontstage_agent": frontstage_agent,
-        "seats": seats if seats is not None else ["ancestor", "planner", "builder", "reviewer", "qa", "designer"],
+        "seats": seats if seats is not None else ["memory", "planner", "builder", "reviewer", "qa", "designer"],
         "machine_services": ["memory"],
     }
 
@@ -119,15 +119,14 @@ def test_heartbeat_seats_rejected(tmp_path):
     assert any("heartbeat_seats" in e for e in result.errors)
 
 
-def test_memory_in_seats_rejected(tmp_path):
+def test_memory_primary_in_seats_allowed(tmp_path):
     path = tmp_path / "profile.toml"
     _write_toml(path, (
-        'version = 2\nseats = ["ancestor", "planner", "memory"]\n'
+        'version = 2\nseats = ["memory", "planner"]\n'
         'openclaw_frontstage_agent = "yu"\n'
     ))
     result = validate_profile_v2(path)
-    assert not result.ok
-    assert any("memory" in e for e in result.errors)
+    assert result.ok
 
 
 def test_koder_in_seats_rejected(tmp_path):
@@ -166,7 +165,7 @@ def test_illegal_seat_name_rejected(tmp_path):
     assert any("wizard" in e for e in result.errors)
 
 
-def test_missing_ancestor_rejected(tmp_path):
+def test_missing_primary_rejected(tmp_path):
     path = tmp_path / "profile.toml"
     _write_toml(path, (
         'version = 2\nseats = ["planner", "builder"]\n'
@@ -174,7 +173,7 @@ def test_missing_ancestor_rejected(tmp_path):
     ))
     result = validate_profile_v2(path)
     assert not result.ok
-    assert any("ancestor" in e for e in result.errors)
+    assert any("primary" in e and "memory" in e and "ancestor" in e for e in result.errors)
 
 
 def test_missing_planner_rejected(tmp_path):
@@ -193,7 +192,7 @@ def test_seats_only_builder_rejected(tmp_path):
     _write_toml(path, 'version = 2\nseats = ["builder"]\nopenclaw_frontstage_agent = "yu"\n')
     result = validate_profile_v2(path)
     assert not result.ok
-    assert any("ancestor" in e or "planner" in e for e in result.errors)
+    assert any("primary" in e or "planner" in e for e in result.errors)
 
 
 # ── Rule 4: no duplicates ─────────────────────────────────────────────

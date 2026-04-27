@@ -143,7 +143,9 @@ LEGACY_IDENTITIES_PATH = LEGACY_CONFIG_ROOT / "auth-identities.toml"
 # Legacy compatibility defaults for the historical "coding" roster.
 # These are not the canonical role-first runtime model for new ClawSeat projects;
 # new projects should come from templates/profiles such as gstack-harness and use
-# `koder / planner / builder-1 / reviewer-1 / qa-1 / designer-1`.
+# `memory / planner / builder / qa / designer (+reviewer if engineering template)`.
+# Note: koder is an OpenClaw agent (overlay), not a ClawSeat tmux seat; see
+# docs/rfc/V2-VOCAB-DRIFT-AUDIT.md.
 PROJECT_DEFAULTS = {
     "coding": {
         "repo_root": str(REPO_ROOT),

@@ -836,9 +836,9 @@ effect on the next seat launch.
 ## §3k — P1 layered-engine implementation notes (v0.4)
 
 Binding spec: `docs/schemas/v0.4-layered-model.md`. Phase 1 delivered the
-**engine** — parsers, validator, migration tool, and operator-facing
-`agent-admin` commands — without touching any on-disk profile. Phase 2
-runs the migration when the operator is ready.
+**engine** — parsers, validator, and operator-facing `agent-admin` commands.
+The v0.7→v2 profile migration has since completed; operators should use
+`scripts/install.sh --reinstall <project>` to regenerate a canonical v2 profile.
 
 ### Module map
 
@@ -846,7 +846,6 @@ runs the migration when the operator is ready.
 |---|---|---|
 | `core/lib/machine_config.py` | `MachineConfig` dataclass, load/write, auto-discovery of tenant workspaces, `validate_tenant` | §3 |
 | `core/lib/profile_validator.py` | `ValidationResult`, `validate_profile_v2`, `validate_machine_config`, `write_validated` (raises `ProfileValidationError`) | §7 |
-| `core/scripts/migrate_profile_to_v2.py` | `plan` / `apply` / `apply-all` / `rollback` with `.bak.v1.<ts>` backups; idempotent on v2 | §6 |
 | `core/scripts/agent_admin_layered.py` | Four new subcommands (below) | §3 / §4 / §5 |
 
 ### `agent-admin` subcommands added in P1
@@ -869,23 +868,15 @@ transparently).
 
 ### Backup & rollback contract (§6)
 
-`migrate_profile_to_v2 apply` writes a backup
-`<profile>.bak.v1.YYYYMMDD-HHMMSS` before calling
-`profile_validator.write_validated`. On validation failure the backup is
-restored and rc=2 is emitted. `rollback --profile <path>` picks the
-latest `.bak.v1.*` and `shutil.copy2`'s it back. Re-applying on an
-already-v2 profile is a no-op (prints "already v2" + rc=0) — safe to
-automate in CI or scheduled sweeps once Phase 2 operator-commits.
+The historical v0.7→v2 migration command has been retired. Re-running
+`scripts/install.sh --reinstall <project>` is now the canonical recovery path;
+it writes the current v2 profile shape directly instead of applying a legacy
+mutation layer.
 
 ### Parallel-development seam (Phase 1)
 
-`migrate_profile_to_v2` and `agent_admin_layered` import the machine +
-validator layers **defensively** — each carries an `_AVAILABLE` flag
-with a small stub fallback. When both layers land, the flags flip
-`True` and the full validation path activates. This keeps builder-1's
-and builder-2's halves shippable on sibling branches without import
-failures; see the "parallel-dev fallback" comments at the top of each
-module.
+`agent_admin_layered` imports the machine + validator layers defensively so the
+CLI can surface a clear error if the validation layer is unavailable.
 
 ### Cross-validation gate
 

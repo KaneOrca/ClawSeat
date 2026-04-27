@@ -155,7 +155,7 @@ def load_context_from_profile(
     if raw.get("version") != 2:
         raise ValueError(
             f"profile at {profile_path} is not v2 (got version={raw.get('version')!r}); "
-            "run `migrate-profile-to-v2 apply` first"
+            "run `scripts/install.sh --reinstall <project>` first"
         )
     profile_project = raw.get("project_name") or raw.get("profile_name")
     if profile_project != project:
