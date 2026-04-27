@@ -31,6 +31,7 @@ import argparse
 import fcntl
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -216,6 +217,26 @@ def _write_markdown_note(path: Path, metadata: dict[str, object], content: str) 
     _atomic_write_text(path, _build_markdown_note(metadata, content))
 
 
+def _update_scan_index(path: Path) -> None:
+    if path.suffix != ".md":
+        return
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                str(_SCRIPTS / "scan_index.py"),
+                "update",
+                "--file",
+                str(path),
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        _ = exc
+
+
 def _append_memory_note_index(
     memory_root: Path,
     *,
@@ -375,6 +396,7 @@ def main() -> int:
             "content_source": content_source,
         }
         _write_markdown_note(out_path, metadata, content)
+        _update_scan_index(out_path)
         _append_memory_note_index(
             Path(args.memory_dir).expanduser().resolve(),
             note_id=note_id,
