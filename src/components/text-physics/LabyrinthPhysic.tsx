@@ -20,48 +20,6 @@ interface Span {
 const PADDING = 8;
 const MIN_SPAN_WIDTH = 20;
 const MAZE_DRIFT_PX = 24;
-const MOUSE_VOID_RADIUS = 96;
-const MOUSE_VOID_CORE = 0.6;
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-function drawTextWithMouseVoid(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  lineHeight: number,
-  mouse: { x: number; y: number },
-): void {
-  const lineY = y + lineHeight / 2;
-  const nearestLineDistance = Math.abs(lineY - mouse.y);
-  const lineWidth = ctx.measureText(text).width;
-  if (
-    nearestLineDistance >= MOUSE_VOID_RADIUS ||
-    mouse.x < x - MOUSE_VOID_RADIUS ||
-    mouse.x > x + lineWidth + MOUSE_VOID_RADIUS
-  ) {
-    ctx.fillText(text, x, y);
-    return;
-  }
-
-  const previousAlpha = ctx.globalAlpha;
-  let cursorX = x;
-  for (const char of Array.from(text)) {
-    const charWidth = ctx.measureText(char).width;
-    const charCenterX = cursorX + charWidth / 2;
-    const distToMouse = Math.hypot(charCenterX - mouse.x, lineY - mouse.y);
-    if (distToMouse >= MOUSE_VOID_RADIUS * MOUSE_VOID_CORE) {
-      ctx.globalAlpha = previousAlpha * smoothstep(MOUSE_VOID_RADIUS * MOUSE_VOID_CORE, MOUSE_VOID_RADIUS, distToMouse);
-      ctx.fillText(char, cursorX, y);
-    }
-    cursorX += charWidth;
-  }
-  ctx.globalAlpha = previousAlpha;
-}
 
 /**
  * Compute free X-axis spans for a given Y row by subtracting all
@@ -139,7 +97,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
   opacity = 0.15,
   variant
 }) => {
-  const mouseRef = useRef({ x: -1000, y: -1000 });
   const { obstaclesRef, soloists, environment } = usePhysicsRegistry();
   const { locale } = useLanguage();
 
@@ -157,14 +114,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
   }, [variant, fontDef, locale]);
 
   const prepared = useMemo(() => prepareWithSegments(text, variantFont), [text, variantFont]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
 
   const render = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, time: number) => {
     ctx.clearRect(0, 0, width, height);
@@ -188,7 +137,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
     let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
     let currentY = 0;
-    const mouse = mouseRef.current;
 
     // TRACKING LINES FOR SOLOISTS
     const lineMap: Map<number, { text: string; x: number }> = new Map();
@@ -221,17 +169,8 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
       for (const span of spans) {
         let startX = span.start;
 
-        // VARIANT-SPECIFIC WAVE WARPING (V3)
-        // Apply wave shift then clamp to safe span bounds so text
-        // never drifts into obstacle regions.
         if (variant === 'v3') {
-          const spanMidX = (span.start + span.end) / 2;
-          const distToMouse = Math.sqrt(
-            Math.pow(currentY - mouse.y, 2) +
-            Math.pow(spanMidX - mouse.x, 2)
-          );
-          const mouseFactor = Math.max(0, 1 - distToMouse / 400);
-          const waveShift = Math.sin((currentY * 0.05) + (time * 0.002)) * (20 + currentWaveAmp * mouseFactor);
+          const waveShift = Math.sin((currentY * 0.05) + (time * 0.002)) * (20 + currentWaveAmp * 0.2);
           startX += waveShift;
         }
 
@@ -247,11 +186,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
           continue;
         }
 
-        const distToMouse = Math.sqrt(
-          Math.pow(currentY - mouse.y, 2) +
-          Math.pow(startX + clampedWidth / 2 - mouse.x, 2)
-        );
-        const mouseFactor = Math.max(0, 1 - distToMouse / 400);
         const halftone = (Math.sin(currentY * 0.3) + Math.sin(startX * 0.3)) * 0.5 + 0.5;
         let drawX = startX;
         let drawY = currentY;
@@ -263,19 +197,19 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
         switch (variant) {
           case 'v2': {
-            const v2Alpha = 0.05 + Math.pow(mouseFactor, 3) * 0.8;
+            const v2Alpha = currentAlpha;
             ctx.fillStyle = env.ambientColor || `rgba(40, 30, 20, ${Math.min(1, v2Alpha * transitionAlphaScale)})`;
             break;
           }
           case 'v3': {
-            const v3Alpha = (currentAlpha * 0.2) + (halftone * 0.2) + (Math.pow(mouseFactor, 1.5) * 1.2);
+            const v3Alpha = (currentAlpha * 0.2) + (halftone * 0.2);
             const hueShift = Math.sin(time * 0.001) * 20;
             ctx.fillStyle = env.ambientColor || `hsla(${270 + hueShift}, 70%, 70%, ${Math.min(1, v3Alpha * transitionAlphaScale)})`;
             break;
           }
         }
 
-        drawTextWithMouseVoid(ctx, line.text, drawX, drawY, lineHeight, mouse);
+        ctx.fillText(line.text, drawX, drawY);
 
         // Store first span position for soloist mapping
         if (!drewAnything) {
@@ -295,12 +229,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
     (soloistsRef.current ?? []).forEach(soloist => {
       const lineData = lineMap.get(soloist.lineIndex);
       if (lineData) {
-        const distToMouse = Math.sqrt(
-          Math.pow(soloist.lineIndex * lineHeight - mouse.y, 2) +
-          Math.pow(lineData.x - mouse.x, 2)
-        );
-        const mouseFactor = Math.max(0, 1 - distToMouse / 400);
-
         ctx.font = `900 ${variant === 'v2' ? '32px' : '48px'} ${variant === 'v2' ? 'serif' : 'sans-serif'}`;
         ctx.fillStyle = soloist.color || '#fff';
         ctx.globalAlpha = 0.3 + surgeNorm * 0.7;

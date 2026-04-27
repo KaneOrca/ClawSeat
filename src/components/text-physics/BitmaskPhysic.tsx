@@ -15,13 +15,7 @@ const DATA = ['0', '1', ':', '.', '·', '∘'] as const;
 const BASE_CELL_W = 10;
 const BASE_CELL_H = 14;
 const FONT = '11px monospace';
-const BASE_VOID_RADIUS = 200;
-const MOUSE_SMOOTHING = 0.15;
 const TRANSITION_EPSILON = 0.005;
-const VOID_X_SCALE = 0.4;
-const VOID_Y_SCALE = 1;
-const VOID_CORE = 0.58;
-const VOID_EDGE = 1;
 
 // Aggressive LOD: scale cell size by DPI and viewport width
 function getCellSize(): { w: number; h: number } {
@@ -50,11 +44,6 @@ function fsin(x: number): number {
 // fcos available if needed: fsin(x + Math.PI * 0.5)
 const FEATHER_PX = 36;
 const OCCLUDED_FLOOR = 0.12;
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
 
 /**
  * Cheap pseudo-noise based on cell coordinates.
@@ -163,8 +152,6 @@ function sampleMask(
  * Fallback: geometric AABB + charRect occlusion when mask unavailable.
  */
 export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) => {
-  const mouseRef = useRef({ x: -1000, y: -1000 });
-  const smoothMouseRef = useRef({ x: -1000, y: -1000, initialized: false });
   const { obstaclesRef, maskRef, viewportRef, environment } = usePhysicsRegistry();
   const lastFrameRef = useRef(0);
   const cellSizeRef = useRef(getCellSize());
@@ -176,12 +163,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
 
   const opacityRef = useRef(opacity);
   useEffect(() => { opacityRef.current = opacity; }, [opacity]);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => { mouseRef.current = { x: e.clientX, y: e.clientY }; };
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
-  }, []);
 
   // Stable render callback — deps are only refs, never changes identity
   const render = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, time: number) => {
@@ -215,19 +196,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     const cols = Math.ceil(width / CELL_W);
     const rows = Math.ceil(height / CELL_H);
     const t = time * 0.001;
-    const rawMouse = mouseRef.current;
-    const smoothMouse = smoothMouseRef.current;
-    const rawMouseActive = rawMouse.x > -500 && rawMouse.y > -500;
-    const smoothMouseOffscreen = smoothMouse.x < -500 || smoothMouse.y < -500;
-    if (!smoothMouse.initialized || (rawMouseActive && smoothMouseOffscreen)) {
-      smoothMouse.x = rawMouse.x;
-      smoothMouse.y = rawMouse.y;
-      smoothMouse.initialized = true;
-    } else {
-      smoothMouse.x += (rawMouse.x - smoothMouse.x) * MOUSE_SMOOTHING;
-      smoothMouse.y += (rawMouse.y - smoothMouse.y) * MOUSE_SMOOTHING;
-    }
-    const mouse = smoothMouse;
     const waveAmplitude = env.waveAmplitude ?? 60;
     const baseAlpha = env.opacity ?? baseOpacity;
     const transition = env.effects;
@@ -287,17 +255,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
           occlusion = getOcclusionAlpha(cx, cy, obstacles);
         }
 
-        const dx = cx - mouse.x;
-        const dy = cy - mouse.y;
-        const anisotropicDist = Math.hypot(dx * VOID_X_SCALE, dy * VOID_Y_SCALE);
-        const voidRadius = BASE_VOID_RADIUS * (0.8 + waveAmplitude / 200);
-        const voidDist = anisotropicDist / voidRadius;
-        const mouseFactor = Math.max(0, 1 - voidDist);
-
-        // Scanline tear void: horizontally stretched core with a soft edge.
-        if (voidDist < VOID_CORE) continue;
-        const voidFade = smoothstep(VOID_CORE, VOID_EDGE, voidDist);
-
         // ── Neural data swarm: flow field + repulsion ─────────────────
 
         // Flow field: two crossing directional streams
@@ -305,10 +262,8 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
         const flowA = fsin(col * 0.12 + row * 0.08 + phase) + fsin(row * 0.15 - col * 0.05 + phase * 1.4);
         const flowB = fsin(col * 0.07 - row * 0.11 + phase * 0.7) + fsin((col + row) * 0.06 + phase * 1.1);
 
-        // Mouse repulsion: push data away from cursor, leave a void
-        const repulsion = mouseFactor * mouseFactor * 2;
         const flowStrength = (flowA * flowA + flowB * flowB) * 0.25 * ampMult;
-        const density = Math.max(0, flowStrength - repulsion);
+        const density = flowStrength;
 
         // Depth layer: cells far from center are darker (3D depth effect)
         const centerDist = Math.sqrt(
@@ -329,16 +284,10 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
           char = DATA[((Math.floor(flowAngle * 3 + t * 5) % 6) + 6) % 6]; // data particles
         }
 
-        // Alpha: void at center, ring glow at edge, normal field beyond.
-        const ringDist = voidDist - 0.78;
-        const ringGlow = Math.exp(-ringDist * ringDist * 40) * 1.2;
-        // Center suppression: hard zero when deep inside void
-        const voidMask = density > 0.01 ? 1 : 0;
         const rawAlpha = baseAlpha * depthFade * (
-          density * (0.3 + flowStrength * 0.7) +  // normal field contribution
-          ringGlow * 0.6 * voidMask                 // edge glow (only where some data exists)
+          density * (0.3 + flowStrength * 0.7)
         );
-        const alpha = rawAlpha * occlusion * voidFade * transitionAlphaScale;
+        const alpha = rawAlpha * occlusion * transitionAlphaScale;
         if (alpha < 0.01) continue;
 
         let drawX = x;
@@ -353,8 +302,8 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
         // Color: cyan/purple neural gradient with depth shift
         const baseHue = 200 + fsin(flowA * 0.5 + t * 0.2) * 60 + hueDistort * fsin(t * 2 + col * 0.1);
         const hue = baseHue + (280 - baseHue) * alignP * 0.15;
-        const sat = 60 + mouseFactor * 20;
-        const lightness = 50 + depthFade * 20 + mouseFactor * 15 + surgeNorm * 10;
+        const sat = 60;
+        const lightness = 50 + depthFade * 20 + surgeNorm * 10;
         ctx.fillStyle = `hsla(${hue}, ${sat}%, ${lightness}%, ${Math.min(1, alpha)})`;
         ctx.fillText(char, drawX, drawY);
       }
