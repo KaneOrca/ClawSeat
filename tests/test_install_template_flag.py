@@ -3,7 +3,7 @@
 Verifies:
 1. --template clawseat-creative is accepted; CLAWSEAT_TEMPLATE_NAME propagated
 2. --template bad dies with exit 2
-3. Omitting --template uses clawseat-minimal
+3. Omitting --template uses clawseat-creative
 4. BOOTSTRAP_TEMPLATE_PATH follows --template (patch for fd7cd74 bug)
 5. prompt_kind_first_flow: skipped (no hang) when --project or --template explicit
 """
@@ -57,26 +57,24 @@ def test_template_invalid_dies_exit_2(tmp_path: Path) -> None:
 
 
 def test_template_default_when_omitted(tmp_path: Path) -> None:
-    """Omitting --template uses clawseat-minimal."""
+    """Omitting --template uses clawseat-creative."""
     result = _run(["--project", "testproj", "--dry-run"], tmp_path)
     assert result.returncode == 0, result.stderr
-    assert "clawseat-minimal" in result.stdout, f"expected default template in output:\n{result.stdout}"
+    assert "clawseat-creative" in result.stdout, f"expected default template in output:\n{result.stdout}"
 
 
-def test_memory_tool_defaults_to_codex(tmp_path: Path) -> None:
-    """clawseat-minimal launches the memory primary seat with Codex by default."""
-    result = _run(["--project", "memcodex", "--template", "clawseat-minimal", "--dry-run"], tmp_path)
+def test_memory_tool_defaults_to_template_claude(tmp_path: Path) -> None:
+    """clawseat-creative launches the memory primary seat with template Claude OAuth by default."""
+    result = _run(["--project", "memclaudedefault", "--template", "clawseat-creative", "--provider", "oauth", "--dry-run"], tmp_path)
     output = result.stdout + result.stderr
     assert result.returncode == 0, result.stderr
-    assert "memory-tool=codex auth=chatgpt model=gpt-5.4-mini; skip Claude provider selection" in output
-    assert "agent-launcher.sh --headless --tool codex --auth chatgpt" in output
-    assert "LAUNCHER_CUSTOM_MODEL=gpt-5.4-mini" in output
+    assert "agent-launcher.sh --headless --tool claude --auth oauth" in output
 
 
 def test_memory_tool_claude_override(tmp_path: Path) -> None:
     """--memory-tool claude keeps the memory primary seat on the Claude launcher path."""
     result = _run(
-        ["--project", "memclaude", "--template", "clawseat-minimal", "--memory-tool", "claude", "--dry-run"],
+        ["--project", "memclaude", "--template", "clawseat-creative", "--memory-tool", "claude", "--provider", "oauth", "--dry-run"],
         tmp_path,
     )
     output = result.stdout + result.stderr
@@ -88,7 +86,7 @@ def test_memory_tool_claude_override(tmp_path: Path) -> None:
 def test_memory_tool_gemini_override(tmp_path: Path) -> None:
     """--memory-tool gemini launches the memory primary seat with Gemini OAuth."""
     result = _run(
-        ["--project", "memgemini", "--template", "clawseat-minimal", "--memory-tool", "gemini", "--dry-run"],
+        ["--project", "memgemini", "--template", "clawseat-creative", "--memory-tool", "gemini", "--dry-run"],
         tmp_path,
     )
     output = result.stdout + result.stderr
@@ -114,13 +112,10 @@ def test_bootstrap_template_path_follows_template_flag(tmp_path: Path) -> None:
     ]
     assert template_lines, f"No template-path lines found in dry-run output:\n{result.stdout}"
 
-    # Every such line must reference clawseat-creative, never clawseat-default.
+    # Every such line must reference clawseat-creative.
     for line in template_lines:
         assert "clawseat-creative" in line, (
             f"Template line references wrong template (expected clawseat-creative):\n  {line}"
-        )
-        assert "clawseat-default" not in line, (
-            f"Template line still references clawseat-default (BOOTSTRAP_TEMPLATE_PATH bug not fixed):\n  {line}"
         )
 
 

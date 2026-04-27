@@ -84,10 +84,10 @@ def test_build_grid_payload_uses_project_roster_and_wait_for_seat_commands() -> 
         assert commands[seat] == f"bash {_REPO / 'scripts' / 'wait-for-seat.sh'} spawn49 {seat}"
 
 
-def test_build_workers_payload_minimal_3workers() -> None:
+def test_build_workers_payload_creative_3workers() -> None:
     project = _project(
         ["memory", "planner", "builder", "designer"],
-        template_name="clawseat-minimal",
+        template_name="clawseat-creative",
     )
 
     payload = agent_admin_window.build_workers_payload(project)
@@ -152,10 +152,10 @@ def test_open_grid_recover_skips_driver_when_window_exists(monkeypatch: pytest.M
     assert driver_calls == []
 
 
-def test_open_grid_window_minimal_calls_workers_and_memories(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_grid_window_memory_template_calls_workers_and_memories(monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(
         ["memory", "planner", "builder", "designer"],
-        template_name="clawseat-minimal",
+        template_name="clawseat-creative",
     )
     payloads: list[dict] = []
 
@@ -180,7 +180,7 @@ def test_open_grid_window_minimal_calls_workers_and_memories(monkeypatch: pytest
 
 
 def test_open_grid_window_default_keeps_v1(monkeypatch: pytest.MonkeyPatch) -> None:
-    project = _project(["ancestor", "planner", "builder"], template_name="clawseat-default")
+    project = _project(["ancestor", "planner", "builder"], template_name="legacy-ancestor")
     payloads: list[dict] = []
 
     monkeypatch.setattr(agent_admin_window, "iterm_window_exists", lambda title: False)

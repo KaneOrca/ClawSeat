@@ -61,23 +61,25 @@ PROVIDER_KEY=""
 PROVIDER_BASE=""
 PROVIDER_MODEL=""
 FORCE_PROVIDER=""
+FORCE_ALL_API_PROVIDER=""
 FORCE_PROVIDER_CHOICE="${CLAWSEAT_INSTALL_PROVIDER:-}"
 FORCE_BASE_URL=""
 FORCE_API_KEY=""
 FORCE_MODEL=""
-MEMORY_TOOL="${CLAWSEAT_MEMORY_TOOL:-codex}"
+MEMORY_TOOL="${CLAWSEAT_MEMORY_TOOL:-}"
+MEMORY_TOOL_EXPLICIT="${CLAWSEAT_MEMORY_TOOL:+1}"
 MEMORY_MODEL="${CLAWSEAT_MEMORY_MODEL:-gpt-5.4-mini}"
 MEMORY_MODEL_EXPLICIT=0
 STATUS_FILE=""
 PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
 AGENTS_TEMPLATES_ROOT="$HOME/.agents/templates"
-CLAWSEAT_TEMPLATE_NAME="clawseat-minimal"
+CLAWSEAT_TEMPLATE_NAME="clawseat-creative"
 BOOTSTRAP_TEMPLATE_DIR=""
 BOOTSTRAP_TEMPLATE_PATH=""
 PENDING_SEATS=(planner builder reviewer qa designer)
 # PRIMARY_SEAT_ID = the seat user dialogs with (always one per project).
-# v1 templates use "ancestor"; v2 clawseat-minimal uses "memory".
+# Canonical templates use "memory"; imported legacy templates may use "ancestor".
 # Set by resolve_pending_seats() based on template's first primary engineer.
 PRIMARY_SEAT_ID="ancestor"
 
@@ -341,10 +343,11 @@ parse_args() {
       --project) PROJECT="$2"; _PROJECT_EXPLICIT=1; shift 2 ;;
       --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
       --provider) FORCE_PROVIDER="$2"; shift 2 ;;
+      --all-api-provider) FORCE_ALL_API_PROVIDER="$2"; shift 2 ;;
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
-      --memory-tool) MEMORY_TOOL="$2"; shift 2 ;;
+      --memory-tool) MEMORY_TOOL="$2"; MEMORY_TOOL_EXPLICIT=1; shift 2 ;;
       --memory-model) MEMORY_MODEL="$2"; MEMORY_MODEL_EXPLICIT=1; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --uninstall) UNINSTALL_PROJECT="$2"; shift 2 ;;
@@ -364,7 +367,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-creative|clawseat-engineering] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -373,13 +376,21 @@ PY
   fi
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-minimal|clawseat-default|clawseat-engineering|clawseat-creative) ;;
-    *) die 2 INVALID_TEMPLATE "--template must be clawseat-minimal | clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+    clawseat-engineering|clawseat-creative) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-creative | clawseat-engineering, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
-  case "$MEMORY_TOOL" in
-    claude|codex|gemini) ;;
-    *) die 2 INVALID_MEMORY_TOOL "--memory-tool must be claude | codex | gemini, got: $MEMORY_TOOL" ;;
-  esac
+  if [[ -n "$MEMORY_TOOL" ]]; then
+    case "$MEMORY_TOOL" in
+      claude|codex|gemini) ;;
+      *) die 2 INVALID_MEMORY_TOOL "--memory-tool must be claude | codex | gemini, got: $MEMORY_TOOL" ;;
+    esac
+  fi
+  if [[ -n "$FORCE_ALL_API_PROVIDER" ]]; then
+    case "$FORCE_ALL_API_PROVIDER" in
+      minimax|deepseek|ark|xcode-best|anthropic_console|custom_api) ;;
+      *) die 2 INVALID_FLAGS "--all-api-provider must be minimax | deepseek | ark | xcode-best | anthropic_console | custom_api, got: $FORCE_ALL_API_PROVIDER" ;;
+    esac
+  fi
   [[ -n "$MEMORY_MODEL" ]] || die 2 INVALID_MEMORY_MODEL "--memory-model must not be empty"
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
     [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
@@ -436,8 +447,8 @@ prompt_kind_first_flow() {
 
   printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
   printf '\n选择项目类型 / Choose project mode:\n' >&2
-  printf '  1) 新手 (clawseat-minimal     — 5 seat 全 OAuth 多模型: memory + planner + builder + qa + designer)  [default]\n' >&2
-  printf '  2) 专家 (clawseat-engineering — template-driven 工程级 workers: planning + build + review + QA + design)\n' >&2
+  printf '  1) 创作项目 (5 seat: memory + planner + builder + qa + designer)  [default]\n' >&2
+  printf '  2) 工程项目 (6 seat: + reviewer 独立审查)\n' >&2
 
   local _kind=""
   while true; do
@@ -445,17 +456,16 @@ prompt_kind_first_flow() {
     read -r _kind < /dev/tty
     [[ -z "$_kind" ]] && _kind="1"   # Enter == default beginner
     case "$_kind" in
-      1) CLAWSEAT_TEMPLATE_NAME="clawseat-minimal";     break ;;
+      1) CLAWSEAT_TEMPLATE_NAME="clawseat-creative";    break ;;
       2) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
-      *) printf '请输入 1 或 2 (回车 = 1 新手)\n' >&2 ;;
+      *) printf '请输入 1 或 2 (回车 = 1 创作项目)\n' >&2 ;;
     esac
   done
 
   local _placeholder
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-minimal)     _placeholder="e.g. myapp, learn-python, my-first-project" ;;
-    clawseat-engineering) _placeholder="e.g. api-service, web-frontend, mobile-app" ;;
     clawseat-creative)    _placeholder="e.g. novel-scifi, series-drama, script-ep01" ;;
+    clawseat-engineering) _placeholder="e.g. api-service, web-frontend, mobile-app" ;;
     *)                    _placeholder="e.g. myproject, experiment-01" ;;
   esac
 
@@ -475,13 +485,8 @@ prompt_kind_first_flow() {
 }
 
 resolve_pending_seats() {
-  # PRIMARY_SEAT_ID is the seat the user dialogs with (ancestor in v1 templates,
-  # memory in v2 clawseat-minimal). PENDING_SEATS is everyone else (workers).
-  # For clawseat-default, keep the hardcoded list (generated template, no file to read).
-  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]]; then
-    PRIMARY_SEAT_ID="ancestor"
-    return 0
-  fi
+  # PRIMARY_SEAT_ID is the seat the user dialogs with. Current canonical
+  # templates are v2 memory-primary; PENDING_SEATS is everyone else (workers).
   local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
   if [[ ! -f "$template_file" ]]; then
     PRIMARY_SEAT_ID="ancestor"
@@ -532,15 +537,15 @@ normalize_provider_choice() {
 }
 
 memory_primary_uses_codex() {
-  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "codex" ]]
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$(primary_effective_tool)" == "codex" ]]
 }
 
 memory_primary_uses_gemini() {
-  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "gemini" ]]
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$(primary_effective_tool)" == "gemini" ]]
 }
 
 memory_primary_skips_claude_provider() {
-  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" != "claude" ]]
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$(primary_effective_tool)" != "claude" ]]
 }
 
 memory_effective_model() {
@@ -553,6 +558,45 @@ memory_effective_model() {
   esac
 }
 
+primary_effective_tool() {
+  local template_tool template_auth template_provider template_model
+  read -r template_tool template_auth template_provider template_model < <(
+    template_seat_config "$PRIMARY_SEAT_ID" 2>/dev/null || printf 'claude oauth anthropic \n'
+  )
+  if [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL_EXPLICIT" == "1" ]]; then
+    printf '%s\n' "$MEMORY_TOOL"
+  else
+    printf '%s\n' "${template_tool:-claude}"
+  fi
+}
+
+template_seat_config() {
+  local seat="$1"
+  local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+  [[ -f "$template_file" ]] || return 1
+  "$PYTHON_BIN" - "$template_file" "$seat" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+target = sys.argv[2]
+for e in data.get("engineers", []):
+    if e.get("id") == target:
+        print(
+            e.get("tool", "claude"),
+            e.get("auth_mode", "oauth"),
+            e.get("provider", "anthropic"),
+            e.get("model", ""),
+        )
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 seat_tmux_name() {
   local seat="$1" tool="$2"
   case "$seat" in
@@ -563,7 +607,7 @@ seat_tmux_name() {
 
 primary_tmux_name() {
   local primary_tool="claude"
-  [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$MEMORY_TOOL"
+  [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$(primary_effective_tool)"
   seat_tmux_name "${PROJECT}-${PRIMARY_SEAT_ID}" "$primary_tool"
 }
 
@@ -821,20 +865,25 @@ select_provider_candidate() {
 
 select_provider() {
   note "Step 3: primary seat provider"
-  local mode="" label="" key="" base="" reply=""
+  local mode="" label="" key="" base="" reply="" primary_template_tool="" primary_template_auth="" primary_template_provider="" primary_template_model="" effective_memory_tool=""
   local -a candidates=()
 
-  if memory_primary_skips_claude_provider; then
+  read -r primary_template_tool primary_template_auth primary_template_provider primary_template_model < <(
+    template_seat_config "$PRIMARY_SEAT_ID" 2>/dev/null || printf 'claude oauth anthropic \n'
+  )
+  effective_memory_tool="${MEMORY_TOOL:-$primary_template_tool}"
+
+  if [[ "$PRIMARY_SEAT_ID" == "memory" && "$effective_memory_tool" != "claude" ]]; then
     remember_provider_selection oauth
     if [[ "$DRY_RUN" == "1" ]]; then
       printf 'Project: %s\n' "$PROJECT"
-      if memory_primary_uses_codex; then
+      if [[ "$effective_memory_tool" == "codex" ]]; then
         printf '[dry-run] memory-tool=codex auth=chatgpt model=%s; skip Claude provider selection\n' "$MEMORY_MODEL"
       else
         printf '[dry-run] memory-tool=gemini auth=oauth; skip Claude provider selection\n'
       fi
     else
-      if memory_primary_uses_codex; then
+      if [[ "$effective_memory_tool" == "codex" ]]; then
         printf 'Using memory tool: codex (auth=chatgpt, model=%s); skipping Claude provider selection.\n' "$MEMORY_MODEL"
       else
         printf 'Using memory tool: gemini (auth=oauth); skipping Claude provider selection.\n'
@@ -1069,12 +1118,41 @@ seat_provider_for_provider_mode() {
   esac
 }
 
+seat_provider_for_explicit_provider() {
+  case "$1" in
+    minimax) printf '%s\n' "minimax" ;;
+    deepseek) printf '%s\n' "deepseek" ;;
+    ark) printf '%s\n' "ark" ;;
+    xcode-best) printf '%s\n' "xcode-best" ;;
+    custom_api|anthropic_console) printf '%s\n' "anthropic-console" ;;
+    *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider for api-seat override: ${1:-<unset>}" ;;
+  esac
+}
+
 seat_model_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
     deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro}" ;;
     ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
     xcode-best|custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
+    *) return 0 ;;
+  esac
+}
+
+seat_model_for_explicit_provider() {
+  case "$1" in
+    minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
+    deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro}" ;;
+    ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
+    xcode-best|custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
+    *) return 0 ;;
+  esac
+}
+
+provider_base_for_explicit_provider() {
+  case "$1" in
+    minimax|deepseek|ark|xcode-best) provider_base_or_default "$1" ;;
+    custom_api|anthropic_console) [[ -n "$PROVIDER_BASE" ]] && printf '%s\n' "$PROVIDER_BASE" || true ;;
     *) return 0 ;;
   esac
 }
@@ -1138,21 +1216,40 @@ EOF
 
 write_project_local_toml() {
   local seat_auth_mode seat_provider seat_model seat primary_tool primary_auth primary_provider primary_model primary_session_name
+  local primary_template_tool primary_template_auth primary_template_provider primary_template_model
   seat_auth_mode="$(seat_auth_mode_for_provider_mode)"
   seat_provider="$(seat_provider_for_provider_mode)"
   seat_model="$(seat_model_for_provider_mode || true)"
-  primary_tool="claude"
-  primary_auth="$seat_auth_mode"
-  primary_provider="$seat_provider"
-  primary_model="$seat_model"
-  if memory_primary_skips_claude_provider; then
+  read -r primary_template_tool primary_template_auth primary_template_provider primary_template_model < <(
+    template_seat_config "$PRIMARY_SEAT_ID" 2>/dev/null || printf 'claude oauth anthropic \n'
+  )
+  primary_tool="$primary_template_tool"
+  primary_auth="$primary_template_auth"
+  primary_provider="$primary_template_provider"
+  primary_model="$primary_template_model"
+  if [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL_EXPLICIT" == "1" ]]; then
     primary_tool="$MEMORY_TOOL"
-    primary_auth="oauth"
     case "$MEMORY_TOOL" in
-      codex) primary_provider="openai" ;;
-      gemini) primary_provider="google" ;;
+      claude)
+        primary_auth="$seat_auth_mode"
+        primary_provider="$seat_provider"
+        primary_model="$seat_model"
+        ;;
+      codex)
+        primary_auth="oauth"
+        primary_provider="openai"
+        primary_model="$(memory_effective_model)"
+        ;;
+      gemini)
+        primary_auth="oauth"
+        primary_provider="google"
+        primary_model="$(memory_effective_model)"
+        ;;
     esac
-    primary_model="$(memory_effective_model)"
+  elif [[ "$primary_tool" == "claude" ]]; then
+    primary_auth="$seat_auth_mode"
+    primary_provider="$seat_provider"
+    primary_model="${seat_model:-$primary_model}"
   fi
   primary_session_name="$(seat_tmux_name "$PROJECT-$PRIMARY_SEAT_ID" "$primary_tool")"
 
@@ -1185,37 +1282,17 @@ EOF
 
   for seat in "${PENDING_SEATS[@]}"; do
     local _seat_tool _seat_auth _seat_provider _seat_template_model
-    if [[ "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-default" ]]; then
-      # For non-default templates, read per-seat tool/auth/provider/model from template TOML.
-      local _template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
-      if [[ -f "$_template_file" ]]; then
-        read -r _seat_tool _seat_auth _seat_provider _seat_template_model < <(
-          "$PYTHON_BIN" - "$_template_file" "$seat" <<'PY'
-import sys
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
-with open(sys.argv[1], "rb") as f:
-    data = tomllib.load(f)
-target = sys.argv[2]
-for e in data.get("engineers", []):
-    if e.get("id") == target:
-        print(
-            e.get("tool", "claude"),
-            e.get("auth_mode", "oauth"),
-            e.get("provider", "anthropic"),
-            e.get("model", ""),
-        )
-        break
-PY
-          2>/dev/null) || true
-      fi
-    fi
-    # Fallback to ancestor values for default template or if template read failed
+    read -r _seat_tool _seat_auth _seat_provider _seat_template_model < <(
+      template_seat_config "$seat" 2>/dev/null || true
+    )
+    # Fallback to memory provider values only if template read failed.
     _seat_tool="${_seat_tool:-claude}"
     _seat_auth="${_seat_auth:-$seat_auth_mode}"
     _seat_provider="${_seat_provider:-$seat_provider}"
+    if [[ -n "$FORCE_ALL_API_PROVIDER" && "$_seat_auth" == "api" ]]; then
+      _seat_provider="$(seat_provider_for_explicit_provider "$FORCE_ALL_API_PROVIDER")"
+      _seat_template_model="$(seat_model_for_explicit_provider "$FORCE_ALL_API_PROVIDER")"
+    fi
     cat >>"$PROJECT_LOCAL_TOML" <<EOF
 
 [[overrides]]
@@ -1224,11 +1301,11 @@ tool = "$_seat_tool"
 auth_mode = "$_seat_auth"
 provider = "$_seat_provider"
 EOF
-    # Write model for claude seats: template-specified model takes precedence;
-    # fall back to the ancestor's selected model when template doesn't specify one.
-    # codex/gemini seats never get a model override.
+    # Write model for claude seats only. Template-specified models stay scoped
+    # to their seats; --provider is memory-only, and --all-api-provider is the
+    # explicit global override for API seats.
     if [[ "$_seat_tool" == "claude" ]]; then
-      local _effective_model="${_seat_template_model:-$seat_model}"
+      local _effective_model="${_seat_template_model:-}"
       if [[ -n "$_effective_model" ]]; then
         printf 'model = "%s"\n' "$_effective_model" >>"$PROJECT_LOCAL_TOML"
       fi
@@ -1246,6 +1323,16 @@ seat_secret_file_for() {
     oauth|oauth_token) return 0 ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unsupported seat auth mode for secret seeding: $seat_auth_mode" ;;
   esac
+}
+
+seat_secret_file_for_provider() {
+  local seat="$1" provider="$2"
+  printf '%s\n' "$HOME/.agents/secrets/claude/$provider/$seat.env"
+}
+
+global_claude_secret_template_for_provider() {
+  local provider="$1"
+  printf '%s\n' "$HOME/.agent-runtime/secrets/claude/$provider.env"
 }
 
 write_bootstrap_secret_file() {
@@ -1307,20 +1394,72 @@ write_bootstrap_secret_file() {
 }
 
 seed_bootstrap_secrets() {
-  note "Step 5.6: seed default seat secrets"
-  local seat secret_path
+  note "Step 5.6: seed template-driven seat secrets"
+  local seat secret_path src_path provider auth tool model
   if [[ "$DRY_RUN" == "1" ]]; then
     for seat in "${PENDING_SEATS[@]}"; do
-      secret_path="$(seat_secret_file_for "$seat" || true)"
-      [[ -n "$secret_path" ]] && printf '[dry-run] write %s\n' "$secret_path"
+      read -r tool auth provider model < <(template_seat_config "$seat" 2>/dev/null || true)
+      if [[ -n "$FORCE_ALL_API_PROVIDER" && "$auth" == "api" ]]; then
+        provider="$(seat_provider_for_explicit_provider "$FORCE_ALL_API_PROVIDER")"
+      fi
+      [[ "$auth" == "api" && "$tool" == "claude" ]] || continue
+      src_path="$(global_claude_secret_template_for_provider "$provider")"
+      secret_path="$(seat_secret_file_for_provider "$seat" "$provider")"
+      printf '[dry-run] copy %s -> %s\n' "$src_path" "$secret_path"
     done
     return 0
   fi
 
-  for seat in "${PENDING_SEATS[@]}"; do
-    secret_path="$(seat_secret_file_for "$seat" || true)"
-    [[ -n "$secret_path" ]] || continue
-    write_bootstrap_secret_file "$secret_path"
+  local seed_source="$PROJECT_RECORD_PATH"
+  [[ -f "$seed_source" ]] || seed_source="$PROJECT_LOCAL_TOML"
+  "$PYTHON_BIN" - "$seed_source" "${PENDING_SEATS[@]}" <<'PY' |
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+path = Path(sys.argv[1])
+pending = set(sys.argv[2:])
+if not path.exists():
+    raise SystemExit(0)
+data = tomllib.loads(path.read_text(encoding="utf-8"))
+if isinstance(data.get("overrides"), list):
+    overrides = {
+        str(item.get("id", "")): item
+        for item in data.get("overrides", [])
+        if str(item.get("id", ""))
+    }
+    seats = [seat for seat in sys.argv[2:] if seat in overrides]
+else:
+    overrides = data.get("seat_overrides") or {}
+    seats = [str(seat) for seat in data.get("engineers", [])]
+for seat in seats:
+    if seat not in pending:
+        continue
+    override = overrides.get(seat) or {}
+    tool = str(override.get("tool", "claude"))
+    auth = str(override.get("auth_mode", "oauth"))
+    provider = str(override.get("provider", "anthropic"))
+    model = str(override.get("model", ""))
+    print("\t".join((seat, tool, auth, provider, model)))
+PY
+  while IFS=$'\t' read -r seat tool auth provider model; do
+    [[ -n "$seat" ]] || continue
+    [[ "$tool" == "claude" && "$auth" == "api" ]] || continue
+    src_path="$(global_claude_secret_template_for_provider "$provider")"
+    secret_path="$(seat_secret_file_for_provider "$seat" "$provider")"
+    if [[ ! -f "$src_path" ]]; then
+      warn "seat secret skipped for $seat; missing shared template: $src_path"
+      continue
+    fi
+    mkdir -p "$(dirname "$secret_path")" || die 31 PROJECT_SECRET_DIR_FAILED "unable to create $(dirname "$secret_path")"
+    cp "$src_path" "$secret_path" || die 31 PROJECT_SECRET_WRITE_FAILED "unable to copy $src_path -> $secret_path"
+    chmod 600 "$secret_path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $secret_path"
   done
 }
 
@@ -1428,11 +1567,13 @@ install_skill_tier_for_home() {
 
 install_skills_by_tier() {
   note "Step 5.8: install ClawSeat skill symlinks"
+  local effective_memory_tool
+  effective_memory_tool="$(primary_effective_tool)"
   install_skill_tier_for_home claude "$HOME/.agents/skills"
   install_skill_tier_for_home gemini "$HOME/.gemini/skills"
   install_skill_tier_for_home codex "$HOME/.codex/skills"
-  if [[ "$LOAD_ALL_SKILLS" != "1" && "$MEMORY_TOOL" != "claude" ]]; then
-    note "Extended skills skipped for $MEMORY_TOOL (context budget); use --load-all-skills to override"
+  if [[ "$LOAD_ALL_SKILLS" != "1" && "$effective_memory_tool" != "claude" ]]; then
+    note "Extended skills skipped for $effective_memory_tool (context budget); use --load-all-skills to override"
   fi
 }
 
@@ -1514,9 +1655,11 @@ prompt_qa_patrol_cron_optin() {
   fi
 }
 
-project_profile_needs_qa_migration() {
+project_profile_needs_template_migration() {
   [[ -f "$PROJECT_RECORD_PATH" ]] || return 1
-  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" <<'PY'
+  local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+  [[ -f "$template_file" ]] || return 1
+  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" "$template_file" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -1528,28 +1671,42 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore
 
 path = Path(sys.argv[1])
+template_path = Path(sys.argv[2])
 data = tomllib.loads(path.read_text(encoding="utf-8"))
+template = tomllib.loads(template_path.read_text(encoding="utf-8"))
 engineers = [str(item) for item in data.get("engineers", [])]
-qa = ((data.get("seat_overrides") or {}).get("qa") or {})
-needs = (
-    "qa" not in engineers
-    or str(qa.get("auth_mode", "")) != "api"
-    or str(qa.get("provider", "")) != "minimax"
-    or str(qa.get("model", "")) != "MiniMax-M2.7-highspeed"
-    or str(qa.get("base_url", "")) != "https://api.minimaxi.com/anthropic"
-)
+monitor_engineers = [str(item) for item in data.get("monitor_engineers", [])]
+overrides = data.get("seat_overrides") or {}
+needs = False
+for spec in template.get("engineers", []):
+    seat = str(spec.get("id", ""))
+    if not seat:
+        continue
+    if seat not in engineers or seat not in monitor_engineers:
+        needs = True
+        break
+    current = overrides.get(seat) or {}
+    for key in ("tool", "auth_mode", "provider"):
+        if key not in current and key in spec:
+            needs = True
+            break
+    if needs:
+        break
+    if spec.get("model") and "model" not in current:
+        needs = True
+        break
 raise SystemExit(0 if needs else 1)
 PY
 }
 
 migrate_project_profile_to_v2() {
-  note "Step 5.6: migrate project profile for qa engineer"
+  note "Step 5.6: migrate project profile from template defaults"
   if [[ ! -f "$PROJECT_RECORD_PATH" ]]; then
     warn "project profile migration skipped; missing $PROJECT_RECORD_PATH"
     return 0
   fi
-  if ! project_profile_needs_qa_migration; then
-    note "[install] project.toml already contains qa engineer with minimax defaults"
+  if ! project_profile_needs_template_migration; then
+    note "[install] project.toml already contains template-defined seats and override defaults"
     return 0
   fi
 
@@ -1568,15 +1725,15 @@ migrate_project_profile_to_v2() {
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] migrate %q: add qa to engineers + monitor_engineers, set qa minimax defaults, preserve seat_overrides\n' "$PROJECT_RECORD_PATH"
+    printf '[dry-run] migrate %q from template %q; preserve existing seat_overrides\n' "$PROJECT_RECORD_PATH" "$CLAWSEAT_TEMPLATE_NAME"
     return 0
   fi
 
   local backup_path="${PROJECT_RECORD_PATH}.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$PROJECT_RECORD_PATH" "$backup_path" \
-    || die 31 QA_PROFILE_BACKUP_FAILED "unable to backup $PROJECT_RECORD_PATH"
-  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" <<'PY' \
-    || die 31 QA_PROFILE_MIGRATE_FAILED "unable to migrate $PROJECT_RECORD_PATH"
+    || die 31 PROJECT_PROFILE_BACKUP_FAILED "unable to backup $PROJECT_RECORD_PATH"
+  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" "$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml" <<'PY' \
+    || die 31 PROJECT_PROFILE_MIGRATE_FAILED "unable to migrate $PROJECT_RECORD_PATH"
 from __future__ import annotations
 
 import re
@@ -1589,21 +1746,30 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore
 
 path = Path(sys.argv[1])
+template_path = Path(sys.argv[2])
 text = path.read_text(encoding="utf-8")
 data = tomllib.loads(text)
+template = tomllib.loads(template_path.read_text(encoding="utf-8"))
+template_defaults = template.get("defaults") or {}
+template_engineers = [
+    spec for spec in template.get("engineers", [])
+    if str(spec.get("id", "")).strip()
+]
 
-def unique_append(values: object, item: str) -> list[str]:
+def unique_extend(values: object, items: list[str]) -> list[str]:
     out = [str(v) for v in values] if isinstance(values, list) else []
-    if item not in out:
-        out.append(item)
+    for item in items:
+        if item not in out:
+            out.append(item)
     return out
 
 def q_array(values: list[str]) -> str:
     return "[" + ", ".join(f'"{v}"' for v in values) + "]"
 
-engineers = unique_append(data.get("engineers", []), "qa")
-monitor_engineers = unique_append(data.get("monitor_engineers", []), "qa")
-monitor_max_panes = max(5, int(data.get("monitor_max_panes", 0) or 0))
+template_ids = [str(spec["id"]) for spec in template_engineers]
+engineers = unique_extend(data.get("engineers", []), template_ids)
+monitor_engineers = unique_extend(data.get("monitor_engineers", []), template_ids)
+monitor_max_panes = max(int(template_defaults.get("monitor_max_panes", 0) or 0), int(data.get("monitor_max_panes", 0) or 0))
 
 def set_or_insert(src: str, key: str, rendered: str) -> str:
     pattern = re.compile(rf"^{re.escape(key)}\s*=.*$", re.MULTILINE)
@@ -1619,7 +1785,7 @@ text = set_or_insert(text, "engineers", q_array(engineers))
 text = set_or_insert(text, "monitor_engineers", q_array(monitor_engineers))
 text = set_or_insert(text, "monitor_max_panes", str(monitor_max_panes))
 
-def upsert_table_key(src: str, table: str, key: str, value: str) -> str:
+def upsert_table_key(src: str, table: str, key: str, value: str, *, preserve_existing: bool = True) -> str:
     header = f"[{table}]"
     header_match = re.search(rf"^\[{re.escape(table)}\]\s*$", src, re.MULTILINE)
     line = f"{key} = {value}"
@@ -1632,18 +1798,38 @@ def upsert_table_key(src: str, table: str, key: str, value: str) -> str:
     block = src[block_start:block_end]
     key_match = re.search(rf"^{re.escape(key)}\s*=.*$", block, re.MULTILINE)
     if key_match:
+        if preserve_existing:
+            return src
         block = block[: key_match.start()] + line + block[key_match.end():]
     else:
         block = block.rstrip("\n") + "\n" + line + "\n"
     return src[:block_start] + block + src[block_end:]
 
-text = upsert_table_key(text, "seat_overrides.qa", "auth_mode", '"api"')
-text = upsert_table_key(text, "seat_overrides.qa", "provider", '"minimax"')
-text = upsert_table_key(text, "seat_overrides.qa", "model", '"MiniMax-M2.7-highspeed"')
-text = upsert_table_key(text, "seat_overrides.qa", "base_url", '"https://api.minimaxi.com/anthropic"')
+def render_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, list):
+        return q_array([str(item) for item in value])
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+for spec in template_engineers:
+    seat = str(spec["id"])
+    for key in ("tool", "auth_mode", "provider", "model", "base_url"):
+        value = spec.get(key)
+        if value in (None, ""):
+            continue
+        text = upsert_table_key(
+            text,
+            f"seat_overrides.{seat}",
+            key,
+            render_value(value),
+            preserve_existing=True,
+        )
 path.write_text(text, encoding="utf-8")
 PY
-  note "[install] project.toml qa engineer migration complete (backup: $backup_path)"
+  note "[install] project.toml template migration complete (backup: $backup_path)"
 }
 
 ensure_qa_engineer_record() {
@@ -1685,15 +1871,14 @@ bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
   [[ -f "$AGENT_ADMIN_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 AGENT_ADMIN_MISSING "missing agent_admin script: $AGENT_ADMIN_SCRIPT"
-  # Only write a locally-generated template for clawseat-default; other templates
-  # (clawseat-engineering, clawseat-creative) have canonical definitions in
-  # templates/*.toml and must not be overridden by the install-time generated version.
-  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && write_bootstrap_template
+  # Canonical templates live in templates/*.toml and must not be overwritten
+  # by install-time generated template files.
   write_project_local_toml
 
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] (cd %q && %q %q project bootstrap --template %q --local %q)\n' \
       "$AGENTS_TEMPLATES_ROOT" "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" "$CLAWSEAT_TEMPLATE_NAME" "$PROJECT_LOCAL_TOML"
+    ensure_deepseek_secret_template
     seed_bootstrap_secrets
     return 0
   fi
@@ -1724,12 +1909,13 @@ bootstrap_project_profile() {
     cd "$AGENTS_TEMPLATES_ROOT" &&
     "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" project bootstrap --template "$CLAWSEAT_TEMPLATE_NAME" --local "$PROJECT_LOCAL_TOML"
   ) || die 31 PROJECT_BOOTSTRAP_FAILED "unable to bootstrap project profile via agent_admin: $PROJECT"
+  ensure_deepseek_secret_template
   seed_bootstrap_secrets
 }
 
 register_project_registry() {
   local primary_tool="claude" primary_session_name
-  [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$MEMORY_TOOL"
+  [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$(primary_effective_tool)"
   primary_session_name="$(primary_tmux_name)"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] %q %q register %q --primary-seat %q --primary-seat-tool %q --tmux-name %q --template-name %q --repo-path %q\n' \
@@ -1804,7 +1990,7 @@ tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(
     PENDING_SEATS_HUMAN=sys.argv[8],
     PRIMARY_SESSION_NAME=sys.argv[9],
 )
-tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-default")
+tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-creative")
 out = Path(sys.argv[2]); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(tmpl, encoding="utf-8")
 PY
     chmod 600 "$BRIEF_PATH" || die 30 BRIEF_CHMOD_FAILED "unable to chmod $BRIEF_PATH"
@@ -1924,9 +2110,9 @@ write_operator_guide() {
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
 
-install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 workers 窗口 + shared memories 窗口；legacy template 可能仍使用单窗口布局。
+install.sh 已完成。现在按 6 步触发 Phase-A。v2 项目使用项目 workers 窗口 + shared memories 窗口；legacy template 可能仍使用单窗口布局。
 
-1. 切到 primary seat：\`${primary_session_name}\`。v2 minimal 通常在 \`clawseat-memories\` 窗口的项目 tab；legacy template 可能在项目窗口中。
+1. 切到 primary seat：\`${primary_session_name}\`。v2 项目通常在 \`clawseat-memories\` 窗口的项目 tab；legacy template 可能在项目窗口中。
 
 2. **先确认 ${primary_session_name} pane 已就绪** — install.sh 不再自动发送 Phase-A kickoff；kickoff 已写入文件，等待 operator 主动触发：
 
@@ -2076,7 +2262,7 @@ launcher_auth_for_provider() {
 launcher_tool_for_seat() {
   local seat_id="${1:-}"
   if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_skips_claude_provider; then
-    printf '%s\n' "$MEMORY_TOOL"
+    primary_effective_tool
     return
   fi
   printf '%s\n' "claude"
@@ -2549,7 +2735,6 @@ main() {
   bootstrap_project_profile
   migrate_project_profile_to_v2
   ensure_privacy_kb_template
-  ensure_deepseek_secret_template
   install_skills_by_tier
   install_privacy_pre_commit_hook
   register_project_registry
@@ -2559,9 +2744,7 @@ main() {
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +
   # one shared memories window across all projects (rebuilt on each install).
-  # v1 single-window grid_payload preserved as fallback for clawseat-default
-  # templates (which still use the legacy single-window layout).
-  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" ]]; then
+  if [[ "$PRIMARY_SEAT_ID" == "memory" ]]; then
     note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
     open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
 
@@ -2576,7 +2759,7 @@ main() {
       warn "memories_payload returned skip — no project memory tmux sessions found"
     fi
   else
-    # v1 single-window topology (clawseat-default / engineering / creative)
+    # Legacy single-window topology for imported ancestor-primary templates.
     note "Step 7: open legacy iTerm worker grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
   fi
 

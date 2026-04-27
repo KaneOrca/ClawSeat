@@ -108,7 +108,7 @@ def test_install_ignores_existing_legacy_memory_daemon_and_window(tmp_path: Path
     assert "memory iTerm window already open, skipping open." not in result.stdout
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["singleton50-ancestor-claude"]
+    assert [record["session"] for record in records] == ["singleton50-memory-claude"]
 
     tmux_log_text = tmux_log.read_text(encoding="utf-8")
     assert "kill-session -t =machine-memory-claude" not in tmux_log_text
@@ -132,7 +132,7 @@ def test_install_does_not_start_legacy_memory_daemon_when_missing(tmp_path: Path
     assert result.returncode == 0, result.stderr
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["singleton51-ancestor-claude"]
+    assert [record["session"] for record in records] == ["singleton51-memory-claude"]
 
     payloads = _read_jsonl(iterm_payload_log)
     assert [payload["title"] for payload in payloads] == [

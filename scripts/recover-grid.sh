@@ -41,8 +41,9 @@ except Exception:
     print("ancestor")
 PY
 )"
-PRIMARY_SESSION="${PROJECT}-${PRIMARY_SEAT_ID}"
-WINDOW_TITLE="clawseat-${PROJECT}"
+agent_admin_bin="$(cd "$(dirname "$0")/.." && pwd)/core/scripts/agent_admin.py"
+PRIMARY_SESSION="$(python3 "$agent_admin_bin" session-name "$PRIMARY_SEAT_ID" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$PRIMARY_SEAT_ID")"
+WINDOW_TITLE="clawseat-${PROJECT}-workers"
 
 if ! env -u TMUX tmux has-session -t "=$PRIMARY_SESSION" 2>/dev/null; then
   echo "error: no tmux session named '$PRIMARY_SESSION'" >&2
@@ -58,7 +59,6 @@ if command -v osascript >/dev/null 2>&1; then
   window_count="$(osascript -e "tell application \"iTerm2\" to count of (windows whose name is \"$WINDOW_TITLE\")" 2>/dev/null || echo 0)"
   if [[ "${window_count:-0}" -eq 0 ]]; then
     echo "iTerm window '$WINDOW_TITLE' missing — invoking window open-grid ..."
-    agent_admin_bin="$(cd "$(dirname "$0")/.." && pwd)/core/scripts/agent_admin.py"
     if [[ -f "$agent_admin_bin" ]]; then
       # Surface stderr so failures are visible (RCA 2026-04-25 — silent failure
       # masked a grid disappearance recovery attempt in a live project).

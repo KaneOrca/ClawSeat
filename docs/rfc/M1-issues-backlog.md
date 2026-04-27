@@ -250,7 +250,7 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 
 2. 改 `open_grid_window(project)` 入口:
    - 读 project 的 template_name (从 `~/.agents/projects/<project>/project.toml`)
-   - clawseat-minimal → 调 `build_workers_payload + ensure_memories_pane` (v2 双窗)
+   - retired-v2-starter → 调 `build_workers_payload + ensure_memories_pane` (v2 双窗)
    - clawseat-{default,engineering,creative} → 保留 `build_grid_payload` (v1 单窗)
 
 3. 新增 `agent_admin_window.ensure_memories_pane(project)` 协议:
@@ -260,7 +260,7 @@ open_iterm_window "$(memories_payload)" _mem_window_id
 
 4. `recover-grid.sh` 不需要改 (调 open-grid 自动走对路径)
 
-5. install.sh main() clawseat-minimal 分支可以改用 Python helper (代码复用)
+5. install.sh main() retired-v2-starter 分支可以改用 Python helper (代码复用)
 
 **追加修复**:
 - 删除 `agent_admin_window.py:254-255` 把 machine-memory-claude 加进 grid 的代码 (v2 没这个)
@@ -500,14 +500,14 @@ MEMORY_WORKSPACE=$HOME/.agents/workspaces/$PROJECT/memory 有正確的 CLAUDE.md
 
 **修复**:
 - `scripts/install.sh` parse_args 加 `--memory-tool` `--memory-model` flag
-- `core/templates/clawseat-minimal.toml` 改 memory seat 默认 tool/model
+- `core/templates/retired-v2-starter.toml` 改 memory seat 默认 tool/model
 - install.sh Step 3 select_provider 跳过 claude provider 选择（如果 --memory-tool=codex）
 
 **Owner**: builder-codex
 **批次**: batch 4 (M1.6)
 **test_policy**: UPDATE
 
-**验收**: `bash install.sh --project foo --template clawseat-minimal` 默认装 codex gpt-5.4-mini memory；现有项目 `--reinstall --memory-tool claude --memory-model claude-opus-4-7` 保持现状
+**验收**: `bash install.sh --project foo --template retired-v2-starter` 默认装 codex gpt-5.4-mini memory；现有项目 `--reinstall --memory-tool claude --memory-model claude-opus-4-7` 保持现状
 
 **关联**: 跟 #1 brief 动态化协同
 

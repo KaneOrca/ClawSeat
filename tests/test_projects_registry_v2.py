@@ -69,7 +69,7 @@ def test_register_project_writes_schema_v2_and_backup(tmp_path: Path, monkeypatc
         "memory",
         primary_seat_tool="codex",
         tmux_name="install-memory",
-        template_name="clawseat-minimal",
+        template_name="clawseat-creative",
         repo_path="/repo",
         metadata={"owner": "ops"},
     )
@@ -77,7 +77,7 @@ def test_register_project_writes_schema_v2_and_backup(tmp_path: Path, monkeypatc
     assert entry.primary_seat_tool == "codex"
     data = json.loads(projects_registry.registry_path().read_text(encoding="utf-8"))
     assert data["version"] == 2
-    assert data["projects"][0]["template_name"] == "clawseat-minimal"
+    assert data["projects"][0]["template_name"] == "clawseat-creative"
     assert data["projects"][0]["repo_path"] == "/repo"
     assert projects_registry.backup_path().is_file()
     assert oct(projects_registry.registry_path().stat().st_mode & 0o777) == "0o600"
@@ -179,7 +179,7 @@ def test_validate_registry_vs_project_toml_warns_on_mismatch(tmp_path: Path, mon
         "\n".join(
             [
                 'name = "demo"',
-                'template_name = "clawseat-minimal"',
+                'template_name = "clawseat-creative"',
                 'engineers = ["memory", "planner"]',
                 "",
                 "[seat_overrides.memory]",
@@ -192,7 +192,7 @@ def test_validate_registry_vs_project_toml_warns_on_mismatch(tmp_path: Path, mon
         "demo",
         "ancestor",
         primary_seat_tool="claude",
-        template_name="clawseat-default",
+        template_name="clawseat-engineering",
     )
 
     warnings = projects_registry.validate_registry_vs_project_toml("demo", agents_home=agents)

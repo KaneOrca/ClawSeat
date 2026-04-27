@@ -38,8 +38,8 @@ bash scripts/install.sh
 
 For non-default cases, follow the playbook and pass only the flags it
 documents, for example `--project`, `--repo-root` (FR-7: point memory to a
-different business repo), `--template` (select project roster: `clawseat-default` |
-`clawseat-engineering` | `clawseat-creative`), `--provider`, `--base-url`,
+different business repo), `--template` (select project roster:
+`clawseat-creative` | `clawseat-engineering`), `--provider`, `--base-url`,
 `--api-key`, `--model`, `--reinstall`, or `--reset-harness-memory` (FR-1: clear
 saved per-seat harness choices).
 
@@ -59,7 +59,7 @@ not manually recreate the memory launch sequence.
 
 - **Project memory layer**: `<project>-memory` is the primary frontstage and orchestration hub.
 - **Project workers window**: worker seats are template-driven from `project.toml`.
-  `clawseat-minimal` uses planner / builder / designer; richer templates can add reviewer and qa.
+  `clawseat-creative` uses planner / builder / qa / designer; engineering adds reviewer.
 - **Tenant layer (Feishu optional)**: `koder` — optional OpenClaw-side
   Feishu reverse channel adapter / async notification sink, not a tmux
   seat and not the primary frontstage.

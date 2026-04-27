@@ -34,16 +34,11 @@ _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
 _MEMORIES_WINDOW_TITLE = "clawseat-memories"
 _MAX_ITERM_PANES = 8
-_V1_GRID_TEMPLATES = frozenset({
-    "",
-    "clawseat-default",
-    "clawseat-engineering",
-    "clawseat-creative",
-})
+_V1_GRID_TEMPLATES = frozenset({""})
 
 # Per-project primary seat ids — the seat that is the user's first dialog
 # entry (orchestrator + memory + research). v1 templates name it "ancestor";
-# v2 clawseat-minimal renames to "memory" per RFC-001 §2.4. Code that special-
+# v2 templates name it "memory" per RFC-001 §2.4. Code that special-
 # cases the primary seat (window grid, recovery hooks, brief env injection,
 # reseed restrictions) checks set membership instead of literal equality.
 _PRIMARY_SEAT_IDS = frozenset({"ancestor", "memory"})
@@ -557,7 +552,7 @@ def open_grid_window(
     open_memory: bool = False,
 ) -> dict[str, Any]:
     template_name = str(getattr(project, "template_name", "") or "")
-    if template_name == "clawseat-minimal":
+    if _project_primary_seat_id(project) == "memory":
         window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers"
         if rebuild and iterm_window_exists(window_title):
             close_iterm_window(window_title)

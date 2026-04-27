@@ -242,9 +242,9 @@ install.sh 创建项目时追加；uninstall 时删除。memories 窗口的 buil
 ### Tier 0 — Templates
 
 模板系统:
-- repo 内置: `clawseat-minimal` (v2 第一个), 未来可加 `clawseat-engineering` (重写适配 v2) / `clawseat-creative` 等
+- repo 内置: `retired-v2-starter` (v2 第一个), 未来可加 `clawseat-engineering` (重写适配 v2) / `clawseat-creative` 等
 - 用户自定义: `~/.agents/templates/<name>.toml` ✅ M3 解锁
-- 模板继承: `extends = "clawseat-minimal"` + override seat 字段 ✅ M3
+- 模板继承: `extends = "retired-v2-starter"` + override seat 字段 ✅ M3
 - 模板版本: `version` 字段 + 升级路径 (v1 = 1, v2 = 1 仍兼容)
 
 ---
@@ -272,13 +272,13 @@ install.sh 创建项目时追加；uninstall 时删除。memories 窗口的 buil
 
 完成情况：
 
-- [x] `templates/clawseat-minimal.toml` 落到 v2 worktree (canonical, 4 seat)
-- [x] install.sh 接受 `clawseat-minimal` 模板 (whitelist 含 minimal)
-- [x] install.sh `prompt_kind_first_flow` 改 2-mode (新手 default = clawseat-minimal / 专家 = clawseat-engineering)
+- [x] `templates/retired-v2-starter.toml` 落到 v2 worktree (canonical, 4 seat)
+- [x] install.sh 接受 `retired-v2-starter` 模板 (whitelist 含 minimal)
+- [x] install.sh `prompt_kind_first_flow` 改 2-mode (新手 default = retired-v2-starter / 专家 = clawseat-engineering)
 - [x] install.sh `bootstrap_project_profile` 修复 reinstall session.toml 复活 bug
 - [x] install.sh PRIMARY_SEAT_ID generalization (8 处 hardcoded `${PROJECT}-ancestor` 改 `${PROJECT}-${PRIMARY_SEAT_ID}`)
 - [x] Python `agent_admin_window.py` + `agent_admin_session.py` 5 处 `"ancestor"` 字面量改成 `_PRIMARY_SEAT_IDS = {"ancestor", "memory"}` 集合判断
-- [ ] **NEXT**: 测试 — `clawseat project new testbed --template clawseat-minimal` → 4 seat 正常 spawn → memory 收到用户对话
+- [ ] **NEXT**: 测试 — `clawseat project new testbed --template retired-v2-starter` → 4 seat 正常 spawn → memory 收到用户对话
 - [ ] auto_send_phase_a_kickoff: 扩 polling 窗口到 OAuth 信任屏完成 (当前 72s 不够)
 - [ ] memory seat 启动时挂 Stop hook
 - [ ] memory seat 接受 dispatch 协议 (跟 v1 dispatch_task 兼容)
@@ -296,7 +296,7 @@ install.sh 创建项目时追加；uninstall 时删除。memories 窗口的 buil
 ### M3 — 自定义模板 + 继承
 
 - [ ] `templates/*.toml` 文件扫描注册 (去掉硬编码白名单)
-- [ ] template `extends = "clawseat-minimal"` 继承机制
+- [ ] template `extends = "retired-v2-starter"` 继承机制
 - [ ] `agent_admin template list/show/validate/create` 子命令
 - [ ] 文档: 如何写自定义模板
 
@@ -326,7 +326,7 @@ install.sh 创建项目时追加；uninstall 时删除。memories 窗口的 buil
 ### 短期: v1 + v2 并存
 
 - 当前 install / cartooner / mor (在 experimental 分支上) 保留作 baseline
-- v2 新建项目用 `--template clawseat-minimal`, 跑在 v2 worktree 的代码上
+- v2 新建项目用 `--template retired-v2-starter`, 跑在 v2 worktree 的代码上
 - 两套并存验证 1-2 周
 
 ### 长期: 完全切换 v2
@@ -364,7 +364,7 @@ install.sh 创建项目时追加；uninstall 时删除。memories 窗口的 buil
 1. operator review (你正在看的就是)
 2. operator 拍板后, dispatch 给 install team 实施 M1 剩余任务
 3. install team planner-claude 出实施细则 → builder-codex 编码 → planner-claude review → memory archive
-4. M1 完成后 operator 验收 (用 `clawseat project new testbed --template clawseat-minimal` 创个最小项目跑通对话)
+4. M1 完成后 operator 验收 (用 `clawseat project new testbed --template retired-v2-starter` 创个最小项目跑通对话)
 5. M1 验收通过 → 启动 M2
 
 ---

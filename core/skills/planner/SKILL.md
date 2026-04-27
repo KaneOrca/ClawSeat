@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Dispatch / consumption / merge hub for ClawSeat chains. Owns dispatch_authority for the worker seats declared in project.toml engineers (minimal default = builder + designer; clawseat-default still gets reviewer + qa); does not own seat lifecycle or operator CLI surface.
+description: Dispatch / consumption / merge hub for ClawSeat chains. Owns dispatch_authority for the worker seats declared in project.toml engineers (creative = builder + qa + designer; engineering adds reviewer); does not own seat lifecycle or operator CLI surface.
 related_skills:
   - clawseat-decision-escalation
   - clawseat-privacy
@@ -52,7 +52,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
 
 派工后立即写 planner KB，记录本次优先级与派工对象的选择理由；这是写自己的 KB，不是写 memory workspace。
 
-我可以派的 seat 由 project.toml `engineers` 字段决定（除 `PRIMARY_SEAT_ID` 外的所有 engineer），常见组合：`clawseat-minimal` = `builder` + `designer`；`clawseat-default` = `builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
+我可以派的 seat 由 project.toml `engineers` 字段决定（除 `PRIMARY_SEAT_ID` 外的所有 engineer），常见组合：`clawseat-creative` = `builder` + `qa` + `designer`；`clawseat-engineering` = `builder` / `reviewer` / `qa` / `designer`。
 
 Planner KB 路径：派工、优先级、方案选择记录写到
 `~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`。

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -47,6 +48,7 @@ def _run_fake_install(
     from tests.test_install_isolation import _fake_install_root
 
     root, home, _launcher_log, _tmux_log, py_stubs = _fake_install_root(tmp_path)
+    shutil.copytree(_REPO / "templates", root / "templates", dirs_exist_ok=True)
     project_dir = home / ".agents" / "projects" / "qa-gaps"
     project_dir.mkdir(parents=True)
     project_toml = project_dir / "project.toml"
@@ -90,7 +92,7 @@ def test_migrate_project_profile_adds_qa(tmp_path: Path) -> None:
         project_toml_text="\n".join(
             [
                 'name = "qa-gaps"',
-                'template_name = "clawseat-minimal"',
+                'template_name = "clawseat-creative"',
                 'engineers = ["memory", "planner", "builder", "designer"]',
                 'monitor_engineers = ["planner", "builder", "designer"]',
                 "monitor_max_panes = 4",
@@ -105,7 +107,7 @@ def test_migrate_project_profile_adds_qa(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     migrated = tomllib.loads(project_toml.read_text(encoding="utf-8"))
     assert migrated["engineers"] == ["memory", "planner", "builder", "designer", "qa"]
-    assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "qa"]
+    assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "memory", "qa"]
     assert migrated["monitor_max_panes"] == 5
     assert migrated["seat_overrides"]["builder"]["provider"] == "openai"
     assert migrated["seat_overrides"]["qa"]["auth_mode"] == "api"
@@ -125,16 +127,38 @@ def test_migrate_project_profile_skips_if_qa_present(tmp_path: Path) -> None:
     original = "\n".join(
         [
             'name = "qa-gaps"',
-            'template_name = "clawseat-minimal"',
+            'template_name = "clawseat-creative"',
             'engineers = ["memory", "planner", "builder", "designer", "qa"]',
-            'monitor_engineers = ["planner", "builder", "designer", "qa"]',
+            'monitor_engineers = ["memory", "planner", "builder", "designer", "qa"]',
             "monitor_max_panes = 5",
             "",
+            "[seat_overrides.memory]",
+            'tool = "claude"',
+            'auth_mode = "oauth"',
+            'provider = "anthropic"',
+            "",
+            "[seat_overrides.planner]",
+            'tool = "claude"',
+            'auth_mode = "api"',
+            'provider = "deepseek"',
+            'model = "deepseek-v4-pro"',
+            "",
+            "[seat_overrides.builder]",
+            'tool = "codex"',
+            'auth_mode = "oauth"',
+            'provider = "openai"',
+            "",
             "[seat_overrides.qa]",
+            'tool = "claude"',
             'auth_mode = "api"',
             'provider = "minimax"',
             'model = "MiniMax-M2.7-highspeed"',
             'base_url = "https://api.minimaxi.com/anthropic"',
+            "",
+            "[seat_overrides.designer]",
+            'tool = "gemini"',
+            'auth_mode = "oauth"',
+            'provider = "google"',
             "",
         ]
     )
@@ -238,7 +262,7 @@ def test_open_grid_rebuild_flag_accepted(monkeypatch: pytest.MonkeyPatch) -> Non
         {
             "name": "qa-gaps",
             "engineers": ["memory", "planner", "builder", "qa"],
-            "template_name": "clawseat-minimal",
+            "template_name": "clawseat-creative",
         },
     )()
     closed: list[str] = []
@@ -271,7 +295,7 @@ def test_workers_recipe_4_pane_labels() -> None:
     project = SimpleNamespace(
         name="qa-gaps",
         engineers=["memory", "planner", "builder", "designer", "qa"],
-        template_name="clawseat-minimal",
+        template_name="clawseat-creative",
     )
 
     payload = agent_admin_window.build_workers_payload(project)
@@ -288,7 +312,7 @@ def test_agent_admin_engineer_create_defaults_qa_to_minimax() -> None:
         name="qa-gaps",
         engineers=["memory", "planner", "builder", "designer"],
         monitor_engineers=["planner", "builder", "designer"],
-        template_name="clawseat-minimal",
+        template_name="clawseat-creative",
     )
     session = SimpleNamespace(
         engineer_id="qa",

@@ -100,7 +100,7 @@ def test_install_provider_choice_env_var_selects_first_candidate_without_tty(tmp
     records = _read_jsonl(launcher_log)
     assert records[0]["custom_base_url"] == "https://api.minimaxi.com/anthropic"
     assert records[0]["custom_model"] == "MiniMax-M2.7-highspeed"
-    assert "set-option -t choice49-ancestor-claude detach-on-destroy off" in tmux_log.read_text(encoding="utf-8")
+    assert "set-option -t choice49-memory-claude detach-on-destroy off" in tmux_log.read_text(encoding="utf-8")
 
 
 def test_install_provider_choice_flag_selects_first_candidate_without_tty(tmp_path: Path) -> None:
@@ -123,4 +123,4 @@ def test_install_provider_choice_flag_selects_first_candidate_without_tty(tmp_pa
     records = _read_jsonl(launcher_log)
     assert records[0]["custom_base_url"] == "https://api.minimaxi.com/anthropic"
     assert records[0]["custom_model"] == "MiniMax-M2.7-highspeed"
-    assert "set-option -t choice50-ancestor-claude detach-on-destroy off" in tmux_log.read_text(encoding="utf-8")
+    assert "set-option -t choice50-memory-claude detach-on-destroy off" in tmux_log.read_text(encoding="utf-8")

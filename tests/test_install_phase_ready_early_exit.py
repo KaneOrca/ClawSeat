@@ -103,5 +103,5 @@ def test_install_reinstall_flags_override_ready_status(tmp_path: Path, reinstall
     assert result.returncode == 0, result.stderr
     assert "already installed" not in (result.stdout + result.stderr)
     tmux_output = tmux_log.read_text(encoding="utf-8")
-    assert "set-option -t ready50-ancestor-claude detach-on-destroy off" in tmux_output
+    assert "set-option -t ready50-memory-claude detach-on-destroy off" in tmux_output
     assert "set-option -t machine-memory-claude detach-on-destroy off" not in tmux_output
