@@ -347,9 +347,13 @@ def main() -> int:
             picked = None
         if picked is None:
             print(
-                f"seat_needed: no live seat with role={role_hint!r} in "
-                f"project={profile.project_name!r}. "
-                "Launch one or specify --target explicitly.",
+                f"seat_needed: no live seat with role={role_hint!r} in project={profile.project_name!r}.",
+                file=sys.stderr,
+            )
+            print(
+                "hint: state.db seats table may be out of sync. Try:\n"
+                f"  python3 ~/ClawSeat/core/scripts/agent_admin.py session reconcile --project {profile.project_name}\n"
+                "or use --target <seat_id> to bypass liveness lookup.",
                 file=sys.stderr,
             )
             return 3

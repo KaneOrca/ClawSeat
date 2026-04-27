@@ -994,6 +994,44 @@ def cmd_session_status(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_status(args)
 
 
+def cmd_session_reconcile(args: argparse.Namespace) -> int:
+    from reconcile_seat_states import reconcile
+
+    counts = reconcile(project=args.project)
+    print(
+        f"reconciled seats: live={counts['live']} dead={counts['dead']} skipped={counts['skipped']}"
+    )
+    return 0
+
+
+def cmd_session_list_live(args: argparse.Namespace) -> int:
+    core_path = REPO_ROOT / "core"
+    if str(core_path) not in sys.path:
+        sys.path.insert(0, str(core_path))
+    from core.lib.state import list_seats, open_db
+
+    with open_db() as conn:
+        projects = [args.project] if args.project else [
+            str(row["project"])
+            for row in conn.execute("SELECT DISTINCT project FROM seats ORDER BY project").fetchall()
+        ]
+        for project_name in sorted(projects):
+            for seat in list_seats(conn, project_name, role=args.role, status="live"):
+                print(
+                    "\t".join(
+                        [
+                            seat.project,
+                            seat.seat_id,
+                            seat.role,
+                            seat.status,
+                            seat.session_name or "",
+                            seat.last_heartbeat or "",
+                        ]
+                    )
+                )
+    return 0
+
+
 def cmd_session_effective_launch(args: argparse.Namespace) -> int:
     return INFO_HANDLERS.session_effective_launch(args)
 
@@ -1276,6 +1314,8 @@ PARSER_HOOKS = ParserHooks(
     cmd_session_stop_engineer=cmd_session_stop_engineer,
     cmd_session_start_project=cmd_session_start_project,
     cmd_session_status=cmd_session_status,
+    cmd_session_reconcile=cmd_session_reconcile,
+    cmd_session_list_live=cmd_session_list_live,
     cmd_session_effective_launch=cmd_session_effective_launch,
     cmd_session_switch_harness=cmd_session_switch_harness,
     cmd_session_switch_auth=cmd_session_switch_auth,
