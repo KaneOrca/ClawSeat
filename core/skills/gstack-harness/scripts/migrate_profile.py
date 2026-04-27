@@ -2,22 +2,17 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
 from typing import Any
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _CORE_LIB = _SCRIPT_DIR.parents[2] / "lib"
 if str(_CORE_LIB) not in sys.path:
     sys.path.insert(0, str(_CORE_LIB))
 from real_home import real_user_home
+from utils import load_toml, q, q_array
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,19 +27,6 @@ def parse_args() -> argparse.Namespace:
         help="Generate a new-project profile that only bootstraps koder and does not preserve legacy seats.",
     )
     return parser.parse_args()
-
-
-def load_toml(path: Path) -> dict[str, Any]:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
-
-
-def q(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def q_array(values: list[str]) -> str:
-    return "[" + ", ".join(q(value) for value in values) + "]"
 
 
 def resolve_clawseat_root() -> Path:

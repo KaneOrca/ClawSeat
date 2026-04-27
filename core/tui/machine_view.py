@@ -12,13 +12,11 @@ Invocation:
 
     python3 -m core.tui.machine_view              # live view
     python3 -m core.tui.machine_view --json       # structured output
-    python3 -m core.tui.machine_view --sample     # render the §3 example
-                                                    # (works without Phase 1)
+    python3 -m core.tui.machine_view --sample     # deprecated; real engine only
 """
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import shutil
 import sys
@@ -26,74 +24,18 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
 
 # ─────────────────────────────────────────────────────────────────────
-# Engine adapter — real modules after Phase 1, fake sample before.
+# Engine adapter.
 # ─────────────────────────────────────────────────────────────────────
 
-try:
-    from machine_config import (  # type: ignore[import-not-found]
-        load_machine,
-        list_openclaw_tenants,
-        validate_tenant,
-    )
-    USE_REAL_ENGINE = True
-except ImportError:
-    USE_REAL_ENGINE = False
+from machine_config import load_machine, list_openclaw_tenants, validate_tenant  # noqa: E402
 
-    @dataclasses.dataclass
-    class _MockMemoryConfig:
-        role: str = "memory-oracle"
-        tool: str = "claude"
-        auth_mode: str = "api"
-        provider: str = "minimax"
-        model: str = "MiniMax-M2.7-highspeed"
-        runtime_dir: str = "~/.agents/runtime/memory"
-        storage_root: str = "~/.agents/memory"
-        monitor: bool = True
-
-    @dataclasses.dataclass
-    class _MockTenant:
-        name: str
-        workspace: str
-        description: str
-
-    @dataclasses.dataclass
-    class _MockMachineConfig:
-        version: int = 1
-        memory: _MockMemoryConfig = dataclasses.field(default_factory=_MockMemoryConfig)
-        tenants: list[_MockTenant] = dataclasses.field(default_factory=list)
-
-    def load_machine() -> _MockMachineConfig:  # type: ignore[no-redef]
-        return _MockMachineConfig(
-            tenants=[
-                _MockTenant(
-                    name="yu",
-                    workspace="~/.openclaw/workspace-yu",
-                    description="operator ywf's primary install-side tenant",
-                ),
-                _MockTenant(
-                    name="koder",
-                    workspace="~/.openclaw/workspace-<tenant>",
-                    description="original koder tenant",
-                ),
-            ],
-        )
-
-    def list_openclaw_tenants() -> list[_MockTenant]:  # type: ignore[no-redef]
-        return load_machine().tenants
-
-    def validate_tenant(name: str) -> tuple[bool, str]:  # type: ignore[no-redef]
-        for t in load_machine().tenants:
-            if t.name == name:
-                path = Path(t.workspace).expanduser()
-                if path.exists():
-                    return True, f"workspace found at {path}"
-                return False, (
-                    f"workspace does not exist: {path} — run "
-                    f"`openclaw tenant init {name}`"
-                )
-        return False, f"tenant {name!r} not in machine.toml"
+USE_REAL_ENGINE = True
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -172,17 +114,18 @@ def _render_memory(machine: Any) -> str:
     return "\n".join(lines)
 
 
-def _render_tenants(tenants: list[Any]) -> str:
+def _render_tenants(machine: Any) -> str:
+    tenants = list_openclaw_tenants(machine)
     if not tenants:
         return _header("OpenClaw tenants") + "\n  (none declared)"
     rows: list[list[str]] = [
         ["name", "workspace", "bound project", "health"]
     ]
     for t in tenants:
-        ok, detail = validate_tenant(t.name)
+        ok, detail = validate_tenant(machine, t.name)
         bound = _read_tenant_binding(t) or "—"
         health = "ok" if ok else f"error: {detail}"
-        rows.append([t.name, t.workspace, bound, health])
+        rows.append([t.name, str(t.workspace), bound, health])
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     lines = [_header("OpenClaw tenants (koder slots)")]
     for i, row in enumerate(rows):
@@ -197,7 +140,7 @@ def _render_machine(machine: Any) -> str:
     out = [
         _render_memory(machine),
         "",
-        _render_tenants(machine.tenants),
+        _render_tenants(machine),
     ]
     return "\n".join(out)
 
@@ -209,11 +152,11 @@ def _render_machine(machine: Any) -> str:
 def _to_jsonable(machine: Any) -> dict[str, Any]:
     mem = machine.memory
     tenants_out = []
-    for t in machine.tenants:
-        ok, detail = validate_tenant(t.name)
+    for t in list_openclaw_tenants(machine):
+        ok, detail = validate_tenant(machine, t.name)
         tenants_out.append({
             "name": t.name,
-            "workspace": t.workspace,
+            "workspace": str(t.workspace),
             "description": getattr(t, "description", ""),
             "bound_project": _read_tenant_binding(t),
             "validation": {"ok": ok, "detail": detail},
@@ -226,8 +169,8 @@ def _to_jsonable(machine: Any) -> dict[str, Any]:
             "auth_mode": mem.auth_mode,
             "provider": mem.provider,
             "model": getattr(mem, "model", None),
-            "runtime_dir": mem.runtime_dir,
-            "storage_root": mem.storage_root,
+            "runtime_dir": str(mem.runtime_dir),
+            "storage_root": str(mem.storage_root),
             "monitor": mem.monitor,
         },
         "tenants": tenants_out,
@@ -244,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true",
                         help="emit structured JSON instead of the human view")
     parser.add_argument("--sample", action="store_true",
-                        help="render the §3 example payload (works without Phase 1)")
+                        help="deprecated compatibility flag; real machine.toml is always shown")
     args = parser.parse_args(argv)
 
     if args.sample and USE_REAL_ENGINE:

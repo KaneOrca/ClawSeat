@@ -18,6 +18,7 @@ if _CORE_LIB not in sys.path:
     sys.path.insert(0, _CORE_LIB)
 
 from project_binding import load_binding  # noqa: E402
+from env_utils import parse_env_file  # noqa: E402
 from project_tool_root import project_tool_root  # noqa: E402
 from real_home import real_user_home  # noqa: E402
 from state import Seat, open_db, upsert_seat  # noqa: E402
@@ -353,23 +354,7 @@ class SessionService:
             )
 
     def _parse_env_file(self, path: str) -> dict[str, str]:
-        values: dict[str, str] = {}
-        if not path:
-            return values
-        env_path = Path(path)
-        if not env_path.exists():
-            return values
-        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith("export "):
-                line = line[len("export "):].strip()
-            key, sep, value = line.partition("=")
-            if not sep:
-                continue
-            values[key.strip()] = (shlex.split(value.strip(), posix=True) or [""])[0] if value.strip() else ""
-        return values
+        return parse_env_file(path)
 
     def _launcher_auth_for(self, session: Any) -> str:
         from agent_admin_config import resolve_launcher_auth

@@ -40,6 +40,9 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+_CORE_LIB = _SCRIPTS.parents[2] / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
 
 from _memory_paths import (  # noqa: E402
     MEMORY_ROOT,
@@ -49,13 +52,10 @@ from _memory_paths import (  # noqa: E402
     reflections_path,
 )
 from _memory_schema import SchemaError, make_record, validate  # noqa: E402
+from utils import now_iso  # noqa: E402
 
 
 DROP_KINDS = frozenset(KIND_SUBDIRS.keys())
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _fact_path(kind: str, project: str, fact_id: str, memory_root: Path) -> Path:

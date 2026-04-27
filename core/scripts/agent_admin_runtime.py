@@ -4,8 +4,14 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
+
+_CORE_LIB = Path(__file__).resolve().parents[1] / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from env_utils import parse_env_file  # noqa: E402
 
 from agent_admin_config import (
     DEFAULT_PATH,
@@ -69,21 +75,6 @@ def detect_macos_system_proxies() -> dict[str, str]:
         "ALL_PROXY": all_proxy,
         "NO_PROXY": "localhost,127.0.0.1,::1,.local",
     }
-
-
-def parse_env_file(path: Path) -> dict[str, str]:
-    env: dict[str, str] = {}
-    if not path.exists():
-        return env
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if not sep:
-            continue
-        env[key.strip()] = shlex.split(value.strip(), posix=True)[0] if value.strip() else ""
-    return env
 
 
 def write_env_file(path: Path, values: dict[str, str], ensure_dir_fn: Any, write_text_fn: Any) -> None:

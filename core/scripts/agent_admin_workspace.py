@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sys
 import textwrap
@@ -35,14 +34,7 @@ _SPECIALIST_ROLES = frozenset({"builder", "reviewer", "qa", "designer"})
 _CORE_PATH = str(REPO_ROOT / "core")
 if _CORE_PATH not in sys.path:
     sys.path.insert(0, _CORE_PATH)
-
-
-def q(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def q_array(values: list[str]) -> str:
-    return "[" + ", ".join(q(item) for item in values) + "]"
+from lib.utils import q, q_array  # noqa: E402
 
 
 def render_role_line(engineer: Any, bullet: bool = False) -> str:

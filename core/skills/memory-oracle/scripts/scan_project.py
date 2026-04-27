@@ -31,12 +31,14 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+_CORE_LIB = _SCRIPTS.parents[2] / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
 
 from _memory_paths import (  # noqa: E402
     MEMORY_ROOT,
@@ -60,6 +62,7 @@ from _project_detectors import (  # noqa: E402
     detect_structure,
     detect_env_templates,
 )
+from utils import now_iso  # noqa: E402
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -97,10 +100,6 @@ _DEPTH_KINDS = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _build_dev_env_summary(
