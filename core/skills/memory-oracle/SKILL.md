@@ -136,3 +136,12 @@ Seats reach memory via the query protocol defined in
 [../clawseat-install/references/memory-query-protocol.md]. Memory is required
 (not optional) in the install flow; see [../../../docs/INSTALL.md]'s
 seat-infrastructure and ancestor-handoff steps.
+
+## Borrowed Practices
+
+- **Brainstorming** — see [`core/references/superpowers-borrowed/brainstorming.md`]
+  设计阶段苏格拉底式提问；不直接给方案，先把需求拆出来再展示给用户。
+- **Writing plans** — see [`core/references/superpowers-borrowed/writing-plans.md`]
+  起草 dispatch brief 时遵循颗粒度规则：每个验收项都能 5 分钟内验证。
+- **Verification before completion** — see [`core/references/superpowers-borrowed/verification-before-completion.md`]
+  作为 verifier 时证据优先于推断；模糊验收一律打回 builder。

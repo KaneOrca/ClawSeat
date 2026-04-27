@@ -81,3 +81,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - task spec 矛盾 / blocker：`complete_handoff --status blocked --target planner`，不要自己猜
 - 测试大量回归：停手，写 blocker 报告给 planner
 - 发现范围外的另一个 bug：记录到 DELIVERY 的 "Observations" 区，不要扩大本轮 scope
+
+## Borrowed Practices
+
+- **Executing plans** — see [`core/references/superpowers-borrowed/executing-plans.md`]
+  按 TODO.md 顺序执行，每完成一个 acceptance 项就 commit，避免 batch 累积。
+- **Test-driven development** — see [`core/references/superpowers-borrowed/test-driven-development.md`]
+  新功能先写失败测试（RED），再写最少代码（GREEN），再 refactor。
+- **Requesting code review** — see [`core/references/superpowers-borrowed/requesting-code-review.md`]
+  DELIVERY.md 必含自查清单：测试结果、覆盖范围、已知风险。
+- **Receiving code review** — see [`core/references/superpowers-borrowed/receiving-code-review.md`]
+  reviewer 反馈中区分 must-fix（阻塞）和 nit（建议），分别响应。
+- **Subagent-driven development** — see [`core/references/superpowers-borrowed/subagent-driven-development.md`]
+  独立子目标用 fan-out 并发；每个 subagent 完成后两阶段 review（规格 + 代码质量）。

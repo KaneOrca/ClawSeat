@@ -79,3 +79,10 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 测试基础设施坏了（pytest collect 失败、依赖缺）：`complete_handoff --status blocked`，请 planner 派 builder 修基础设施
 - Acceptance criteria 与 test 结果矛盾（criteria 说"应通过" 但 test 失败）：verdict 留空，交回 planner 判断
 - 发现测试本身逻辑有问题：在 DELIVERY 的 "Observations" 记录，planner 决定是否派 builder 修 test
+
+## Borrowed Practices
+
+- **Verification before completion** — see [`core/references/superpowers-borrowed/verification-before-completion.md`]
+  发现报告前二次验证：grep 确认 contract_violation 真实存在；test FAIL 再跑一次确认非 flaky。
+- **Systematic debugging** — see [`core/references/superpowers-borrowed/systematic-debugging.md`]
+  high severity 发现必须含现象 / 触发条件 / 根因假设 / 验证方式四要素。
