@@ -20,6 +20,7 @@ if _CORE_LIB not in sys.path:
 from project_binding import load_binding  # noqa: E402
 from project_tool_root import project_tool_root  # noqa: E402
 from real_home import real_user_home  # noqa: E402
+from state import Seat, open_db, upsert_seat  # noqa: E402
 
 
 TMUX_COMMAND_RETRIES = 2
@@ -526,6 +527,74 @@ class SessionService:
         real_home = _real_home_for_tool_seeding()
         return real_home / ".agents" / "tasks" / project / "patrol" / "handoffs" / "memory-bootstrap.md"
 
+    def _role_for_session(self, session: Any, project: Any) -> str:
+        def _generic_role(value: str) -> str:
+            value = value.strip()
+            if value.startswith("creative-"):
+                value = value.removeprefix("creative-")
+            if value.startswith("code-"):
+                value = value.removeprefix("code-")
+            mapping = {
+                "planner-dispatcher": "planner",
+                "project-memory": "memory",
+                "memory-oracle": "memory",
+                "code-reviewer": "reviewer",
+                "frontstage-supervisor": "koder",
+            }
+            value = mapping.get(value, value)
+            for prefix, role in (
+                ("builder", "builder"),
+                ("planner", "planner"),
+                ("reviewer", "reviewer"),
+                ("designer", "designer"),
+                ("qa", "qa"),
+                ("memory", "memory"),
+                ("koder", "koder"),
+                ("engineer", "builder"),
+            ):
+                if value == prefix or value.startswith(prefix + "-"):
+                    return role
+            return value or "specialist"
+
+        project_engineers = getattr(session, "project_engineers", None)
+        if isinstance(project_engineers, dict):
+            engineer = project_engineers.get(session.engineer_id)
+            role = str(getattr(engineer, "role", "") or "").strip()
+            if role:
+                return _generic_role(role)
+        try:
+            context = self.hooks.project_template_context(project)
+        except Exception:  # noqa: BLE001 state registration is best-effort
+            context = None
+        if isinstance(context, tuple) and len(context) >= 1 and isinstance(context[0], dict):
+            engineer = context[0].get(session.engineer_id)
+            role = str(getattr(engineer, "role", "") or "").strip()
+            if role:
+                return _generic_role(role)
+        return _generic_role(str(session.engineer_id))
+
+    def _record_seat_live(self, session: Any, project: Any) -> None:
+        try:
+            now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            with open_db() as conn:
+                upsert_seat(
+                    conn,
+                    Seat(
+                        project=str(session.project),
+                        seat_id=str(session.engineer_id),
+                        role=self._role_for_session(session, project),
+                        tool=str(session.tool),
+                        auth_mode=str(session.auth_mode),
+                        provider=str(session.provider),
+                        status="live",
+                        last_heartbeat=now,
+                        session_name=str(session.session),
+                        workspace=str(session.workspace),
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001 state.db must not block startup
+            print(f"warn: state.db upsert_seat failed (non-fatal): {exc}", file=sys.stderr)
+
     def reseed_sandbox_user_tool_dirs(self, session: Any) -> list[str]:
         launcher_auth = self._launcher_auth_for(session)
         runtime_dir = self._launcher_runtime_dir(session, launcher_auth)
@@ -552,6 +621,7 @@ class SessionService:
         if self.hooks.tmux_has_session(session.session):
             self._assert_session_running(session, operation=f"start_engineer idempotent check for {session.session}")
             self._configure_session_display(session.session)
+            self._record_seat_live(session, project)
             return
         self._cleanup_stale_tool_variants(session)
         launcher_auth = self._launcher_auth_for(session)
@@ -653,6 +723,7 @@ class SessionService:
                             file=sys.stderr,
                         )
                         self._configure_session_display(session.session)
+                        self._record_seat_live(session, project)
                         return
                     self._run_tmux_with_retry(
                         ["kill-session", "-t", session.session],
@@ -678,6 +749,7 @@ class SessionService:
         # Enable tmux terminal titles and status line so iTerm tabs show
         # the canonical session name and attachment state.
         self._configure_session_display(session.session)
+        self._record_seat_live(session, project)
 
         # Auto-recover iTerm grid pane routing after any specialist seat
         # start / restart. When a seat's canonical tmux session comes up

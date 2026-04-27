@@ -40,6 +40,8 @@ class ParserHooks:
     cmd_session_stop_engineer: Callable[[Any], int]
     cmd_session_start_project: Callable[[Any], int]
     cmd_session_status: Callable[[Any], int]
+    cmd_session_reconcile: Callable[[Any], int]
+    cmd_session_list_live: Callable[[Any], int]
     cmd_session_effective_launch: Callable[[Any], int]
     cmd_session_switch_harness: Callable[[Any], int]
     cmd_session_switch_auth: Callable[[Any], int]
@@ -434,6 +436,15 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_status_parser.add_argument("engineer", nargs="?")
     session_status_parser.add_argument("--project")
     session_status_parser.set_defaults(func=hooks.cmd_session_status)
+
+    session_reconcile_parser = session_sub.add_parser("reconcile")
+    session_reconcile_parser.add_argument("--project")
+    session_reconcile_parser.set_defaults(func=hooks.cmd_session_reconcile)
+
+    session_list_live_parser = session_sub.add_parser("list-live")
+    session_list_live_parser.add_argument("--project")
+    session_list_live_parser.add_argument("--role")
+    session_list_live_parser.set_defaults(func=hooks.cmd_session_list_live)
 
     session_effective_launch = session_sub.add_parser("effective-launch")
     session_effective_launch.add_argument("engineer")

@@ -40,6 +40,7 @@ ITERM_DRIVER_TIMEOUT_SECONDS=30
 MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
 MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/qa-patrol.plist.in"
 MIGRATE_ANCESTOR_PATHS_SCRIPT="$REPO_ROOT/core/scripts/migrate_ancestor_paths.py"
+RECONCILE_SEAT_STATES_SCRIPT="$REPO_ROOT/core/scripts/reconcile_seat_states.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
 PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
@@ -2733,6 +2734,17 @@ run_legacy_path_migration() {
     || warn "legacy path migration failed (non-fatal); run $MIGRATE_ANCESTOR_PATHS_SCRIPT --project $PROJECT"
 }
 
+reconcile_seat_liveness_state() {
+  note "Step 1.5: reconcile seat liveness state"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q --project %q\n' "$PYTHON_BIN" "$RECONCILE_SEAT_STATES_SCRIPT" "$PROJECT"
+    return 0
+  fi
+  [[ -f "$RECONCILE_SEAT_STATES_SCRIPT" ]] || { warn "state.db reconcile skipped (missing $RECONCILE_SEAT_STATES_SCRIPT)"; return 0; }
+  "$PYTHON_BIN" "$RECONCILE_SEAT_STATES_SCRIPT" --project "$PROJECT" \
+    || warn "state.db reconcile skipped (non-fatal)"
+}
+
 main() {
   self_update_check "$@"
   parse_args "$@"
@@ -2746,7 +2758,7 @@ main() {
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
   fi
-  ensure_host_deps; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
