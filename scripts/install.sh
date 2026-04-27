@@ -46,6 +46,8 @@ CLAWSEAT_CLI_SCRIPT="$REPO_ROOT/core/scripts/clawseat-cli.sh"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py"
+QA_HOOK_INSTALLER="$REPO_ROOT/core/skills/qa/scripts/install_qa_hook.py"
+QA_PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/qa/scripts/install_qa_patrol_cron.py"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
@@ -431,7 +433,7 @@ prompt_kind_first_flow() {
 
   printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
   printf '\n选择项目类型 / Choose project mode:\n' >&2
-  printf '  1) 新手 (clawseat-minimal     — 4 seat 全 OAuth 多模型: memory + planner + builder + designer)  [default]\n' >&2
+  printf '  1) 新手 (clawseat-minimal     — 5 seat 全 OAuth 多模型: memory + planner + builder + qa + designer)  [default]\n' >&2
   printf '  2) 专家 (clawseat-engineering — 6 seat 工程级: ancestor + planner + builder + reviewer + qa + designer)\n' >&2
 
   local _kind=""
@@ -1413,6 +1415,47 @@ install_privacy_pre_commit_hook() {
   chmod +x "$hook_path" || die 31 PRIVACY_HOOK_CHMOD_FAILED "unable to chmod $hook_path"
 }
 
+prompt_qa_patrol_cron_optin() {
+  local answer="${CLAWSEAT_QA_PATROL_CRON_OPT_IN:-}"
+  if [[ -z "$answer" ]]; then
+    if [[ -t 0 && -t 1 ]]; then
+      printf '[install] QA Patrol Cron 是否启用每日扫描？(y/N) '
+      read -r answer
+    else
+      answer="n"
+    fi
+  fi
+
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf '[dry-run] %q %q install\n' "$PYTHON_BIN" "$QA_PATROL_CRON_INSTALLER"
+    elif [[ ! -f "$QA_PATROL_CRON_INSTALLER" ]]; then
+      warn "qa patrol cron skipped; missing helper: $QA_PATROL_CRON_INSTALLER"
+      return 0
+    else
+      "$PYTHON_BIN" "$QA_PATROL_CRON_INSTALLER" install
+    fi
+    note "[install] QA Patrol Cron installed"
+  else
+    note "[install] QA Patrol Cron skipped"
+  fi
+}
+
+install_qa_bootstrap() {
+  note "Step 7.6: install qa hook + qa patrol cron"
+  local qa_workspace="$HOME/.agents/workspaces/$PROJECT/qa"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] mkdir -p %q\n' "$qa_workspace"
+    printf '[dry-run] %q %q --workspace %q\n' "$PYTHON_BIN" "$QA_HOOK_INSTALLER" "$qa_workspace"
+  elif [[ ! -f "$QA_HOOK_INSTALLER" ]]; then
+    warn "qa hook install skipped; missing helper: $QA_HOOK_INSTALLER"
+  else
+    mkdir -p "$qa_workspace"
+    "$PYTHON_BIN" "$QA_HOOK_INSTALLER" --workspace "$qa_workspace"
+  fi
+  prompt_qa_patrol_cron_optin
+}
+
 bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
@@ -2272,6 +2315,7 @@ main() {
   register_project_registry
   install_clawseat_cli_symlink
   install_ancestor_patrol_plist
+  install_qa_bootstrap
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +
   # one shared memories window across all projects (rebuilt on each install).
