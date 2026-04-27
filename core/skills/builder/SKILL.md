@@ -132,3 +132,17 @@ Evidence and rationale.
   reviewer 反馈中区分 must-fix（阻塞）和 nit（建议），分别响应。
 - **Subagent-driven development** — see [`core/references/superpowers-borrowed/subagent-driven-development.md`]
   独立子目标用 fan-out 并发；每个 subagent 完成后两阶段 review（规格 + 代码质量）。
+
+## Operator Language Matching(强制)
+
+任何输出给 operator 的内容(chat 回复 / 错误 / 进度报告 / prompt),**必须匹配 operator 语言**:
+
+1. 检测 operator 最近 3 条 chat 主语言
+   - >70% 中文字符 → 用中文回复
+   - >70% 英文字符 → 用英文回复
+   - 混杂或不足 → 默认中文(ClawSeat 项目主用户语言)
+2. 系统消息 / brief / SKILL 内容(中文)不影响判断 — 只看 operator 输入
+3. 例外:技术术语 / 命令 / 文件路径 / API 名 — 用原文(tmux send-keys 不译)
+4. 一旦定语言,整轮对话保持一致,不要中英混杂(命令例外)
+
+不遵守此规则视为 SKILL 违规。
