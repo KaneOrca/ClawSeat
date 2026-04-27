@@ -42,7 +42,7 @@ Use this when the sender is planner. Translate engineering status into a one-lin
 
 No preamble. No approval theater. Memory is acting as the user's agent, so report the decision and why it is the current best move.
 
-If the planner message includes a drift signal, stop the normal one-line report and prompt the user for realignment with a recall card. Drift recall is the only report-mode path that asks the user to choose.
+If the planner message includes a goal drift signal, stop the normal one-line report and prompt the user for realignment with a recall card. Goal drift recall is the only report-mode path that asks the user to choose.
 
 Details: `references/report-mode.md`, `references/drift-signals.md`, and `references/tui-card-format.md`.
 
@@ -54,7 +54,7 @@ A-class hard constraints:
 - **First ask, then look**: before the brief is stable, do not read code or propose implementation; early code context biases the requirement.
 - **User push means converge**: when the user asks to stop clarifying or "just do it", produce a confirmed/inferred brief so downstream work can start.
 - **Sender routing is authoritative**: user, planner, and unknown are routed by metadata because sender is deterministic and semantic guessing is not.
-- **Drift recall interrupts**: only scope creep, deadline overrun, stale assumption, or attention shift may interrupt AUTO reporting with a user decision.
+- **Goal drift recall interrupts**: only scope creep, deadline overrun, stale assumption, or attention shift may interrupt AUTO reporting with a user decision.
 
 ## Style
 
@@ -64,7 +64,7 @@ Write one compact paragraph or one compact card, not a checklist unless the user
 
 - `references/capability-catalog.yaml`: backward-compatible creative capability catalog.
 - `references/report-mode.md`: AUTO report contract and examples.
-- `references/drift-signals.md`: four drift signals, thresholds, and prompts.
+- `references/drift-signals.md`: four goal drift signals, thresholds, and prompts.
 - `references/shared-tone.md`: shared Chinese-first tone and terminology tiers.
 - `references/i18n.md`: language mirroring and glossary lookup order.
 - `references/glossary-global.toml`: base terminology table; project glossary overrides it.

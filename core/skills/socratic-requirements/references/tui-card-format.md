@@ -40,7 +40,7 @@ Use an info card for status updates and AUTO decisions. No user action is needed
 
 ## 召回卡
 
-Use a recall card only when drift is detected and the user must decide whether to realign.
+Use a recall card only when goal drift is detected and the user must decide whether to realign.
 
 ```markdown
 ### ⚠️ 我感觉到目标可能在偏移

@@ -4,6 +4,37 @@ ClawSeat uses a federated knowledge model: each seat owns its domain KB, and
 Memory reads those KBs directly to synthesize cross-seat knowledge. Memory is
 not the sole store of project knowledge.
 
+## Memory Workspace Layout
+
+```text
+~/.agents/memory/                        ← global KB root
+├── machine/<*.json>                     ← M1 scanner credentials/network/openclaw/github/current_context
+├── learnings/                           ← cross-project patterns when present
+├── shared/                              ← shared library knowledge and examples
+├── index.json                           ← global scan_index.py summary
+├── events.log                           ← global append-only JSONL event stream
+├── responses/<task_id>.json             ← memory_deliver.py outputs
+└── projects/<project>/                  ← see Project Layout
+```
+
+## Project Layout
+
+```text
+~/.agents/memory/projects/<project>/
+├── dev_env.json                         ← M2 scanner shallow output
+├── decision/<ts>-<slug>.md              ← Memory decisions, orphan knowledge
+├── finding/<ts>-<slug>.md               ← Memory findings, orphan knowledge
+├── task/<ts>-<slug>.md                  ← Memory task records, orphan knowledge
+├── plan/<ts>-<slug>.md                  ← Memory plans, optional orphan knowledge
+├── builder/<ts>-<slug>.md               ← Builder domain KB
+├── planner/<ts>-<slug>.md               ← Planner domain KB
+├── reviewer/<ts>-<slug>.md              ← Reviewer domain KB
+├── qa/doc-code-alignment/<ts>-<slug>.md
+├── qa/test-results/<ts>-<slug>.md
+├── qa/task-commit-gaps/<ts>-<slug>.md
+└── _index/                              ← scan_index.py derivative output
+```
+
 ## Path Conventions
 
 Seat KBs live under the Memory project tree:
@@ -101,5 +132,5 @@ Seat-specific records may add fields. Recommended additions:
 - Planner owns dispatch, priority, and alternative-selection decisions.
 - Reviewer owns review observations and recurring risk patterns.
 - QA owns doc-code alignment, task-commit gaps, and test results.
-- Memory owns orphan knowledge: cross-seat synthesis, north-star drift judgment,
+- Memory owns orphan knowledge: cross-seat synthesis, north-star deviation judgment,
   user clarification records, and major event chains.

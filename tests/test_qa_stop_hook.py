@@ -71,3 +71,16 @@ def test_summary_card_path_resolution(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0
     assert "QA Summary" in log.read_text(encoding="utf-8")
+
+
+def test_marker_includes_session_and_project(tmp_path: Path) -> None:
+    proc, log = _run_hook(
+        tmp_path,
+        "[QA-NOTIFY:project=install,scope=patrol,high=0,medium=0,low=0]",
+    )
+    text = log.read_text(encoding="utf-8")
+    assert proc.returncode == 0
+    assert "[QA scope=patrol]" in text
+    assert "_via QA @" in text
+    assert "project=install" in text
+    assert "session=" in text

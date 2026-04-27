@@ -46,6 +46,10 @@ def _make_wrapped_path(tmp_path: Path, *, tmux_rc: int = 0, python_rc: int = 0) 
     tmux_wrapper = """#!/usr/bin/env bash
 set -eu
 : "${CALLS_LOG:?}"
+if [ "${1:-}" = "display-message" ]; then
+  printf '%s\\n' "${TMUX_DISPLAY_MESSAGE:-mock-session}"
+  exit 0
+fi
 printf 'tmux\\t%s\\n' "$*" >> "$CALLS_LOG"
 exit "${TMUX_RC:-0}"
 """
@@ -88,6 +92,7 @@ def _run_hook(
             "CALLS_LOG": str(calls_log),
             "TMUX_RC": str(tmux_rc),
             "PYTHON_RC": str(python_rc),
+            "TMUX_DISPLAY_MESSAGE": "install-memory-claude",
             "CLAUDE_PROJECT_DIR": str(_REPO),
         }
     )
@@ -181,3 +186,28 @@ def test_tmux_failure_still_exits_zero(tmp_path: Path) -> None:
     tmux_calls = [line for line in calls if line.startswith("tmux\t")]
     assert tmux_calls
     assert "send-keys" in tmux_calls[0]
+
+
+def test_memory_hook_adds_prefix_and_footer(tmp_path: Path) -> None:
+    proc, calls = _run_hook(
+        tmp_path,
+        {"last_assistant_message": "Done. [DELIVER:seat=planner]"},
+        transcript_content="task_id: MEMORY-QUERY-123\nproject: install\n",
+    )
+    assert proc.returncode == 0
+    python_calls = [line for line in calls if line.startswith("python\t")]
+    assert python_calls
+    joined = "\n".join(python_calls)
+    assert "[Memory]" in joined
+    assert "_via Memory @" in joined
+    assert "project=install" in joined
+
+
+def test_memory_hook_session_lookup(tmp_path: Path) -> None:
+    proc, calls = _run_hook(
+        tmp_path,
+        {"last_assistant_message": "Done. [DELIVER:seat=planner]"},
+        transcript_content="task_id: MEMORY-QUERY-123\nproject: install\n",
+    )
+    assert proc.returncode == 0
+    assert "session=install-memory-claude" in "\n".join(calls)

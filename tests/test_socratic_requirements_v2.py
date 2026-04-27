@@ -41,7 +41,7 @@ def test_report_mode_reference_has_auto_format_and_example() -> None:
     text = (_REFS / "report-mode.md").read_text(encoding="utf-8")
     assert "[Action] [Reason 1 sentence]" in text
     assert "派工给 builder 实现 X" in text
-    assert "Drift recall is the only report-mode path" in text
+    assert "Goal drift recall is the only report-mode path" in text
 
 
 def test_drift_signals_reference_defines_all_thresholds() -> None:

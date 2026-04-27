@@ -133,6 +133,10 @@ emit("DELIVER_RESPONSE_JSON", json.dumps(response, ensure_ascii=False))
 PY
 }
 
+tmux_session_name() {
+  tmux display-message -p '#S' 2>/dev/null || echo unknown
+}
+
 send_clear() {
   local candidates=()
   local candidate=""
@@ -173,13 +177,37 @@ deliver_response() {
 }
 
 main() {
-  local payload_json="" parsed=""
+  local payload_json="" parsed="" hook_project="" hook_session="" hook_ts=""
   payload_json="$(cat || true)"
   [[ -n "$payload_json" ]] || return 0
 
   parsed="$(parse_payload "$payload_json" || true)"
   [[ -n "$parsed" ]] || return 0
   eval "$parsed"
+
+  hook_project="${DELIVER_PROJECT:-${CLAWSEAT_PROJECT:-${AGENTS_PROJECT:-unknown}}}"
+  [[ -n "$hook_project" ]] || hook_project="unknown"
+  hook_session="$(tmux_session_name)"
+  hook_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ -n "${DELIVER_RESPONSE_JSON:-}" ]]; then
+    DELIVER_RESPONSE_JSON="$(
+      RESPONSE_JSON="$DELIVER_RESPONSE_JSON" \
+      HOOK_PROJECT="$hook_project" \
+      HOOK_SESSION="$hook_session" \
+      HOOK_TS="$hook_ts" \
+      "$PYTHON_BIN" - <<'PY'
+import json, os
+payload = json.loads(os.environ["RESPONSE_JSON"])
+answer = str(payload.get("answer", ""))
+payload["answer"] = (
+    f"[Memory]\n{answer}\n\n---\n"
+    f"_via Memory @ {os.environ['HOOK_TS']} | "
+    f"project={os.environ['HOOK_PROJECT']} | session={os.environ['HOOK_SESSION']}_"
+)
+print(json.dumps(payload, ensure_ascii=False))
+PY
+    )"
+  fi
 
   if [[ "${CLEAR_REQUESTED:-0}" == "1" ]]; then
     send_clear || true

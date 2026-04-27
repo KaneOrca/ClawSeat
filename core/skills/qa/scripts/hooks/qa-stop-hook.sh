@@ -42,10 +42,14 @@ PY
 [[ -n "$parsed" ]] || exit 0
 eval "$parsed"
 
-body="QA ${SCOPE} summary for ${PROJECT}: high=${HIGH} medium=${MEDIUM} low=${LOW}"
+session="$(tmux display-message -p '#S' 2>/dev/null || echo unknown)"
+ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+body="[QA scope=${SCOPE}]
+QA ${SCOPE} summary for ${PROJECT}: high=${HIGH} medium=${MEDIUM} low=${LOW}"
 if [[ -f "${SUMMARY:-}" ]]; then
   body="${body}"$'\n\n'"$(cat "$SUMMARY" 2>/dev/null || true)"
 fi
+body="${body}"$'\n\n---\n'"_via QA @ ${ts} | project=${PROJECT} | session=${session}_"
 
 feishu "$body" >/dev/null 2>&1 || true
 exit 0
