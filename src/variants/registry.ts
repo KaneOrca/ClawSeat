@@ -3,9 +3,9 @@ import type { VariantType } from '../context/ArenaContext';
 
 
 // V2
-import { HomeView as V2Home } from './v2/views/HomeView';
-import { ChallengeDetailView as V2ChallengeDetail } from './v2/views/ChallengeDetailView';
-import { WatchView as V2Watch } from './v2/views/WatchView';
+import { HomeView as V2Home } from '../views/Home/v2/HomeView';
+import { ChallengeDetailView as V2ChallengeDetail } from '../views/ChallengeDetail/v2/ChallengeDetailView';
+import { WatchView as V2Watch } from '../views/Watch/v2/WatchView';
 import { HallViewV2 } from '../views/Hall/v2/HallView';
 import { CommunityViewV2 } from '../views/Community/v2/CommunityView';
 import { AuthViewV2 } from '../views/Auth/v2/AuthView';
