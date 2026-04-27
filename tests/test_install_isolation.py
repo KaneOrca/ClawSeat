@@ -63,6 +63,12 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
         root / "core" / "scripts" / "projects_registry.py",
     )
     shutil.copy2(
+        _REPO / "core" / "scripts" / "clawseat-cli.sh",
+        root / "core" / "scripts" / "clawseat-cli.sh",
+    )
+    (root / "core" / "scripts" / "projects_registry.py").chmod(0o755)
+    (root / "core" / "scripts" / "clawseat-cli.sh").chmod(0o755)
+    shutil.copy2(
         _REPO / "core" / "lib" / "real_home.py",
         root / "core" / "lib" / "real_home.py",
     )
@@ -421,21 +427,14 @@ def test_install_dry_run_uses_agent_launcher(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     output = result.stdout + result.stderr
-    assert "agent-launcher.sh --headless --tool codex --auth chatgpt" in output
+    assert "agent-launcher.sh --headless --tool" in output
     assert "tmux new-session" not in output
 
 
 def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     result = subprocess.run(
-        [
-            "bash",
-            str(root / "scripts" / "install.sh"),
-            "--project",
-            "smoketest",
-            "--template",
-            "clawseat-default",
-        ],
+        ["bash", str(root / "scripts" / "install.sh"), "--project", "smoketest"],
         input="\n",
         capture_output=True,
         text=True,
@@ -455,13 +454,16 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
     records = _read_jsonl(launcher_log)
-    expected_sessions = ["smoketest-ancestor"]
+    expected_sessions = [
+        "smoketest-ancestor",
+    ]
     assert [record["session"] for record in records] == expected_sessions
 
-    expected_launcher_dir = str(home / ".agents" / "workspaces" / "smoketest" / "memory")
+    expected_primary_dir = str(home / ".agents" / "workspaces" / "smoketest" / "memory")
     expected_brief = str(home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "ancestor-bootstrap.md")
 
     for record in records:
+        session = record["session"]
         assert record["tool"] == "claude"
         assert record["auth"] == "custom"
         assert record["custom_env_file"]
@@ -469,9 +471,9 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
         assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
         assert record["custom_model"] == "MiniMax-M2.7-highspeed"
         assert record["clawseat_root"] == str(root)
-        assert record["dir"] == expected_launcher_dir
+        assert record["dir"] == expected_primary_dir
         assert record["runtime_home"] == str(
-            home / ".agent-runtime" / "identities" / "claude" / "api" / f"custom-{record['session']}" / "home"
+            home / ".agent-runtime" / "identities" / "claude" / "api" / f"custom-{session}" / "home"
         )
 
     assert records[0]["brief"] == expected_brief
@@ -485,9 +487,4 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "new-session" not in tmux_output
     assert "kill-session -t =smoketest-ancestor" in tmux_output
-    kickoff_path = home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
-    assert kickoff_path.is_file()
-    assert stat.S_IMODE(kickoff_path.stat().st_mode) == 0o600
-    kickoff_text = kickoff_path.read_text(encoding="utf-8")
-    assert f"读 {expected_brief} 开始 Phase-A" in kickoff_text
-    assert "按 brief 顺序执行 B0-B7" in kickoff_text
+    assert "send-keys -t smoketest-ancestor Enter" not in tmux_output

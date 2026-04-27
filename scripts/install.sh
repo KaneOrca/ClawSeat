@@ -3,6 +3,7 @@ set -euo pipefail
 
 DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""
 _PROJECT_EXPLICIT=0; _TEMPLATE_EXPLICIT=0  # set to 1 when flag is passed explicitly
+UNINSTALL_PROJECT=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
@@ -41,6 +42,7 @@ ANCESTOR_PATROL_TEMPLATE="$REPO_ROOT/core/templates/ancestor-patrol.plist.in"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
 PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
+CLAWSEAT_CLI_SCRIPT="$REPO_ROOT/core/scripts/clawseat-cli.sh"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
@@ -297,6 +299,7 @@ parse_args() {
       --memory-tool) MEMORY_TOOL="$2"; shift 2 ;;
       --memory-model) MEMORY_MODEL="$2"; MEMORY_MODEL_EXPLICIT=1; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
+      --uninstall) UNINSTALL_PROJECT="$2"; shift 2 ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
       --load-all-skills) LOAD_ALL_SKILLS=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
@@ -313,10 +316,13 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
+  if [[ -n "$UNINSTALL_PROJECT" ]]; then
+    [[ "$UNINSTALL_PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "--uninstall project must match ^[a-z0-9-]+$"
+  fi
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
     clawseat-minimal|clawseat-default|clawseat-engineering|clawseat-creative) ;;
@@ -1373,18 +1379,57 @@ bootstrap_project_profile() {
 }
 
 register_project_registry() {
+  local primary_tool="claude"
+  [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$MEMORY_TOOL"
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] %q %q register %q %q %q\n' \
-      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PRIMARY_SEAT_ID" "${PROJECT}-${PRIMARY_SEAT_ID}"
+    printf '[dry-run] %q %q register %q --primary-seat %q --primary-seat-tool %q --tmux-name %q --template-name %q --repo-path %q\n' \
+      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PRIMARY_SEAT_ID" "$primary_tool" "${PROJECT}-${PRIMARY_SEAT_ID}" "$CLAWSEAT_TEMPLATE_NAME" "$PROJECT_REPO_ROOT"
     return 0
   fi
   if [[ ! -f "$PROJECTS_REGISTRY_SCRIPT" ]]; then
     warn "projects.json register skipped; missing $PROJECTS_REGISTRY_SCRIPT"
     return 0
   fi
-  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" register \
-    "$PROJECT" "$PRIMARY_SEAT_ID" "${PROJECT}-${PRIMARY_SEAT_ID}" >/dev/null \
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" register "$PROJECT" \
+    --primary-seat "$PRIMARY_SEAT_ID" \
+    --primary-seat-tool "$primary_tool" \
+    --tmux-name "${PROJECT}-${PRIMARY_SEAT_ID}" \
+    --template-name "$CLAWSEAT_TEMPLATE_NAME" \
+    --repo-path "$PROJECT_REPO_ROOT" >/dev/null \
     || warn "projects.json register failed (non-fatal); see ~/.clawseat/projects.json"
+}
+
+uninstall_project_registry_entry() {
+  local project="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q unregister %q\n' "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$project"
+    return 0
+  fi
+  [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || die 31 PROJECTS_REGISTRY_MISSING "missing projects registry helper: $PROJECTS_REGISTRY_SCRIPT"
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" unregister "$project" || true
+}
+
+touch_project_registry() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q touch %q\n' "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT"
+    return 0
+  fi
+  [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || return 0
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" touch "$PROJECT" >/dev/null 2>&1 || true
+}
+
+install_clawseat_cli_symlink() {
+  local link="/usr/local/bin/clawseat"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] ln -sfn %q %q\n' "$CLAWSEAT_CLI_SCRIPT" "$link"
+    return 0
+  fi
+  [[ -f "$CLAWSEAT_CLI_SCRIPT" ]] || { warn "clawseat CLI skipped; missing $CLAWSEAT_CLI_SCRIPT"; return 0; }
+  if [[ -w "$(dirname "$link")" || ( ! -e "$link" && -w "$(dirname "$link")" ) ]]; then
+    ln -sfn "$CLAWSEAT_CLI_SCRIPT" "$link" || warn "unable to install $link"
+  else
+    warn "clawseat CLI symlink skipped; $(dirname "$link") not writable"
+  fi
 }
 
 render_brief() {
@@ -2079,8 +2124,8 @@ from projects_registry import enumerate_projects
 def registry_tabs():
     tabs = []
     for entry in enumerate_projects():
-        name = entry.get("name")
-        tmux_name = entry.get("tmux_name")
+        name = entry.name
+        tmux_name = entry.tmux_name
         if not name or not tmux_name:
             continue
         tabs.append({
@@ -2125,7 +2170,12 @@ PY
 }
 
 main() {
-  parse_args "$@"; prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
+  parse_args "$@"
+  if [[ -n "$UNINSTALL_PROJECT" ]]; then
+    uninstall_project_registry_entry "$UNINSTALL_PROJECT"
+    exit 0
+  fi
+  prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
@@ -2138,6 +2188,7 @@ main() {
   install_skills_by_tier
   install_privacy_pre_commit_hook
   register_project_registry
+  install_clawseat_cli_symlink
   install_ancestor_patrol_plist
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +
@@ -2175,6 +2226,7 @@ main() {
   fi
   note "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt"
   persist_phase_a_kickoff_prompt
+  touch_project_registry
   write_operator_guide
   print_operator_banner
 }
