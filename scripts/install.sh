@@ -45,6 +45,7 @@ PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
 CLAWSEAT_CLI_SCRIPT="$REPO_ROOT/core/scripts/clawseat-cli.sh"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
+CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
@@ -84,6 +85,48 @@ note() { printf '==> %s\n' "$*"; }
 PYTHON_BIN_OVERRIDE="${PYTHON_BIN:-}"
 PYTHON_BIN_VERSION=""
 PYTHON_BIN_RESOLUTION=""
+
+self_update_check() {
+  if ! git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    note "[install] $REPO_ROOT is not a git worktree, skip self-update"
+    return 0
+  fi
+
+  local current=""
+  current="$(git -C "$REPO_ROOT" symbolic-ref --short HEAD 2>/dev/null || printf 'DETACHED')"
+  if [[ "$current" != "main" ]]; then
+    note "[install] non-main branch ($current), skip self-update"
+    return 0
+  fi
+
+  if ! git -C "$REPO_ROOT" diff --quiet || ! git -C "$REPO_ROOT" diff --cached --quiet; then
+    note "[install] dirty tree, skip self-update"
+    return 0
+  fi
+
+  if ! git -C "$REPO_ROOT" remote get-url clawseat >/dev/null 2>&1; then
+    note "[install] no clawseat remote, skip self-update"
+    return 0
+  fi
+
+  if ! git -C "$REPO_ROOT" fetch clawseat main --quiet 2>/dev/null; then
+    note "[install] fetch failed, skip self-update"
+    return 0
+  fi
+
+  local local_sha="" remote_sha=""
+  local_sha="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  remote_sha="$(git -C "$REPO_ROOT" rev-parse clawseat/main 2>/dev/null || true)"
+  [[ -n "$local_sha" && -n "$remote_sha" ]] || return 0
+
+  if [[ "$local_sha" != "$remote_sha" ]]; then
+    note "[install] updating $REPO_ROOT to clawseat/main..."
+    git -C "$REPO_ROOT" reset --hard clawseat/main
+    note "[install] $local_sha -> $remote_sha"
+    note "[install] re-executing install.sh with new code..."
+    exec "$0" "$@"
+  fi
+}
 
 resolve_python_candidate() {
   local candidate="$1"
@@ -541,6 +584,44 @@ ensure_host_deps() {
     die 10 PREFLIGHT_FAILED "preflight failed. 按上面的输出修复后重跑 install.sh。"
   fi
   echo "OK: preflight"
+}
+
+prompt_autoupdate_optin() {
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  [[ "$(uname -s)" == "Darwin" ]] || return 0
+  command -v launchctl >/dev/null 2>&1 || return 0
+  [[ -t 0 && -t 1 ]] || {
+    note "[install] non-interactive terminal, skip LaunchAgent autoupdate prompt"
+    return 0
+  }
+
+  if launchctl list 2>/dev/null | grep -q 'com.clawseat.autoupdate'; then
+    note "[install] LaunchAgent autoupdate already installed"
+    return 0
+  fi
+
+  cat <<'EOF'
+
+----- ClawSeat 自动更新（可选） -----
+
+ClawSeat 频繁更新。我们可以装一个后台 LaunchAgent
+每天凌晨 3:00 自动同步 ~/ClawSeat 到最新 main 分支：
+
+  - 仅在 main 分支 + 工作树 clean 时同步
+  - 失败/异常时静默跳过（不影响其他流程）
+  - 日志写到 ~/.clawseat/auto-update.log
+
+是否启用？(y/N)
+EOF
+
+  local answer=""
+  read -r answer
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    "$PYTHON_BIN" "$CLAWSEAT_AUTOUPDATE_INSTALLER" install --repo "$REPO_ROOT"
+    note "[install] LaunchAgent installed"
+  else
+    note "[install] LaunchAgent skipped (run scripts/install_clawseat_autoupdate.py install later if needed)"
+  fi
 }
 
 ensure_python_tomllib_fallback() {
@@ -2170,6 +2251,7 @@ PY
 }
 
 main() {
+  self_update_check "$@"
   parse_args "$@"
   if [[ -n "$UNINSTALL_PROJECT" ]]; then
     uninstall_project_registry_entry "$UNINSTALL_PROJECT"
@@ -2180,7 +2262,7 @@ main() {
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
   fi
-  ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  ensure_host_deps; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile

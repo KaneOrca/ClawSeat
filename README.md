@@ -1,5 +1,13 @@
 # ClawSeat
 
+## Repository Roles
+
+- `~/ClawSeat` is the install/release clone. Always on `main`.
+- Auto-updates daily via LaunchAgent (opt-in during first install).
+- Each `install.sh` run does a self-check + auto fast-forward.
+- For dev work, use a separate worktree:
+  `git worktree add ~/path/to/dev <branch>`
+
 ## OpenClaw × gstack × tmux = 一支住在你 Mac 里的 AI 研发团队
 
 不上云。不订阅。在你的 Mac 上。
