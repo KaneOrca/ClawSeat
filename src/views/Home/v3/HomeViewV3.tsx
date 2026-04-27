@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { useArena } from '../../../context/ArenaContext';
+import type { User } from '../../../context/ArenaContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { tokens } from '../../../design/tokens';
 import { useObstacleDetached } from '../../../hooks/useObstacle';
@@ -236,7 +237,7 @@ const PromptAtomMemo = React.memo(PromptAtom);
 
 const CTAAtom: React.FC<{
   onInitialize: () => void;
-  user: any;
+  user: User | null;
   isZenMode: boolean;
   joinLabel: string;
   authorizeLabel: string;

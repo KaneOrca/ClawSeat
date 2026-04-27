@@ -38,7 +38,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   }, []);
 
   const handleOpenSettings = () => {
-    console.log('Settings triggered');
   };
 
   useEffect(() => {

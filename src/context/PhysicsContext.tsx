@@ -291,7 +291,18 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         const mouseObstacle = mouseObstacleRef.current;
         if (mouseObstacle) next.push(mouseObstacle);
-        if (mouseObstacle && !changed) { const p = prevRects.get('system:mouse'); if (!p || Math.abs(mouseObstacle.x - p.x) > CHANGE_THRESHOLD || Math.abs(mouseObstacle.y - p.y) > CHANGE_THRESHOLD || Math.abs(mouseObstacle.w - p.w) > CHANGE_THRESHOLD || Math.abs(mouseObstacle.h - p.h) > CHANGE_THRESHOLD) changed = true; }
+        if (mouseObstacle && !changed) {
+          const prev = prevRects.get('system:mouse');
+          if (
+            !prev ||
+            Math.abs(mouseObstacle.x - prev.x) > CHANGE_THRESHOLD ||
+            Math.abs(mouseObstacle.y - prev.y) > CHANGE_THRESHOLD ||
+            Math.abs(mouseObstacle.w - prev.w) > CHANGE_THRESHOLD ||
+            Math.abs(mouseObstacle.h - prev.h) > CHANGE_THRESHOLD
+          ) {
+            changed = true;
+          }
+        }
 
         // Always update the mutable ref (canvas reads this directly)
         obstaclesLiveRef.current = next;
