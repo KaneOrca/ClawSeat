@@ -142,7 +142,7 @@ validate_tool_name() {
 validate_auth_mode() {
   local tool="$1" auth="$2"
   case "$tool:$auth" in
-    claude:oauth|claude:oauth_token|claude:anthropic-console|claude:minimax|claude:xcode|claude:custom|\
+    claude:oauth|claude:oauth_token|claude:anthropic-console|claude:minimax|claude:deepseek|claude:xcode|claude:custom|\
     codex:chatgpt|codex:xcode|codex:custom|\
     gemini:oauth|gemini:primary|gemini:custom)
       return 0
@@ -300,6 +300,9 @@ if [[ -n "$CHECK_SECRETS_TOOL" ]]; then
           _cs_key="ANTHROPIC_API_KEY" ;;
         minimax)
           _cs_file="$REAL_HOME/.agent-runtime/secrets/claude/minimax.env"
+          _cs_key="ANTHROPIC_AUTH_TOKEN" ;;
+        deepseek)
+          _cs_file="$REAL_HOME/.agent-runtime/secrets/claude/deepseek.env"
           _cs_key="ANTHROPIC_AUTH_TOKEN" ;;
         xcode)
           _cs_file="$REAL_HOME/.agent-runtime/secrets/claude/xcode.env"
@@ -500,6 +503,7 @@ resolve_claude_secret_file() {
     oauth_token) printf '%s\n' "$REAL_HOME/.agents/.env.global" ;;
     anthropic-console) printf '%s\n' "$REAL_HOME/.agents/secrets/claude/anthropic-console.env" ;;
     minimax) printf '%s\n' "$REAL_HOME/.agent-runtime/secrets/claude/minimax.env" ;;
+    deepseek) printf '%s\n' "$REAL_HOME/.agent-runtime/secrets/claude/deepseek.env" ;;
     xcode) printf '%s\n' "$REAL_HOME/.agent-runtime/secrets/claude/xcode.env" ;;
     *) return 1 ;;
   esac
@@ -871,6 +875,11 @@ run_claude_runtime() {
         export API_TIMEOUT_MS=3000000
         export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
         mode_label="MiniMax API"
+        ;;
+      deepseek)
+        export API_TIMEOUT_MS=3000000
+        export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+        mode_label="DeepSeek API"
         ;;
       xcode)
         export API_TIMEOUT_MS=3000000

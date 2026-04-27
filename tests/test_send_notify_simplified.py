@@ -57,7 +57,7 @@ def test_bash_syntax_check():
     assert result.returncode == 0, result.stderr
 
 
-def test_sent_log_format_on_success(tmp_path):
+def test_sent_log_format_on_success(tmp_path, isolated_tasks_dir):
     """Successful send outputs 'SENT: <session>' and exits 0."""
     sess = "test-sent-log-success"
     mock_ctl = _mock_agentctl(tmp_path)
@@ -70,7 +70,7 @@ def test_sent_log_format_on_success(tmp_path):
         _kill_session(sess)
 
 
-def test_session_dead_returns_exit_1(tmp_path):
+def test_session_dead_returns_exit_1(tmp_path, isolated_tasks_dir):
     """Non-existent tmux session → SESSION_DEAD + rc=1."""
     sess = "nonexistent-session-xyz-dead-12345"
     mock_ctl = _mock_agentctl(tmp_path)
@@ -86,7 +86,7 @@ def test_session_not_found_returns_exit_1():
     assert result.returncode == 1
 
 
-def test_emoji_message(tmp_path):
+def test_emoji_message(tmp_path, isolated_tasks_dir):
     """Emoji message sends successfully."""
     sess = "test-emoji-msg"
     mock_ctl = _mock_agentctl(tmp_path)
@@ -99,7 +99,7 @@ def test_emoji_message(tmp_path):
         _kill_session(sess)
 
 
-def test_chinese_message(tmp_path):
+def test_chinese_message(tmp_path, isolated_tasks_dir):
     """Chinese characters send successfully."""
     sess = "test-chinese-msg"
     mock_ctl = _mock_agentctl(tmp_path)
@@ -112,7 +112,7 @@ def test_chinese_message(tmp_path):
         _kill_session(sess)
 
 
-def test_newline_message(tmp_path):
+def test_newline_message(tmp_path, isolated_tasks_dir):
     """Multi-line message sends successfully."""
     sess = "test-newline-msg"
     mock_ctl = _mock_agentctl(tmp_path)
@@ -125,7 +125,7 @@ def test_newline_message(tmp_path):
         _kill_session(sess)
 
 
-def test_long_message_1kb(tmp_path):
+def test_long_message_1kb(tmp_path, isolated_tasks_dir):
     """1024-byte message sends successfully."""
     sess = "test-long-msg"
     mock_ctl = _mock_agentctl(tmp_path)
@@ -148,7 +148,7 @@ def _send_worker(args: tuple[str, str, str]) -> tuple[int, str]:
     return r.returncode, r.stdout
 
 
-def test_concurrent_sends_different_sessions(tmp_path):
+def test_concurrent_sends_different_sessions(tmp_path, isolated_tasks_dir):
     """Two concurrent sends to different sessions both succeed."""
     s1, s2 = "test-concurrent-a", "test-concurrent-b"
     mock_ctl = _mock_agentctl(tmp_path)
