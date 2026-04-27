@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, request } from '../../../api/arena';
 import { useArena } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
+import { PretextButton } from '../../../components/PretextButton';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
 import { useObstacle } from '../../../hooks/useObstacle';
@@ -20,6 +21,7 @@ interface ChatMessage {
 export const CommunityViewV2: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
   const { registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const inputRef = useObstacle() as React.RefObject<HTMLInputElement>;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -123,6 +125,8 @@ export const CommunityViewV2: React.FC = () => {
 
       <div className="community-v2-input-row" style={inputRowStyle}>
         <input
+          ref={inputRef}
+          data-obstacle-id="community-v2-input"
           type="text"
           value={input}
           onChange={event => setInput(event.target.value)}
@@ -131,18 +135,26 @@ export const CommunityViewV2: React.FC = () => {
           disabled={!user}
           style={inputStyle}
         />
-        <button
-          type="button"
-          onClick={handleSend}
+        <PretextButton
+          config={{
+            label: 'SEND',
+            engine: 'labyrinth',
+            physicsLineIndex: 28,
+            soloistId: 'community-v2-send',
+            color: user && input.trim() ? tokens.colors.manuscript.red : 'rgba(26,26,26,0.35)',
+            onTrigger: handleSend,
+          }}
+          data-obstacle-id="community-v2-send"
           disabled={!user || !input.trim()}
           style={{
             ...sendStyle,
             color: user && input.trim() ? tokens.colors.manuscript.red : 'rgba(26,26,26,0.35)',
             cursor: user && input.trim() ? 'pointer' : 'not-allowed',
+            textDecoration: 'none',
           }}
         >
           SEND
-        </button>
+        </PretextButton>
       </div>
 
       <style>{`

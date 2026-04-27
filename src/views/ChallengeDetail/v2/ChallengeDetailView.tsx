@@ -3,6 +3,7 @@ import { ArrowLeft, Edit3 } from 'lucide-react';
 import { PretextButton } from '../../../components/PretextButton';
 import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
 import { useChallengeSubmission } from '../../../hooks/useChallengeSubmission';
+import { useObstacle } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
 import { tokens } from '../../../design/tokens';
 
@@ -11,6 +12,7 @@ export const ChallengeDetailView: React.FC = () => {
     challenge, answer, setAnswer, submitting, handleSubmit,
     currentChallengeId, setChallengeId, t, locale
   } = useChallengeSubmission();
+  const textareaRef = useObstacle() as React.RefObject<HTMLTextAreaElement>;
 
   const obstacles = useMemo(() => [
     { id: 'folio-meta', x: 750, y: 50, w: 250, h: 400 },
@@ -104,6 +106,8 @@ export const ChallengeDetailView: React.FC = () => {
           }}>
             <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
             <textarea
+              ref={textareaRef}
+              data-obstacle-id="challenge-v2-textarea"
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder={t('challengeDetail.v2.input_placeholder')}
@@ -121,9 +125,17 @@ export const ChallengeDetailView: React.FC = () => {
                 borderBottom: '1px dashed #ccc'
               }}
             />
-            <button
+            <PretextButton
               className="challenge-v2-submit"
-              onClick={handleSubmit}
+              config={{
+                label: submitting ? t('challengeDetail.v2.submitting') : t('challengeDetail.v2.submit'),
+                engine: 'labyrinth',
+                physicsLineIndex: 20,
+                soloistId: 'challenge-v2-submit',
+                color: tokens.colors.manuscript.ink,
+                onTrigger: handleSubmit,
+              }}
+              data-obstacle-id="challenge-v2-submit"
               disabled={submitting || !answer.trim()}
               style={{
                 marginTop: '1.5rem',
@@ -141,11 +153,12 @@ export const ChallengeDetailView: React.FC = () => {
                 fontWeight: 700,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
+                textDecoration: 'none',
                 transition: 'transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease'
               }}
             >
               <Edit3 size={16} /> {submitting ? t('challengeDetail.v2.submitting') : t('challengeDetail.v2.submit')}
-            </button>
+            </PretextButton>
           </div>
         </div>
       </div>
