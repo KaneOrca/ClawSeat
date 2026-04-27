@@ -223,6 +223,41 @@ role_details = [
 ]
 
 [[engineers]]
+id = "qa"
+role = "qa"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+base_url = "https://api.minimaxi.com/anthropic"
+effort = "auto"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+qa_authority = true
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md",
+  "~/.gstack/repos/gstack/.agents/skills/gstack-qa-only/SKILL.md",
+]
+role_details = [
+  "default verification / smoke / regression lane",
+  "use gstack-qa for full QA testing with bug fixing",
+  "use gstack-qa-only for report-only mode without fixing",
+  "use gstack-browse for headless browser UI testing",
+  "NEVER use raw tmux send-keys to notify peer seats. Full stop. Use complete_handoff.py --user-summary as the only compliant rich text exit for completion messages.",
+]
+
+[[engineers]]
 id = "qa-1"
 role = "qa"
 tool = "claude"

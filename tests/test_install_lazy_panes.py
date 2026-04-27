@@ -106,19 +106,24 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     assert result.returncode == 0, result.stderr
 
     bootstrap_calls = _read_jsonl(agent_admin_log)
-    assert bootstrap_calls == [
-        {
-            "argv": [
-                "project",
-                "bootstrap",
-                "--template",
-                "clawseat-default",
-                "--local",
-                str(home / ".agents" / "tasks" / "spawn49" / "project-local.toml"),
-            ],
-            "cwd": str(home / ".agents" / "templates"),
-        }
-    ]
+    assert bootstrap_calls[0] == {
+        "argv": [
+            "project",
+            "bootstrap",
+            "--template",
+            "clawseat-default",
+            "--local",
+            str(home / ".agents" / "tasks" / "spawn49" / "project-local.toml"),
+        ],
+        "cwd": str(home / ".agents" / "templates"),
+    }
+    assert [
+        "engineer",
+        "create",
+        "qa",
+        "spawn49",
+        "--no-monitor",
+    ] in [call["argv"] for call in bootstrap_calls]
 
     template_text = (
         home / ".agents" / "templates" / "clawseat-default" / "template.toml"
@@ -133,7 +138,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
         home / ".agents" / "tasks" / "spawn49" / "project-local.toml"
     ).read_text(encoding="utf-8")
     assert 'seat_order = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]' in local_text
-    assert 'session_name = "spawn49-ancestor"' in local_text
+    assert 'session_name = "spawn49-ancestor-claude"' in local_text
     assert local_text.count("[[overrides]]") == 6
     assert 'auth_mode = "api"' in local_text
     assert 'provider = "minimax"' in local_text
@@ -144,7 +149,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     grid_payload = payloads[0]
     assert grid_payload["title"] == "clawseat-spawn49"
     commands = {pane["label"]: pane["command"] for pane in grid_payload["panes"]}
-    assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor'"
+    assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor-claude'"
     for seat in ("planner", "builder", "reviewer", "qa", "designer"):
         assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}"
 
@@ -234,7 +239,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "claude-custom-49" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["custom49-ancestor"]
+    assert [record["session"] for record in records] == ["custom49-ancestor-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://custom.api.invalid/v1"
@@ -356,7 +361,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "ANTHROPIC_MODEL=MiniMax-M2.7-highspeed" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["mini49-ancestor"]
+    assert [record["session"] for record in records] == ["mini49-ancestor-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
@@ -426,7 +431,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "export ANTHROPIC_AUTH_TOKEN" not in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["console49-ancestor"]
+    assert [record["session"] for record in records] == ["console49-ancestor-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://api.anthropic.com"

@@ -47,7 +47,7 @@ def test_install_sets_tmux_status_line_for_seat_sessions(tmp_path: Path) -> None
 
     assert result.returncode == 0, result.stderr
     tmux_output = tmux_log.read_text(encoding="utf-8")
-    assert "set-option -t spawn49-ancestor status on" in tmux_output
-    assert "set-option -t spawn49-ancestor status-left [#{session_name}] " in tmux_output
-    assert "set-option -t spawn49-ancestor status-right #{?client_attached,ATTACHED,WAITING} | %H:%M" in tmux_output
-    assert "set-option -t spawn49-ancestor status-style fg=white,bg=blue,bold" in tmux_output
+    assert "set-option -t spawn49-ancestor-claude status on" in tmux_output
+    assert "set-option -t spawn49-ancestor-claude status-left [#{session_name}] " in tmux_output
+    assert "set-option -t spawn49-ancestor-claude status-right #{?client_attached,ATTACHED,WAITING} | %H:%M" in tmux_output
+    assert "set-option -t spawn49-ancestor-claude status-style fg=white,bg=blue,bold" in tmux_output

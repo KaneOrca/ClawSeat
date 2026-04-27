@@ -131,6 +131,7 @@ def _run(
     ("gemini", "oauth"),
 ])
 def test_dry_run_prints_expected_fields(tool, auth):
+    expected_session = f"test-session-{tool}"
     result = _run([
         str(_LAUNCHERS / "agent-launcher.sh"),
         "--tool", tool,
@@ -142,8 +143,23 @@ def test_dry_run_prints_expected_fields(tool, auth):
     assert result.returncode == 0, f"dry-run failed: {result.stderr}"
     out = result.stdout
     assert f"tool:     {tool}" in out
-    assert "session:  test-session" in out
+    assert f"session:  {expected_session}" in out
     assert "dir:" in out
+
+
+def test_dry_run_does_not_double_suffix_explicit_session():
+    result = _run([
+        str(_LAUNCHERS / "agent-launcher.sh"),
+        "--tool", "claude",
+        "--auth", "oauth_token",
+        "--session", "project-memory-claude",
+        "--dir", str(Path.home()),
+        "--dry-run",
+    ])
+
+    assert result.returncode == 0, result.stderr
+    assert "session:  project-memory-claude" in result.stdout
+    assert "project-memory-claude-claude" not in result.stdout
 
 
 def test_dry_run_via_wrapper():

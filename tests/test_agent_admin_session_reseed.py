@@ -62,7 +62,7 @@ def test_start_engineer_reseeds_existing_sandbox_home_before_launcher(
         / "identities"
         / "claude"
         / "api"
-        / "custom-install-planner-1-claude"
+        / "minimax-install-planner-1-claude"
         / "home"
     )
     runtime_home.mkdir(parents=True, exist_ok=True)

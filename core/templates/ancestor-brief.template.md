@@ -32,7 +32,7 @@
 ## Seat TUI 生命周期（强制理解）
 
 1. install.sh Step 7 首次打开的是 workers 窗口 `clawseat-${PROJECT_NAME}-workers`，另有共享 memories 窗口 `clawseat-memories`；二者构成 v2 双窗口布局。
-2. 除 primary seat（`${PROJECT_NAME}-${PRIMARY_SEAT_ID}`）外，每个 worker pane 都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`：只支持这个 2 参数接口，不再支持旧的单参数 `<project-seat>`；它先通过 `agent_admin.py session-name` 解析 canonical session，再 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
+2. 除 primary seat（`${PRIMARY_SESSION_NAME}`）外，每个 worker pane 都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`：只支持这个 2 参数接口，不再支持旧的单参数 `<project-seat>`；它先通过 `agent_admin.py session-name` 解析 canonical session，再 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
 3. 不要手动 `tmux attach -t ${PROJECT_NAME}-<seat>` 去“救”某个 pane；这会污染 `wait-for-seat.sh` 所在 pane，把它从 canonical re-attach loop 里拽出来。
 4. 真正需要人工恢复的是 workers 窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
 
@@ -174,7 +174,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 （读本文件即完成）
 
 ### B2 — Verify memory seat
-`tmux has-session -t "${PROJECT_NAME}-${PRIMARY_SEAT_ID}"` 必须 rc=0；
+`tmux has-session -t "${PRIMARY_SESSION_NAME}"` 必须 rc=0；
 否则重新拉起（`agent-launcher.sh --headless ...`）。
 
 ### B2.5 — Bootstrap machine tenants + project-memory 快速概览
@@ -228,7 +228,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 [ "$(echo "$PROJECT_NAME")" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
 ancestor_session="$(tmux display-message -p '#{session_name}')"
 echo "scope: project=$PROJECT_NAME ancestor_session=$ancestor_session"
-[ "$ancestor_session" = "${PROJECT_NAME}-${PRIMARY_SEAT_ID}" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
+[ "$ancestor_session" = "${PRIMARY_SESSION_NAME}" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
 ```
 
 scope 不匹配 → halt，并告知 operator 先修正当前 iTerm / tmux 归属，不要继续 spawn seat。
@@ -449,7 +449,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 ### 禁用
 
-- ❌ 不要把 `tmux send-keys` 用在 memory 上（尤其是 `${PROJECT_NAME}-${PRIMARY_SEAT_ID}`）
+- ❌ 不要把 `tmux send-keys` 用在 memory 上（尤其是 `${PRIMARY_SESSION_NAME}`）
 - ❌ `query_memory.py --ask` - 该模式已弃用
 
 ## 失败处理
@@ -510,7 +510,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 | **specialist pane 显示 primary seat 内容**（pane 错连） | `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}` |
 | 整个 workers window 丢失 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
 
-**诊断 pane 错连**：`tmux list-clients -t '=${PROJECT_NAME}-${PRIMARY_SEAT_ID}'`；若超过 1 个 client 说明 specialist pane 错接到 primary seat 上（详见 `docs/ITERM_TMUX_REFERENCE.md §3.1.1`）。`recover-grid.sh` 幂等安全。
+**诊断 pane 错连**：`tmux list-clients -t '=${PRIMARY_SESSION_NAME}'`；若超过 1 个 client 说明 specialist pane 错接到 primary seat 上（详见 `docs/ITERM_TMUX_REFERENCE.md §3.1.1`）。`recover-grid.sh` 幂等安全。
 
 ### Brief drift
 

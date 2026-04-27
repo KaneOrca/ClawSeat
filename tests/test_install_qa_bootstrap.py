@@ -57,6 +57,7 @@ def test_install_sh_invokes_install_qa_hook(tmp_path: Path) -> None:
     assert result.returncode == 0, combined
     assert "PENDING_SEATS=(planner builder qa designer)" in combined
     assert "Step 7.6: install qa hook + qa patrol cron" in combined
+    assert "engineer create qa qa-bootstrap --no-monitor" in combined
     assert "install_qa_hook.py --workspace" in combined
     assert "/.agents/workspaces/qa-bootstrap/qa" in combined
 

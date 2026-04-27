@@ -550,6 +550,20 @@ memory_effective_model() {
   esac
 }
 
+seat_tmux_name() {
+  local seat="$1" tool="$2"
+  case "$seat" in
+    *-"$tool") printf '%s\n' "$seat" ;;
+    *) printf '%s-%s\n' "$seat" "$tool" ;;
+  esac
+}
+
+primary_tmux_name() {
+  local primary_tool="claude"
+  [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$MEMORY_TOOL"
+  seat_tmux_name "${PROJECT}-${PRIMARY_SEAT_ID}" "$primary_tool"
+}
+
 ensure_host_deps() {
   note "Step 1: preflight"
   if [[ "$FORCE_REINSTALL" != "1" && -f "$STATUS_FILE" ]] && grep -q '^phase=ready$' "$STATUS_FILE"; then
@@ -1090,7 +1104,7 @@ EOF
 }
 
 write_project_local_toml() {
-  local seat_auth_mode seat_provider seat_model seat primary_tool primary_auth primary_provider primary_model
+  local seat_auth_mode seat_provider seat_model seat primary_tool primary_auth primary_provider primary_model primary_session_name
   seat_auth_mode="$(seat_auth_mode_for_provider_mode)"
   seat_provider="$(seat_provider_for_provider_mode)"
   seat_model="$(seat_model_for_provider_mode || true)"
@@ -1107,6 +1121,7 @@ write_project_local_toml() {
     esac
     primary_model="$(memory_effective_model)"
   fi
+  primary_session_name="$(seat_tmux_name "$PROJECT-$PRIMARY_SEAT_ID" "$primary_tool")"
 
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] write %s\n' "$PROJECT_LOCAL_TOML"
@@ -1126,7 +1141,7 @@ seat_order = [$_seat_order_str]
 
 [[overrides]]
 id = "$PRIMARY_SEAT_ID"
-session_name = "$PROJECT-$PRIMARY_SEAT_ID"
+session_name = "$primary_session_name"
 tool = "$primary_tool"
 auth_mode = "$primary_auth"
 provider = "$primary_provider"
@@ -1441,9 +1456,161 @@ prompt_qa_patrol_cron_optin() {
   fi
 }
 
+project_profile_needs_qa_migration() {
+  [[ -f "$PROJECT_RECORD_PATH" ]] || return 1
+  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+path = Path(sys.argv[1])
+data = tomllib.loads(path.read_text(encoding="utf-8"))
+engineers = [str(item) for item in data.get("engineers", [])]
+qa = ((data.get("seat_overrides") or {}).get("qa") or {})
+needs = (
+    "qa" not in engineers
+    or str(qa.get("auth_mode", "")) != "api"
+    or str(qa.get("provider", "")) != "minimax"
+    or str(qa.get("model", "")) != "MiniMax-M2.7-highspeed"
+    or str(qa.get("base_url", "")) != "https://api.minimaxi.com/anthropic"
+)
+raise SystemExit(0 if needs else 1)
+PY
+}
+
+migrate_project_profile_to_v2() {
+  note "Step 5.6: migrate project profile for qa engineer"
+  if [[ ! -f "$PROJECT_RECORD_PATH" ]]; then
+    warn "project profile migration skipped; missing $PROJECT_RECORD_PATH"
+    return 0
+  fi
+  if ! project_profile_needs_qa_migration; then
+    note "[install] project.toml already contains qa engineer with minimax defaults"
+    return 0
+  fi
+
+  local answer="${CLAWSEAT_QA_PROFILE_MIGRATE:-}"
+  if [[ -z "$answer" ]]; then
+    if [[ -t 0 && -t 1 ]]; then
+      printf '[install] 检测到 project.toml 缺 qa engineer，是否升级? (Y/n) '
+      read -r answer
+    else
+      answer="y"
+    fi
+  fi
+  if [[ "$answer" =~ ^[Nn]$ ]]; then
+    warn "project.toml qa engineer migration skipped by operator"
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] migrate %q: add qa to engineers + monitor_engineers, set qa minimax defaults, preserve seat_overrides\n' "$PROJECT_RECORD_PATH"
+    return 0
+  fi
+
+  local backup_path="${PROJECT_RECORD_PATH}.bak.$(date +%Y%m%d-%H%M%S)"
+  cp "$PROJECT_RECORD_PATH" "$backup_path" \
+    || die 31 QA_PROFILE_BACKUP_FAILED "unable to backup $PROJECT_RECORD_PATH"
+  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" <<'PY' \
+    || die 31 QA_PROFILE_MIGRATE_FAILED "unable to migrate $PROJECT_RECORD_PATH"
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+data = tomllib.loads(text)
+
+def unique_append(values: object, item: str) -> list[str]:
+    out = [str(v) for v in values] if isinstance(values, list) else []
+    if item not in out:
+        out.append(item)
+    return out
+
+def q_array(values: list[str]) -> str:
+    return "[" + ", ".join(f'"{v}"' for v in values) + "]"
+
+engineers = unique_append(data.get("engineers", []), "qa")
+monitor_engineers = unique_append(data.get("monitor_engineers", []), "qa")
+monitor_max_panes = max(5, int(data.get("monitor_max_panes", 0) or 0))
+
+def set_or_insert(src: str, key: str, rendered: str) -> str:
+    pattern = re.compile(rf"^{re.escape(key)}\s*=.*$", re.MULTILINE)
+    line = f"{key} = {rendered}"
+    if pattern.search(src):
+        return pattern.sub(line, src, count=1)
+    marker = re.search(r"^\[seat_overrides\.", src, re.MULTILINE)
+    if marker:
+        return src[: marker.start()] + line + "\n" + src[marker.start():]
+    return src.rstrip() + "\n" + line + "\n"
+
+text = set_or_insert(text, "engineers", q_array(engineers))
+text = set_or_insert(text, "monitor_engineers", q_array(monitor_engineers))
+text = set_or_insert(text, "monitor_max_panes", str(monitor_max_panes))
+
+def upsert_table_key(src: str, table: str, key: str, value: str) -> str:
+    header = f"[{table}]"
+    header_match = re.search(rf"^\[{re.escape(table)}\]\s*$", src, re.MULTILINE)
+    line = f"{key} = {value}"
+    if not header_match:
+        return src.rstrip() + f"\n\n{header}\n{line}\n"
+    block_start = header_match.end()
+    after = src[block_start:]
+    next_header = re.search(r"^\[", after, re.MULTILINE)
+    block_end = block_start + (next_header.start() if next_header else len(after))
+    block = src[block_start:block_end]
+    key_match = re.search(rf"^{re.escape(key)}\s*=.*$", block, re.MULTILINE)
+    if key_match:
+        block = block[: key_match.start()] + line + block[key_match.end():]
+    else:
+        block = block.rstrip("\n") + "\n" + line + "\n"
+    return src[:block_start] + block + src[block_end:]
+
+text = upsert_table_key(text, "seat_overrides.qa", "auth_mode", '"api"')
+text = upsert_table_key(text, "seat_overrides.qa", "provider", '"minimax"')
+text = upsert_table_key(text, "seat_overrides.qa", "model", '"MiniMax-M2.7-highspeed"')
+text = upsert_table_key(text, "seat_overrides.qa", "base_url", '"https://api.minimaxi.com/anthropic"')
+path.write_text(text, encoding="utf-8")
+PY
+  note "[install] project.toml qa engineer migration complete (backup: $backup_path)"
+}
+
+ensure_qa_engineer_record() {
+  local qa_session="$HOME/.agents/sessions/$PROJECT/qa/session.toml"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q engineer create qa %q --no-monitor\n' \
+      "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" "$PROJECT"
+    return 0
+  fi
+  if [[ -f "$qa_session" ]]; then
+    note "[install] qa engineer session already registered"
+    return 0
+  fi
+  if [[ ! -f "$AGENT_ADMIN_SCRIPT" ]]; then
+    warn "qa engineer create skipped; missing agent_admin helper: $AGENT_ADMIN_SCRIPT"
+    return 0
+  fi
+  "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" engineer create qa "$PROJECT" --no-monitor \
+    || die 31 QA_ENGINEER_CREATE_FAILED "unable to create qa engineer session for $PROJECT"
+}
+
 install_qa_bootstrap() {
   note "Step 7.6: install qa hook + qa patrol cron"
   local qa_workspace="$HOME/.agents/workspaces/$PROJECT/qa"
+  ensure_qa_engineer_record
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] mkdir -p %q\n' "$qa_workspace"
     printf '[dry-run] %q %q --workspace %q\n' "$PYTHON_BIN" "$QA_HOOK_INSTALLER" "$qa_workspace"
@@ -1503,11 +1670,12 @@ bootstrap_project_profile() {
 }
 
 register_project_registry() {
-  local primary_tool="claude"
+  local primary_tool="claude" primary_session_name
   [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$MEMORY_TOOL"
+  primary_session_name="$(primary_tmux_name)"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] %q %q register %q --primary-seat %q --primary-seat-tool %q --tmux-name %q --template-name %q --repo-path %q\n' \
-      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PRIMARY_SEAT_ID" "$primary_tool" "${PROJECT}-${PRIMARY_SEAT_ID}" "$CLAWSEAT_TEMPLATE_NAME" "$PROJECT_REPO_ROOT"
+      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PRIMARY_SEAT_ID" "$primary_tool" "$primary_session_name" "$CLAWSEAT_TEMPLATE_NAME" "$PROJECT_REPO_ROOT"
     return 0
   fi
   if [[ ! -f "$PROJECTS_REGISTRY_SCRIPT" ]]; then
@@ -1517,7 +1685,7 @@ register_project_registry() {
   "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" register "$PROJECT" \
     --primary-seat "$PRIMARY_SEAT_ID" \
     --primary-seat-tool "$primary_tool" \
-    --tmux-name "${PROJECT}-${PRIMARY_SEAT_ID}" \
+    --tmux-name "$primary_session_name" \
     --template-name "$CLAWSEAT_TEMPLATE_NAME" \
     --repo-path "$PROJECT_REPO_ROOT" >/dev/null \
     || warn "projects.json register failed (non-fatal); see ~/.clawseat/projects.json"
@@ -1559,13 +1727,14 @@ install_clawseat_cli_symlink() {
 render_brief() {
   note "Step 4: render ancestor brief"
   [[ -f "$TEMPLATE_PATH" || "$DRY_RUN" == "1" ]] || die 30 TEMPLATE_MISSING "missing template: $TEMPLATE_PATH"
-  local pending_seats_human
+  local pending_seats_human primary_session_name
   printf -v pending_seats_human '%s, ' "${PENDING_SEATS[@]}"
   pending_seats_human="${pending_seats_human%, }"
+  primary_session_name="$(primary_tmux_name)"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] render %s -> %s\n' "$TEMPLATE_PATH" "$BRIEF_PATH"
   else
-    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" "$PRIMARY_SEAT_ID" "$pending_seats_human" <<'PY'
+    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" "$PRIMARY_SEAT_ID" "$pending_seats_human" "$primary_session_name" <<'PY'
 from pathlib import Path
 from string import Template
 import sys
@@ -1575,6 +1744,7 @@ tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(
     AGENT_HOME=sys.argv[5],
     PRIMARY_SEAT_ID=sys.argv[7],
     PENDING_SEATS_HUMAN=sys.argv[8],
+    PRIMARY_SESSION_NAME=sys.argv[9],
 )
 tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-default")
 out = Path(sys.argv[2]); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(tmpl, encoding="utf-8")
@@ -1682,6 +1852,8 @@ install_primary_patrol_plist() {
 }
 
 write_operator_guide() {
+  local primary_session_name
+  primary_session_name="$(primary_tmux_name)"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] write %s\n' "$GUIDE_FILE"
     return 0
@@ -1689,19 +1861,19 @@ write_operator_guide() {
 
   # Compatibility anchor for tests that still check the old v1 text:
   # `tmux kill-session -t ${PROJECT}-ancestor`. The rendered guide below uses
-  # `${PROJECT}-${PRIMARY_SEAT_ID}` so v2 memory-primary projects stay correct.
+  # `${primary_session_name}` so v2 memory-primary projects stay correct.
   mkdir -p "$(dirname "$GUIDE_FILE")" || die 30 GUIDE_DIR_FAILED "unable to create $(dirname "$GUIDE_FILE")"
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
 
 install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 workers 窗口 + shared memories 窗口；legacy template 可能仍使用单窗口布局。
 
-1. 切到 primary seat：\`${PROJECT}-${PRIMARY_SEAT_ID}\`。v2 minimal 通常在 \`clawseat-memories\` 窗口的项目 tab；legacy template 可能在项目窗口中。
+1. 切到 primary seat：\`${primary_session_name}\`。v2 minimal 通常在 \`clawseat-memories\` 窗口的项目 tab；legacy template 可能在项目窗口中。
 
-2. **先确认 ${PROJECT}-${PRIMARY_SEAT_ID} pane 已就绪** — install.sh 不再自动发送 Phase-A kickoff；kickoff 已写入文件，等待 operator 主动触发：
+2. **先确认 ${primary_session_name} pane 已就绪** — install.sh 不再自动发送 Phase-A kickoff；kickoff 已写入文件，等待 operator 主动触发：
 
    \`\`\`bash
-   tmux capture-pane -t '${PROJECT}-${PRIMARY_SEAT_ID}' -p | tail -15
+   tmux capture-pane -t '${primary_session_name}' -p | tail -15
    \`\`\`
 
    如果看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏，先按屏幕提示处理完，再继续。
@@ -1717,7 +1889,7 @@ install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 w
    **A) 让当前 install-memory / 安装 agent 通过 transport 发送 kickoff：**
 
    \`\`\`bash
-   bash ${SEND_AND_VERIFY_SCRIPT} --project ${PROJECT} ${PROJECT}-${PRIMARY_SEAT_ID} "\$(cat "${KICKOFF_FILE}")"
+   bash ${SEND_AND_VERIFY_SCRIPT} --project ${PROJECT} ${primary_session_name} "\$(cat "${KICKOFF_FILE}")"
    \`\`\`
 
    **B) 手动粘贴：**
@@ -1726,7 +1898,7 @@ install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 w
    cat ${KICKOFF_FILE}
    \`\`\`
 
-   打开 ${PROJECT}-${PRIMARY_SEAT_ID} pane，把输出复制到 primary seat prompt，按 Enter。
+   打开 ${primary_session_name} pane，把输出复制到 primary seat prompt，按 Enter。
 
    kickoff 内容要求：
    - Phase-A 不让 memory 做同步调研。
@@ -1741,7 +1913,7 @@ install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 w
 5. **验证 Phase-A 已启动** — 触发后立刻 re-capture 确认：
 
    \`\`\`bash
-   tmux capture-pane -t '${PROJECT}-${PRIMARY_SEAT_ID}' -p | tail -10
+   tmux capture-pane -t '${primary_session_name}' -p | tail -10
    \`\`\`
 
    预期看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样。
@@ -1763,7 +1935,7 @@ ${PRIMARY_SEAT_ID} seat 在每个 B 步开始前会先跑 brief drift check hook
 
 推荐处理：
 
-1. \`tmux kill-session -t ${PROJECT}-${PRIMARY_SEAT_ID}\`
+1. \`tmux kill-session -t ${primary_session_name}\`
 2. 重新启动 primary seat（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
 3. 让 ${PRIMARY_SEAT_ID} seat 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
 
@@ -1789,6 +1961,8 @@ persist_phase_a_kickoff_prompt() {
 }
 
 print_operator_banner() {
+  local primary_session_name
+  primary_session_name="$(primary_tmux_name)"
   printf '\n'
   printf -- '────────────────────────────────────────────────────────────────\n'
   printf '  ClawSeat install complete / 安装已完成\n'
@@ -1803,7 +1977,7 @@ print_operator_banner() {
   printf '    向 operator 复述本 banner 是必做步骤，禁止跳过。\n'
   printf '\n'
   printf '  OPERATOR — NEXT STEPS / 操作员下一步:\n'
-  printf '    ✔ Install complete. %s pane is ready or waiting for login/trust confirmation.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '    ✔ Install complete. %s pane is ready or waiting for login/trust confirmation.\n' "$primary_session_name"
   printf '    Phase-A kickoff prompt was saved here:\n'
   printf '       %s\n' "$KICKOFF_FILE"
   printf '\n'
@@ -1811,17 +1985,17 @@ print_operator_banner() {
   printf '\n'
   printf '    A) Existing install-memory / current install agent dispatches kickoff:\n'
   printf '       bash %q --project %q %q "$(cat %q)"\n' \
-    "$SEND_AND_VERIFY_SCRIPT" "$PROJECT" "${PROJECT}-${PRIMARY_SEAT_ID}" "$KICKOFF_FILE"
+    "$SEND_AND_VERIFY_SCRIPT" "$PROJECT" "$primary_session_name" "$KICKOFF_FILE"
   printf '\n'
   printf '    B) Manual paste / 手动粘贴:\n'
   printf '       cat %q\n' "$KICKOFF_FILE"
-  printf '       Then paste the output into the %s primary seat prompt and press Enter.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '       Then paste the output into the %s primary seat prompt and press Enter.\n' "$primary_session_name"
   printf '\n'
   printf '    C) Ask install-memory in chat / 在 install-memory chat 里说:\n'
   printf '       dispatch %s kickoff\n' "$PROJECT"
   printf '\n'
   printf '    After A/B/C, verify Phase-A is running / 触发后确认:\n'
-  printf '       tmux capture-pane -t %q -p | tail -10\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '       tmux capture-pane -t %q -p | tail -10\n' "$primary_session_name"
   printf '       Expected: B0 / "已读取 brief" / env_scan activity.\n'
   printf '\n'
   printf '    Operator guide / 操作员指引:\n'
@@ -1939,17 +2113,18 @@ ensure_tmux_session_alive() {
 }
 
 launch_seat() {
-  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file="" launcher_tool=""
+  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file="" launcher_tool="" actual_session=""
   local launcher_model=""
   launcher_tool="$(launcher_tool_for_seat "$seat_id")"
+  actual_session="$(seat_tmux_name "$session" "$launcher_tool")"
   auth_mode="$(launcher_auth_for_seat "$seat_id")"
   launcher_model="$(memory_effective_model)"
-  custom_env_file="$(launcher_custom_env_file_for_session "$session")"
+  custom_env_file="$(launcher_custom_env_file_for_session "$actual_session")"
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    run tmux kill-session -t "=$session"
+    run tmux kill-session -t "=$actual_session"
   else
-    tmux kill-session -t "=$session" 2>/dev/null || true
+    tmux kill-session -t "=$actual_session" 2>/dev/null || true
     mkdir -p "$cwd" || die 31 TMUX_CWD_CREATE_FAILED "unable to create launcher cwd: $cwd"
   fi
 
@@ -1960,22 +2135,22 @@ launch_seat() {
   if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" != "claude" && -n "$launcher_model" ]]; then
     cmd+=("LAUNCHER_CUSTOM_MODEL=$launcher_model")
   fi
-  cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool "$launcher_tool" --auth "$auth_mode" --dir "$cwd" --session "$session")
+  cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool "$launcher_tool" --auth "$auth_mode" --dir "$cwd" --session "$actual_session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
   [[ "$DRY_RUN" == "1" ]] && cmd+=(--dry-run)
 
   if [[ "$DRY_RUN" == "1" ]]; then
     run "${cmd[@]}"
-    configure_tmux_session_display "$session"
+    configure_tmux_session_display "$actual_session"
     return 0
   fi
 
   if ! "${cmd[@]}"; then
     [[ -n "$custom_env_file" && -f "$custom_env_file" ]] && rm -f "$custom_env_file"
-    die 31 TMUX_SESSION_CREATE_FAILED "unable to launch tmux session via agent-launcher: $session"
+    die 31 TMUX_SESSION_CREATE_FAILED "unable to launch tmux session via agent-launcher: $actual_session"
   fi
-  ensure_tmux_session_alive "$session"
-  configure_tmux_session_display "$session"
+  ensure_tmux_session_alive "$actual_session"
+  configure_tmux_session_display "$actual_session"
 }
 
 check_iterm_window_exists() {
@@ -2097,15 +2272,15 @@ PY
 grid_payload() {
   # v1 compat: single-window project grid (primary seat + N workers)
   # v2 callers should use workers_payload() + memories_payload() instead.
-  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$PRIMARY_SEAT_ID" "${PENDING_SEATS[@]}" <<'PY'
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$PRIMARY_SEAT_ID" "$(primary_tmux_name)" "${PENDING_SEATS[@]}" <<'PY'
 import json
 import shlex
 import sys
 
-project, wait_script, primary_seat = sys.argv[1], sys.argv[2], sys.argv[3]
-seats = sys.argv[4:]
+project, wait_script, primary_seat, primary_session = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+seats = sys.argv[5:]
 panes = [
-    {"label": primary_seat, "command": f"tmux attach -t '={project}-{primary_seat}'"},
+    {"label": primary_seat, "command": f"tmux attach -t '={primary_session}'"},
 ]
 for seat in seats:
     panes.append(
@@ -2309,6 +2484,7 @@ main() {
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
+  migrate_project_profile_to_v2
   ensure_privacy_kb_template
   install_skills_by_tier
   install_privacy_pre_commit_hook

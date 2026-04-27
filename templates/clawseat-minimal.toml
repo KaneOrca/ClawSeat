@@ -155,8 +155,10 @@ qa_authority = true
 review_authority = false
 
 tool = "claude"
-auth_mode = "oauth"
-provider = "anthropic"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+base_url = "https://api.minimaxi.com/anthropic"
 
 [engineers.qa.alternatives]
 allowed_tools = ["claude"]

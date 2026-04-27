@@ -278,6 +278,8 @@ def _worker_attach_pane(
 def _workers_recipe(n_total: int) -> list[list[object]]:
     if n_total < 1:
         return []
+    if n_total == 4:
+        return [[0, True], [0, False], [1, False]]
     n_right = n_total - 1
     if n_right == 0:
         return []
@@ -331,23 +333,33 @@ def build_workers_payload(project: Any, *, wait_for_seat_script: Path | None = N
             f"workers window supports at most {_MAX_ITERM_PANES} panes"
         )
 
-    main_worker = workers[0]
-    right_workers = workers[1:]
-    panes = [
-        _worker_attach_pane(
-            project_name=project.name,
-            seat_id=main_worker,
-            wait_script=wait_script,
-        )
-    ]
-    for worker_idx in _right_worker_order(len(right_workers)):
-        panes.append(
+    if len(workers) == 4:
+        panes = [
             _worker_attach_pane(
                 project_name=project.name,
-                seat_id=right_workers[worker_idx],
+                seat_id=seat_id,
                 wait_script=wait_script,
             )
-        )
+            for seat_id in workers
+        ]
+    else:
+        main_worker = workers[0]
+        right_workers = workers[1:]
+        panes = [
+            _worker_attach_pane(
+                project_name=project.name,
+                seat_id=main_worker,
+                wait_script=wait_script,
+            )
+        ]
+        for worker_idx in _right_worker_order(len(right_workers)):
+            panes.append(
+                _worker_attach_pane(
+                    project_name=project.name,
+                    seat_id=right_workers[worker_idx],
+                    wait_script=wait_script,
+                )
+            )
     return {
         "title": f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers",
         "panes": panes,
@@ -501,6 +513,37 @@ def focus_iterm_window(title: str) -> None:
             return
 
 
+def close_iterm_window(title: str) -> bool:
+    if shutil.which("osascript") is None:
+        return False
+    quoted_title = applescript_quote(title)
+    for app_name in ITERM_SCRIPT_APPS:
+        script = textwrap.dedent(
+            f'''
+            tell application "{app_name}"
+              repeat with w in windows
+                try
+                  if (name of w as string) contains "{quoted_title}" then
+                    close w
+                    return "1"
+                  end if
+                end try
+              end repeat
+              return "0"
+            end tell
+            '''
+        ).strip()
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip() == "1":
+            return True
+    return False
+
+
 def open_memory_window() -> dict[str, Any]:
     """Deprecated no-op for the removed v1 global machine memory window."""
     return {"status": "skipped", "reason": "global memory window retired"}
@@ -510,17 +553,21 @@ def open_grid_window(
     project: Any,
     *,
     recover: bool = False,
+    rebuild: bool = False,
     open_memory: bool = False,
 ) -> dict[str, Any]:
     template_name = str(getattr(project, "template_name", "") or "")
     if template_name == "clawseat-minimal":
         window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers"
-        if recover and iterm_window_exists(window_title):
+        if rebuild and iterm_window_exists(window_title):
+            close_iterm_window(window_title)
+        if recover and not rebuild and iterm_window_exists(window_title):
             focus_iterm_window(window_title)
             result: dict[str, Any] = {"status": "ok", "window_id": "", "recovered": True}
         else:
             result = run_iterm_panes_driver(build_workers_payload(project))
             result["recovered"] = False
+            result["rebuilt"] = bool(rebuild)
         result["memories"] = ensure_memories_pane(project)
         result["memory"] = {
             "status": "skipped",
@@ -536,12 +583,15 @@ def open_grid_window(
         )
 
     window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}"
-    if recover and iterm_window_exists(window_title):
+    if rebuild and iterm_window_exists(window_title):
+        close_iterm_window(window_title)
+    if recover and not rebuild and iterm_window_exists(window_title):
         focus_iterm_window(window_title)
         result: dict[str, Any] = {"status": "ok", "window_id": "", "recovered": True}
     else:
         result = run_iterm_panes_driver(build_grid_payload(project))
         result["recovered"] = False
+        result["rebuilt"] = bool(rebuild)
     if open_memory:
         result["memory"] = open_memory_window()
     return result

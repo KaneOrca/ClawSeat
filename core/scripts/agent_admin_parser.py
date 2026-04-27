@@ -476,6 +476,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     open_grid.add_argument("project")
     open_grid.add_argument("--recover", action="store_true")
+    open_grid.add_argument("--rebuild", action="store_true", help="Close any existing project window and open a fresh grid.")
     open_grid.add_argument("--open-memory", action="store_true")
     open_grid.set_defaults(func=hooks.cmd_window_open_grid)
 
@@ -508,9 +509,9 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     create = engineer_sub.add_parser("create")
     create.add_argument("engineer")
     create.add_argument("project")
-    create.add_argument("tool", choices=["codex", "claude", "gemini"])
-    create.add_argument("mode", choices=["oauth", "api"])
-    create.add_argument("provider")
+    create.add_argument("tool", nargs="?", choices=["codex", "claude", "gemini"])
+    create.add_argument("mode", nargs="?", choices=["oauth", "api"])
+    create.add_argument("provider", nargs="?")
     create.add_argument("--no-monitor", action="store_true")
     create.set_defaults(func=hooks.cmd_engineer_create)
 

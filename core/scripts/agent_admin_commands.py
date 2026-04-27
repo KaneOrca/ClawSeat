@@ -338,6 +338,7 @@ class CommandHandlers:
         window_ops.open_grid_window(
             project,
             recover=bool(getattr(args, "recover", False)),
+            rebuild=bool(getattr(args, "rebuild", False)),
             open_memory=bool(getattr(args, "open_memory", False)),
         )
         return 0

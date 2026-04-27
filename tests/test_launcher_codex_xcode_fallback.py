@@ -111,7 +111,7 @@ def test_codex_xcode_exec_agent_renders_fresh_config_over_existing_symlink(tmp_p
         / "identities"
         / "codex"
         / "api"
-        / f"xcode-{session_name}"
+        / f"xcode-{session_name}-codex"
         / "codex-home"
     )
     runtime_codex_home.mkdir(parents=True, exist_ok=True)

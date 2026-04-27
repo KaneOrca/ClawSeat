@@ -601,6 +601,7 @@ LAUNCHER_AUTH_MAP: dict[tuple[str, str, str | None], str] = {
     ("claude", "oauth",       None):            "oauth",
     ("claude", "oauth_token", None):            "oauth_token",
     ("claude", "ccr",         None):            "custom",
+    ("claude", "api",         "minimax"):       "minimax",
     ("claude", "api",         None):            "custom",
     ("codex",  "oauth",       None):            "chatgpt",
     ("codex",  "api",         "xcode-best"):    "xcode",
@@ -614,6 +615,7 @@ LAUNCHER_AUTH_MAP: dict[tuple[str, str, str | None], str] = {
 # be seeded with credentials before the launcher starts.
 LAUNCHER_SECRET_TARGETS: dict[tuple[str, str], str] = {
     ("claude", "oauth_token"): ".agents/.env.global",
+    ("claude", "minimax"):     ".agent-runtime/secrets/claude/minimax.env",
     ("gemini", "primary"):     ".agent-runtime/secrets/gemini/primary.env",
     ("codex",  "xcode"):       ".agent-runtime/secrets/codex/xcode.env",
 }
