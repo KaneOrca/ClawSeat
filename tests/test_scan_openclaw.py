@@ -83,16 +83,22 @@ def test_scan_openclaw_lists_workspace_agents(monkeypatch, tmp_path):
             "name": "plain-with-contract",
             "workspace": str(openclaw_home / "plain-with-contract"),
             "has_contract": True,
+            "project": "",
+            "feishu_group_id": "",
         },
         {
             "name": "a",
             "workspace": str(openclaw_home / "workspace-a"),
             "has_contract": True,
+            "project": "",
+            "feishu_group_id": "",
         },
         {
             "name": "b",
             "workspace": str(openclaw_home / "workspace-b"),
             "has_contract": False,
+            "project": "",
+            "feishu_group_id": "",
         },
     ]
 

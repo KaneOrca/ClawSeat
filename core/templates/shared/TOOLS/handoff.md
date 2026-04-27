@@ -94,4 +94,5 @@ python3 <HARNESS_SCRIPTS>/complete_handoff.py \
 
 For `USER_DECISION_NEEDED`: do NOT auto-ack. Hold the entry, relay summary to user, and wait.
 
-See `TOOLS/koder-hygiene.md` for full Rule 1 / Rule 2 / Rule 3 decision table.
+For Koder v2, routing and user-notification policy live in `IDENTITY.md` and
+the `clawseat-koder` skill.

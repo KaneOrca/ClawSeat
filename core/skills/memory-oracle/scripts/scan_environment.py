@@ -27,6 +27,11 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib
+
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "core" / "lib")):
     if _p not in sys.path:
@@ -308,10 +313,18 @@ def _scan_openclaw_agents(openclaw_home: Path) -> list[dict]:
             continue
         if not agent_name:
             continue
+        contract_data: dict = {}
+        if contract.exists():
+            try:
+                contract_data = tomllib.loads(contract.read_text(encoding="utf-8"))
+            except Exception:
+                contract_data = {}
         agents.append({
             "name": agent_name,
             "workspace": str(entry),
             "has_contract": contract.exists(),
+            "project": str(contract_data.get("project") or ""),
+            "feishu_group_id": str(contract_data.get("feishu_group_id") or ""),
         })
     return agents
 

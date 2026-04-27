@@ -48,6 +48,34 @@ Memory dispatches a task via `dispatch_task.py` 时，SHOULD 调用
 当前 project 的 `~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
 Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Memory 的职责。
 
+## Skill Loading
+
+Memory loads two companion skills:
+
+- `socratic-requirements`: direct user intake clarification for tmux users.
+- `memory-report-mode`: planner update sender routing, AUTO report mode, and
+  goal-drift recall.
+
+Koder loads `socratic-requirements` but not `memory-report-mode`; planner does
+not load either for high-context operator work.
+
+## Decision Payload Output
+
+When Memory needs the Feishu/Koder decision path, produce a
+`decision_payload` JSON object that validates against
+`core/schemas/decision-payload.schema.json`, then send it to Koder via the
+tmux-send transport capability:
+
+```bash
+python3 core/skills/memory-oracle/scripts/decision_payload.py send \
+  --session <project>-koder \
+  --payload-file /path/to/decision_payload.json
+```
+
+The helper validates required fields, option shape, timeout default, and
+schema-safe additional properties before invoking transport. Validation failure
+blocks the send.
+
 ## 目录布局（v0.8）
 
 ```text

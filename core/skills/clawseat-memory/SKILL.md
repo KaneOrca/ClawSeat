@@ -451,7 +451,7 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT_NAME
 
 memory 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"operator 前台"，只是 transport 不同（koder=Feishu，memory=CLI）。operator 问问题、派需求、要决策，都打 memory；koder 只在 Feishu overlay 开启时出现。
 
-所以 memory 应该懂 **koder-frontstage 的语义契约**，即使这个 skill 当前没 embed 到你的 system prompt（Round-9 会修 template 机制）：
+所以 memory 应该懂 **clawseat-koder 的语义契约**，即使 Feishu overlay 未开启：
 
 - **`frontstage_disposition`** 三态：
   - `ok` — 下游 seat 自行完成、无需 operator 介入 → memory 可直接 relay 摘要给 operator
@@ -461,7 +461,7 @@ memory 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"oper
 - **`decision_hint`** — memory 用它组织给 operator 的问题，但不代替 operator 答复
 - **`OC_DELEGATION_REPORT_V1`** envelope（Feishu 侧用）— memory 在 CLI 直接拿到自然语言不需要 parse 这个 envelope，但要认出对应字段的语义
 
-完整 frontstage 契约参考 `${CLAWSEAT_ROOT}/core/skills/clawseat-koder-frontstage/SKILL.md`。你**现在**就可以 Read 它，不需要等 template 修好。
+完整 frontstage 契约参考 `${CLAWSEAT_ROOT}/core/skills/clawseat-koder/SKILL.md`。
 
 #### 5.3.4 反模式 — 不要创建重复 skill
 
@@ -470,7 +470,7 @@ memory 在桌面端**兼任 koder 的 frontstage 职责**——两者都是"oper
 | 已存在 | 你以为要建的 | 备注 |
 |--------|------------|------|
 | `core/skills/gstack-harness/SKILL.md` | "ClawSeat 协调 skill" / "seat dispatch skill" | 就是它 — dispatch / handoff / ACK / heartbeat 全在这 |
-| `core/skills/clawseat-koder-frontstage/SKILL.md` | "frontstage skill" / "operator 交互 skill" | 就是它 |
+| `core/skills/clawseat-koder/SKILL.md` | "frontstage skill" / "operator 交互 skill" | 就是它 |
 | `core/skills/clawseat-memory/SKILL.md` | "memory 职责 skill" | 就是你正在读的 |
 | `core/skills/planner/SKILL.md` | "planner 职责 skill" | 就是它 |
 

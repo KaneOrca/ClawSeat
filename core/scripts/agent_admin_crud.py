@@ -251,6 +251,7 @@ def _render_dynamic_profile(
         "{{agent_admin}}": str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"),
         "{{workspace_root}}": str(workspace_root),
         "{{handoff_dir}}": str(handoff_dir),
+        "{{heartbeat_receipt}}": str(HOME / ".openclaw" / "koder" / f"{project}-HEARTBEAT_RECEIPT.toml"),
         "{{session_root}}": str(HOME / ".agents" / "sessions"),
         "{{default_notify_target}}": default_target,
         "{{seats}}": _q_array(seats),

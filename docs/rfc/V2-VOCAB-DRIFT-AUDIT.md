@@ -89,7 +89,7 @@
 - `core/templates/ancestor-engineer.toml`
 - `core/skills/clawseat-ancestor/SKILL.md` — 整个 skill 名 + 自称（建议改名 `clawseat-memory` 或加显式 alias）
 - `core/skills/clawseat/SKILL.md`
-- `core/skills/clawseat-koder-frontstage/SKILL.md`
+- `core/skills/clawseat-koder/SKILL.md`
 - `core/skills/planner/SKILL.md` — 提到 ancestor 的部分
 - `core/skills/reviewer/SKILL.md` / `qa/SKILL.md` / `designer/SKILL.md`
 - `core/skills/cs/SKILL.md` / `cs-structure/SKILL.md`

@@ -2,9 +2,9 @@
 """
 init_koder.py — Initialize an OpenClaw agent workspace as ClawSeat koder.
 
-Writes identity, soul, tools, memory, agents, contract, and skill symlinks
-into the agent's existing workspace directory. Does NOT create the workspace
-itself — that's OpenClaw's job.
+Writes the four-file koder workspace contract plus skill symlinks into the
+agent's existing workspace directory. Does NOT create the workspace itself —
+that's OpenClaw's job.
 
 Usage:
     python3 init_koder.py --workspace <agent_workspace_path> \
@@ -65,8 +65,8 @@ def parse_args() -> argparse.Namespace:
         "--on-conflict",
         choices=("ask", "overwrite", "backup", "abort"),
         default="backup",
-        help="When the workspace already has managed files (IDENTITY/SOUL/TOOLS/MEMORY/"
-             "AGENTS.md + WORKSPACE_CONTRACT.toml): back them up to .backup-<timestamp>/ first "
+        help="When the workspace already has managed files (IDENTITY/MEMORY/USER/"
+             "WORKSPACE_CONTRACT): back them up to .backup-<timestamp>/ first "
              "(default), overwrite them in place, ask the user interactively, or abort.",
     )
     p.add_argument(
@@ -88,12 +88,17 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-# Files init_koder writes into the workspace. Only these are backed up when
-# --on-conflict=backup is chosen — everything else (skills/, repos/, working
-# products like pptx/png etc.) stays in place. Entries may be relative paths
-# with subdirs (e.g. "TOOLS/dispatch.md"); backup preserves the layout.
+# Files init_koder writes into the workspace. Only these plus obsolete v1 files
+# are backed up when --on-conflict=backup is chosen — everything else (skills/,
+# repos/, working products like pptx/png etc.) stays in place.
 MANAGED_FILES = (
     "IDENTITY.md",
+    "MEMORY.md",
+    "USER.md",
+    "WORKSPACE_CONTRACT.toml",
+)
+
+OBSOLETE_FILES = (
     "SOUL.md",
     "TOOLS.md",
     "TOOLS/dispatch.md",
@@ -102,9 +107,7 @@ MANAGED_FILES = (
     "TOOLS/memory.md",
     "TOOLS/install.md",
     "TOOLS/koder-hygiene.md",
-    "MEMORY.md",
     "AGENTS.md",
-    "WORKSPACE_CONTRACT.toml",
 )
 
 
@@ -118,7 +121,7 @@ from _seat_bootstrap import detect_managed_conflicts as _detect_managed_conflict
 
 
 def detect_managed_conflicts(workspace: Path) -> list[str]:
-    return _detect_managed_conflicts_generic(workspace, MANAGED_FILES)
+    return _detect_managed_conflicts_generic(workspace, (*MANAGED_FILES, *OBSOLETE_FILES))
 
 
 def load_template() -> dict:
@@ -203,29 +206,23 @@ def build_workspace_files(
     active_loop_owner = str(profile.active_loop_owner).strip() or "planner"
     default_notify_target = str(profile.default_notify_target).strip() or active_loop_owner
     return {
-        "IDENTITY.md": render_identity(project, profile_path),
-        "SOUL.md": render_soul(notify_target=default_notify_target),
-        "TOOLS.md": render_tools_index(REPO_ROOT, heartbeat_owner=heartbeat_owner, notify_target=default_notify_target),
-        "TOOLS/dispatch.md": render_tools_dispatch(REPO_ROOT),
-        "TOOLS/project.md": render_tools_project(REPO_ROOT, heartbeat_owner=heartbeat_owner, workspace_path=workspace_path),
-        "TOOLS/seat.md": render_tools_seat(REPO_ROOT, heartbeat_owner=heartbeat_owner, backend_seats=backend),
-        "TOOLS/memory.md": render_tools_memory(REPO_ROOT, heartbeat_owner=heartbeat_owner),
-        "TOOLS/install.md": render_tools_install(REPO_ROOT),
-        "TOOLS/koder-hygiene.md": (REPO_ROOT / "core/templates/shared/TOOLS/koder-hygiene.md").read_text(encoding="utf-8"),
+        "IDENTITY.md": render_identity(
+            project,
+            profile_path,
+            spec=spec,
+            heartbeat_owner=heartbeat_owner,
+            notify_target=default_notify_target,
+            backend_seats=backend,
+        ),
         "MEMORY.md": render_memory(
             project,
             profile_path,
-            seats,
             heartbeat_owner=heartbeat_owner,
             backend_seats=backend,
             default_backend_start_seats=default_backend,
+            workspace_path=workspace_path,
         ),
-        "AGENTS.md": render_agents(
-            spec,
-            REPO_ROOT,
-            heartbeat_owner=heartbeat_owner,
-            backend_seats=backend,
-        ),
+        "USER.md": render_user_profile(),
         "WORKSPACE_CONTRACT.toml": render_contract(
             project,
             profile_path,
@@ -246,18 +243,56 @@ def build_workspace_files(
 # Renderers
 # ---------------------------------------------------------------------------
 
-def render_identity(project: str, profile_path: Path) -> str:
+def render_identity(
+    project: str,
+    profile_path: Path,
+    *,
+    spec: dict,
+    heartbeat_owner: str,
+    notify_target: str,
+    backend_seats: list[str],
+) -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    skills = []
+    for skill_path in spec.get("skills", []):
+        expanded = skill_path.replace("{CLAWSEAT_ROOT}", str(REPO_ROOT))
+        expanded = os.path.expanduser(expanded)
+        skills.append(f"- `{Path(expanded).parent.name}`: `{expanded}`")
+    backend_list = ", ".join(f"`{seat}`" for seat in backend_seats) if backend_seats else "(none)"
     return f"""# IDENTITY.md — ClawSeat koder
 
 - **Name:** Koder
 - **Role:** frontstage-supervisor
-- **Seat ID:** koder
+- **Seat ID:** {heartbeat_owner}
 - **Project:** {project}
 - **Profile:** {profile_path}
 - **Initialized:** {now}
 - **Language:** Chinese
 - **Style:** concise, reliable, low-noise
+
+## Core Responsibilities
+
+1. OUTBOUND: translate Memory `decision_payload` JSON into readable Feishu cards.
+2. INBOUND: translate button clicks or free text into structured messages for `<project>-memory`.
+3. Research: run bounded read-only local KB research when users ask why, compare, or explain.
+4. Timeout: apply `default_if_timeout` when a decision expires.
+5. Privacy: read `~/.agents/memory/machine/privacy.md` before every broadcast and hard-fail on matches.
+6. Routing: resolve Feishu group messages to projects using prefix, recent context, bound projects, default project, then clarification card.
+
+## Boundaries
+
+- Do not make business decisions; Memory owns recommendations.
+- Do not dispatch specialists or mutate ClawSeat seats; route work through `{notify_target}`.
+- Do not persist private state beyond OpenClaw/plugin-managed runtime state.
+- Do not expose file paths, URLs, hashes, command blocks, or internal RFCs in user-facing cards.
+
+## Skills
+
+{chr(10).join(skills)}
+
+## Backend Seats
+
+Only backend seats may be started from this workspace: {backend_list}.
 """
 
 
@@ -450,7 +485,7 @@ exit 2 时只需 re-send（notify），不重新 dispatch。重复 dispatch 同�
 def render_tools_project(clawseat_root: Path, *, heartbeat_owner: str, workspace_path: Path | None = None) -> str:
     scripts = clawseat_root / "core" / "skills" / "gstack-harness" / "scripts"
     # workspace_path is the actual workspace this koder is being initialized into
-    # (e.g. ~/.openclaw/workspace-koder for install, ~/.openclaw/workspace-yu for cartooner).
+    # (for example, an OpenClaw workspace-<tenant> directory).
     # Embed the resolved path so the snippet reads THIS workspace's contract,
     # not a hardcoded `workspace-koder` that would mis-route for other projects.
     if workspace_path is not None:
@@ -888,11 +923,11 @@ python3 {clawseat_root}/core/skills/clawseat-install/scripts/refresh_workspaces.
 def render_memory(
     project: str,
     profile_path: Path,
-    seats: list[str],
     *,
     heartbeat_owner: str,
     backend_seats: list[str],
     default_backend_start_seats: list[str],
+    workspace_path: Path | None,
 ) -> str:
     """MEMORY.md — render-time snapshot + pointers to SSOT.
 
@@ -903,6 +938,11 @@ def render_memory(
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     default_backend_list = "\n".join(f"- `{s}`" for s in default_backend_start_seats) or "- (none)"
     scripts_dir = "core/skills/gstack-harness/scripts"
+    contract_path = (
+        workspace_path / "WORKSPACE_CONTRACT.toml"
+        if workspace_path is not None
+        else Path("<this-workspace>") / "WORKSPACE_CONTRACT.toml"
+    )
     return f"""# MEMORY.md — koder project snapshot
 
 ## 项目绑定 (render-time snapshot)
@@ -915,7 +955,7 @@ Seat roster and backend list are authoritative in `WORKSPACE_CONTRACT.toml`.
 Read them there, not here:
 
 ```bash
-python3 -c "import pathlib,tomllib; d=tomllib.loads((pathlib.Path.home() / '.openclaw/workspace-{heartbeat_owner}/WORKSPACE_CONTRACT.toml').read_text()); print('seats:', d.get('seats'))"
+python3 -c "import pathlib,tomllib; d=tomllib.loads(pathlib.Path('{contract_path}').read_text()); print('seats:', d.get('seats'))"
 ```
 
 ## Recommended startup order (render-time suggestion)
@@ -930,6 +970,20 @@ For live state, run:
 - `python3 <CLAWSEAT_ROOT>/{scripts_dir}/tui_ctl.py --profile <profile> status` — which seats are VISIBLE
 - `tmux ls | grep {project}-` — which tmux sessions exist
 - `ls ~/.agents/tasks/{project}/patrol/handoffs/` — recent dispatch activity
+"""
+
+
+def render_user_profile() -> str:
+    return """# USER.md — operator language profile
+
+detail_level = "intermediate"  # beginner | intermediate | advanced
+language = "zh-CN"
+
+## Rendering Guidance
+
+- beginner: add analogies, avoid jargon, explain one tradeoff at a time.
+- intermediate: concise Chinese with explicit risks and next action.
+- advanced: direct summary, numbers and deltas first, no teaching tone.
 """
 
 
@@ -1198,6 +1252,17 @@ def main() -> int:
             print(f"backed up {len(conflicts)} file(s) to {backup_dir}")
         elif policy == "overwrite":
             print(f"overwriting {len(conflicts)} file(s) in place")
+            for rel in OBSOLETE_FILES:
+                target = workspace / rel
+                if target.exists() or target.is_symlink():
+                    if target.is_dir():
+                        continue
+                    target.unlink()
+            tools_dir = workspace / "TOOLS"
+            try:
+                tools_dir.rmdir()
+            except OSError:
+                pass
 
     profile_path, profile = load_profile_context(args.project, args.profile)
     files = build_workspace_files(
