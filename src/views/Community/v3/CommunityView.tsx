@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, request } from '../../../api/arena';
 import { useArena } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
+import { PretextButton } from '../../../components/PretextButton';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
-import { useObstacle } from '../../../hooks/useObstacle';
+import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
 
 interface ChatMessage {
@@ -21,7 +22,6 @@ export const CommunityViewV3: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
   const { environment, setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
   const labelRef = useObstacle() as React.RefObject<HTMLDivElement>;
-  const inputRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const environmentRef = useRef(environment);
   const isZenModeRef = useRef(isZenMode);
   const mountAmplitudeRef = useRef(environment.waveAmplitude ?? 60);
@@ -29,6 +29,8 @@ export const CommunityViewV3: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [incomingIds, setIncomingIds] = useState<Set<number>>(new Set());
+  const emptyRef = useObstacleDetached(!loading && messages.length === 0, isZenMode) as React.RefObject<HTMLDivElement>;
+  const inputRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLInputElement>;
   const seenIds = useRef<Set<number>>(new Set());
   const incomingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const agentPulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,7 +128,7 @@ export const CommunityViewV3: React.FC = () => {
         {loading ? (
           <NeuralLoading label="INITIALIZING_COMMUNITY_STREAM" />
         ) : messages.length === 0 ? (
-          <div style={emptyStyle}>[ NO_MESSAGES_IN_BUFFER ]</div>
+          <div ref={emptyRef} data-obstacle-id="community-v3-empty" style={emptyStyle}>[ NO_MESSAGES_IN_BUFFER ]</div>
         ) : (
           messages.map((message, index) => (
             <TraceRow
@@ -134,13 +136,16 @@ export const CommunityViewV3: React.FC = () => {
               message={message}
               index={index}
               isIncoming={incomingIds.has(message.id)}
+              isZenMode={isZenMode}
             />
           ))
         )}
       </div>
 
-      <div ref={inputRef} className="community-v3-input" style={inputContainerStyle}>
+      <div className="community-v3-input" style={inputContainerStyle}>
         <input
+          ref={inputRef}
+          data-obstacle-id="community-v3-input"
           type="text"
           value={input}
           onChange={event => setInput(event.target.value)}
@@ -149,18 +154,25 @@ export const CommunityViewV3: React.FC = () => {
           disabled={!user}
           style={inputStyle}
         />
-        <button
-          type="button"
-          onClick={handleSend}
+        <PretextButton
+          config={{
+            label: 'SEND',
+            engine: 'bitmask',
+            soloistId: 'community-v3-send',
+            color: user && input.trim() ? tokens.colors.aurora.cyan : tokens.colors.text.tertiary,
+            onTrigger: handleSend,
+          }}
+          data-obstacle-id="community-v3-send"
           disabled={!user || !input.trim()}
           style={{
             ...sendStyle,
             color: user && input.trim() ? tokens.colors.aurora.cyan : tokens.colors.text.tertiary,
             cursor: user && input.trim() ? 'pointer' : 'not-allowed',
+            textDecoration: 'none',
           }}
         >
           SEND
-        </button>
+        </PretextButton>
       </div>
 
       <style>{`
@@ -186,8 +198,9 @@ export const CommunityViewV3: React.FC = () => {
   );
 };
 
-const TraceRow: React.FC<{ message: ChatMessage; index: number; isIncoming: boolean }> = ({ message, index, isIncoming }) => {
+const TraceRow: React.FC<{ message: ChatMessage; index: number; isIncoming: boolean; isZenMode: boolean }> = ({ message, index, isIncoming, isZenMode }) => {
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  const prefixRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
   return (
     <div
       ref={ref}
@@ -197,7 +210,7 @@ const TraceRow: React.FC<{ message: ChatMessage; index: number; isIncoming: bool
         color: message.is_agent ? tokens.colors.aurora.cyan : tokens.colors.aurora.blue,
       }}
     >
-      <span style={prefixStyle}>{'>'} 0x{(index + 1).toString(16).padStart(2, '0').toUpperCase()} // </span>
+      <span ref={prefixRef} data-obstacle-id={`community-v3-prefix-${message.id}`} style={prefixStyle}>{'>'} 0x{(index + 1).toString(16).padStart(2, '0').toUpperCase()} // </span>
       <span>{formatTraceText(message, index, false)}</span>
     </div>
   );

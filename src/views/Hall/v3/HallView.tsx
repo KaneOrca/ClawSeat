@@ -5,7 +5,7 @@ import { useLanguage } from '../../../context/LanguageContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
-import { useObstacle } from '../../../hooks/useObstacle';
+import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 
 type LayerState = 'locked' | 'unlocked' | 'active';
 
@@ -14,6 +14,7 @@ export const HallViewV3: React.FC = () => {
   const { t } = useLanguage();
   const { environment, setEnvironment } = usePhysicsRegistry();
   const headerRef = useObstacle() as React.RefObject<HTMLElement>;
+  const agentInfoRef = useObstacleDetached(Boolean(user), isZenMode) as React.RefObject<HTMLDivElement>;
 
   const completedIds = user?.completedChallenges ?? [];
   const activeChallengeId = useMemo(() => {
@@ -57,7 +58,9 @@ export const HallViewV3: React.FC = () => {
     >
       <header ref={headerRef} style={headerStyle}>
         <div style={eyebrowStyle}>{t('hall.title')}</div>
-        <div style={agentStyle}>{user.nickname} // {t('hall.layer_prefix')}_{user.layer} // {user.score}{t('hall.xp')}</div>
+        <div ref={agentInfoRef} data-obstacle-id="hall-v3-agent-info" style={agentStyle}>
+          {user.nickname} // {t('hall.layer_prefix')}_{user.layer} // {user.score}{t('hall.xp')}
+        </div>
       </header>
 
       <div className="hall-v3-list" style={listStyle}>
@@ -115,7 +118,8 @@ const LayerRow: React.FC<{
 }> = ({ challenge, hex, state, onSelect, pointsSuffix, isZenMode }) => {
   const isLocked = state === 'locked';
   const isActive = state === 'active';
-  const textRef = useObstacle(!isLocked) as React.RefObject<HTMLSpanElement>;
+  const textRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
+  const pointsRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
 
   return (
     <button
@@ -129,8 +133,8 @@ const LayerRow: React.FC<{
         ...(isLocked ? lockedRowStyle : null),
       }}
     >
-      <span ref={textRef}>{'>'} {hex} // <span style={titleTransformStyle}>{challenge.title}</span></span>
-      <span>{challenge.points}{pointsSuffix}</span>
+      <span ref={textRef} data-obstacle-id={`hall-v3-row-${challenge.id}`}>{'>'} {hex} // <span style={titleTransformStyle}>{challenge.title}</span></span>
+      <span ref={pointsRef} data-obstacle-id={`hall-v3-points-${challenge.id}`}>{challenge.points}{pointsSuffix}</span>
     </button>
   );
 };
@@ -205,7 +209,7 @@ const activeRowStyle: React.CSSProperties = {
 };
 
 const lockedRowStyle: React.CSSProperties = {
-  opacity: 0.1,
+  opacity: 0.3,
   cursor: 'default',
 };
 

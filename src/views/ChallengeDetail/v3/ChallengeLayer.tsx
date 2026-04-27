@@ -5,6 +5,7 @@ import { useObstacleDetached } from '../../../hooks/useObstacle';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { useProgressiveLiteraryReveal } from '../../../components/text-physics/useProgressiveLiteraryReveal';
 import { useDecryptionCatharsis } from '../../../components/text-physics/useDecryptionCatharsis';
+import { PretextButton } from '../../../components/PretextButton';
 import { tokens } from '../../../design/tokens';
 import { safeStr } from '../../../utils/safeStr';
 
@@ -127,7 +128,11 @@ export const ChallengeLayer: React.FC = () => {
     t,
   } = useChallengeSubmission();
   const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
-  const eyebrowRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
+  const layerActive = Boolean(currentChallengeId);
+  const eyebrowRef = useObstacleDetached(layerActive, isZenMode) as React.RefObject<HTMLDivElement>;
+  const progressLabelRef = useObstacleDetached(layerActive, isZenMode) as React.RefObject<HTMLDivElement>;
+  const literaryLabelRef = useObstacleDetached(layerActive, isZenMode) as React.RefObject<HTMLDivElement>;
+  const textareaRef = useObstacleDetached(layerActive, isZenMode) as React.RefObject<HTMLTextAreaElement>;
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [submissions, setSubmissions] = useState<Record<string, string>>({});
   const [flashStepId, setFlashStepId] = useState<string | null>(null);
@@ -185,34 +190,57 @@ export const ChallengeLayer: React.FC = () => {
 
   return (
     <main className="challenge-layer-v3" style={containerStyle}>
-      <button style={backStyle} onClick={() => setChallengeId(null)}>
+      <PretextButton
+        config={{
+          label: t('challengeDetail.v3.back'),
+          engine: 'bitmask',
+          soloistId: 'challenge-v3-back',
+          color: tokens.colors.aurora.purple,
+          onTrigger: () => setChallengeId(null),
+        }}
+        data-obstacle-id="challenge-v3-back"
+        style={backStyle}
+      >
         <ArrowLeft size={16} /> {t('challengeDetail.v3.back')}
-      </button>
+      </PretextButton>
 
       <div ref={eyebrowRef} style={eyebrowStyle}>NODE_RESONANCE: {safeStr(challenge.title).toUpperCase()} // {literary.form}</div>
       <section className="challenge-layer-grid" style={gridStyle}>
         <div style={leftPaneStyle}>
-          <div style={paneLabelStyle}>PROGRESS_TEXT_FLOW</div>
+          <div ref={progressLabelRef} data-obstacle-id="challenge-v3-pane-progress" style={paneLabelStyle}>PROGRESS_TEXT_FLOW</div>
           {steps.map((step, index) => (
             <StepLine key={step.id} step={step} index={index} isZenMode={isZenMode} flash={flashStepId === step.id} />
           ))}
         </div>
 
         <div style={rightPaneStyle}>
-          <div style={paneLabelStyle}>LITERARY_DECRYPTION_FIELD</div>
+          <div ref={literaryLabelRef} data-obstacle-id="challenge-v3-pane-literary" style={paneLabelStyle}>LITERARY_DECRYPTION_FIELD</div>
           <LiteraryBlock text={reveal.revealedSlice} shimmer={reveal.shimmerActive} isZenMode={isZenMode} />
           <textarea
+            ref={textareaRef}
+            data-obstacle-id="challenge-v3-textarea"
             value={answer}
             onChange={event => setAnswer(event.target.value)}
             placeholder={activeStep ? `[KEY: ${activeStep.decryptKeys[0]}]` : t('challengeDetail.v3.input_placeholder')}
             style={textareaStyle}
           />
-          <button disabled={submitting || !answer.trim()} onClick={onSubmit} style={{
-            ...submitStyle,
-            color: answer.trim() ? tokens.colors.aurora.cyan : tokens.colors.text.micro,
+          <PretextButton
+            config={{
+              label: submitting ? t('challengeDetail.v3.submitting') : t('challengeDetail.v3.submit'),
+              engine: 'bitmask',
+              soloistId: 'challenge-v3-submit',
+              color: answer.trim() ? tokens.colors.aurora.cyan : tokens.colors.text.micro,
+              onTrigger: onSubmit,
+            }}
+            data-obstacle-id="challenge-v3-submit"
+            disabled={submitting || !answer.trim()}
+            style={{
+              ...submitStyle,
+              color: answer.trim() ? tokens.colors.aurora.cyan : tokens.colors.text.micro,
+              textDecoration: 'none',
           }}>
             {submitting ? t('challengeDetail.v3.submitting') : t('challengeDetail.v3.submit')}
-          </button>
+          </PretextButton>
         </div>
       </section>
 
@@ -281,6 +309,7 @@ const backStyle: React.CSSProperties = {
   gap: tokens.spacing.sm,
   cursor: 'pointer',
   padding: 0,
+  textDecoration: 'none',
 };
 
 const eyebrowStyle: React.CSSProperties = {

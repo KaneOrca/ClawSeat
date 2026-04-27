@@ -3,7 +3,7 @@ import { api, requestTyped } from '../../../api/arena';
 import { useArena, type User } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { PretextButton } from '../../../components/PretextButton';
-import { useObstacle } from '../../../hooks/useObstacle';
+import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
 import { tokens } from '../../../design/tokens';
 
@@ -16,7 +16,7 @@ interface RegisterResponse {
 }
 
 export const AuthViewV3: React.FC = () => {
-  const { login, setView } = useArena();
+  const { login, setView, isZenMode } = useArena();
   const { setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
   const inputRef = useObstacle() as React.RefObject<HTMLInputElement>;
   const codeRef = useObstacle() as React.RefObject<HTMLDivElement>;
@@ -29,6 +29,10 @@ export const AuthViewV3: React.FC = () => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const prefixRef = useObstacleDetached(!success, isZenMode) as React.RefObject<HTMLSpanElement>;
+  const suffixRef = useObstacleDetached(!success, isZenMode) as React.RefObject<HTMLSpanElement>;
+  const resonanceRef = useObstacleDetached(success, isZenMode) as React.RefObject<HTMLDivElement>;
+  const captionRef = useObstacleDetached(success, isZenMode) as React.RefObject<HTMLDivElement>;
 
   useEffect(() => {
     setEnvironment({
@@ -102,7 +106,7 @@ export const AuthViewV3: React.FC = () => {
         <div style={flowStyle}>
           <div ref={messageRef} style={eyebrowStyle}>AWAITING_SYNAPTIC_OVERRIDE</div>
           <p style={proseStyle}>
-            INJECT_NICKNAME_
+            <span ref={prefixRef} data-obstacle-id="auth-v3-prefix">INJECT_NICKNAME_</span>
             <input
               ref={inputRef}
               aria-label="nickname"
@@ -113,7 +117,7 @@ export const AuthViewV3: React.FC = () => {
               style={inputStyle}
               autoComplete="off"
             />
-            TO CUT THE FIRST RIFT.
+            <span ref={suffixRef} data-obstacle-id="auth-v3-suffix">TO CUT THE FIRST RIFT.</span>
           </p>
           <PretextButton
             config={{
@@ -133,10 +137,10 @@ export const AuthViewV3: React.FC = () => {
         </div>
       ) : (
         <div style={flowStyle}>
-          <div style={eyebrowStyle}>RESONANCE_ESTABLISHED</div>
+          <div ref={resonanceRef} data-obstacle-id="auth-v3-resonance" style={eyebrowStyle}>RESONANCE_ESTABLISHED</div>
           <div ref={messageRef} style={successTextStyle}>[ RESONANCE ESTABLISHED ] 第一道裂隙已开。</div>
           <div id="agent-code" ref={codeRef} style={codeStyle}>{safeStr(displayCode || agentCode)}</div>
-          <div style={captionStyle}>[ RELIC_STATUS: STABLE ]<br />[ AUTO_REDIRECT: HALL_V3 IN 8S ]</div>
+          <div ref={captionRef} data-obstacle-id="auth-v3-caption" style={captionStyle}>[ RELIC_STATUS: STABLE ]<br />[ AUTO_REDIRECT: HALL_V3 IN 8S ]</div>
           <PretextButton
             config={{
               label: 'ENTER_HALL_V3',
