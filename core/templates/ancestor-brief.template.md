@@ -82,6 +82,14 @@ operator 可以选择用 `send-and-verify.sh` 发送该文件内容，或手动 
 
 ### B0 — env_scan LLM 分析（必须向用户汇报）
 
+**B0.registry — projects.json validation（warn-only）**：
+
+先检查 `${AGENT_HOME}/.clawseat/projects.json` 与当前 `project.toml` 是否一致。只警告，不 hard-fail：
+
+```bash
+python3 ${CLAWSEAT_ROOT}/core/scripts/projects_registry.py validate ${PROJECT_NAME} || true
+```
+
 ## project.toml SSOT authority
 
 `${AGENT_HOME}/.agents/projects/${PROJECT_NAME}/project.toml` 的 `[seat_overrides]` 是 seat harness SSOT。
