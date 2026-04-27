@@ -54,6 +54,14 @@
 
 ### B0 — env_scan LLM 分析（必须向用户汇报）
 
+**B0.registry — projects.json validation（warn-only）**：
+
+先检查 `${HOME}/.clawseat/projects.json` 与当前 `project.toml` 是否一致。只警告，不 hard-fail：
+
+```bash
+python3 ${CLAWSEAT_ROOT}/core/scripts/projects_registry.py validate ${PROJECT_NAME} || true
+```
+
 **B0.pre — 先读 install.sh 已写入的 harness overrides（强制）**：
 
 `install.sh` 在 Step 3（`select_provider`）+ `bootstrap_project_profile` 已把 operator 的 provider 选择写进 `project-local.toml`，每个 seat 都有一条 `[[overrides]]`。B0 不应重新跑一遍 env_scan LLM 分析让 operator 再选一次——先读已有决策，展示给 operator 确认（Enter 沿用 / 输入覆盖）：

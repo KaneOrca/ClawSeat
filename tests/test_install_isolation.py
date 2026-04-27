@@ -59,6 +59,16 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
         root / "core" / "scripts" / "seat_claude_template.py",
     )
     shutil.copy2(
+        _REPO / "core" / "scripts" / "projects_registry.py",
+        root / "core" / "scripts" / "projects_registry.py",
+    )
+    shutil.copy2(
+        _REPO / "core" / "scripts" / "clawseat-cli.sh",
+        root / "core" / "scripts" / "clawseat-cli.sh",
+    )
+    (root / "core" / "scripts" / "projects_registry.py").chmod(0o755)
+    (root / "core" / "scripts" / "clawseat-cli.sh").chmod(0o755)
+    shutil.copy2(
         _REPO / "core" / "lib" / "real_home.py",
         root / "core" / "lib" / "real_home.py",
     )

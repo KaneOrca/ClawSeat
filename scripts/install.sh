@@ -3,6 +3,7 @@ set -euo pipefail
 
 DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""
 _PROJECT_EXPLICIT=0; _TEMPLATE_EXPLICIT=0  # set to 1 when flag is passed explicitly
+UNINSTALL_PROJECT=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
@@ -41,6 +42,8 @@ MEMORY_HOOK_INSTALLER="$REPO_ROOT/core/skills/memory-oracle/scripts/install_memo
 SEAT_CLAUDE_TEMPLATE_SCRIPT="$REPO_ROOT/core/scripts/seat_claude_template.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
+PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
+CLAWSEAT_CLI_SCRIPT="$REPO_ROOT/core/scripts/clawseat-cli.sh"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
@@ -287,6 +290,7 @@ parse_args() {
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
+      --uninstall) UNINSTALL_PROJECT="$2"; shift 2 ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
       --reset-harness-memory)
@@ -302,10 +306,13 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-default|clawseat-engineering|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-default|clawseat-engineering|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
+  if [[ -n "$UNINSTALL_PROJECT" ]]; then
+    [[ "$UNINSTALL_PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "--uninstall project must match ^[a-z0-9-]+$"
+  fi
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
     clawseat-default|clawseat-engineering|clawseat-creative) ;;
@@ -1598,6 +1605,54 @@ install_memory_hook() {
     || die 32 MEMORY_HOOK_INSTALL_FAILED "failed to install memory Stop-hook into $template_settings"
 }
 
+uninstall_project_registry_entry() {
+  local project="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q unregister %q\n' "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$project"
+    return 0
+  fi
+  [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || die 31 PROJECTS_REGISTRY_MISSING "missing projects registry helper: $PROJECTS_REGISTRY_SCRIPT"
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" unregister "$project" || true
+}
+
+register_project_registry() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q register %q --primary-seat ancestor --primary-seat-tool claude --tmux-name %q --template-name %q --repo-path %q\n' \
+      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PROJECT-ancestor" "$CLAWSEAT_TEMPLATE_NAME" "$PROJECT_REPO_ROOT"
+    return 0
+  fi
+  [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || { warn "projects registry skipped; missing $PROJECTS_REGISTRY_SCRIPT"; return 0; }
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" register "$PROJECT" \
+    --primary-seat ancestor \
+    --primary-seat-tool claude \
+    --tmux-name "$PROJECT-ancestor" \
+    --template-name "$CLAWSEAT_TEMPLATE_NAME" \
+    --repo-path "$PROJECT_REPO_ROOT" >/dev/null || warn "projects registry register failed for $PROJECT"
+}
+
+touch_project_registry() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q touch %q\n' "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT"
+    return 0
+  fi
+  [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || return 0
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" touch "$PROJECT" >/dev/null 2>&1 || true
+}
+
+install_clawseat_cli_symlink() {
+  local link="/usr/local/bin/clawseat"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] ln -sfn %q %q\n' "$CLAWSEAT_CLI_SCRIPT" "$link"
+    return 0
+  fi
+  [[ -f "$CLAWSEAT_CLI_SCRIPT" ]] || { warn "clawseat CLI skipped; missing $CLAWSEAT_CLI_SCRIPT"; return 0; }
+  if [[ -w "$(dirname "$link")" || ( ! -e "$link" && -w "$(dirname "$link")" ) ]]; then
+    ln -sfn "$CLAWSEAT_CLI_SCRIPT" "$link" || warn "unable to install $link"
+  else
+    warn "clawseat CLI symlink skipped; $(dirname "$link") not writable"
+  fi
+}
+
 check_iterm_window_exists() {
   local title="$1"
   if ! command -v osascript >/dev/null 2>&1; then
@@ -1744,7 +1799,12 @@ memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"labe
 
 main() {
   local memory_window_id=""
-  parse_args "$@"; prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
+  parse_args "$@"
+  if [[ -n "$UNINSTALL_PROJECT" ]]; then
+    uninstall_project_registry_entry "$UNINSTALL_PROJECT"
+    exit 0
+  fi
+  prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
@@ -1753,6 +1813,8 @@ main() {
   note "Step 5: launch ancestor seat via agent-launcher"
   launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
   bootstrap_project_profile
+  register_project_registry
+  install_clawseat_cli_symlink
   install_ancestor_patrol_plist
   note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
   note "Step 8: ensure memory singleton daemon"
@@ -1789,6 +1851,7 @@ main() {
       warn "auto-send 未完成：ancestor pane 未就绪或验证投递失败。请按 banner 指引手工粘贴 kickoff。"
     fi
   fi
+  touch_project_registry
   write_operator_guide
   print_operator_banner
 }

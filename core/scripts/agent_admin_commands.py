@@ -32,6 +32,12 @@ class CommandHandlers:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self.hooks.session_service.start_engineer(session, reset=args.reset)
         try:
+            from projects_registry import touch_project
+
+            touch_project(session.project)
+        except Exception as exc:
+            _ = exc
+        try:
             provisioned, detail = self.hooks.provision_session_heartbeat(session)
             if detail:
                 print(detail)
@@ -167,6 +173,14 @@ class CommandHandlers:
                 f"seats failed to start: {failed_ids}. "
                 "Not opening iTerm window; fix the failing seats then re-run."
             )
+
+        if started:
+            try:
+                from projects_registry import touch_project
+
+                touch_project(started[0].project)
+            except Exception as exc:
+                _ = exc
 
         # Phase 2 — single atomic open-monitor.
         if skip_iterm:
