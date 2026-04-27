@@ -29,7 +29,7 @@ def _run_install(
     iterm_payload_log = tmp_path / "iterm_payload.jsonl"
     agentctl_log = tmp_path / "agentctl.log"
     pane_dir = tmp_path / "tmux-panes"
-    brief_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    brief_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "memory-bootstrap.md"
     if pane_snapshots is not None or steady_pane_text is not None:
         pane_dir.mkdir(parents=True, exist_ok=True)
         session_name = "kickoff50-memory-claude"
@@ -111,8 +111,8 @@ def test_install_persists_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> Non
     )
 
     combined = result.stdout + result.stderr
-    expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
-    kickoff_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
+    expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "memory-bootstrap.md"
+    kickoff_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "memory-kickoff.txt"
     guide_path = home / ".agents" / "tasks" / "kickoff50" / "OPERATOR-START-HERE.md"
     kickoff = (
         f"读 {expected_brief} 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。"
@@ -120,7 +120,7 @@ def test_install_persists_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> Non
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt" in combined
+    assert "Step 9.5: persist Phase-A kickoff prompt to memory-kickoff.txt" in combined
     assert "auto-send Phase-A kickoff prompt" not in combined
     assert "Phase-A kickoff delivered" not in combined
     assert "Phase-A kickoff submitted" not in combined
@@ -151,15 +151,15 @@ def test_install_writes_operator_triggered_kickoff_without_auto_send(tmp_path: P
     )
 
     combined = result.stdout + result.stderr
-    expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
-    kickoff_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
+    expected_brief = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "memory-bootstrap.md"
+    kickoff_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "memory-kickoff.txt"
     kickoff = (
         f"读 {expected_brief} 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。"
         "不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。"
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt" in combined
+    assert "Step 9.5: persist Phase-A kickoff prompt to memory-kickoff.txt" in combined
     assert "Auto-send could not verify kickoff delivery" not in combined
     assert "Phase-A kickoff auto-send skipped or failed" not in combined
     assert "ClawSeat install complete / 安装已完成" in combined
@@ -182,12 +182,12 @@ def test_install_does_not_probe_spinner_before_operator_trigger(tmp_path: Path) 
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, result.stderr
-    assert "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt" in combined
+    assert "Step 9.5: persist Phase-A kickoff prompt to memory-kickoff.txt" in combined
     assert "auto-send Phase-A kickoff prompt" not in combined
     assert "Phase-A kickoff submitted" not in combined
     assert "Auto-send could not verify kickoff delivery" not in combined
     assert (
-        home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-kickoff.txt"
+        home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "memory-kickoff.txt"
     ).is_file()
 
     tmux_output = tmux_log.read_text(encoding="utf-8")

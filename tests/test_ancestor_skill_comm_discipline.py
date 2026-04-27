@@ -6,7 +6,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _ANCESTOR_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
-_ANCESTOR_PLIST = _REPO / "core" / "templates" / "ancestor-patrol.plist.in"
+_ANCESTOR_PLIST = _REPO / "core" / "templates" / "qa-patrol.plist.in"
 
 
 def test_ancestor_skill_and_patrol_plist_use_send_and_verify_for_project_seat_messages() -> None:
@@ -33,8 +33,8 @@ def test_ancestor_skill_and_patrol_plist_use_send_and_verify_for_project_seat_me
     assert "Phase-B patrol cycle" in plist
     # Existing canonical-send invariants still hold.
     assert "send-and-verify.sh" in plist
-    assert "tmux send-keys -t '={PROJECT}-ancestor-{TOOL}'" not in plist
-    assert "agentctl.sh' session-name ancestor --project '{PROJECT}'" in plist
+    assert "tmux send-keys -t '={PROJECT}-memory-{TOOL}'" not in plist
+    assert "agentctl.sh' session-name memory --project '{PROJECT}'" in plist
     assert "={PROJECT}-ancestor-{TOOL}" not in plist
 
 

@@ -79,8 +79,8 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     )
     (root / "core" / "shell-scripts" / "send-and-verify.sh").chmod(0o755)
     shutil.copy2(
-        _REPO / "core" / "templates" / "ancestor-patrol.plist.in",
-        root / "core" / "templates" / "ancestor-patrol.plist.in",
+        _REPO / "core" / "templates" / "qa-patrol.plist.in",
+        root / "core" / "templates" / "qa-patrol.plist.in",
     )
 
     _write_executable(
@@ -182,7 +182,7 @@ fi
 exit 0
 """,
     )
-    (root / "core" / "templates" / "ancestor-brief.template.md").write_text(
+    (root / "core" / "templates" / "memory-bootstrap.template.md").write_text(
         "\n".join(
             [
                 "# Brief for ${PROJECT_NAME} at ${CLAWSEAT_ROOT}",
@@ -225,7 +225,7 @@ case "$tool/$auth" in
 esac
 mkdir -p "$runtime_dir/home"
 
-python3 - "$LOG_FILE" "$session" "$tool" "$auth" "$dir" "$custom_env_file" "$runtime_dir/home" "${CLAWSEAT_ROOT:-}" "${CLAWSEAT_ANCESTOR_BRIEF:-}" "${LAUNCHER_CUSTOM_BASE_URL:-}" "${LAUNCHER_CUSTOM_MODEL:-}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
+python3 - "$LOG_FILE" "$session" "$tool" "$auth" "$dir" "$custom_env_file" "$runtime_dir/home" "${CLAWSEAT_ROOT:-}" "${CLAWSEAT_MEMORY_BRIEF:-}" "${LAUNCHER_CUSTOM_BASE_URL:-}" "${LAUNCHER_CUSTOM_MODEL:-}" "${LAUNCHER_CUSTOM_API_KEY:-}" <<'PY'
 from __future__ import annotations
 import json
 import os
@@ -461,7 +461,7 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
     assert [record["session"] for record in records] == expected_sessions
 
     expected_primary_dir = str(home / ".agents" / "workspaces" / "smoketest" / "memory")
-    expected_brief = str(home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "ancestor-bootstrap.md")
+    expected_brief = str(home / ".agents" / "tasks" / "smoketest" / "patrol" / "handoffs" / "memory-bootstrap.md")
 
     for record in records:
         session = record["session"]

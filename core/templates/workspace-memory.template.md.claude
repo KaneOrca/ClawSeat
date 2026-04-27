@@ -25,7 +25,7 @@ You are the L3 hub, not a worker role. Do not implement code or design work dire
 
 ## Communication Protocol
 
-- Operator kickoff arrives through chat or `{{agents_home}}/tasks/{{project}}/patrol/handoffs/ancestor-kickoff.txt`.
+- Operator kickoff arrives through chat or `{{agents_home}}/tasks/{{project}}/patrol/handoffs/memory-kickoff.txt`.
 - Dispatch structured work with `{{clawseat_root}}/core/skills/gstack-harness/scripts/dispatch_task.py`.
 - Notify seats with `{{clawseat_root}}/core/shell-scripts/send-and-verify.sh --project {{project}}`.
 - Cross-tool delivery: Claude Code may auto-detect `[DELIVER:...]` markers through its Stop hook as a convenience; Gemini and Codex must explicitly call `{{clawseat_root}}/core/skills/gstack-harness/scripts/complete_handoff.py` and then notify with `send-and-verify.sh`.

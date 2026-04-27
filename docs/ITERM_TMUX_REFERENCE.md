@@ -110,5 +110,5 @@ bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh <project>
 
 ## 5. 与安装 / 重入入口的衔接
 - v0.7 主链路默认走 `docs/INSTALL.md` 与 `scripts/install.sh`：预检、环境扫描、memory 拉起、workers 窗口与 memories 窗口由 install.sh 完成，然后交给 memory 接手后续席位。
-- `scripts/launch_ancestor.sh` 只应视为 legacy helper / test fixture，不是 fresh install 的 canonical 入口。
+- 旧 direct primary-seat relaunch helper 已删除；fresh install 的 canonical 入口只有 `scripts/install.sh`。
 - 若链路失败，当前实现会给出可执行修复建议，不做非阻断 GUI 降级。

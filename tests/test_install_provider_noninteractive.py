@@ -92,7 +92,7 @@ def test_install_provider_choice_env_var_selects_first_candidate_without_tty(tmp
     combined = result.stdout + result.stderr
     assert "Using selected provider candidate #1" in combined
 
-    provider_env = (home / ".agents" / "tasks" / "choice49" / "ancestor-provider.env").read_text(encoding="utf-8")
+    provider_env = (home / ".agents" / "tasks" / "choice49" / "memory-provider.env").read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=minimax-token" in provider_env
     assert "ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic" in provider_env
     assert "ANTHROPIC_MODEL=MiniMax-M2.7-highspeed" in provider_env
@@ -115,7 +115,7 @@ def test_install_provider_choice_flag_selects_first_candidate_without_tty(tmp_pa
     combined = result.stdout + result.stderr
     assert "Using selected provider candidate #1" in combined
 
-    provider_env = (home / ".agents" / "tasks" / "choice50" / "ancestor-provider.env").read_text(encoding="utf-8")
+    provider_env = (home / ".agents" / "tasks" / "choice50" / "memory-provider.env").read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=minimax-token" in provider_env
     assert "ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic" in provider_env
     assert "ANTHROPIC_MODEL=MiniMax-M2.7-highspeed" in provider_env

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_BRIEF_TEMPLATE = _REPO / "core" / "templates" / "ancestor-brief.template.md"
+_BRIEF_TEMPLATE = _REPO / "core" / "templates" / "memory-bootstrap.template.md"
 
 
 def test_ancestor_brief_template_has_common_operations_cookbook() -> None:
@@ -21,6 +21,6 @@ def test_ancestor_brief_template_has_common_operations_cookbook() -> None:
     assert "agent_admin.py session switch-harness --project ${PROJECT_NAME}" in text
     assert "agent_admin.py session reseed-sandbox --project ${PROJECT_NAME} --all" in text
     assert "agent_admin.py window open-grid --project ${PROJECT_NAME} --recover" in text
-    assert "bash ${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh" in text
+    assert "bash ${CLAWSEAT_ROOT}/scripts/memory-brief-mtime-check.sh" in text
     assert "send-and-verify.sh --project ${PROJECT_NAME} <seat>" in text
     assert "send_delegation_report.py" in text

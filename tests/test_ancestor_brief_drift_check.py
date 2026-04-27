@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SCRIPT = _REPO / "scripts" / "ancestor-brief-mtime-check.sh"
+_SCRIPT = _REPO / "scripts" / "memory-brief-mtime-check.sh"
 
 
 def _write_tmux_stub(bin_dir: Path) -> None:
@@ -27,7 +27,7 @@ exit 2
 
 
 def _run_check(tmp_path: Path, *, brief_exists: bool, brief_mtime: int | None, session_created: int | None, with_target: bool) -> subprocess.CompletedProcess[str]:
-    brief = tmp_path / "ancestor-bootstrap.md"
+    brief = tmp_path / "memory-bootstrap.md"
     if brief_exists:
         brief.write_text("brief\n", encoding="utf-8")
         if brief_mtime is not None:
@@ -36,10 +36,10 @@ def _run_check(tmp_path: Path, *, brief_exists: bool, brief_mtime: int | None, s
     env = {
         **os.environ,
         "PATH": f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
-        "CLAWSEAT_ANCESTOR_BRIEF": str(brief),
+        "CLAWSEAT_MEMORY_BRIEF": str(brief),
     }
     if with_target:
-        env["CLAWSEAT_ANCESTOR_SESSION"] = "smoke01-ancestor"
+        env["CLAWSEAT_MEMORY_SESSION"] = "smoke01-memory"
         env["TMUX_PANE"] = "%1"
     if session_created is not None:
         env["TMUX_SESSION_CREATED"] = str(session_created)
@@ -66,9 +66,9 @@ def test_reports_drift_when_brief_is_newer_than_session_start(tmp_path: Path) ->
 
     assert result.returncode == 1, result.stderr
     assert "BRIEF_DRIFT_DETECTED" in result.stdout
-    assert "ancestor_started_unix=1700000000" in result.stdout
+    assert "memory_started_unix=1700000000" in result.stdout
     assert "brief_mtime_unix=1700000010" in result.stdout
-    assert "ancestor-bootstrap.md" in result.stdout
+    assert "memory-bootstrap.md" in result.stdout
 
 
 def test_allows_brief_when_it_is_not_newer_than_session_start(tmp_path: Path) -> None:

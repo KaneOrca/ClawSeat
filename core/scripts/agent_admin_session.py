@@ -522,9 +522,9 @@ class SessionService:
             return operator_home / ".agent-runtime" / "identities" / "gemini" / "api" / f"{launcher_auth}-{session.session}"
         return None
 
-    def _ancestor_brief_path(self, project: str) -> Path:
+    def _memory_brief_path(self, project: str) -> Path:
         real_home = _real_home_for_tool_seeding()
-        return real_home / ".agents" / "tasks" / project / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+        return real_home / ".agents" / "tasks" / project / "patrol" / "handoffs" / "memory-bootstrap.md"
 
     def reseed_sandbox_user_tool_dirs(self, session: Any) -> list[str]:
         launcher_auth = self._launcher_auth_for(session)
@@ -599,6 +599,7 @@ class SessionService:
                 if custom_env_file:
                     cmd.extend(["--custom-env-file", custom_env_file])
                 env = dict(os.environ)
+                env.pop("CLAWSEAT_MEMORY_BRIEF", None)
                 env.pop("CLAWSEAT_ANCESTOR_BRIEF", None)
                 env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
                 env["CLAWSEAT_PROJECT"] = session.project
@@ -611,12 +612,13 @@ class SessionService:
                     env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
                         project_tool_root(session.project, home=_real_home_for_tool_seeding())
                     )
-                # Primary seat (ancestor or memory in v2 minimal) gets the
-                # ancestor-bootstrap brief injected as CLAWSEAT_ANCESTOR_BRIEF.
+                # Primary seat gets the memory bootstrap brief. Export the old
+                # env name as a compatibility alias for existing hooks.
                 if session.engineer_id in ("ancestor", "memory"):
-                    ancestor_brief = self._ancestor_brief_path(session.project)
-                    if ancestor_brief.is_file():
-                        env["CLAWSEAT_ANCESTOR_BRIEF"] = str(ancestor_brief)
+                    memory_brief = self._memory_brief_path(session.project)
+                    if memory_brief.is_file():
+                        env["CLAWSEAT_MEMORY_BRIEF"] = str(memory_brief)
+                        env["CLAWSEAT_ANCESTOR_BRIEF"] = str(memory_brief)
                 print(
                     "start_engineer_launch: "
                     f"session={session.session} "
@@ -680,7 +682,7 @@ class SessionService:
         # Auto-recover iTerm grid pane routing after any specialist seat
         # start / restart. When a seat's canonical tmux session comes up
         # after grid open time, stray grid panes may have attached to the
-        # project's primary seat (v2 uses <project>-memory; v1 had an ancestor alias)
+        # project's primary seat (v2 uses <project>-memory)
         # instead (see scripts/recover-grid.sh / docs
         # ITERM_TMUX_REFERENCE.md §3.1.1). This hook is idempotent:
         # if no misroute exists it prints "ok" and exits 0.
@@ -755,14 +757,14 @@ class SessionService:
                 project = session_name.split("-", 1)[0]
         if not project:
             return
-        # Skip ancestor + memory — their panes aren't the misroute victims
+        # Skip primary-seat ids — their panes aren't the misroute victims.
         seat_id = getattr(session, "engineer_id", "") or ""
         if seat_id in ("ancestor", "memory"):
             return
         recover_script = _REPO_ROOT / "scripts" / "recover-grid.sh"
         if not recover_script.exists():
             return
-        # Append stdout+stderr to a durable log so ancestor / operator can
+        # Append stdout+stderr to a durable log so memory / operator can
         # diagnose silent recover-grid failures (RCA 2026-04-25).
         log_path = real_user_home() / ".clawseat" / ".agent" / "task-watch" / "grid-recovery.log"
         try:

@@ -122,7 +122,7 @@ def test_ancestor_brief_defaults_to_real_home_under_sandbox(monkeypatch, tmp_pat
     assert ancestor_brief._render_path(real_home / ".agents" / "tasks") == "~/.agents/tasks"
 
     written = ancestor_brief.write_brief(ctx)
-    assert written == real_home / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    assert written == real_home / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "memory-bootstrap.md"
 
 
 def test_launcher_discover_uses_real_home_override(monkeypatch, tmp_path: Path) -> None:

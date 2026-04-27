@@ -137,7 +137,7 @@ def test_install_detects_ark_candidate_and_applies_default_model(tmp_path: Path)
     assert "ARK 火山方舟" in result.stdout
 
     provider_env = (
-        home / ".agents" / "tasks" / "arkmenu50" / "ancestor-provider.env"
+        home / ".agents" / "tasks" / "arkmenu50" / "memory-provider.env"
     ).read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=sk-ark-menu" in provider_env
     assert "ANTHROPIC_BASE_URL=https://ark.cn-beijing.volces.com/api/coding" in provider_env
@@ -191,7 +191,7 @@ def test_install_provider_ark_with_api_key_auto_fills_base_url_and_model(tmp_pat
     assert "Using forced provider: ark" in result.stdout
 
     provider_env = (
-        home / ".agents" / "tasks" / "arkforce50" / "ancestor-provider.env"
+        home / ".agents" / "tasks" / "arkforce50" / "memory-provider.env"
     ).read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=sk-ark-force" in provider_env
     assert "ANTHROPIC_BASE_URL=https://ark.cn-beijing.volces.com/api/coding" in provider_env

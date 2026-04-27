@@ -23,9 +23,9 @@
 ### #1 brief 模板硬编码 5-worker，与 minimal 4-seat 不一致 — 🟠 HIGH
 
 **症状**:
-- `core/templates/ancestor-brief.template.md` 写死 `planner, builder, reviewer, qa, designer` (5 workers)
+- `core/templates/memory-bootstrap.template.md` 写死 `planner, builder, reviewer, qa, designer` (5 workers)
 - minimal 模板只有 `planner, builder, designer` (3 workers, no reviewer/no qa)
-- 渲染出的 `~/.agents/tasks/install/patrol/handoffs/ancestor-bootstrap.md` 让 memory seat 按 5-seat 心智 spawn，会失败
+- 渲染出的 `~/.agents/tasks/install/patrol/handoffs/memory-bootstrap.md` 让 memory seat 按 5-seat 心智 spawn，会失败
 
 **当前缓解**: ancestor 在 install 时手动 sed 修补（删除 reviewer/qa 字面量），但模板源头没改
 
@@ -369,16 +369,16 @@ if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
 
 **修复设计**:
 1. 删除 install.sh `auto_send_phase_a_kickoff()` + Step 9.5 整段
-2. 改成：install.sh 跑完 Step 9（focus pane）后**直接退出**，把 kickoff prompt 写到 `~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt`
+2. 改成：install.sh 跑完 Step 9（focus pane）后**直接退出**，把 kickoff prompt 写到 `~/.agents/tasks/<project>/patrol/handoffs/memory-kickoff.txt`
 3. install.sh 末尾 banner 给 operator 3 个明确选项:
    ```
    ✔ Install complete. <project>-memory pane is ready.
    To start Phase-A, choose one:
      A) Existing install-memory will dispatch kickoff to <project>-memory:
         bash <path>/send-and-verify.sh --project <project> <project>-memory \
-          "$(cat ~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt)"
+          "$(cat ~/.agents/tasks/<project>/patrol/handoffs/memory-kickoff.txt)"
      B) Manual paste — open <project>-memory pane, copy the prompt from:
-        cat ~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt
+        cat ~/.agents/tasks/<project>/patrol/handoffs/memory-kickoff.txt
         and paste into the Claude Code prompt
      C) install-memory dispatches automatically:
         say "dispatch arena kickoff" to install-memory in chat
@@ -580,21 +580,21 @@ MEMORY_WORKSPACE=$HOME/.agents/workspaces/$PROJECT/memory 有正確的 CLAUDE.md
 
 ---
 
-### #29 ancestor-kickoff.txt → memory-kickoff.txt artifact rename — 🟡 MEDIUM (deferred)
+### #29 memory-kickoff.txt → memory-kickoff.txt artifact rename — 🟡 MEDIUM (deferred)
 
 **来源**: designer visual QA (pkg-visual-qa-designer-review) MEDIUM #2
 
 **症状**: install.sh 生成的 artifact 文件名仍用 ancestor 词汇：
-- `~/.agents/tasks/<project>/patrol/handoffs/ancestor-kickoff.txt`
-- `~/.agents/tasks/<project>/patrol/handoffs/ancestor-bootstrap.md`
-- CLAWSEAT_ANCESTOR_BRIEF env var
+- `~/.agents/tasks/<project>/patrol/handoffs/memory-kickoff.txt`
+- `~/.agents/tasks/<project>/patrol/handoffs/memory-bootstrap.md`
+- CLAWSEAT_MEMORY_BRIEF env var
 
 **缓解**: 这些文件名只影响文件系统可见性和 env var 名字，功能不受影响。
 operator 已知晓，A' 决策时明确 defer（breaking change：现有项目的 kickoff.txt 路径在 OPERATOR-START-HERE 里硬编码）。
 
 **修复时机**: 可以在 M2 期间或单独 micro-PR 处理。改法：
 - install.sh `BRIEF_PATH` / `KICKOFF_PATH` 变量改为 memory-kickoff.txt / bootstrap-brief.md
-- CLAWSEAT_ANCESTOR_BRIEF → CLAWSEAT_MEMORY_BRIEF (加 compat alias)
+- CLAWSEAT_MEMORY_BRIEF → CLAWSEAT_MEMORY_BRIEF (加 compat alias)
 - OPERATOR-START-HERE 路径同步
 
 **Owner**: builder-codex
@@ -671,7 +671,7 @@ e. **osascript fallback path**: 如果 ensure-mode 检测不到 tab 但 osascrip
 
 #### A. brief 模板没 vocab refresh
 
-`core/templates/ancestor-brief.template.md` 仍含:
+`core/templates/memory-bootstrap.template.md` 仍含:
 - "你是 ClawSeat **始祖 CC**"（应 "project-memory"）
 - "六宫格"（应 "workers + memories 双窗口"）
 - "monitor grid: clawseat-cartooner"（应 `clawseat-cartooner-workers` + `clawseat-memories`）
@@ -701,7 +701,7 @@ e. **osascript fallback path**: 如果 ensure-mode 检测不到 tab 但 osascrip
 **修复方案**:
 
 **A 修复**:
-- core/templates/ancestor-brief.template.md 全文重写（按 RFC-002 §1-§9 vocab）
+- core/templates/memory-bootstrap.template.md 全文重写（按 RFC-002 §1-§9 vocab）
 - "始祖 CC" → "project-memory"; "六宫格" → "workers/memories 双窗口"; "machine-memory-claude" 删除引用
 - skill path 引用全部 `clawseat-ancestor` → `clawseat-memory`
 
@@ -771,7 +771,7 @@ memory: heartbeat provisioning currently targets Claude sessions only
 
 ### #33 brief 不强制 project.toml seat_overrides 权威 → planner provider 幻觉 — 🟠 HIGH
 
-**症状（2026-04-27 cartooner-memory 实测）**: cartooner-memory B0 写出的 ancestor-provider-decision.md 含:
+**症状（2026-04-27 cartooner-memory 实测）**: cartooner-memory B0 写出的 memory-provider-decision.md 含:
 ```
 planner: gemini / oauth / google
 ```
@@ -794,7 +794,7 @@ brief 没显式说"project.toml seat_overrides 是 SSOT，不许覆盖"，导致
    不许根据 machine credentials 推断或 override。
    如果 seat_overrides 不存在某 seat，才能 fallback 到 template default。
    ```
-2. ancestor-provider-decision.md 模板加显式字段:
+2. memory-provider-decision.md 模板加显式字段:
    ```
    ## project.toml authority check
    - Source: ~/.agents/projects/<project>/project.toml
@@ -809,7 +809,7 @@ brief 没显式说"project.toml seat_overrides 是 SSOT，不许覆盖"，导致
 **test_policy**: UPDATE
 
 **验收**:
-- 装 cartooner（project.toml planner=claude） → memory ancestor-provider-decision.md 必须写 planner=claude
+- 装 cartooner（project.toml planner=claude） → memory memory-provider-decision.md 必须写 planner=claude
 - agent_admin 拒绝 spawn 跟 project.toml 不一致的 seat（除非 --accept-override）
 - brief grep 显示 "project.toml seat_overrides 是 SSOT" 字样
 

@@ -140,7 +140,7 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
     assert "xcode-best" in combined
     assert "Provider URL will be auto-configured to https://xcode.best" in combined
 
-    provider_env = (home / ".agents" / "tasks" / "xcodemenu50" / "ancestor-provider.env").read_text(encoding="utf-8")
+    provider_env = (home / ".agents" / "tasks" / "xcodemenu50" / "memory-provider.env").read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=sk-xcode-menu" in provider_env
     assert "ANTHROPIC_BASE_URL=https://xcode.best" in provider_env
 
@@ -168,7 +168,7 @@ def test_install_provider_xcode_best_with_api_key_auto_fills_base_url(tmp_path: 
     assert "Using forced provider: xcode-best (base_url=https://xcode.best)" in combined
     assert "Provider URL will be auto-configured to https://xcode.best" in combined
 
-    provider_env = (home / ".agents" / "tasks" / "xcodeforce50" / "ancestor-provider.env").read_text(encoding="utf-8")
+    provider_env = (home / ".agents" / "tasks" / "xcodeforce50" / "memory-provider.env").read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=sk-xcode-force" in provider_env
     assert "ANTHROPIC_BASE_URL=https://xcode.best" in provider_env
 

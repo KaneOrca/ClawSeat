@@ -697,7 +697,7 @@ PY
   local seat_id="${CLAWSEAT_SEAT:-${CLAWSEAT_ENGINEER_ID:-}}"
   # Fallback: infer seat_id from session_name when env not passed.
   # session_name formats: "<project>-<seat>-<tool>", primary-seat overrides
-  # such as "<project>-ancestor" / "<project>-memory", or "machine-memory-<tool>"
+  # such as "<project>-memory", or "machine-memory-<tool>"
   if [[ -z "$seat_id" && -n "$session_name" ]]; then
     local _project="${CLAWSEAT_PROJECT:-}"
     local _candidate="$session_name"

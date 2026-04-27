@@ -1,24 +1,24 @@
-# Ancestor Bootstrap Brief — Schema v0.1
+# Memory Bootstrap Brief — Schema v0.1
 
 > **Status**: Legacy reference for `core/tui/ancestor_brief.py`, not the v0.7
 > install SSOT.
-> **Consumer**: ancestor seat (via `clawseat-ancestor` skill)
+> **Consumer**: memory seat (via `clawseat-memory` skill)
 > **Producer**: historical `core/tui/ancestor_brief.py` renderer. The current
-> v0.7 install path renders `core/templates/ancestor-brief.template.md` from
+> v0.7 install path renders `core/templates/memory-bootstrap.template.md` from
 > `scripts/install.sh`.
 > **Format**: Markdown with a leading fenced YAML metadata block so both
-> humans and the ancestor skill can parse deterministically.
-> **Location**: `~/.agents/tasks/<project>/patrol/handoffs/ancestor-bootstrap.md`
+> humans and the memory skill can parse deterministically.
+> **Location**: `~/.agents/tasks/<project>/patrol/handoffs/memory-bootstrap.md`
 
 When this file conflicts with [`docs/INSTALL.md`](../INSTALL.md),
-[`core/skills/clawseat-ancestor/SKILL.md`](../../core/skills/clawseat-ancestor/SKILL.md),
-or [`core/templates/ancestor-brief.template.md`](../../core/templates/ancestor-brief.template.md),
+[`core/skills/clawseat-memory/SKILL.md`](../../core/skills/clawseat-memory/SKILL.md),
+or [`core/templates/memory-bootstrap.template.md`](../../core/templates/memory-bootstrap.template.md),
 the v0.7 install playbook and current template win. Some examples below retain
 pre-v0.7 assumptions for legacy renderer coverage and historical context.
 
 ## Why a brief
 
-The ancestor boots into an empty state. It needs a deterministic, file-based
+The memory boots into an empty state. It needs a deterministic, file-based
 handoff that tells it:
 
 - which project it belongs to
@@ -30,9 +30,9 @@ handoff that tells it:
 
 File-based (not `tmux send-keys`) because:
 
-1. Idempotent. Ancestor can re-read on crash-recovery without replaying
+1. Idempotent. memory can re-read on crash-recovery without replaying
    keystrokes that may have been truncated or applied mid-prompt.
-2. Reviewable. Operators can inspect what the ancestor saw.
+2. Reviewable. Operators can inspect what the memory seat saw.
 3. Diffable. Bootstrap runs across time compared via `git diff`.
 
 ## Envelope
@@ -42,7 +42,7 @@ block delimited by `---` lines, followed by human-readable sections.
 
 ```
 ---
-brief_schema: ancestor-bootstrap
+brief_schema: memory-bootstrap
 brief_schema_version: 0.1
 brief_generated_at: 2026-04-21T22:45:00+08:00
 brief_generator: core/tui/ancestor_brief.py
@@ -56,12 +56,12 @@ openclaw_tenant_workspace: ~/.openclaw/workspace-yu
 feishu_group_binding: null    # project-local binding not yet written
 
 seats_declared:
-  - role: ancestor
+  - role: memory
     sessions: [install-memory]
     tool: claude
     auth_mode: oauth_token
     provider: anthropic
-    state: alive         # ancestor is already up (that's us)
+    state: alive         # memory is already up (that's us)
   - role: planner
     sessions: [install-planner-claude]
     tool: claude
@@ -104,13 +104,13 @@ observability:
     - chain.closeout
     - seat.blocked_on_modal
     - seat.context_near_limit
-  feishu_sender_seat: ancestor
+  feishu_sender_seat: memory
   feishu_lark_cli_identity: planner    # shared OAuth per 2026-04-21 Q2=a
 
 clawseat_root: /Users/ywf/ClawSeat
 ---
 
-# Ancestor bootstrap brief — <project>
+# Memory bootstrap brief — <project>
 
 ... human-readable narrative follows ...
 ```
@@ -119,18 +119,18 @@ clawseat_root: /Users/ywf/ClawSeat
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `brief_schema` | string | yes | always `"ancestor-bootstrap"` |
+| `brief_schema` | string | yes | always `"memory-bootstrap"` |
 | `brief_schema_version` | string | yes | semver; breaking changes bump major |
 | `brief_generated_at` | ISO-8601 timestamp w/ offset | yes | UTC+08 in practice |
 | `brief_generator` | string | yes | human-readable producer id |
 | `project` | string | yes | matches `profile.project_name` |
 | `profile_path` | path string (may start `~`) | yes | absolute or tilde-prefixed |
 | `profile_version` | int | yes | must equal 2 for v0.4 |
-| `machine_config_path` | path string or null | yes | null → ancestor must alert and DO NOT auto-create |
+| `machine_config_path` | path string or null | yes | null → memory must alert and DO NOT auto-create |
 | `openclaw_tenant` | string | yes | matches `profile.openclaw_frontstage_agent` |
 | `openclaw_tenant_workspace` | path string | yes | tenant workspace parent |
 | `feishu_group_binding` | string or null | yes | project-local binding path; null → Phase A B5 must run |
-| `seats_declared` | list of seat objects | yes | includes ancestor (with state=alive); other roles state=pending or alive if already spawned |
+| `seats_declared` | list of seat objects | yes | includes memory (with state=alive); other roles state=pending or alive if already spawned |
 | `seats_declared[].role` | enum | yes | one of v0.4 LEGAL_SEAT_ROLES |
 | `seats_declared[].sessions` | list of strings | yes | tmux session names (exact, for `tmux has-session -t '='`). One entry for singleton roles; `parallel_instances` entries for fan-out roles (builder/reviewer/qa). Suffix convention: `<project>-<role>-<N>-<tool>`. |
 | `seats_declared[].tool` | enum | yes | from profile.seat_overrides |
@@ -139,16 +139,16 @@ clawseat_root: /Users/ywf/ClawSeat
 | `seats_declared[].parallel_instances` | int or absent | no | present only for builder/reviewer/qa |
 | `seats_declared[].state` | enum | yes | `alive` \| `pending` \| `dead` |
 | `machine_services_required` | list of strings | yes | must appear in machine.toml.services |
-| `checklist_phase_a` | list of strings | yes | stable ordered tokens; ancestor crosses them off |
+| `checklist_phase_a` | list of strings | yes | stable ordered tokens; memory crosses them off |
 | `checklist_phase_b_cadence_minutes` | int | yes | patrol interval |
 | `observability.feishu_events_whitelist` | list of enum strings | yes | mirrors profile.observability.announce_event_types |
-| `observability.feishu_sender_seat` | string | yes | always `"ancestor"` |
+| `observability.feishu_sender_seat` | string | yes | always `"memory"` |
 | `observability.feishu_lark_cli_identity` | enum | yes | `"planner"` per current decision; future values may widen |
 | `clawseat_root` | absolute path | yes | `{CLAWSEAT_ROOT}` expanded |
 
 ## Phase-A checklist token semantics
 
-The `checklist_phase_a` list is the ancestor skill's ordered step plan.
+The `checklist_phase_a` list is the memory skill's ordered step plan.
 Each token has a fixed contract.
 
 | Token | Meaning | Success signal | Failure handling |
@@ -162,7 +162,7 @@ Each token has a fixed contract.
 | `B7-write-status-ready` | Write `~/.agents/tasks/<project>/STATUS.md` with `phase=ready`, then enter Phase-B (no operator ack gate) | file present | hard failure (disk issue) |
 
 **Note**: B8 (await-operator-ack) was removed in v0.1. Rationale: the install
-playbook already surfaces runtime selection and binding inputs before ancestor
+playbook already surfaces runtime selection and binding inputs before memory
 is launched; a second "ack before patrol" gate provides no additional
 information. Phase-B patrol is benign (read-only observation +
 restart-dead-seats) so unconditionally entering it after B7 is safe.
@@ -171,7 +171,7 @@ restart-dead-seats) so unconditionally entering it after B7 is safe.
 
 Phase B is **manual-by-default** since Round-8. Triggers:
 
-1. **Operator natural-language request** (primary): ancestor skill §3.0
+1. **Operator natural-language request** (primary): memory skill §3.0
    recognizes keywords (`巡检` / `稳态检查` / `Phase-B 巡检` / `扫一下 seat`
    / `patrol 一次` / `patrol` / `scan seats` / `Phase-B patrol` /
    `liveness check`) and runs one P1..P7 cycle per request.
@@ -179,27 +179,27 @@ Phase B is **manual-by-default** since Round-8. Triggers:
 2. **Optional external `launchd` plist** (opt-in via
    `scripts/install.sh --enable-auto-patrol --project <name>`; default
    install does NOT install the plist). When enabled, template at
-   `core/templates/ancestor-patrol.plist.in` renders a LaunchAgent that
+   `core/templates/qa-patrol.plist.in` renders a LaunchAgent that
    every `checklist_phase_b_cadence_minutes` minutes resolves the
-   canonical ancestor session via `agentctl.sh session-name ancestor
+   canonical memory session via `agentctl.sh session-name memory
    --project <project>` and sends a bilingual natural-language Phase-B
    request ("请按 SKILL §3 做一次 Phase-B 稳态巡检（P1..P7）。Please
    run one Phase-B patrol cycle per SKILL §3.") through
-   `send-and-verify.sh`. Ancestor skill §3.0 recognizes it via the
+   `send-and-verify.sh`. memory skill §3.0 recognizes it via the
    same natural-language trigger and executes P1..P7 in one turn.
 
 The legacy `/patrol-tick` slash token has been retired — Claude Code's
 built-in slash-command resolver rejects unregistered `/xxx` tokens with
 "Unknown command: /patrol-tick", so the token never actually reached
-ancestor as model input. Natural language is the canonical form.
+memory as model input. Natural language is the canonical form.
 
-Phase B runs until the project is archived (ancestor never retires on
+Phase B runs until the project is archived (memory never retires on
 its own).
 
-Ancestor does NOT run an in-process `sleep`-loop. Patrol cadence is:
+memory does NOT run an in-process `sleep`-loop. Patrol cadence is:
 
 - **default**: event-driven by operator natural-language request (no
-  cadence; ancestor responds when asked).
+  cadence; memory responds when asked).
 - **opt-in via `--enable-auto-patrol`**: the OS scheduler (`launchd`
   plist) owns cadence — every `checklist_phase_b_cadence_minutes`
   minutes the plist injects a natural-language Phase-B request
@@ -207,7 +207,7 @@ Ancestor does NOT run an in-process `sleep`-loop. Patrol cadence is:
 
 ## Idempotency requirements
 
-Ancestor may re-read the brief on crash-recovery. Before executing any
+Memory may re-read the brief on crash-recovery. Before executing any
 B-step, it checks whether the step was already done:
 
 - `B2`: re-verify memory each time (it's cheap)
@@ -218,24 +218,24 @@ B-step, it checks whether the step was already done:
 - `B7`: re-write is safe (overwrite semantics)
 
 Never mutate this brief file. Progress is tracked in STATUS.md + the
-ancestor seat's own workspace journal, NOT by rewriting the brief.
+memory seat's own workspace journal, NOT by rewriting the brief.
 
 ## Versioning policy
 
 - `0.x` = TUI-engineer-provisional, subject to architect veto
 - `1.0` = architect sign-off, stable through all v0.4.x ClawSeat releases
 - `2.0` = only bumped when a seat-role change invalidates existing briefs;
-  ancestor skill must then support both schemas for one release cycle
+  memory skill must then support both schemas for one release cycle
 
 ## Architect decisions (2026-04-21, closed)
 
 - Brief format: YAML front-matter + Markdown body — **APPROVED**.
 - `seats_declared[].state` enum: `alive | pending | dead` (no `dying`) — **APPROVED**.
 - B0-preflight: **not added**; B1 implicitly parses the YAML block.
-- Feishu identity: uses planner's lark-cli OAuth + `sender_seat: ancestor` header; no separate audit log in v0.1.
+- Feishu identity: uses planner's lark-cli OAuth + `sender_seat: memory` header; no separate audit log in v0.1.
 - B8 (await-operator-ack): **removed**; see note in Phase-A checklist above.
 - `seats_declared[].session` → `sessions: list[str]`: fan-out roles expand to one entry per instance (§N-2).
-- B2 semantics: verify-**or**-launch memory; ancestor owns machine-service launch (§B2 revision).
+- B2 semantics: verify-**or**-launch memory; memory owns machine-service launch (§B2 revision).
 - B5 semantics: verify project-local `feishu_group_id` already written by the launcher (§B5 revision); memory does NOT prompt operator (would violate N1 in responsibilities.md).
 - Phase-B trigger: **manual-by-default** (operator natural-language request); optional `launchd` plist via `--enable-auto-patrol` injects a bilingual natural-language request through `send-and-verify.sh`. `/patrol-tick` slash token retired in Round-8 (rejected by Claude Code slash resolver). See §"Phase-B patrol semantics" above.
 

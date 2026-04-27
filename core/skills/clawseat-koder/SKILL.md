@@ -123,7 +123,15 @@ The OpenClaw workspace has four canonical files:
 
 Legacy `SOUL.md`, `AGENTS.md`, and `TOOLS/*` files are obsolete for Koder v2.
 
-## 10. Anti-Patterns
+## 10. Deploy Checklist
+
+- Confirm Memory's `Feishu requireMention 双层配置` cookbook has been followed.
+- Layer 1: `openclaw.json` has `requireMention: true`.
+- Layer 2: Feishu group bot setting requires @ before replying.
+- Verify a normal @ Koder group message reaches Koder webhook logs under
+  `~/.openclaw/logs/`.
+
+## 11. Anti-Patterns
 
 - answering business questions directly instead of routing to Memory
 - saving durable decision state in the Koder workspace
@@ -132,7 +140,7 @@ Legacy `SOUL.md`, `AGENTS.md`, and `TOOLS/*` files are obsolete for Koder v2.
 - broadcasting before the privacy gate
 - guessing project routing when the five-step ladder cannot resolve
 
-## 11. Acceptance
+## 12. Acceptance
 
 - valid payload to Feishu card in <=30 seconds
 - button click to Memory session in <=5 seconds

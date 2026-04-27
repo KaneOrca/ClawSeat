@@ -8,7 +8,7 @@
 
 执行任何 shell 命令前，必须先查 canonical：
 
-1. `grep` `$CLAWSEAT_ANCESTOR_BRIEF` 找场景关键字（如 `重启`、`切换`、`lark-cli`、`window`、`seed`）
+1. `grep` `$CLAWSEAT_MEMORY_BRIEF` 找场景关键字（如 `重启`、`切换`、`lark-cli`、`window`、`seed`）
 2. 命中 Cookbook → 直接用 cookbook 里的 canonical 命令
 3. 未命中 Cookbook → 再 `grep` `${CLAWSEAT_ROOT}/core/skills/clawseat-memory/SKILL.md`
 4. 仍未命中 → 报 operator："Cookbook 没覆盖此场景，请提供命令"
@@ -75,7 +75,7 @@ bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>
 kickoff 文本由 `install.sh` 写入：
 
 ```bash
-${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/patrol/handoffs/ancestor-kickoff.txt
+${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/patrol/handoffs/memory-kickoff.txt
 ```
 
 operator 可以选择用 `send-and-verify.sh` 发送该文件内容，或手动 `cat` 后粘贴。收到 kickoff 后再按下面 B0-B7 顺序执行。
@@ -96,7 +96,7 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/projects_registry.py validate ${PROJECT_NA
 memory MUST spawn seats per `seat_overrides` `tool` / `auth_mode` / `provider` literally.
 Do NOT infer provider from machine credentials or override without explicit operator flag.
 If `seat_overrides` does not include a seat, fall back to template default.
-Before writing `ancestor-provider-decision.md`, explicitly ack:
+Before writing `memory-provider-decision.md`, explicitly ack:
 
 ```text
 Read project.toml seat_overrides: N overrides found. Decisions match overrides: yes/no
@@ -107,7 +107,7 @@ Read project.toml seat_overrides: N overrides found. Decisions match overrides: 
 `install.sh` 在 Step 3（`select_provider`）+ `bootstrap_project_profile` 已把 operator 的 provider 选择写进 `project-local.toml`，每个 seat 都有一条 `[[overrides]]`。B0 不应重新跑一遍 env_scan LLM 分析让 operator 再选一次——先读已有决策，展示给 operator 确认（Enter 沿用 / 输入覆盖）：
 
 ```bash
-# 注意：ancestor 运行在 sandbox HOME（launcher 导的 $HOME != real home）；
+# 注意：memory 运行在 sandbox HOME（launcher 导的 $HOME != real home）；
 # project-local.toml 由 install.sh 写在 operator 真实 home 下，要读 $AGENT_HOME。
 python3 - <<'PY'
 import os, sys, tomllib
@@ -137,11 +137,11 @@ PY
 ```
 
 operator 选"沿用"：把 overrides 内容作为 B0 决策写到
-`${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/ancestor-provider-decision.md`，仍跑 B0.0 memory query（强制不变），然后**跳过 B0.0.1**，进 B1。
+`${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/memory-provider-decision.md`，仍跑 B0.0 memory query（强制不变），然后**跳过 B0.0.1**，进 B1。
 
 operator 选"自定义"：继续走完 B0.0 memory query 和 B0.0.1 env_scan 原流程。
 
-`ancestor-provider-decision.md` 必须包含：
+`memory-provider-decision.md` 必须包含：
 
 ```markdown
 ## project.toml authority check
@@ -168,7 +168,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 - 每个的登录方式（api_key / oauth / ccr）
 - **推荐最优组合**（优先 claude-code + 国产 API key，说明成本根因）
 - 列出可选替代方案
-向用户确认或采纳自定义方案后，写决定到 `${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/ancestor-provider-decision.md`。
+向用户确认或采纳自定义方案后，写决定到 `${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/memory-provider-decision.md`。
 
 ### B1 — 解析 brief
 （读本文件即完成）
@@ -226,9 +226,9 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 
 ```bash
 [ "$(echo "$PROJECT_NAME")" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
-ancestor_session="$(tmux display-message -p '#{session_name}')"
-echo "scope: project=$PROJECT_NAME ancestor_session=$ancestor_session"
-[ "$ancestor_session" = "${PRIMARY_SESSION_NAME}" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
+memory_session="$(tmux display-message -p '#{session_name}')"
+echo "scope: project=$PROJECT_NAME memory_session=$memory_session"
+[ "$memory_session" = "${PRIMARY_SESSION_NAME}" ] || { echo "ARCH_VIOLATION: memory 身份错位"; exit 1; }
 ```
 
 scope 不匹配 → halt，并告知 operator 先修正当前 iTerm / tmux 归属，不要继续 spawn seat。
@@ -516,7 +516,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 | 场景 | 命令 |
 |------|------|
-| 检查自己是否过时 | `bash ${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh` |
+| 检查自己是否过时 | `bash ${CLAWSEAT_ROOT}/scripts/memory-brief-mtime-check.sh` |
 
 ### 通讯
 

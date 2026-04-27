@@ -5,7 +5,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
-_BRIEF = _REPO / "core" / "templates" / "ancestor-brief.template.md"
+_BRIEF = _REPO / "core" / "templates" / "memory-bootstrap.template.md"
 
 
 def test_skill_has_auth_decision_tree() -> None:

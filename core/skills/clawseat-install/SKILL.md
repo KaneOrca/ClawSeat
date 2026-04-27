@@ -45,7 +45,7 @@ saved per-seat harness choices).
 
 Important:
 - `scripts/install.sh` is the L1 user-facing entrypoint. Do not replace it
-  with `scripts/launch_ancestor.sh`, direct `agent-launcher.sh`, or ad-hoc
+  with direct `agent-launcher.sh` or ad-hoc
   `tmux` commands for fresh installs.
 - When the provider menu appears in a non-interactive or CI-style run, use the
   documented `--provider 1` / `CLAWSEAT_INSTALL_PROVIDER=1` path from
@@ -87,8 +87,8 @@ Follow the runtime boundaries in `docs/INSTALL.md` and `docs/ARCHITECTURE.md`:
   releases.
 - Do **not** rely on the old batch flags from the removed installer
   surface.
-- Do **not** call `scripts/launch_ancestor.sh` for fresh install. That is a
-  legacy helper, not the canonical v0.7 bootstrap path.
+- Do **not** resurrect retired direct primary-seat launch helpers for fresh install.
+  They are not the canonical v0.7 bootstrap path.
 - Do **not** invoke `/cs` for fresh installs — `/cs` is a separate
   resumer skill for "memory crashed, come back up"; it does not
   replace the v0.7 playbook.

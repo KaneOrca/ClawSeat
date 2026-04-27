@@ -35,9 +35,9 @@
 **文档**:
 - `docs/INSTALL.md:298, 363` — install 流程文档
 - `docs/rfc/SESSION-HANDOFF-2026-04-26.md` — handoff 快照（保留作历史，不改）
-- `docs/schemas/ancestor-bootstrap-brief.md`
+- `docs/schemas/memory-bootstrap-brief.md`
 - `docs/rfc/RFC-001-self-contained-project-architecture.md` — 提到 M4 删除（保留作设计依据）
-- `core/templates/ancestor-brief.template.md` — brief 模板
+- `core/templates/memory-bootstrap.template.md` — brief 模板
 
 **skill**:
 - `core/skills/clawseat-ancestor/SKILL.md` — Phase-A B2 检查 machine-memory-claude alive
@@ -72,7 +72,7 @@
 
 ---
 
-## C. [DONE] ancestor 命名漂移（核心心智问题）
+## C. [DONE-fully] ancestor 命名漂移（核心心智问题）
 
 **v2 决议**: 始祖 = SEAT 类型，每项目 1 个；tmux 名 `<project>-memory`（不是 `<project>-ancestor`）。`ancestor` 一词只用于设计文档说明"始祖角色"，**实际文件/变量/seat id 都用 `memory`**。
 
@@ -85,8 +85,8 @@
 - `core/launchers/agent-launcher.sh` — launcher 接受 seat id
 
 **模板/skill**:
-- `core/templates/ancestor-brief.template.md` — 整个 brief 用 "ancestor" 自称（应改 "memory"，但保留 "始祖" 作为角色术语）
-- `core/templates/ancestor-engineer.toml`
+- `core/templates/memory-bootstrap.template.md` — 主路径已改 memory，旧路径由 migration alias 兼容
+- `core/templates/ancestor-engineer.toml` — 已删除 v0.7 残留
 - `core/skills/clawseat-ancestor/SKILL.md` — 整个 skill 名 + 自称（建议改名 `clawseat-memory` 或加显式 alias）
 - `core/skills/clawseat/SKILL.md`
 - `core/skills/clawseat-koder/SKILL.md`
@@ -101,12 +101,12 @@
 - `CHANGELOG.md`
 - `core/launchers/README.md`
 
-**清扫策略**（**不是简单 sed 替换**）:
+**完成口径**（**不是简单 sed 替换**）:
 - "始祖" 一词作为**架构概念**保留（描述项目级 singleton seat 的角色）
 - "ancestor" 作为 **seat id / 文件名** 全部改 "memory"（保留 v1 legacy alias 双识别 ≥ 1 个 milestone）
 - skill `clawseat-ancestor` → 重命名 `clawseat-memory` + 加 frontmatter `aliases: [clawseat-ancestor]`
 - 自称 "我是 ancestor" → "我是 ${PROJECT}-memory（始祖 seat）"
-- 派 builder-codex 做（issue #15）
+- H' 已完成主路径文件/变量 rename；概念层文档可保留 ancestor 作为 v1/v2 历史术语。
 
 ---
 
@@ -144,7 +144,7 @@
 - `core/tui/ancestor_brief.py:76, 230` — parallel_instances 仅 builder/reviewer/qa
 
 **模板**:
-- `core/templates/ancestor-brief.template.md:325` — 临时短消息接收方含 reviewer/qa
+- `core/templates/memory-bootstrap.template.md:325` — 临时短消息接收方含 reviewer/qa
 - `core/templates/ancestor-engineer.toml:32` — 自我约束文案
 - `core/templates/gstack-harness/template.toml:3, 105` — gstack 模板
 
@@ -169,13 +169,13 @@
 
 ---
 
-## F. [DONE] `install-ancestor` 硬编码（issue #3/#12 部分覆盖）
+## F. [DONE-fully] `install-ancestor` 硬编码（issue #3/#12 部分覆盖）
 
 **已记录**: issue #3 (banner 文案)、#12 (recover-grid.sh + grid-recovery)、#13 (Python module)。
 
 **本审计补充清单**（除 #3/#12/#13 外）:
 - `docs/INSTALL.md:272, 298, 363, 550` — INSTALL 文档全程用 install-ancestor
-- `docs/schemas/ancestor-bootstrap-brief.md:60` — schema 例子
+- `docs/schemas/memory-bootstrap-brief.md:60` — schema 例子
 - `docs/schemas/v0.4-layered-model.md:379` — comment
 - `docs/ITERM_TMUX_REFERENCE.md:72, 84` — recovery 文档
 - `core/scripts/agent_admin_session.py:683` — comment

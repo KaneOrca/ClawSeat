@@ -48,7 +48,7 @@ def _capture_start_engineer_env(
         provider="minimax",
         secret_content="ANTHROPIC_AUTH_TOKEN=minimax-token\n",
     )
-    brief_path = real_home / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    brief_path = real_home / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "memory-bootstrap.md"
     brief_path.parent.mkdir(parents=True, exist_ok=True)
     brief_path.write_text("brief\n", encoding="utf-8")
 
@@ -76,12 +76,22 @@ def _capture_start_engineer_env(
 def test_start_engineer_ancestor_injects_brief_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     env = _capture_start_engineer_env(tmp_path, monkeypatch, engineer_id="ancestor")
 
-    expected_brief = tmp_path / "real-home" / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
+    expected_brief = tmp_path / "real-home" / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "memory-bootstrap.md"
+    assert env["CLAWSEAT_MEMORY_BRIEF"] == str(expected_brief)
     assert env["CLAWSEAT_ANCESTOR_BRIEF"] == str(expected_brief)
     assert env["CLAWSEAT_ROOT"] == str(tmp_path / "repo")
+
+
+def test_start_engineer_memory_injects_brief_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = _capture_start_engineer_env(tmp_path, monkeypatch, engineer_id="memory")
+
+    expected_brief = tmp_path / "real-home" / ".agents" / "tasks" / "install" / "patrol" / "handoffs" / "memory-bootstrap.md"
+    assert env["CLAWSEAT_MEMORY_BRIEF"] == str(expected_brief)
+    assert env["CLAWSEAT_ANCESTOR_BRIEF"] == str(expected_brief)
 
 
 def test_start_engineer_non_ancestor_does_not_inject_brief_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     env = _capture_start_engineer_env(tmp_path, monkeypatch, engineer_id="planner")
 
+    assert "CLAWSEAT_MEMORY_BRIEF" not in env
     assert "CLAWSEAT_ANCESTOR_BRIEF" not in env
