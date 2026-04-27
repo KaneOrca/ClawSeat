@@ -4,152 +4,458 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import sys
+import tempfile
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib
+
+
+SCHEMA_VERSION = 2
+VALID_STATUSES = {"active", "archived", "broken"}
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def registry_root() -> Path:
+    override = os.environ.get("CLAWSEAT_REGISTRY_HOME", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".clawseat"
+
 
 def registry_path() -> Path:
-    return Path.home() / ".clawseat" / "projects.json"
+    return registry_root() / "projects.json"
+
+
+def backup_path() -> Path:
+    return registry_path().with_suffix(".json.bak")
+
+
+@dataclass
+class ProjectEntry:
+    name: str
+    primary_seat: str
+    tmux_name: str
+    registered_at: str
+    primary_seat_tool: str = ""
+    template_name: str = ""
+    last_access: str = ""
+    status: str = "active"
+    metadata: dict[str, Any] = field(default_factory=dict)
+    repo_path: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "ProjectEntry":
+        registered_at = str(raw.get("registered_at") or _now())
+        status = str(raw.get("status") or "active")
+        if status not in VALID_STATUSES:
+            status = "broken"
+        metadata = raw.get("metadata")
+        return cls(
+            name=str(raw.get("name", "")).strip(),
+            primary_seat=str(raw.get("primary_seat") or raw.get("primary") or "").strip(),
+            primary_seat_tool=str(raw.get("primary_seat_tool") or "").strip(),
+            tmux_name=str(raw.get("tmux_name") or "").strip(),
+            template_name=str(raw.get("template_name") or "").strip(),
+            registered_at=registered_at,
+            last_access=str(raw.get("last_access") or registered_at),
+            status=status,
+            metadata=dict(metadata) if isinstance(metadata, dict) else {},
+            repo_path=str(raw.get("repo_path") or "").strip(),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        if not data["last_access"]:
+            data["last_access"] = data["registered_at"]
+        if data["status"] not in VALID_STATUSES:
+            data["status"] = "broken"
+        return data
 
 
 def _empty_registry() -> dict[str, Any]:
-    return {"version": 1, "projects": []}
+    return {"version": SCHEMA_VERSION, "projects": []}
 
 
-def load_registry() -> dict[str, Any]:
+def _decode_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _normalise_registry(raw: dict[str, Any]) -> dict[str, Any]:
+    projects: list[dict[str, Any]] = []
+    for item in raw.get("projects", []):
+        if not isinstance(item, dict):
+            continue
+        entry = ProjectEntry.from_dict(item)
+        if not entry.name:
+            continue
+        if not entry.primary_seat:
+            entry.primary_seat = "memory"
+        if not entry.tmux_name:
+            entry.tmux_name = f"{entry.name}-{entry.primary_seat}"
+        projects.append(entry.to_dict())
+    projects.sort(key=lambda item: item["name"])
+    return {"version": SCHEMA_VERSION, "projects": projects}
+
+
+def load_registry(*, recover: bool = True) -> dict[str, Any]:
     path = registry_path()
     if not path.exists():
         return _empty_registry()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        return _normalise_registry(_decode_json(path))
+    except Exception:
+        bak = backup_path()
+        if recover and bak.exists():
+            recovered = _normalise_registry(_decode_json(bak))
+            atomic_write(recovered)
+            return recovered
         return _empty_registry()
-    if not isinstance(data, dict):
-        return _empty_registry()
-    projects = data.get("projects")
-    if not isinstance(projects, list):
-        return _empty_registry()
-    return {"version": data.get("version", 1), "projects": projects}
 
 
-def _project_name(entry: Any) -> str | None:
-    if not isinstance(entry, dict):
-        return None
-    name = entry.get("name")
-    if isinstance(name, str) and name:
-        return name
+def atomic_write(data: dict[str, Any]) -> None:
+    root = registry_root()
+    root.mkdir(parents=True, exist_ok=True)
+    normalised = _normalise_registry(data)
+    path = registry_path()
+    fd, tmp_name = tempfile.mkstemp(prefix="projects.", suffix=".json", dir=str(root))
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(normalised, handle, indent=2, ensure_ascii=False, sort_keys=True)
+            handle.write("\n")
+        tmp.chmod(0o600)
+        os.replace(tmp, path)
+        shutil.copy2(path, backup_path())
+        backup_path().chmod(0o600)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def _project_index(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {str(item.get("name")): item for item in data.get("projects", []) if item.get("name")}
+
+
+def enumerate_projects(*, include_archived: bool = True) -> list[ProjectEntry]:
+    entries = [ProjectEntry.from_dict(item) for item in load_registry().get("projects", [])]
+    if include_archived:
+        return entries
+    return [entry for entry in entries if entry.status == "active"]
+
+
+def get_project(name: str) -> ProjectEntry | None:
+    for entry in enumerate_projects():
+        if entry.name == name:
+            return entry
     return None
 
 
-def _normalized_entry(entry: Any) -> dict[str, str] | None:
-    name = _project_name(entry)
-    if name is None or not isinstance(entry, dict):
-        return None
-    primary_seat = entry.get("primary_seat")
-    if not isinstance(primary_seat, str) or not primary_seat:
-        primary_seat = "memory"
-    tmux_name = entry.get("tmux_name")
-    if not isinstance(tmux_name, str) or not tmux_name:
-        tmux_name = f"{name}-{primary_seat}"
-    registered_at = entry.get("registered_at")
-    if not isinstance(registered_at, str):
-        registered_at = ""
-    return {
-        "name": name,
-        "primary_seat": primary_seat,
-        "tmux_name": tmux_name,
-        "registered_at": registered_at,
-    }
-
-
-def _utc_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def register_project(name: str, primary_seat: str, *, tmux_name: str | None = None) -> bool:
+def register_project(
+    name: str,
+    primary_seat: str,
+    *,
+    tmux_name: str = "",
+    primary_seat_tool: str = "",
+    template_name: str = "",
+    repo_path: str = "",
+    status: str = "active",
+    metadata: dict[str, Any] | None = None,
+) -> ProjectEntry:
+    if status not in VALID_STATUSES:
+        raise ValueError(f"invalid status {status!r}; expected one of {sorted(VALID_STATUSES)}")
     data = load_registry()
-    projects = data["projects"]
-    existing = {_project_name(entry) for entry in projects}
-    if name in existing:
-        return False
-
-    entry = {
-        "name": name,
-        "primary_seat": primary_seat,
-        "tmux_name": tmux_name or f"{name}-{primary_seat}",
-        "registered_at": _utc_timestamp(),
-    }
-    projects.append(entry)
-    _atomic_write(data)
-    return True
+    index = _project_index(data)
+    now = _now()
+    existing = ProjectEntry.from_dict(index[name]) if name in index else None
+    entry = ProjectEntry(
+        name=name,
+        primary_seat=primary_seat,
+        primary_seat_tool=primary_seat_tool or (existing.primary_seat_tool if existing else ""),
+        tmux_name=tmux_name or f"{name}-{primary_seat}",
+        template_name=template_name or (existing.template_name if existing else ""),
+        registered_at=existing.registered_at if existing else now,
+        last_access=now,
+        status=status,
+        metadata={**(existing.metadata if existing else {}), **(metadata or {})},
+        repo_path=repo_path or (existing.repo_path if existing else ""),
+    )
+    index[name] = entry.to_dict()
+    data["projects"] = list(index.values())
+    atomic_write(data)
+    return entry
 
 
 def unregister_project(name: str) -> bool:
     data = load_registry()
-    projects = data["projects"]
-    filtered = [entry for entry in projects if _project_name(entry) != name]
-    if len(filtered) == len(projects):
-        return False
-    data["projects"] = filtered
-    _atomic_write(data)
-    return True
+    before = len(data.get("projects", []))
+    data["projects"] = [item for item in data.get("projects", []) if item.get("name") != name]
+    atomic_write(data)
+    return len(data["projects"]) != before
 
 
-def enumerate_projects() -> list[dict[str, str]]:
-    return [
-        normalized
-        for entry in load_registry()["projects"]
-        if (normalized := _normalized_entry(entry)) is not None
-    ]
+def update_project(
+    name: str,
+    *,
+    status: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    repo_path: str | None = None,
+    template_name: str | None = None,
+    primary_seat_tool: str | None = None,
+) -> ProjectEntry:
+    data = load_registry()
+    index = _project_index(data)
+    if name not in index:
+        raise KeyError(name)
+    entry = ProjectEntry.from_dict(index[name])
+    if status is not None:
+        if status not in VALID_STATUSES:
+            raise ValueError(f"invalid status {status!r}; expected one of {sorted(VALID_STATUSES)}")
+        entry.status = status
+    if metadata:
+        entry.metadata.update(metadata)
+    if repo_path is not None:
+        entry.repo_path = repo_path
+    if template_name is not None:
+        entry.template_name = template_name
+    if primary_seat_tool is not None:
+        entry.primary_seat_tool = primary_seat_tool
+    index[name] = entry.to_dict()
+    data["projects"] = list(index.values())
+    atomic_write(data)
+    return entry
 
 
-def _atomic_write(data: dict[str, Any]) -> None:
-    path = registry_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    if tmp.exists():
-        tmp.unlink()
-
-    payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    opener = lambda file, flags: os.open(file, flags, 0o600)
-    with open(tmp, "w", encoding="utf-8", opener=opener) as handle:
-        handle.write(payload)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
-    os.chmod(path, 0o600)
+def touch_project(name: str) -> ProjectEntry | None:
+    entry = get_project(name)
+    if entry is None:
+        return None
+    data = load_registry()
+    index = _project_index(data)
+    entry.last_access = _now()
+    index[name] = entry.to_dict()
+    data["projects"] = list(index.values())
+    atomic_write(data)
+    return entry
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Manage ClawSeat active-project registry.")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+def _agents_root() -> Path:
+    override = os.environ.get("CLAWSEAT_AGENTS_HOME", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".agents"
 
-    register = subparsers.add_parser("register")
-    register.add_argument("name")
-    register.add_argument("primary_seat")
-    register.add_argument("tmux_name", nargs="?")
 
-    unregister = subparsers.add_parser("unregister")
-    unregister.add_argument("name")
+def _project_toml_path(project: str, agents_home: Path | None = None) -> Path:
+    root = agents_home or _agents_root()
+    return root / "projects" / project / "project.toml"
 
-    subparsers.add_parser("list")
+
+def _primary_from_toml(data: dict[str, Any]) -> str:
+    engineers = data.get("engineers")
+    if isinstance(engineers, list) and engineers:
+        return str(engineers[0])
+    embedded = data.get("engineer") or data.get("engineers_table") or []
+    if isinstance(embedded, list) and embedded:
+        first = embedded[0]
+        if isinstance(first, dict):
+            return str(first.get("id") or "")
+    return ""
+
+
+def _primary_tool_from_toml(data: dict[str, Any], primary: str) -> str:
+    overrides = data.get("seat_overrides")
+    if isinstance(overrides, dict):
+        primary_override = overrides.get(primary)
+        if isinstance(primary_override, dict) and primary_override.get("tool"):
+            return str(primary_override["tool"])
+    for item in data.get("engineer", []) if isinstance(data.get("engineer"), list) else []:
+        if isinstance(item, dict) and str(item.get("id")) == primary:
+            return str(item.get("tool") or item.get("default_tool") or "")
+    return ""
+
+
+def validate_registry_vs_project_toml(
+    project: str,
+    *,
+    agents_home: Path | None = None,
+) -> list[str]:
+    warnings: list[str] = []
+    entry = get_project(project)
+    if entry is None:
+        return [f"registry missing project {project}"]
+    path = _project_toml_path(project, agents_home)
+    if not path.exists():
+        return [f"project.toml missing for {project}: {path}"]
+    with path.open("rb") as handle:
+        project_data = tomllib.load(handle)
+    primary = _primary_from_toml(project_data)
+    if primary and entry.primary_seat != primary:
+        warnings.append(
+            f"primary_seat mismatch: registry={entry.primary_seat} project.toml={primary}"
+        )
+    primary_tool = _primary_tool_from_toml(project_data, primary)
+    if primary_tool and entry.primary_seat_tool and entry.primary_seat_tool != primary_tool:
+        warnings.append(
+            f"primary_seat_tool mismatch: registry={entry.primary_seat_tool} project.toml={primary_tool}"
+        )
+    template_name = str(project_data.get("template_name") or "")
+    if template_name and entry.template_name and entry.template_name != template_name:
+        warnings.append(
+            f"template_name mismatch: registry={entry.template_name} project.toml={template_name}"
+        )
+    return warnings
+
+
+def _metadata_items(items: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"metadata must be key=value, got {item!r}")
+        key, value = item.split("=", 1)
+        result[key] = value
+    return result
+
+
+def _cmd_list(args: argparse.Namespace) -> int:
+    entries = enumerate_projects(include_archived=not args.active_only)
+    if args.json:
+        print(json.dumps([entry.to_dict() for entry in entries], ensure_ascii=False, indent=2))
+    else:
+        for entry in entries:
+            print(f"{entry.name}\t{entry.status}\t{entry.primary_seat}\t{entry.last_access}")
+    return 0
+
+
+def _cmd_show(args: argparse.Namespace) -> int:
+    entry = get_project(args.project)
+    if entry is None:
+        print(f"project not found: {args.project}", file=sys.stderr)
+        return 1
+    print(json.dumps(entry.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_register(args: argparse.Namespace) -> int:
+    entry = register_project(
+        args.project,
+        args.primary_seat,
+        tmux_name=args.tmux_name or "",
+        primary_seat_tool=args.primary_seat_tool or "",
+        template_name=args.template_name or "",
+        repo_path=args.repo_path or "",
+        status=args.status,
+        metadata=_metadata_items(args.metadata or []),
+    )
+    print(json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_unregister(args: argparse.Namespace) -> int:
+    removed = unregister_project(args.project)
+    print(f"unregistered {args.project}" if removed else f"not registered {args.project}")
+    return 0 if removed else 1
+
+
+def _cmd_update(args: argparse.Namespace) -> int:
+    try:
+        entry = update_project(
+            args.project,
+            status=args.status,
+            metadata=_metadata_items(args.metadata or []),
+            repo_path=args.repo_path,
+            template_name=args.template_name,
+            primary_seat_tool=args.primary_seat_tool,
+        )
+    except KeyError:
+        print(f"project not found: {args.project}", file=sys.stderr)
+        return 1
+    print(json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_touch(args: argparse.Namespace) -> int:
+    entry = touch_project(args.project)
+    if entry is None:
+        print(f"project not found: {args.project}", file=sys.stderr)
+        return 1
+    print(json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    warnings = validate_registry_vs_project_toml(args.project)
+    for warning in warnings:
+        print(f"warn: {warning}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="projects_registry.py")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    list_cmd = sub.add_parser("list")
+    list_cmd.add_argument("--json", action="store_true")
+    list_cmd.add_argument("--active-only", action="store_true")
+    list_cmd.set_defaults(func=_cmd_list)
+
+    show_cmd = sub.add_parser("show")
+    show_cmd.add_argument("project")
+    show_cmd.set_defaults(func=_cmd_show)
+
+    register_cmd = sub.add_parser("register")
+    register_cmd.add_argument("project")
+    register_cmd.add_argument("--primary-seat", default="memory")
+    register_cmd.add_argument("--primary-seat-tool", default="")
+    register_cmd.add_argument("--tmux-name", default="")
+    register_cmd.add_argument("--template-name", default="")
+    register_cmd.add_argument("--repo-path", default="")
+    register_cmd.add_argument("--status", choices=sorted(VALID_STATUSES), default="active")
+    register_cmd.add_argument("--metadata", action="append", default=[])
+    register_cmd.set_defaults(func=_cmd_register)
+
+    unregister_cmd = sub.add_parser("unregister")
+    unregister_cmd.add_argument("project")
+    unregister_cmd.set_defaults(func=_cmd_unregister)
+
+    update_cmd = sub.add_parser("update")
+    update_cmd.add_argument("project")
+    update_cmd.add_argument("--status", choices=sorted(VALID_STATUSES))
+    update_cmd.add_argument("--metadata", action="append", default=[])
+    update_cmd.add_argument("--repo-path")
+    update_cmd.add_argument("--template-name")
+    update_cmd.add_argument("--primary-seat-tool")
+    update_cmd.set_defaults(func=_cmd_update)
+
+    touch_cmd = sub.add_parser("touch")
+    touch_cmd.add_argument("project")
+    touch_cmd.set_defaults(func=_cmd_touch)
+
+    validate_cmd = sub.add_parser("validate")
+    validate_cmd.add_argument("project")
+    validate_cmd.set_defaults(func=_cmd_validate)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-    if args.command == "register":
-        created = register_project(args.name, args.primary_seat, tmux_name=args.tmux_name)
-        print(("registered" if created else "exists") + f" {args.name}")
-        return 0
-    if args.command == "unregister":
-        removed = unregister_project(args.name)
-        print(("unregistered" if removed else "missing") + f" {args.name}")
-        return 0
-    if args.command == "list":
-        print(json.dumps(enumerate_projects(), ensure_ascii=False))
-        return 0
-    return 2
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return int(args.func(args))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

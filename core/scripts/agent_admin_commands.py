@@ -76,6 +76,12 @@ class CommandHandlers:
                     print(detail)
             except Exception as exc:
                 print(f"heartbeat: {exc}")
+        try:
+            from projects_registry import touch_project
+
+            touch_project(session.project)
+        except Exception as exc:
+            print(f"projects registry touch skipped: {exc}", file=sys.stderr)
         print(session.session)
         return 0
 

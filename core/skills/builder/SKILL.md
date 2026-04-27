@@ -38,10 +38,14 @@ related_skills:
 3. 做代码/脚本/配置/模板变更
 4. 写/更新 pytest（或语言等价）覆盖新增行为 + 回归
 5. 本地跑测试；不过不 deliver
-6. 把改动范围、测试结果、风险写入 `DELIVERY.md`
+6. 把关键实现决策写入 builder KB
+7. 把改动范围、测试结果、风险写入 `DELIVERY.md`
 
 允许的改动范围：代码、shell 脚本、Python 模块、模板、docs、测试。
 **不允许**：skill 协议文本（那是 planner/架构师 gate）、`machine.toml`、profile、`openclaw.json`、secrets。
+
+Builder KB 路径：实现决策与技术约束写到
+`~/.agents/memory/projects/<project>/builder/<ts>-<slug>.md`。
 
 ## 4. Deliver
 
@@ -65,6 +69,40 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - **Risks / Blockers**：可能影响其它 lane 或需要 reviewer 特别注意的点
 - **Commit**：是否已 commit；默认**不**自己 commit，除非 TODO 明确要求
 
+## 4.1 KB 维护（v2）
+
+Builder 在每次交付时维护自己的 domain KB，不写 Memory-owned orphan KB。
+
+路径：`~/.agents/memory/projects/<project>/builder/<ts>-<slug>.md`
+
+写入时机：调用 `complete_handoff.py` 之前，和更新 `DELIVERY.md` 同一收口阶段。
+
+记录内容：
+
+- 选择了哪种实现方案，以及为什么没有选其它方案。
+- 遇到的技术约束，例如为什么不能用某个库、API、工具或架构。
+- 跨文件隐式依赖，例如 A 模块依赖 B 模块的初始化顺序。
+- 被注释掉或删除的代码的原因。
+
+记录格式：Markdown + frontmatter。
+
+```markdown
+---
+ts: ISO8601
+task_id: string
+project: string
+seat: builder
+kind: decision
+decision_type: implementation|dependency|deletion|constraint
+title: string
+status: open|completed|superseded
+detail: string
+files_affected: ["path"]
+---
+
+Evidence and rationale.
+```
+
 ## 5. Anti-patterns
 
 - 读到 TODO 立刻 fix 不写 tests — 永远补 tests
@@ -78,3 +116,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - task spec 矛盾 / blocker：`complete_handoff --status blocked --target planner`，不要自己猜
 - 测试大量回归：停手，写 blocker 报告给 planner
 - 发现范围外的另一个 bug：记录到 DELIVERY 的 "Observations" 区，不要扩大本轮 scope
+
+## Borrowed Practices
+
+- **Executing plans** — see [`core/references/superpowers-borrowed/executing-plans.md`]
+  按 TODO.md 顺序执行，每完成一个 acceptance 项就 commit，避免 batch 累积。
+- **Test-driven development** — see [`core/references/superpowers-borrowed/test-driven-development.md`]
+  新功能先写失败测试（RED），再写最少代码（GREEN），再 refactor。
+- **Requesting code review** — see [`core/references/superpowers-borrowed/requesting-code-review.md`]
+  DELIVERY.md 必含自查清单：测试结果、覆盖范围、已知风险。
+- **Receiving code review** — see [`core/references/superpowers-borrowed/receiving-code-review.md`]
+  reviewer 反馈中区分 must-fix（阻塞）和 nit（建议），分别响应。
+- **Subagent-driven development** — see [`core/references/superpowers-borrowed/subagent-driven-development.md`]
+  独立子目标用 fan-out 并发；每个 subagent 完成后两阶段 review（规格 + 代码质量）。

@@ -376,11 +376,11 @@ def build_memories_payload(project: Any) -> dict[str, Any] | None:
     del project  # The shared memories window is built from all registered project memory sessions.
     tabs = [
         {
-            "name": entry["name"],
-            "command": f"tmux attach -t '={entry['tmux_name']}'",
+            "name": entry.name,
+            "command": f"tmux attach -t '={entry.tmux_name}'",
         }
         for entry in projects_registry.enumerate_projects()
-        if entry.get("name") and entry.get("tmux_name")
+        if entry.name and entry.tmux_name
     ]
     if not tabs:
         memory_sessions = sorted(

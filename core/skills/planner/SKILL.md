@@ -50,7 +50,12 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
   --reply-to planner
 ```
 
+派工后立即写 planner KB，记录本次优先级与派工对象的选择理由；这是写自己的 KB，不是写 memory workspace。
+
 我可以派的 seat 由 project.toml `engineers` 字段决定（除 `PRIMARY_SEAT_ID` 外的所有 engineer），常见组合：`clawseat-minimal` = `builder` + `designer`；`clawseat-default` = `builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
+
+Planner KB 路径：派工、优先级、方案选择记录写到
+`~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`。
 
 派发规则：
 
@@ -86,6 +91,40 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 先保留 verdict / risk / blocker，再压缩实现细节。
 - lane 之间冲突时，先标冲突，再决定重派还是 escalte。
 - 合并是 planner 的责任，不是 reviewer 或 qa 的责任。
+
+## 4.1 KB 维护（v2）
+
+Planner 在每次派工决策后维护自己的 domain KB，不写 Memory workspace，也不写 Memory-owned orphan KB。
+
+路径：`~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`
+
+写入时机：`dispatch_task.py` 调用之后，通知 specialist 之前或同一收口阶段。
+
+记录内容：
+
+- 为什么选择这个优先级顺序，而不是其它顺序。
+- 为什么派给这个 seat / builder，而不是其它 seat。
+- 被否决的方案及理由。
+- 预计工时；实际工时可在 consumption / merge 阶段回填或追加记录。
+
+记录格式：Markdown + frontmatter。
+
+```markdown
+---
+ts: ISO8601
+task_id: string
+project: string
+seat: planner
+kind: decision
+decision_type: priority|routing|scope|alternative
+title: string
+status: open|completed|superseded
+detail: string
+alternatives_considered: ["string"]
+---
+
+Dispatch rationale and follow-up notes.
+```
 
 ## 5. Decision Blocking（瀑布式决策回路）
 
@@ -196,3 +235,12 @@ knowledge 提炼归 memory 自己的巡检 / hook 逻辑，我只消费结果。
 | `PLANNER_STOP_HOOK_ENABLED` | `1` | 设为 `0` 时跳过 stop-hook 广播 |
 | `PLANNER_MAX_FAN_OUT` | `4` | 单条 chain 同时可开的 specialist lane 上限 |
 | `CLAWSEAT_ROOT` | 当前 ClawSeat checkout（通常是 `$HOME/ClawSeat`） | repo root；dispatch / complete / query helper 都从这里解析 |
+
+## Borrowed Practices
+
+- **Writing plans** — see [`core/references/superpowers-borrowed/writing-plans.md`]
+  审核 memory 派工 brief 时检查颗粒度；过粗就拆，过细就合。
+- **Executing plans** — see [`core/references/superpowers-borrowed/executing-plans.md`]
+  派给 builder 的 TODO.md 任务粒度控制在 2-5 个文件、半天可交付。
+- **Finishing a development branch** — see [`core/references/superpowers-borrowed/finishing-a-development-branch.md`]
+  builder DELIVERY 通过 verifier 后，按此流程决定 merge / PR / keep / discard。
