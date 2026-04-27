@@ -78,6 +78,38 @@ Dispatch 模式只在 planner 通过 TODO.md 派工时执行。它跑 pytest / s
 
 QA 不写新 tests；新增或修复测试属于 builder / designer 职责。
 
+### 3.1 文档对齐扫描
+
+当 TODO 明确要求 doc-code alignment，或 Dispatch 验收项包含文档一致性检查时，
+QA 用与 Patrol 相同的 issue_type 规则执行一次有界扫描。扫描对象只限 TODO 指定的
+文件、commit 区间或交付范围，不扩大为全量巡检。
+
+结果写入 Markdown KB：
+`~/.agents/memory/projects/<project>/qa/doc-code-alignment/<ts>-<slug>.md`
+
+frontmatter 至少包含：
+
+```yaml
+issue_id: uuid
+ts: ISO8601
+project: install
+seat: qa
+kind: alignment
+task_id: optional
+title: string
+doc_file: path
+code_file: path
+issue_type: planned_not_impl|spec_only|forgotten_impl|delivery_unverified|contract_violation|undocumented_behavior
+severity: high|medium|low
+status: open|resolved
+first_seen: ISO8601
+last_seen: ISO8601
+resolved_at:
+model: minimax-text-01
+```
+
+已知问题再次发现时更新 `last_seen`，问题消失时标记 `resolved`，不删除历史记录。
+
 ### Web 应用测试
 
 当 TODO.md 的 test_scope 涉及 Web 应用（live URL、staging 环境、本地 dev server），
