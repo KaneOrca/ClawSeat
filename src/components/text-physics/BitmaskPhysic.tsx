@@ -15,6 +15,13 @@ const DATA = ['0', '1', ':', '.', '·', '∘'] as const;
 const BASE_CELL_W = 10;
 const BASE_CELL_H = 14;
 const FONT = '11px monospace';
+const BASE_VOID_RADIUS = 200;
+const MOUSE_SMOOTHING = 0.15;
+const TRANSITION_EPSILON = 0.005;
+const VOID_X_SCALE = 0.4;
+const VOID_Y_SCALE = 1;
+const VOID_CORE = 0.58;
+const VOID_EDGE = 1;
 
 // Aggressive LOD: scale cell size by DPI and viewport width
 function getCellSize(): { w: number; h: number } {
@@ -43,6 +50,11 @@ function fsin(x: number): number {
 // fcos available if needed: fsin(x + Math.PI * 0.5)
 const FEATHER_PX = 36;
 const OCCLUDED_FLOOR = 0.12;
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
 
 /**
  * Cheap pseudo-noise based on cell coordinates.
@@ -152,6 +164,7 @@ function sampleMask(
  */
 export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) => {
   const mouseRef = useRef({ x: -1000, y: -1000 });
+  const smoothMouseRef = useRef({ x: -1000, y: -1000, initialized: false });
   const { obstaclesRef, maskRef, viewportRef, environment } = usePhysicsRegistry();
   const lastFrameRef = useRef(0);
   const cellSizeRef = useRef(getCellSize());
@@ -202,20 +215,36 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     const cols = Math.ceil(width / CELL_W);
     const rows = Math.ceil(height / CELL_H);
     const t = time * 0.001;
-    const mouse = mouseRef.current;
+    const rawMouse = mouseRef.current;
+    const smoothMouse = smoothMouseRef.current;
+    const rawMouseActive = rawMouse.x > -500 && rawMouse.y > -500;
+    const smoothMouseOffscreen = smoothMouse.x < -500 || smoothMouse.y < -500;
+    if (!smoothMouse.initialized || (rawMouseActive && smoothMouseOffscreen)) {
+      smoothMouse.x = rawMouse.x;
+      smoothMouse.y = rawMouse.y;
+      smoothMouse.initialized = true;
+    } else {
+      smoothMouse.x += (rawMouse.x - smoothMouse.x) * MOUSE_SMOOTHING;
+      smoothMouse.y += (rawMouse.y - smoothMouse.y) * MOUSE_SMOOTHING;
+    }
+    const mouse = smoothMouse;
     const waveAmplitude = env.waveAmplitude ?? 60;
     const baseAlpha = env.opacity ?? baseOpacity;
     const transition = env.effects;
+    const recoilVelX = transition?.recoilVelocity?.x ?? 0;
     const recoilVelY = transition?.recoilVelocity?.y ?? 0;
     const transitionProgress = transition?.transitionProgress ?? 0;
     const transitionFrom = transition?.transitionFrom ?? null;
-    const isTransitioning = !!transitionFrom && transitionProgress > 0;
-    const transitionJitter = isTransitioning ? Math.max(0, Math.min(1, (waveAmplitude - 60) / 90)) : 0;
+    const activeTransitionProgress = Math.abs(transitionProgress) < TRANSITION_EPSILON ? 0 : transitionProgress;
+    const isTransitioning = !!transitionFrom && activeTransitionProgress > 0;
+    const transitionJitter = isTransitioning
+      ? activeTransitionProgress * Math.max(0, Math.min(1, (waveAmplitude - 60) / 90))
+      : 0;
     const transitionAlphaScale = !isTransitioning
       ? 1
       : transitionFrom === 'v2'
-        ? transitionProgress
-        : 1 - transitionProgress;
+        ? activeTransitionProgress
+        : 1 - activeTransitionProgress;
     const alignmentPulse = transition?.alignmentPulse;
     const alignElapsed = alignmentPulse?.active ? time - alignmentPulse.startTime : 0;
     const alignDuration = alignmentPulse?.duration ?? 600;
@@ -239,7 +268,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
 
         // Pixel-perfect mask occlusion (primary), geometric fallback only when no mask
         // Prediction: sample mask at predicted position (where text will be next frame)
-        const predX = vp.scrollVelX * 1.5;
+        const predX = (vp.scrollVelX + recoilVelX) * 1.5;
         const predY = (vp.scrollVelY + recoilVelY) * 1.5;
         let occlusion: number;
         if (maskData && maskW === vp.width) {
@@ -260,17 +289,14 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
 
         const dx = cx - mouse.x;
         const dy = cy - mouse.y;
-        const distSq = dx * dx + dy * dy;
-        const dist = Math.sqrt(distSq);
-        const mouseFactor = Math.max(0, 1 - dist / 300);
+        const anisotropicDist = Math.hypot(dx * VOID_X_SCALE, dy * VOID_Y_SCALE);
+        const voidRadius = BASE_VOID_RADIUS * (0.8 + waveAmplitude / 200);
+        const voidDist = anisotropicDist / voidRadius;
+        const mouseFactor = Math.max(0, 1 - voidDist);
 
-        // Void core: smoothstep fade from 0.75→0.85 (hard skip above 0.85)
-        if (mouseFactor > 0.85) continue;
-        let voidFade = 1;
-        if (mouseFactor > 0.75) {
-          const t2 = (mouseFactor - 0.75) / 0.1; // 0→1 over 0.75→0.85
-          voidFade = 1 - t2 * t2 * (3 - 2 * t2); // smoothstep to 0
-        }
+        // Scanline tear void: horizontally stretched core with a soft edge.
+        if (voidDist < VOID_CORE) continue;
+        const voidFade = smoothstep(VOID_CORE, VOID_EDGE, voidDist);
 
         // ── Neural data swarm: flow field + repulsion ─────────────────
 
@@ -303,11 +329,9 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
           char = DATA[((Math.floor(flowAngle * 3 + t * 5) % 6) + 6) % 6]; // data particles
         }
 
-        // Alpha: void at center, ring glow at edge, normal field beyond
-        // Ring function: peaks at mouseFactor≈0.5, zero at center (1.0) and far (0.0)
-        // Ring glow: peaks near the void edge, narrowed to read as a crisp field boundary.
-        const ringDist = mouseFactor - 0.82;
-        const ringGlow = Math.exp(-ringDist * ringDist * 160) * mouseFactor * 1.8;
+        // Alpha: void at center, ring glow at edge, normal field beyond.
+        const ringDist = voidDist - 0.78;
+        const ringGlow = Math.exp(-ringDist * ringDist * 40) * 1.2;
         // Center suppression: hard zero when deep inside void
         const voidMask = density > 0.01 ? 1 : 0;
         const rawAlpha = baseAlpha * depthFade * (
@@ -361,7 +385,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     if (env.debugAlignment) {
       ctx.lineWidth = 1;
       // Apply same prediction offset as mask sampling
-      const diagPredX = vp.scrollVelX * 1.5;
+      const diagPredX = (vp.scrollVelX + recoilVelX) * 1.5;
       const diagPredY = (vp.scrollVelY + recoilVelY) * 1.5;
 
       for (const obs of obstacles) {
