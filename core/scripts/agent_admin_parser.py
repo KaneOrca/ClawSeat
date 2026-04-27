@@ -472,7 +472,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
 
     open_grid = window_sub.add_parser(
         "open-grid",
-        help="Reopen the project iTerm grid. Use --recover to focus an existing grid and --open-memory to also ensure the memory window is open.",
+        help="Reopen the project iTerm grid. --open-memory is retained as a no-op v1 compatibility flag.",
     )
     open_grid.add_argument("project")
     open_grid.add_argument("--recover", action="store_true")

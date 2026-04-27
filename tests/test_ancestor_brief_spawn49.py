@@ -20,7 +20,8 @@ def test_spawn49_brief_uses_agent_admin_session_start_engineer() -> None:
     assert "MEMORY_REPORT_READY" not in text
     assert "### B5 — Feishu channel + koder overlay bind（5 子步）" in text
     assert "agent_admin.py project binding-list" in text
-    assert "${AGENT_HOME}/.agents/tasks/*/PROJECT_BINDING.toml" in text
+    assert "${AGENT_HOME}/.agents/projects/*/project.toml" in text
+    assert "project-local.toml" in text
     assert "${AGENT_HOME}/.lark-cli/config.json" in text
     assert "apply-koder-overlay.sh" in text
     assert "lark-cli auth status --as user" in text
@@ -42,7 +43,8 @@ def test_spawn49_brief_uses_agent_admin_session_start_engineer() -> None:
     assert "claude code oauth" in text
     assert "codex xcode-best api" in text
     assert "gemini cli oauth" in text
-    assert "agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]" in text
+    assert "agent_admin window open-grid ${PROJECT_NAME} [--recover]" in text
+    assert "--open-memory" not in text
     assert "agent-launcher.sh --headless --engineer ${seat} --project ${PROJECT_NAME}" not in text
 
 

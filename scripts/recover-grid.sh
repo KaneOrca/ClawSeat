@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # recover-grid.sh — recover misrouted iTerm grid panes.
 #
-# Use this when specialist panes (planner/builder/reviewer/qa/designer)
+# Use this when worker panes (template-specific project seats)
 # are showing the primary seat's TUI content instead of their own seat.
 #
 # Root cause (suspected): panes' wait-for-seat.sh attached to the project's
@@ -50,7 +50,7 @@ if ! env -u TMUX tmux has-session -t "=$PRIMARY_SESSION" 2>/dev/null; then
   exit 1
 fi
 
-# Step 1: if the iTerm 6-pane window has been closed entirely (distinct
+# Step 1: if the workers iTerm window has been closed entirely (distinct
 # from "pane is misrouted inside the window"), reopen it and exit —
 # open-grid creates a fresh window with correctly-wired panes, so the
 # detach-client dance below is not needed.

@@ -20,7 +20,7 @@ for install.
 
 2. **Read `docs/INSTALL.md`** from the clone. That file is the
    executable playbook: prerequisites, env scan, runtime choice,
-   seat infrastructure, ancestor launch, and the six-pane monitor
+   seat infrastructure, project memory launch, and the workers window
    handoff. Follow it top-to-bottom.
 
 3. **Do not invent steps.** If something you need is not in
@@ -37,7 +37,7 @@ bash scripts/install.sh
 ```
 
 For non-default cases, follow the playbook and pass only the flags it
-documents, for example `--project`, `--repo-root` (FR-7: point ancestor to a
+documents, for example `--project`, `--repo-root` (FR-7: point memory to a
 different business repo), `--template` (select project roster: `clawseat-default` |
 `clawseat-engineering` | `clawseat-creative`), `--provider`, `--base-url`,
 `--api-key`, `--model`, `--reinstall`, or `--reset-harness-memory` (FR-1: clear
@@ -52,27 +52,21 @@ Important:
   `docs/INSTALL.md`.
 - `--model` is only meaningful when the documented provider path supports it.
 
-After `install.sh` finishes, the **ancestor CC takes over**. The installer does
-not manually recreate the ancestor launch sequence.
+After `install.sh` finishes, the **project memory seat takes over**. The installer does
+not manually recreate the memory launch sequence.
 
-## Runtime topology (what ancestor brings up)
+## Runtime topology (what memory brings up)
 
-- **Machine layer**: `memory` seat (singleton, not in six-pane monitor)
-- **Project layer — six-pane monitor** (ancestor owns this grid and
-  includes **itself** in it):
-  1. **ancestor** — CLI frontstage (this is the visible chat pane)
-  2. **planner**
-  3. **builder**
-  4. **reviewer**
-  5. **qa**
-  6. **designer**
+- **Project memory layer**: `<project>-memory` is the primary frontstage and orchestration hub.
+- **Project workers window**: worker seats are template-driven from `project.toml`.
+  `clawseat-minimal` uses planner / builder / designer; richer templates can add reviewer and qa.
 - **Tenant layer (Feishu optional)**: `koder` — optional OpenClaw-side
   Feishu reverse channel adapter / async notification sink, not a tmux
   seat and not the primary frontstage.
 
 Frontstage identity depends on runtime:
-- **CLI install** → ancestor is frontstage
-- **Feishu / OpenClaw path** → ancestor remains the CLI frontstage;
+- **CLI install** → project memory is frontstage
+- **Feishu / OpenClaw path** → project memory remains the CLI frontstage;
   `koder` is only an optional post-install reverse-channel overlay
 
 ## Orchestration boundary
@@ -80,8 +74,8 @@ Frontstage identity depends on runtime:
 Follow the runtime boundaries in `docs/INSTALL.md` and `docs/ARCHITECTURE.md`:
 
 - `install.sh` handles host bootstrap, machine scan, provider selection,
-  ancestor launch, grid open, and memory launch.
-- Once ancestor is prompt-ready, ancestor owns Phase-A and later seat
+  memory launch, workers window open, and shared memories window setup.
+- Once project memory is prompt-ready, memory owns Phase-A and later seat
   lifecycle.
 - Do not parallelize B3.5 engineer bring-up. Provider clarification is
   intentionally one-by-one via CLI prompt.
@@ -96,7 +90,7 @@ Follow the runtime boundaries in `docs/INSTALL.md` and `docs/ARCHITECTURE.md`:
 - Do **not** call `scripts/launch_ancestor.sh` for fresh install. That is a
   legacy helper, not the canonical v0.7 bootstrap path.
 - Do **not** invoke `/cs` for fresh installs — `/cs` is a separate
-  resumer skill for "ancestor crashed, come back up"; it does not
+  resumer skill for "memory crashed, come back up"; it does not
   replace the v0.7 playbook.
 - Do **not** describe your work using retired launch choreography from older
   install generations.
@@ -116,7 +110,7 @@ stopped. Typically:
 
 1. Check what seats are already up (`tmux list-sessions | grep <project>-`).
 2. Fill the gaps.
-3. If ancestor is alive, defer the rest to ancestor's Phase-A checklist.
+3. If project memory is alive, defer the rest to memory's Phase-A checklist.
 
 ## References
 
@@ -125,5 +119,5 @@ stopped. Typically:
 - [`core/lib/profile_validator.py`](../../lib/profile_validator.py) — v2 schema validator (still authoritative)
 - [`core/launchers/agent-launcher.sh`](../../launchers/agent-launcher.sh) — low-level seat launcher used internally by `install.sh` / `agent_admin`
 - [`core/scripts/agent_admin.py`](../../scripts/agent_admin.py) — session lifecycle CLI
-- [`core/skills/clawseat-ancestor/SKILL.md`](../clawseat-ancestor/SKILL.md) — ancestor's own skill, owns everything post-launch
+- [`core/skills/clawseat-memory/SKILL.md`](../clawseat-memory/SKILL.md) — memory's own skill, owns everything post-launch
 - [`core/skills/cs/SKILL.md`](../cs/SKILL.md) — `/cs` resumer (separate from fresh install)
