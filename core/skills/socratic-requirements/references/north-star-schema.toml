@@ -6,7 +6,7 @@ name = ""                 # required
 goal = ""                 # required
 success_criteria = []     # required: list of measurable outcomes
 anti_goals = []           # optional: work to avoid
-stakeholders = []         # optional: people or seats affected by drift
+stakeholders = []         # optional: people or seats affected by goal drift
 created_at = ""           # required: ISO8601 timestamp or date
 last_updated = ""         # required: ISO8601 timestamp or date
 

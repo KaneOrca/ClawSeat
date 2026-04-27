@@ -1,6 +1,6 @@
 # Shared Tone
 
-Use this reference when rendering user-facing text from clarify mode, report mode, drift recall, or reflection cards.
+Use this reference when rendering user-facing text from clarify mode, report mode, goal drift recall, or reflection cards.
 
 ## Language
 

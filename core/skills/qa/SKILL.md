@@ -116,6 +116,16 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 
 QA Stop Hook 检测后调用飞书 CLI 推送，与 Memory 通道隔离。
 
+## Feishu 消息身份标识
+
+所有飞书推送遵循统一格式（详见 `core/references/feishu-message-marker.md`）：
+
+- 前缀：`[QA scope=patrol]` 或 `[QA scope=test]`
+- 附录：`_via QA @ <ts> | project=<p> | session=<s>_`
+
+格式由 stop hook 自动添加；seat 输出不需主动包含。Koder（OpenClaw 侧）
+按此前缀和附录解析，把用户回复路由到正确 session。
+
 ## Borrowed Practices
 
 This seat applies the following imported principles:

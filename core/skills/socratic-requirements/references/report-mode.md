@@ -31,9 +31,9 @@ Use an info card when the channel benefits from visual structure, but keep the c
 *decision-log 已记录*
 ```
 
-## Drift Signal
+## Goal Drift Signal
 
-If the planner message mentions or implies a drift signal, do not emit the normal AUTO line. Prompt the user for realignment with a recall card:
+If the planner message mentions or implies a goal drift signal, do not emit the normal AUTO line. Prompt the user for realignment with a recall card:
 
 ```markdown
 ### ⚠️ 我感觉到目标可能在偏移
@@ -49,4 +49,4 @@ If the planner message mentions or implies a drift signal, do not emit the norma
 3. 详细解释
 ```
 
-Drift recall is the only report-mode path that asks the user to choose.
+Goal drift recall is the only report-mode path that asks the user to choose.

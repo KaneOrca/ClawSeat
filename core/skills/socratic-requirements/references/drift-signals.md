@@ -1,6 +1,6 @@
-# Drift Signals
+# Goal Drift Signals
 
-Memory watches for four drift signals. A signal does not prove the project is wrong; it means user realignment is cheaper than silently continuing.
+Memory watches for four goal drift signals. A signal does not prove the project is wrong; it means user realignment is cheaper than silently continuing.
 
 ## 1. 范围蔓延
 
