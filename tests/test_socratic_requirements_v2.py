@@ -14,15 +14,19 @@ def _body(text: str) -> str:
     return text[end + 4 :]
 
 
-def test_skill_is_compact_and_sender_routed() -> None:
+def test_skill_merges_main_clarify_flow_and_sender_routing() -> None:
     text = _SKILL.read_text(encoding="utf-8")
-    assert len(text.splitlines()) <= 150
+    assert "## Phase -1: 意图分类" in text
+    assert "capability-catalog.yaml" in text
+    assert "## 飞书通道适配" in text
+    assert "## 行为规则" in text
     assert 'sender == "user"    -> Clarify mode' in text
     assert 'sender == "planner" -> Report mode' in text
     assert "sender unknown      -> Clarify mode" in text
-    assert "not semantic keyword matching" in text
-    assert "A-class hard constraints" in text
-    assert "## Style" in text
+    assert "## Report Mode" in text
+    assert "## Sender Routing" in text
+    assert "## Drift Detection / Goal Drift" in text
+    assert "references/tui-card-format.md" in text
 
 
 def test_skill_body_has_no_keywords_field() -> None:
@@ -32,9 +36,9 @@ def test_skill_body_has_no_keywords_field() -> None:
 
 def test_clarify_mode_preserves_phase_0_to_3_path() -> None:
     text = _SKILL.read_text(encoding="utf-8")
-    assert "Phase 0 -> Phase 3" in text
+    assert "Phase 0 → Phase 3" in text
     assert "references/capability-catalog.yaml" in text
-    assert "summary contract" in text
+    assert "summary_contract" in text
 
 
 def test_report_mode_reference_has_auto_format_and_example() -> None:

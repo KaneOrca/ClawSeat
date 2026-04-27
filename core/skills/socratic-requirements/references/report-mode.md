@@ -25,7 +25,7 @@ Use an info card when the channel benefits from visual structure, but keep the c
 ```markdown
 ### ✅ 已处理
 
-**动作**：派工给 builder 实现 X  
+**动作**：派工给 builder 实现 X<br>
 **理由**：Y 是当前优先级，Z 已完成。
 
 *decision-log 已记录*

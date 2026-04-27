@@ -27,7 +27,7 @@ Use an info card for status updates and AUTO decisions. No user action is needed
 ```markdown
 ### ✅ 已处理
 
-**任务**：T3 描述审核  
+**任务**：T3 描述审核<br>
 **结果**：通过
 
 **理由**：
