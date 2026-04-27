@@ -266,6 +266,26 @@ class CrudHandlers:
     def __init__(self, hooks: CrudHooks) -> None:
         self.hooks = hooks
 
+    def _engineer_template_defaults(self, project: Any, engineer_id: str) -> dict[str, str]:
+        template_names = [str(getattr(project, "template_name", "") or ""), "gstack-harness"]
+        seen: set[str] = set()
+        for template_name in template_names:
+            if not template_name or template_name in seen:
+                continue
+            seen.add(template_name)
+            try:
+                template = self.hooks.load_template(template_name)
+            except Exception:
+                continue
+            for spec in template.get("engineers", []):
+                if self.hooks.normalize_name(str(spec.get("id", ""))) == engineer_id:
+                    return {
+                        "tool": str(spec.get("tool", "") or ""),
+                        "mode": str(spec.get("auth_mode", "") or ""),
+                        "provider": str(spec.get("provider", "") or ""),
+                    }
+        return {}
+
     def project_open(self, args: Any) -> int:
         return self.hooks.show_project(args)
 
@@ -646,6 +666,13 @@ class CrudHandlers:
         return 0
 
     def engineer_create(self, args: Any) -> int:
+        projects = self.hooks.load_projects()
+        project = projects[args.project]
+        engineer_id = self.hooks.normalize_name(args.engineer)
+        defaults = self._engineer_template_defaults(project, engineer_id)
+        tool = getattr(args, "tool", None) or defaults.get("tool") or "claude"
+        mode = getattr(args, "mode", None) or defaults.get("mode") or "oauth"
+        provider = getattr(args, "provider", None) or defaults.get("provider") or "anthropic"
         # Validate the tool/auth_mode/provider triple BEFORE we touch any
         # filesystem state. Historically typos like `anthropix` (vs
         # `anthropic`) silently created engineer profiles + runtime sandbox
@@ -654,15 +681,12 @@ class CrudHandlers:
         # used the typoed provider. The operator's only symptom was a blank
         # pane. Catching this at the argparse boundary gives a clear error.
         validate_runtime_combo(
-            args.tool,
-            args.mode,
-            args.provider,
+            tool,
+            mode,
+            provider,
             error_cls=self.hooks.error_cls,
             context=f"engineer create {args.engineer}",
         )
-        projects = self.hooks.load_projects()
-        project = projects[args.project]
-        engineer_id = self.hooks.normalize_name(args.engineer)
         if self.hooks.session_path(project.name, engineer_id).exists():
             raise self.hooks.error_cls(f"{engineer_id} already has a session in {project.name}")
         if self.hooks.engineer_path(engineer_id).exists():
@@ -670,17 +694,17 @@ class CrudHandlers:
         else:
             profile = self.hooks.create_engineer_profile(
                 engineer_id=engineer_id,
-                tool=args.tool,
-                auth_mode=args.mode,
-                provider=args.provider,
+                tool=tool,
+                auth_mode=mode,
+                provider=provider,
             )
             self.hooks.write_engineer(profile)
         session = self.hooks.create_session_record(
             engineer_id=engineer_id,
             project=project,
-            tool=args.tool,
-            auth_mode=args.mode,
-            provider=args.provider,
+            tool=tool,
+            auth_mode=mode,
+            provider=provider,
             monitor=not args.no_monitor,
         )
         self.hooks.write_session(session)
@@ -710,9 +734,9 @@ class CrudHandlers:
                         Path(profile_path),
                         engineer_id,
                         role_val,
-                        session_data.get("tool", args.tool),
-                        session_data.get("auth_mode", args.mode),
-                        session_data.get("provider", args.provider),
+                        session_data.get("tool", tool),
+                        session_data.get("auth_mode", mode),
+                        session_data.get("provider", provider),
                         session_data.get("model"),
                     )
                 except Exception as exc:

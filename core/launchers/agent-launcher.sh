@@ -79,6 +79,7 @@ launcher_provider_default_base_url() {
 
 TOOL_NAME=""
 SESSION_NAME=""
+SESSION_NAME_EXPLICIT="0"
 AUTH_MODE=""
 WORKDIR=""
 EXEC_MODE=""
@@ -113,7 +114,7 @@ uppercase_ascii() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tool) TOOL_NAME="$2"; shift 2 ;;
-    --session) SESSION_NAME="$2"; shift 2 ;;
+    --session) SESSION_NAME="$2"; SESSION_NAME_EXPLICIT="1"; shift 2 ;;
     --auth) AUTH_MODE="$2"; shift 2 ;;
     --dir) WORKDIR="$2"; shift 2 ;;
     --custom-env-file) CUSTOM_ENV_FILE="$2"; shift 2 ;;
@@ -170,6 +171,16 @@ default_session_name() {
   printf '%s\n' "${tool}-${auth}-$(launcher_slugify "$(basename "$workdir")")"
 }
 
+normalize_explicit_session_name() {
+  if [[ "$SESSION_NAME_EXPLICIT" != "1" || -z "$SESSION_NAME" || -z "$TOOL_NAME" ]]; then
+    return 0
+  fi
+  case "$SESSION_NAME" in
+    *-"$TOOL_NAME") ;;
+    *) SESSION_NAME="${SESSION_NAME}-${TOOL_NAME}" ;;
+  esac
+}
+
 prompt_tool_and_auth_interactive() {
   # Only prompt when stdin is a TTY and not running headless.
   if [[ ! -t 0 ]] || [[ "$HEADLESS" == "1" ]]; then
@@ -205,6 +216,7 @@ validate_top_level_inputs() {
 
   WORKDIR="$(resolve_launcher_workdir "$WORKDIR")"
   [[ -n "$SESSION_NAME" ]] || SESSION_NAME="$(default_session_name "$TOOL_NAME" "$AUTH_MODE" "$WORKDIR")"
+  normalize_explicit_session_name
 }
 
 

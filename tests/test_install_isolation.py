@@ -455,7 +455,7 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
 
     records = _read_jsonl(launcher_log)
     expected_sessions = [
-        "smoketest-ancestor",
+        "smoketest-ancestor-claude",
     ]
     assert [record["session"] for record in records] == expected_sessions
 
@@ -486,5 +486,5 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "new-session" not in tmux_output
-    assert "kill-session -t =smoketest-ancestor" in tmux_output
-    assert "send-keys -t smoketest-ancestor Enter" not in tmux_output
+    assert "kill-session -t =smoketest-ancestor-claude" in tmux_output
+    assert "send-keys -t smoketest-ancestor-claude Enter" not in tmux_output

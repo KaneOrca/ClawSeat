@@ -87,7 +87,7 @@ def test_start_engineer_source_no_longer_contains_tmux_new_session():
         ("claude", "oauth_token", "anthropic", "oauth_token"),
         ("claude", "ccr", "ccr-local", "custom"),
         ("claude", "api", "anthropic-console", "custom"),
-        ("claude", "api", "minimax", "custom"),
+        ("claude", "api", "minimax", "minimax"),
         ("claude", "api", "xcode-best", "custom"),
         ("codex", "oauth", "openai", "chatgpt"),
         ("codex", "api", "xcode-best", "xcode"),
@@ -131,9 +131,9 @@ def test_launcher_auth_mapping_matrix(
             "minimax",
             "qa-1",
             "ANTHROPIC_AUTH_TOKEN=minimax-token\n",
-            "custom",
-            ".agent-runtime/identities/claude/api/custom-install-qa-1-claude",
-            True,
+            "minimax",
+            ".agent-runtime/identities/claude/api/minimax-install-qa-1-claude",
+            False,
         ),
         (
             "codex",
@@ -244,8 +244,8 @@ def test_start_engineer_passes_custom_env_file_and_launcher_removes_it(
         engineer_id="builder-1",
         tool="claude",
         auth_mode="api",
-        provider="minimax",
-        secret_content="ANTHROPIC_AUTH_TOKEN=minimax-token\n",
+        provider="xcode-best",
+        secret_content="ANTHROPIC_AUTH_TOKEN=xcode-token\n",
     )
     svc, _ = _make_service(tmp_path, session)
     captured: dict[str, str] = {}
@@ -265,9 +265,8 @@ def test_start_engineer_passes_custom_env_file_and_launcher_removes_it(
     ):
         svc.start_engineer(session)
 
-    assert "export LAUNCHER_CUSTOM_API_KEY=minimax-token" in captured["content"]
-    assert "export LAUNCHER_CUSTOM_BASE_URL=https://api.minimaxi.com/anthropic" in captured["content"]
-    assert "export LAUNCHER_CUSTOM_MODEL=MiniMax-M2.7-highspeed" in captured["content"]
+    assert "export LAUNCHER_CUSTOM_API_KEY=xcode-token" in captured["content"]
+    assert "export LAUNCHER_CUSTOM_BASE_URL=https://xcode.best" in captured["content"]
     assert not Path(captured["path"]).exists()
 
 

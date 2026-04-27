@@ -47,5 +47,5 @@ def test_install_sets_detach_on_destroy_for_seat_sessions(tmp_path: Path) -> Non
 
     assert result.returncode == 0, result.stderr
     tmux_output = tmux_log.read_text(encoding="utf-8")
-    assert "set-option -t spawn49-ancestor detach-on-destroy off" in tmux_output
+    assert "set-option -t spawn49-ancestor-claude detach-on-destroy off" in tmux_output
     assert "set-option -t machine-memory-claude detach-on-destroy off" not in tmux_output
