@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { CodeMorphReveal } from './CodeMorphReveal';
-import { BitmaskPhysic } from '../components/text-physics/BitmaskPhysic';
-import { usePhysicsRegistry } from '../context/PhysicsContext';
-import { tokens } from '../design/tokens';
+import { BitmaskPhysic } from '../../../components/text-physics/BitmaskPhysic';
+import { usePhysicsRegistry } from '../../../context/PhysicsContext';
+import { tokens } from '../../../design/tokens';
 
 const STEPS = [
   "const keywords = extract('user query');",

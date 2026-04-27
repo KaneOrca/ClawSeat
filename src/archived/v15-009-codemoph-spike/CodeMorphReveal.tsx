@@ -3,8 +3,8 @@ import { createHighlighter } from 'shiki';
 import type { HighlighterCore } from 'shiki/core';
 import { ShikiMagicMove } from 'shiki-magic-move/react';
 import 'shiki-magic-move/dist/style.css';
-import { useObstacle } from '../hooks/useObstacle';
-import { tokens } from '../design/tokens';
+import { useObstacle } from '../../../hooks/useObstacle';
+import { tokens } from '../../../design/tokens';
 
 interface CodeMorphRevealProps {
   steps: string[];

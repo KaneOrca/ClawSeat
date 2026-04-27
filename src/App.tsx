@@ -7,10 +7,6 @@ import { variantRegistry } from './variants/registry';
 
 import './index.css';
 
-const CodeMorphRoute = React.lazy(() =>
-  import('./spike/CodeMorphRoute').then(module => ({ default: module.CodeMorphRoute }))
-);
-
 /**
  * Router component handles conditional view rendering based on ArenaContext.
  */
@@ -54,21 +50,6 @@ const Router: React.FC = () => {
 };
 
 const AppContent: React.FC = () => {
-  const { currentView } = useArena();
-  const isCodeMorphSpike = import.meta.env.DEV && (
-    currentView === 'spike-code-morph' ||
-    window.location.pathname === '/spike/code-morph' ||
-    new URLSearchParams(window.location.search).get('spike') === 'code-morph'
-  );
-
-  if (isCodeMorphSpike) {
-    return (
-      <React.Suspense fallback={null}>
-        <CodeMorphRoute />
-      </React.Suspense>
-    );
-  }
-
   return (
     <MainLayout>
       <Router />
