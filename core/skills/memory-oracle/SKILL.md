@@ -39,12 +39,12 @@ Memory 被动读取的知识来自各席位 KB：
 - 读取后只把综合判断写入 Memory 自己的 KB；不复制原始 seat KB 数据。
 - 如果某个 seat KB 缺失，回答 `not_in_federated_kb`，不要编造。
 
-## 目录布局（v0.7）
+## 目录布局（v0.8）
 
 ```text
 ~/.agents/memory/
 ├── machine/                credentials / network / openclaw / github / current_context
-    ├── projects/<project>/     dev_env.json + Memory-owned decisions / deliveries / issues / findings / reflections
+├── projects/<project>/     Memory-owned decisions / deliveries / issues / findings / reflections
 ├── shared/                 library_knowledge / patterns / examples
 ├── responses/              memory_deliver.py 写出的响应 JSON
 ├── index.json              M1 scanner 索引
