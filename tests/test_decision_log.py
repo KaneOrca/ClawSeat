@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
-import json
+import re
 from pathlib import Path
 
 
@@ -18,7 +18,7 @@ def _load_decision_log():
     return module
 
 
-def test_append_creates_dir_and_jsonl(tmp_path, monkeypatch) -> None:
+def test_append_creates_dir_and_markdown_file(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     decision_log = _load_decision_log()
 
@@ -29,12 +29,15 @@ def test_append_creates_dir_and_jsonl(tmp_path, monkeypatch) -> None:
         "Implementation lane is the fastest path.",
     )
 
-    log_path = tmp_path / ".agents" / "projects" / "install" / "memory-data" / "decision-log.jsonl"
-    assert log_path.is_file()
-    assert json.loads(log_path.read_text(encoding="utf-8")) == record
+    decision_dir = tmp_path / ".agents" / "memory" / "projects" / "install" / "decision"
+    files = list(decision_dir.glob("*.md"))
+    assert len(files) == 1
+    assert files[0].name.endswith("-dispatch-builder.md")
+    assert "Implementation lane is the fastest path." in files[0].read_text(encoding="utf-8")
+    assert record["kind"] == "decision"
 
 
-def test_append_record_has_required_federated_fields(tmp_path, monkeypatch) -> None:
+def test_append_frontmatter_has_required_fields(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     decision_log = _load_decision_log()
 
@@ -46,53 +49,95 @@ def test_append_record_has_required_federated_fields(tmp_path, monkeypatch) -> N
         seat="memory",
         decision_type="dispatch",
     )
+    path = decision_log._decision_record_path("install", record["ts"], record["title"])
+    parsed = decision_log._parse_frontmatter(path)
 
-    for field in ("ts", "task_id", "project", "seat", "title", "detail"):
-        assert field in record
-    assert record["decision_type"] == "dispatch"
-    assert record["auto_mode"] is True
-    assert record["reason"] == "Planner selected builder."
+    for field in (
+        "issue_id",
+        "ts",
+        "task_id",
+        "project",
+        "seat",
+        "kind",
+        "title",
+        "status",
+        "detail",
+        "decision_type",
+        "auto_mode",
+        "reason",
+    ):
+        assert field in parsed
+    assert re.fullmatch(r"[0-9a-f-]{36}", parsed["issue_id"])
+    assert parsed["auto_mode"] is True
+    assert parsed["status"] == "open"
 
 
-def test_list_decisions_limit(tmp_path, monkeypatch) -> None:
+def test_list_decisions_reads_markdown_sorted_with_limit(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     decision_log = _load_decision_log()
+    decision_dir = tmp_path / ".agents" / "memory" / "projects" / "install" / "decision"
+    decision_dir.mkdir(parents=True)
 
-    for index in range(5):
-        decision_log.append_decision("install", f"task-{index}", f"title {index}", f"detail {index}")
+    for ts, title in (
+        ("2026-04-27T08:43:00Z", "third"),
+        ("2026-04-27T08:41:00Z", "first"),
+        ("2026-04-27T08:42:00Z", "second"),
+    ):
+        record = {
+            "issue_id": f"id-{title}",
+            "ts": ts,
+            "task_id": f"task-{title}",
+            "project": "install",
+            "seat": "planner",
+            "kind": "decision",
+            "title": title,
+            "status": "open",
+            "detail": title,
+            "decision_type": "auto",
+            "auto_mode": True,
+            "reason": title,
+            "body": title,
+        }
+        decision_log._decision_record_path("install", ts, title).write_text(
+            decision_log._render_md(record),
+            encoding="utf-8",
+        )
 
     records = decision_log.list_decisions("install", limit=2)
-    assert [record["task_id"] for record in records] == ["task-3", "task-4"]
+    assert [record["title"] for record in records] == ["second", "third"]
 
 
-def test_get_project_list_reads_projects_json(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
-    registry = tmp_path / ".clawseat" / "projects.json"
-    registry.parent.mkdir(parents=True)
-    registry.write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "projects": {
-                    "install": {"status": "active"},
-                    "cartooner": {"status": "active"},
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    decision_log = _load_decision_log()
-
-    assert decision_log.get_project_list() == ["install", "cartooner"]
-
-
-def test_decision_log_integration_install(tmp_path, monkeypatch) -> None:
+def test_slug_filename_generation_handles_cjk_title(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     decision_log = _load_decision_log()
 
-    decision_log.append_decision("install", "task-a", "First decision", "Start Stage 2.")
-    decision_log.append_decision("install", "task-b", "Second decision", "Continue data layer.")
+    path = decision_log._decision_record_path("install", "2026-04-27T08:41:00Z", "派工 M2.0-C reporting")
 
-    records = decision_log.list_decisions("install")
-    assert len(records) == 2
-    assert [record["title"] for record in records] == ["First decision", "Second decision"]
+    assert path.name == "2026-04-27T08-41-00Z-m2-0-c-reporting.md"
+
+
+def test_frontmatter_parse_roundtrip(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    decision_log = _load_decision_log()
+    record = {
+        "issue_id": "00000000-0000-0000-0000-000000000000",
+        "ts": "2026-04-27T08:41:00Z",
+        "task_id": "task-roundtrip",
+        "project": "install",
+        "seat": "planner",
+        "kind": "decision",
+        "title": "Title: needs quoting",
+        "status": "open",
+        "detail": "Detail with # hash",
+        "decision_type": "dispatch",
+        "auto_mode": False,
+        "reason": "Operator requested it.",
+        "body": "Markdown body",
+    }
+    path = tmp_path / "roundtrip.md"
+    path.write_text(decision_log._render_md(record), encoding="utf-8")
+
+    parsed = decision_log._parse_frontmatter(path)
+    assert parsed["title"] == "Title: needs quoting"
+    assert parsed["detail"] == "Detail with # hash"
+    assert parsed["auto_mode"] is False

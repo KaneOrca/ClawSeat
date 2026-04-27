@@ -40,6 +40,9 @@ description: Implementation specialist in a ClawSeat chain. Consumes planner-dis
 允许的改动范围：代码、shell 脚本、Python 模块、模板、docs、测试。
 **不允许**：skill 协议文本（那是 planner/架构师 gate）、`machine.toml`、profile、`openclaw.json`、secrets。
 
+Builder KB 路径：实现决策与技术约束写到
+`~/.agents/memory/projects/<project>/builder/<ts>-<slug>.md`。
+
 ## 4. Deliver
 
 标准收口：

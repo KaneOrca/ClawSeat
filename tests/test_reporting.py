@@ -20,7 +20,7 @@ def _load_reporting():
 
 def _write_projects_json(home: Path) -> None:
     path = home / ".clawseat" / "projects.json"
-    path.parent.mkdir(parents=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {
@@ -36,13 +36,19 @@ def _write_projects_json(home: Path) -> None:
     )
 
 
-def _write_decisions(home: Path, project: str, records: list[dict]) -> None:
-    path = home / ".agents" / "projects" / project / "memory-data" / "decision-log.jsonl"
-    path.parent.mkdir(parents=True)
-    path.write_text(
-        "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
-        encoding="utf-8",
+def _write_decision_md(home: Path, project: str, record: dict) -> None:
+    path = (
+        home
+        / ".agents"
+        / "memory"
+        / "projects"
+        / project
+        / "decision"
+        / f"{record['ts'].replace(':', '-')}-{record['title']}.md"
     )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frontmatter = "\n".join(f"{key}: {value}" for key, value in record.items())
+    path.write_text(f"---\n{frontmatter}\n---\n\nbody\n", encoding="utf-8")
 
 
 def test_load_all_projects_reads_projects_json(tmp_path, monkeypatch) -> None:
@@ -55,13 +61,15 @@ def test_load_all_projects_reads_projects_json(tmp_path, monkeypatch) -> None:
 
 def test_load_decisions_returns_records(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    _write_decisions(
+    _write_decision_md(
         tmp_path,
         "install",
-        [
-            {"ts": "2026-04-01T00:00:00Z", "project": "install", "title": "old"},
-            {"ts": "2026-04-27T08:41:00Z", "project": "install", "title": "new"},
-        ],
+        {"ts": "2026-04-01T00:00:00Z", "project": "install", "seat": "planner", "title": "old"},
+    )
+    _write_decision_md(
+        tmp_path,
+        "install",
+        {"ts": "2026-04-27T08:41:00Z", "project": "install", "seat": "planner", "title": "new"},
     )
     reporting = _load_reporting()
 
@@ -78,15 +86,15 @@ def test_load_decisions_missing_file_returns_empty(tmp_path, monkeypatch) -> Non
 
 def test_aggregate_sorts_by_ts(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    _write_decisions(
+    _write_decision_md(
         tmp_path,
         "install",
-        [{"ts": "2026-04-27T08:42:00Z", "project": "install", "title": "second"}],
+        {"ts": "2026-04-27T08:42:00Z", "project": "install", "seat": "planner", "title": "second"},
     )
-    _write_decisions(
+    _write_decision_md(
         tmp_path,
         "cartooner",
-        [{"ts": "2026-04-27T08:41:00Z", "project": "cartooner", "title": "first"}],
+        {"ts": "2026-04-27T08:41:00Z", "project": "cartooner", "seat": "planner", "title": "first"},
     )
     reporting = _load_reporting()
 

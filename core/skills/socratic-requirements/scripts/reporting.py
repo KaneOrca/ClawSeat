@@ -15,7 +15,35 @@ def _registry_path() -> Path:
 
 
 def _decision_log_path(project: str) -> Path:
-    return Path.home() / ".agents" / "projects" / project / "memory-data" / "decision-log.jsonl"
+    return Path.home() / ".agents" / "memory" / "projects" / project / "decision"
+
+
+def _parse_frontmatter_value(value: str) -> Any:
+    value = value.strip()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if value.startswith('"') and value.endswith('"'):
+        return json.loads(value)
+    return value
+
+
+def _parse_frontmatter(md_path: Path) -> dict[str, Any]:
+    text = md_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if not lines or lines[0] != "---":
+        return {}
+
+    parsed: dict[str, Any] = {}
+    for line in lines[1:]:
+        if line == "---":
+            break
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        parsed[key.strip()] = _parse_frontmatter_value(value)
+    return parsed
 
 
 def load_all_projects() -> list[str]:
@@ -55,18 +83,19 @@ def load_all_projects() -> list[str]:
 def load_decisions(project: str, *, since: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """Read recent decision records for one project."""
 
-    path = _decision_log_path(project)
-    if not path.exists() or limit < 1:
+    decision_dir = _decision_log_path(project)
+    if not decision_dir.exists() or limit < 1:
         return []
 
     records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
+    for md_path in sorted(decision_dir.glob("*.md")):
+        record = _parse_frontmatter(md_path)
+        if not record:
             continue
-        record = json.loads(line)
         if since is not None and str(record.get("ts", "")) < since:
             continue
         records.append(record)
+    records.sort(key=lambda record: str(record.get("ts", "")))
     return records[-limit:]
 
 

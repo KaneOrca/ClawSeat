@@ -48,6 +48,9 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
 
 我可以派的 seat：`builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
 
+Planner KB 路径：派工、优先级、方案选择记录写到
+`~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`。
+
 派发规则：
 
 - 允许 fan-out。同一 chain 可以同时派多个 specialist。
