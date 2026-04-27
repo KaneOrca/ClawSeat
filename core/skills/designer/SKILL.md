@@ -79,3 +79,8 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 所需后端 API 还没就绪：`complete_handoff --status blocked --target planner`，说明缺哪个 API
 - 设计规范有矛盾（e.g., Figma 和现有组件冲突）：在 DELIVERY "Observations" 记录，planner 决定
 - 视觉验证发现已存在 bug（与本 TODO 无关）：记录到 "Observations"，不要扩大 scope
+
+## Borrowed Practices
+
+- **Brainstorming** — see [`core/references/superpowers-borrowed/brainstorming.md`]
+  视觉 / UX 探索阶段先发散后收敛，先呈现选项再讨论 trade-off。

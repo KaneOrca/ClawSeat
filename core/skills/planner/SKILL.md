@@ -195,3 +195,12 @@ knowledge 提炼归 memory 自己的巡检 / hook 逻辑，我只消费结果。
 | `PLANNER_STOP_HOOK_ENABLED` | `1` | 设为 `0` 时跳过 stop-hook 广播 |
 | `PLANNER_MAX_FAN_OUT` | `4` | 单条 chain 同时可开的 specialist lane 上限 |
 | `CLAWSEAT_ROOT` | 当前 ClawSeat checkout（通常是 `$HOME/ClawSeat`） | repo root；dispatch / complete / query helper 都从这里解析 |
+
+## Borrowed Practices
+
+- **Writing plans** — see [`core/references/superpowers-borrowed/writing-plans.md`]
+  审核 memory 派工 brief 时检查颗粒度；过粗就拆，过细就合。
+- **Executing plans** — see [`core/references/superpowers-borrowed/executing-plans.md`]
+  派给 builder 的 TODO.md 任务粒度控制在 2-5 个文件、半天可交付。
+- **Finishing a development branch** — see [`core/references/superpowers-borrowed/finishing-a-development-branch.md`]
+  builder DELIVERY 通过 verifier 后，按此流程决定 merge / PR / keep / discard。

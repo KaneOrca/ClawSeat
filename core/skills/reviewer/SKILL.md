@@ -84,3 +84,10 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 
 - 发现的问题涉及架构/协议层面（不是 builder 能独立修）：verdict `BLOCKED`，在 Findings 说明"需要 planner 架构决策"
 - DELIVERY 明显有诚信问题（测试声称过实际失败）：verdict `BLOCKED`，记录证据
+
+## Borrowed Practices
+
+- **Systematic debugging** — see [`core/references/superpowers-borrowed/systematic-debugging.md`]
+  发现 bug 时按 4 阶段：现象 → 根因假设 → 验证 → 修复建议；不接受症状级修复。
+- **Requesting code review** — see [`core/references/superpowers-borrowed/requesting-code-review.md`]
+  作为 review 接收方，按此清单核查 builder 的自查项是否完整。
