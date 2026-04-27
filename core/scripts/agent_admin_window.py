@@ -32,7 +32,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ITERM_PANES_DRIVER = Path(__file__).resolve().with_name("iterm_panes_driver.py")
 _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
-_MEMORY_WINDOW_TITLE = "machine-memory-claude"
 _MEMORIES_WINDOW_TITLE = "clawseat-memories"
 _MAX_ITERM_PANES = 8
 _V1_GRID_TEMPLATES = frozenset({
@@ -386,7 +385,7 @@ def build_memories_payload(project: Any) -> dict[str, Any] | None:
         memory_sessions = sorted(
             session
             for session in _tmux_session_names()
-            if session.endswith("-memory") and session != _MEMORY_WINDOW_TITLE
+            if session.endswith("-memory")
         )
         tabs = [
             {
@@ -410,19 +409,6 @@ def ensure_memories_pane(project: Any) -> dict[str, Any]:
     if payload is None:
         return {"status": "skipped", "reason": "no project memory tmux sessions"}
     return run_iterm_panes_driver(payload)
-
-
-def build_memory_payload() -> dict[str, Any]:
-    """Return the v1-only global machine memory window payload."""
-    return {
-        "title": _MEMORY_WINDOW_TITLE,
-        "panes": [
-            {
-                "label": "memory",
-                "command": "tmux attach -t '=machine-memory-claude'",
-            }
-        ],
-    }
 
 
 def run_iterm_panes_driver(payload: dict[str, Any]) -> dict[str, Any]:
@@ -516,19 +502,8 @@ def focus_iterm_window(title: str) -> None:
 
 
 def open_memory_window() -> dict[str, Any]:
-    """Open the v1-only global machine memory window."""
-    if not tmux_has_session(_MEMORY_WINDOW_TITLE):
-        print(
-            f"agent_admin_window: memory tmux session missing for {_MEMORY_WINDOW_TITLE}; "
-            "skipping open-memory",
-            file=sys.stderr,
-        )
-        return {"status": "skipped", "reason": "memory tmux session missing"}
-    if iterm_window_exists(_MEMORY_WINDOW_TITLE):
-        return {"status": "ok", "window_id": "", "reused": True}
-    result = run_iterm_panes_driver(build_memory_payload())
-    result["reused"] = False
-    return result
+    """Deprecated no-op for the removed v1 global machine memory window."""
+    return {"status": "skipped", "reason": "global memory window retired"}
 
 
 def open_grid_window(
@@ -549,7 +524,7 @@ def open_grid_window(
         result["memories"] = ensure_memories_pane(project)
         result["memory"] = {
             "status": "skipped",
-            "reason": "v2 minimal uses memories tabs, not machine-memory-claude",
+            "reason": "v2 minimal uses memories tabs",
         }
         return result
 

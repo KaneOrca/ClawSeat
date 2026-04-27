@@ -53,11 +53,11 @@ profile_version: 2
 machine_config_path: ~/ClawSeat/machine.toml    # null if missing
 openclaw_tenant: yu
 openclaw_tenant_workspace: ~/.openclaw/workspace-yu
-feishu_group_binding: null    # PROJECT_BINDING.toml not yet written
+feishu_group_binding: null    # project-local binding not yet written
 
 seats_declared:
   - role: ancestor
-    sessions: [install-ancestor-claude]
+    sessions: [install-memory]
     tool: claude
     auth_mode: oauth_token
     provider: anthropic
@@ -128,8 +128,8 @@ clawseat_root: /Users/ywf/ClawSeat
 | `profile_version` | int | yes | must equal 2 for v0.4 |
 | `machine_config_path` | path string or null | yes | null → ancestor must alert and DO NOT auto-create |
 | `openclaw_tenant` | string | yes | matches `profile.openclaw_frontstage_agent` |
-| `openclaw_tenant_workspace` | path string | yes | tenant's WORKSPACE_CONTRACT.toml parent |
-| `feishu_group_binding` | string or null | yes | PROJECT_BINDING.toml path; null → Phase A B5 must run |
+| `openclaw_tenant_workspace` | path string | yes | tenant workspace parent |
+| `feishu_group_binding` | string or null | yes | project-local binding path; null → Phase A B5 must run |
 | `seats_declared` | list of seat objects | yes | includes ancestor (with state=alive); other roles state=pending or alive if already spawned |
 | `seats_declared[].role` | enum | yes | one of v0.4 LEGAL_SEAT_ROLES |
 | `seats_declared[].sessions` | list of strings | yes | tmux session names (exact, for `tmux has-session -t '='`). One entry for singleton roles; `parallel_instances` entries for fan-out roles (builder/reviewer/qa). Suffix convention: `<project>-<role>-<N>-<tool>`. |
@@ -154,10 +154,10 @@ Each token has a fixed contract.
 | Token | Meaning | Success signal | Failure handling |
 |-------|---------|----------------|------------------|
 | `B1-read-brief` | Parse this file | YAML block parses cleanly | Abort with operator alert |
-| `B2-verify-or-launch-memory` | `tmux has-session -t 'machine-memory-claude'`; if you need exact-target syntax use `tmux has-session -t '=machine-memory-claude'` (quoted). If absent, call `agent-launcher.sh --headless --session machine-memory-claude` using `machine.toml.services.memory` overrides; re-verify | rc=0 after (up to) one launch attempt | Feishu alert, continue (see 6.3 in responsibilities); do **not** halt Phase-A |
-| `B3-verify-openclaw-binding` | Read tenant WORKSPACE_CONTRACT.toml, assert `.project == <project>` | match | Feishu alert, halt Phase A |
+| `B2-verify-or-launch-memory` | `tmux has-session -t '<project>-memory'`; if you need exact-target syntax use `tmux has-session -t '=<project>-memory'` (quoted). If absent, call `agent-launcher.sh --headless --session <project>-memory`; re-verify | rc=0 after (up to) one launch attempt | Feishu alert, continue (see 6.3 in responsibilities); do **not** halt Phase-A |
+| `B3-verify-openclaw-binding` | Read tenant project metadata, assert `.project == <project>` | match | Feishu alert, halt Phase A |
 | `B4-launch-pending-seats` | For each seat with `state=pending`, iterate `sessions[]` and call `agent-launcher.sh --headless --session <session>` per instance | every session transitions to alive within 30s | Retry once per session; then mark that instance `state=dead`, include in status |
-| `B5-verify-feishu-group-binding` | Read `~/.agents/tasks/<project>/PROJECT_BINDING.toml.feishu_group_id`; confirm non-empty | file exists + group id present | Halt Phase-A; stderr + Feishu (if any earlier binding) alert: "launcher must have written PROJECT_BINDING.toml.feishu_group_id before spawning ancestor; rerun installer" |
+| `B5-verify-feishu-group-binding` | Read project-local binding `feishu_group_id`; confirm non-empty | file exists + group id present | Halt Phase-A; stderr + Feishu (if any earlier binding) alert: "launcher must have written project-local feishu_group_id before spawning memory; rerun installer" |
 | `B6-smoke-dispatch` | Send `OC_DELEGATION_REPORT_V1` report type=`smoke` to group | message delivered | Retry 3×, then mark B6 failed in STATUS.md; proceed (not hard-fail) |
 | `B7-write-status-ready` | Write `~/.agents/tasks/<project>/STATUS.md` with `phase=ready`, then enter Phase-B (no operator ack gate) | file present | hard failure (disk issue) |
 
@@ -236,7 +236,7 @@ ancestor seat's own workspace journal, NOT by rewriting the brief.
 - B8 (await-operator-ack): **removed**; see note in Phase-A checklist above.
 - `seats_declared[].session` → `sessions: list[str]`: fan-out roles expand to one entry per instance (§N-2).
 - B2 semantics: verify-**or**-launch memory; ancestor owns machine-service launch (§B2 revision).
-- B5 semantics: verify PROJECT_BINDING.toml.feishu_group_id already written by the launcher (§B5 revision); ancestor does NOT prompt operator (would violate N1 in responsibilities.md).
+- B5 semantics: verify project-local `feishu_group_id` already written by the launcher (§B5 revision); memory does NOT prompt operator (would violate N1 in responsibilities.md).
 - Phase-B trigger: **manual-by-default** (operator natural-language request); optional `launchd` plist via `--enable-auto-patrol` injects a bilingual natural-language request through `send-and-verify.sh`. `/patrol-tick` slash token retired in Round-8 (rejected by Claude Code slash resolver). See §"Phase-B patrol semantics" above.
 
 ## Residual open questions (deferred to v0.2)

@@ -434,7 +434,7 @@ prompt_kind_first_flow() {
   printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
   printf '\n选择项目类型 / Choose project mode:\n' >&2
   printf '  1) 新手 (clawseat-minimal     — 5 seat 全 OAuth 多模型: memory + planner + builder + qa + designer)  [default]\n' >&2
-  printf '  2) 专家 (clawseat-engineering — 6 seat 工程级: ancestor + planner + builder + reviewer + qa + designer)\n' >&2
+  printf '  2) 专家 (clawseat-engineering — template-driven 工程级 workers: planning + build + review + QA + design)\n' >&2
 
   local _kind=""
   while true; do
@@ -560,7 +560,7 @@ ensure_host_deps() {
     # plist keeps injecting stale payloads even though install.sh
     # itself exited early and never reached Step 6.
     if [[ "$ENABLE_AUTO_PATROL" != "1" ]]; then
-      uninstall_ancestor_patrol_plist_if_present
+      uninstall_primary_patrol_plist_if_present
     fi
     printf 'Project %s already installed (phase=ready) at %s.\n' "$PROJECT" "$STATUS_FILE"
     printf 'Use --reinstall or --force to rebuild.\n'
@@ -1591,7 +1591,7 @@ ancestor_patrol_cadence_seconds() {
   printf '%s\n' "$((cadence_minutes * 60))"
 }
 
-uninstall_ancestor_patrol_plist_if_present() {
+uninstall_primary_patrol_plist_if_present() {
   # Teardown idempotency: bootout is attempted *unconditionally* by label so
   # a ghost-loaded LaunchAgent (plist file manually deleted but the job is
   # still loaded in launchd) is still unloaded. `launchctl bootout ... || true`
@@ -1616,14 +1616,14 @@ uninstall_ancestor_patrol_plist_if_present() {
   rm -f "$ANCESTOR_PATROL_PLIST_PATH"
 }
 
-install_ancestor_patrol_plist() {
+install_primary_patrol_plist() {
   if [[ "$ENABLE_AUTO_PATROL" != "1" ]]; then
     note "Step 6: auto-patrol disabled (default; pass --enable-auto-patrol to install a periodic plist that sends a natural-language patrol request)"
     # Upgrade path: if a previous install had the plist enabled, tear it
     # down so the project actually becomes manual-by-default instead of
     # leaving a ghost LaunchAgent spraying /patrol-tick (or stale
     # payloads) at the ancestor.
-    uninstall_ancestor_patrol_plist_if_present
+    uninstall_primary_patrol_plist_if_present
     return 0
   fi
   note "Step 6: install ancestor patrol LaunchAgent (--enable-auto-patrol)"
@@ -2095,7 +2095,7 @@ PY
 }
 
 grid_payload() {
-  # v1 compat: single-window 6-pane (ancestor + N workers)
+  # v1 compat: single-window project grid (primary seat + N workers)
   # v2 callers should use workers_payload() + memories_payload() instead.
   "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$PRIMARY_SEAT_ID" "${PENDING_SEATS[@]}" <<'PY'
 import json
@@ -2314,13 +2314,13 @@ main() {
   install_privacy_pre_commit_hook
   register_project_registry
   install_clawseat_cli_symlink
-  install_ancestor_patrol_plist
+  install_primary_patrol_plist
   install_qa_bootstrap
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +
   # one shared memories window across all projects (rebuilt on each install).
   # v1 single-window grid_payload preserved as fallback for clawseat-default
-  # template (which still uses 6-pane single-window).
+  # templates (which still use the legacy single-window layout).
   if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" ]]; then
     note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
     open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
@@ -2337,10 +2337,10 @@ main() {
     fi
   else
     # v1 single-window topology (clawseat-default / engineering / creative)
-    note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
+    note "Step 7: open legacy iTerm worker grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
   fi
 
-  # v1 machine-memory-claude tmux session may still be running on machines
+  # v1 LEGACY (M4 remove): machine-memory-claude tmux session may still be running on machines
   # upgraded from v0.6 or earlier; v2 install no longer creates/manages it.
   # M4 will retire the legacy session entirely.
   note "Step 9: focus primary seat ($PRIMARY_SEAT_ID) and persist operator guide"

@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_CLAWSEAT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT:-${CLAUDE_PROJECT_DIR:-$DEFAULT_CLAWSEAT_ROOT}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-SESSION_NAME="${TMUX_SESSION_NAME:-machine-memory-claude}"
+# v1 LEGACY (M4 remove): retired global memory session "machine-memory-claude".
+LEGACY_GLOBAL_MEMORY_SESSION="$(printf '%s-%s-%s' machine memory claude)"
+SESSION_NAME="${TMUX_SESSION_NAME:-$LEGACY_GLOBAL_MEMORY_SESSION}"
 
 parse_payload() {
   local payload_json="$1"
@@ -141,7 +143,7 @@ send_clear() {
   local candidates=()
   local candidate=""
   candidates+=("$SESSION_NAME")
-  candidates+=("machine-memory-claude" "install-memory-claude" "memory-claude")
+  candidates+=("$LEGACY_GLOBAL_MEMORY_SESSION" "install-memory-claude" "memory-claude")
   for candidate in "${candidates[@]}"; do
     [[ -n "$candidate" ]] || continue
     sleep 0.5
