@@ -31,10 +31,9 @@ def test_entrypoint_skills_point_to_install_sh_not_v05_launch_path() -> None:
 def test_canonical_docs_mark_legacy_brief_reference_and_install_entry() -> None:
     readme = _read("README.md")
     iterm = _read("docs/ITERM_TMUX_REFERENCE.md")
-    brief_schema = _read("docs/schemas/ancestor-bootstrap-brief.md")
+    brief_schema = _read("docs/schemas/memory-bootstrap-brief.md")
     launcher_readme = _read("core/launchers/README.md")
     plugin_readme = _read("shells/openclaw-plugin/README.md")
-    launch_ancestor = _read("scripts/launch_ancestor.sh")
 
     assert "docs/INSTALL.md" in readme          # main install doc referenced
     assert "scripts/install.sh" in readme        # install script referenced
@@ -44,7 +43,7 @@ def test_canonical_docs_mark_legacy_brief_reference_and_install_entry() -> None:
     assert "v0.5 主链路默认走 `docs/INSTALL.md` 与 `scripts/launch_ancestor.sh`" not in iterm
 
     assert "Legacy reference" in brief_schema
-    assert "core/templates/ancestor-brief.template.md" in brief_schema
+    assert "core/templates/memory-bootstrap.template.md" in brief_schema
     assert "When this file conflicts with" in brief_schema
 
     assert "the v0.7 install playbook" in launcher_readme
@@ -53,5 +52,4 @@ def test_canonical_docs_mark_legacy_brief_reference_and_install_entry() -> None:
     assert "v0.7 `scripts/install.sh`" in plugin_readme
     assert "follow the v0.5 playbook" not in plugin_readme
 
-    assert "legacy helper for direct ancestor relaunch/testing" in launch_ancestor
-    assert "ClawSeat v0.5 install" not in launch_ancestor
+    assert not (_REPO / "scripts" / "launch_ancestor.sh").exists()

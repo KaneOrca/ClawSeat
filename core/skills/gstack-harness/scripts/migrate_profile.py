@@ -58,13 +58,13 @@ def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, boot
     tasks_root = str(real_user_home() / ".agents" / "tasks" / project_name)
     workspace_root = str(real_user_home() / ".agents" / "workspaces" / project_name)
     heartbeat_owner = str(data.get("heartbeat_owner", "koder"))
-    active_loop_owner = str(data.get("active_loop_owner", heartbeat_owner))
-    default_notify_target = str(data.get("default_notify_target", active_loop_owner))
+    active_loop_owner = str(data.get("active_loop_owner", "memory"))
+    default_notify_target = str(data.get("default_notify_target", "memory"))
     legacy_seat_roles = {str(k): str(v) for k, v in data.get("seat_roles", {}).items() if str(k) != heartbeat_owner}
     legacy_seats = [seat for seat in data.get("seats", []) if str(seat) != heartbeat_owner]
     if bootstrap_only:
-        active_loop_owner = heartbeat_owner
-        default_notify_target = heartbeat_owner
+        active_loop_owner = "memory"
+        default_notify_target = "memory"
         legacy_seat_roles = {}
         legacy_seats = []
 

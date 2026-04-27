@@ -139,6 +139,17 @@ Memory seat 的 Claude Code Stop-hook 是：
 格式由 stop hook 自动添加；seat 输出不需主动包含。Koder（OpenClaw 侧）
 按此前缀和附录解析，把用户回复路由到正确 session。
 
+## Feishu requireMention 双层配置
+
+Layer 1 是 `openclaw.json` 里的 `requireMention: true`。这是 install
+B5.4.x 自动写入的项目配置，用来要求 Koder 只响应明确 @ 的群消息。
+
+Layer 2 是飞书后台 UI 手工开关：进入飞书后台的群机器人设置，启用
+"需要@机器人才能回复"。这一步编程不可达，operator 必须手工确认。
+
+验证方式：配置后在绑定群 @ Koder 发一条普通消息；Koder 应收到 webhook，
+可查 `~/.openclaw/logs/` 中对应项目日志。
+
 ## 两类任务
 
 **扫描（M1）**：只在收到明确 scan 指令时执行，不主动发起。  

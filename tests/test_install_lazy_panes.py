@@ -219,7 +219,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "Using: explicit custom API" in result.stdout
 
     provider_env = (
-        home / ".agents" / "tasks" / "custom49" / "ancestor-provider.env"
+        home / ".agents" / "tasks" / "custom49" / "memory-provider.env"
     ).read_text(encoding="utf-8")
     assert "https://custom.api.invalid/v1" in provider_env
     assert "sk-custom49" in provider_env
@@ -341,7 +341,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "Using forced provider: minimax" in result.stdout
 
     provider_env = (
-        home / ".agents" / "tasks" / "mini49" / "ancestor-provider.env"
+        home / ".agents" / "tasks" / "mini49" / "memory-provider.env"
     ).read_text(encoding="utf-8")
     assert "ANTHROPIC_AUTH_TOKEN=sk-mini49" in provider_env
     assert "ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic" in provider_env
@@ -412,7 +412,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "Using forced provider: anthropic_console" in result.stdout
 
     provider_env = (
-        home / ".agents" / "tasks" / "console49" / "ancestor-provider.env"
+        home / ".agents" / "tasks" / "console49" / "memory-provider.env"
     ).read_text(encoding="utf-8")
     assert "ANTHROPIC_API_KEY=sk-ant-49" in provider_env
     assert "export ANTHROPIC_AUTH_TOKEN" not in provider_env

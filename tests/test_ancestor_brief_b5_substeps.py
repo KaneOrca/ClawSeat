@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_BRIEF = _REPO / "core" / "templates" / "ancestor-brief.template.md"
+_BRIEF = _REPO / "core" / "templates" / "memory-bootstrap.template.md"
 
 
 def test_brief_has_five_b5_substeps() -> None:

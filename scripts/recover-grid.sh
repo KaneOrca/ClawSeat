@@ -36,9 +36,9 @@ try:
     primary = engineers[0] if engineers else ""
     if isinstance(primary, dict):
         primary = primary.get("id", "")
-    print(primary or "ancestor")
+    print(primary or "memory")
 except Exception:
-    print("ancestor")
+    print("memory")
 PY
 )"
 agent_admin_bin="$(cd "$(dirname "$0")/.." && pwd)/core/scripts/agent_admin.py"

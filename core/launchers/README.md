@@ -65,8 +65,8 @@ personal copies in sync.
 `--headless` is retained as a compatibility flag for existing callers, but
 the launcher is tmux-only regardless. `scripts/install.sh` and `agent_admin`
 already treat the launcher as an internal L3 primitive and open or focus
-visible panes separately when needed. `scripts/launch_ancestor.sh` remains a
-legacy compatibility helper, not the canonical fresh-install entry.
+visible panes separately when needed. The old direct primary-seat launch helper
+has been removed; it is not the canonical fresh-install entry.
 
 ## Configuration (env vars)
 

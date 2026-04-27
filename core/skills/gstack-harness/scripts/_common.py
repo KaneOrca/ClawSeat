@@ -479,8 +479,8 @@ def load_profile(path: str | Path) -> HarnessProfile:
         send_script=expand_profile_value(str(data["send_script"])),
         # v0.4 migration stripped these fields (see schema §7). Provide
         # sane defaults so v2 profiles load cleanly:
-        #   active_loop_owner → "planner" (the only active seat in v0.4)
-        #   default_notify_target → "planner"
+        #   active_loop_owner → "memory" (the v2 L3 hub)
+        #   default_notify_target → "memory"
         #   status_script / patrol_script / heartbeat_receipt → empty
         status_script=expand_profile_value(str(data.get("status_script", ""))),
         patrol_script=expand_profile_value(str(data.get("patrol_script", ""))),
@@ -489,8 +489,8 @@ def load_profile(path: str | Path) -> HarnessProfile:
         handoff_dir=expand_profile_value(str(data["handoff_dir"])),
         heartbeat_owner=compat_frontstage_owner,
         heartbeat_transport=compat_frontstage_transport,
-        active_loop_owner=str(data.get("active_loop_owner", "planner")),
-        default_notify_target=str(data.get("default_notify_target", "planner")),
+        active_loop_owner=str(data.get("active_loop_owner", "memory")),
+        default_notify_target=str(data.get("default_notify_target", "memory")),
         heartbeat_receipt=expand_profile_value(str(data.get("heartbeat_receipt", ""))),
         seats=seats,
         runtime_seats=compat_runtime_seats,

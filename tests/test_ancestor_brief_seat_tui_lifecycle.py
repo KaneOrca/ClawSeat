@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_BRIEF_TEMPLATE = _REPO / "core" / "templates" / "ancestor-brief.template.md"
+_BRIEF_TEMPLATE = _REPO / "core" / "templates" / "memory-bootstrap.template.md"
 
 
 def test_ancestor_brief_documents_seat_tui_lifecycle() -> None:

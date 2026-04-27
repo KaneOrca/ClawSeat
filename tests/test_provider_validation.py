@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -93,8 +92,6 @@ def _fake_launch_root(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "fake-root"
     log_path = tmp_path / "calls.log"
     (root / "scripts").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_REPO / "scripts" / "launch_ancestor.sh", root / "scripts" / "launch_ancestor.sh")
-    (root / "scripts" / "launch_ancestor.sh").chmod(0o755)
     _write_executable(
         root / "core" / "launchers" / "agent-launcher.sh",
         """#!/usr/bin/env bash
@@ -154,42 +151,8 @@ printf 'send %s\\n' "$*" >> "${LOG_FILE:?}"
     return root, log_path
 
 
-def test_launch_ancestor_maps_install_runtime_combo_and_forwards_model(tmp_path: Path):
-    root, log_path = _fake_launch_root(tmp_path)
-    result = subprocess.run(
-        [
-            "bash",
-            str(root / "scripts" / "launch_ancestor.sh"),
-            "--project",
-            "install",
-            "--tool",
-            "claude",
-            "--auth-mode",
-            "api",
-            "--provider",
-            "minimax",
-            "--model",
-            "MiniMax-M2.7-highspeed",
-        ],
-        text=True,
-        capture_output=True,
-        env={
-            **os.environ,
-            "CLAWSEAT_ROOT": str(root),
-            "LOG_FILE": str(log_path),
-            "HOME": str(tmp_path / "home"),
-        },
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    log = log_path.read_text(encoding="utf-8")
-    assert "launcher --check-secrets claude --auth minimax" in log
-    assert (
-        "agent_admin session switch-harness --project install --engineer ancestor "
-        "--tool claude --mode api --provider minimax --model MiniMax-M2.7-highspeed"
-    ) in log
-    assert "agent_admin session start-engineer ancestor --project install" in log
-    assert "send --project install install-ancestor-claude" in log
+def test_legacy_launch_ancestor_entrypoint_removed() -> None:
+    assert not (_REPO / "scripts" / "launch_ancestor.sh").exists()
 
 
 def test_env_scan_emits_only_supported_runtime_combos(tmp_path: Path):

@@ -37,8 +37,9 @@ export HOME="$REAL_HOME"
 SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
 ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
 ITERM_DRIVER_TIMEOUT_SECONDS=30
-TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
-ANCESTOR_PATROL_TEMPLATE="$REPO_ROOT/core/templates/ancestor-patrol.plist.in"
+MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
+MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/qa-patrol.plist.in"
+MIGRATE_ANCESTOR_PATHS_SCRIPT="$REPO_ROOT/core/scripts/migrate_ancestor_paths.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
 PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
@@ -53,6 +54,10 @@ MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
 GUIDE_FILE=""
 KICKOFF_FILE=""
+MEMORY_PATROL_PLIST_LABEL=""
+MEMORY_PATROL_PLIST_PATH=""
+MEMORY_PATROL_LOG_DIR=""
+# Compatibility aliases for callers that source install.sh internals.
 ANCESTOR_PATROL_PLIST_LABEL=""
 ANCESTOR_PATROL_PLIST_PATH=""
 ANCESTOR_PATROL_LOG_DIR=""
@@ -81,7 +86,7 @@ PENDING_SEATS=(planner builder reviewer qa designer)
 # PRIMARY_SEAT_ID = the seat user dialogs with (always one per project).
 # Canonical templates use "memory"; imported legacy templates may use "ancestor".
 # Set by resolve_pending_seats() based on template's first primary engineer.
-PRIMARY_SEAT_ID="ancestor"
+PRIMARY_SEAT_ID="memory"
 
 die() { local n="$1" code="$2" msg="$3"; printf '%s\nERR_CODE: %s\n' "$msg" "$code" >&2; exit "$n"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
@@ -422,16 +427,19 @@ PY
 
 compute_project_paths() {
   STATUS_FILE="$HOME/.agents/tasks/$PROJECT/STATUS.md"
-  PROVIDER_ENV="$HOME/.agents/tasks/$PROJECT/ancestor-provider.env"
-  BRIEF_PATH="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/ancestor-bootstrap.md"
+  PROVIDER_ENV="$HOME/.agents/tasks/$PROJECT/memory-provider.env"
+  BRIEF_PATH="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/memory-bootstrap.md"
   MEMORY_WORKSPACE="$HOME/.agents/workspaces/$PROJECT/memory"
   PROJECT_LOCAL_TOML="$HOME/.agents/tasks/$PROJECT/project-local.toml"
   PROJECT_RECORD_PATH="$HOME/.agents/projects/$PROJECT/project.toml"
   GUIDE_FILE="$HOME/.agents/tasks/$PROJECT/OPERATOR-START-HERE.md"
-  KICKOFF_FILE="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/ancestor-kickoff.txt"
-  ANCESTOR_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.ancestor-patrol"
-  ANCESTOR_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${ANCESTOR_PATROL_PLIST_LABEL}.plist"
-  ANCESTOR_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
+  KICKOFF_FILE="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/memory-kickoff.txt"
+  MEMORY_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.qa-patrol"
+  MEMORY_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${MEMORY_PATROL_PLIST_LABEL}.plist"
+  MEMORY_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
+  ANCESTOR_PATROL_PLIST_LABEL="$MEMORY_PATROL_PLIST_LABEL"
+  ANCESTOR_PATROL_PLIST_PATH="$MEMORY_PATROL_PLIST_PATH"
+  ANCESTOR_PATROL_LOG_DIR="$MEMORY_PATROL_LOG_DIR"
   BOOTSTRAP_TEMPLATE_DIR="$AGENTS_TEMPLATES_ROOT/$CLAWSEAT_TEMPLATE_NAME"
   BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
 }
@@ -489,8 +497,8 @@ resolve_pending_seats() {
   # templates are v2 memory-primary; PENDING_SEATS is everyone else (workers).
   local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
   if [[ ! -f "$template_file" ]]; then
-    PRIMARY_SEAT_ID="ancestor"
-    return 0  # fallback to hardcoded if not found
+    PRIMARY_SEAT_ID="memory"
+    return 0
   fi
   local primary seats
   primary="$("$PYTHON_BIN" - "$template_file" <<'PY'
@@ -508,7 +516,7 @@ for e in data.get("engineers", []):
         break
 PY
   2>/dev/null)"
-  PRIMARY_SEAT_ID="${primary:-ancestor}"
+  PRIMARY_SEAT_ID="${primary:-memory}"
 
   seats="$("$PYTHON_BIN" - "$template_file" "$PRIMARY_SEAT_ID" <<'PY'
 import sys
@@ -1180,9 +1188,9 @@ monitor_max_panes = 5
 open_detail_windows = false
 
 [[engineers]]
-id = "ancestor"
-display_name = "Ancestor"
-role = "ancestor"
+id = "memory"
+display_name = "Memory"
+role = "memory"
 monitor = true
 tool = "claude"
 auth_mode = "$seat_auth_mode"
@@ -1969,16 +1977,16 @@ install_clawseat_cli_symlink() {
 }
 
 render_brief() {
-  note "Step 4: render ancestor brief"
-  [[ -f "$TEMPLATE_PATH" || "$DRY_RUN" == "1" ]] || die 30 TEMPLATE_MISSING "missing template: $TEMPLATE_PATH"
+  note "Step 4: render memory bootstrap brief"
+  [[ -f "$MEMORY_BRIEF_TEMPLATE" || "$DRY_RUN" == "1" ]] || die 30 TEMPLATE_MISSING "missing template: $MEMORY_BRIEF_TEMPLATE"
   local pending_seats_human primary_session_name
   printf -v pending_seats_human '%s, ' "${PENDING_SEATS[@]}"
   pending_seats_human="${pending_seats_human%, }"
   primary_session_name="$(primary_tmux_name)"
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] render %s -> %s\n' "$TEMPLATE_PATH" "$BRIEF_PATH"
+    printf '[dry-run] render %s -> %s\n' "$MEMORY_BRIEF_TEMPLATE" "$BRIEF_PATH"
   else
-    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" "$PRIMARY_SEAT_ID" "$pending_seats_human" "$primary_session_name" <<'PY'
+    "$PYTHON_BIN" - "$MEMORY_BRIEF_TEMPLATE" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" "$PRIMARY_SEAT_ID" "$pending_seats_human" "$primary_session_name" <<'PY'
 from pathlib import Path
 from string import Template
 import sys
@@ -1997,8 +2005,8 @@ PY
   fi
 }
 
-ancestor_patrol_cadence_seconds() {
-  local cadence_minutes="${CLAWSEAT_ANCESTOR_PATROL_CADENCE_MINUTES:-30}"
+memory_patrol_cadence_seconds() {
+  local cadence_minutes="${CLAWSEAT_MEMORY_PATROL_CADENCE_MINUTES:-${CLAWSEAT_ANCESTOR_PATROL_CADENCE_MINUTES:-30}}"
   if [[ ! "$cadence_minutes" =~ ^[0-9]+$ ]] || (( cadence_minutes <= 0 )); then
     cadence_minutes=30
   fi
@@ -2012,86 +2020,84 @@ uninstall_primary_patrol_plist_if_present() {
   # is a no-op when the label is not loaded, so this is safe. File removal
   # (note + rm) is still gated on plist existence.
   local have_file=0
-  [[ -f "$ANCESTOR_PATROL_PLIST_PATH" ]] && have_file=1
+  [[ -f "$MEMORY_PATROL_PLIST_PATH" ]] && have_file=1
 
   if [[ "$have_file" == "1" ]]; then
-    note "  cleanup: found stale $ANCESTOR_PATROL_PLIST_PATH — removing (auto-patrol disabled; upgrade path)"
+    note "  cleanup: found stale $MEMORY_PATROL_PLIST_PATH — removing (auto-patrol disabled; upgrade path)"
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] launchctl bootout gui/%s/%s 2>/dev/null || true\n' "$(id -u)" "$ANCESTOR_PATROL_PLIST_LABEL"
-    [[ "$have_file" == "1" ]] && printf '[dry-run] rm -f %q\n' "$ANCESTOR_PATROL_PLIST_PATH"
+    printf '[dry-run] launchctl bootout gui/%s/%s 2>/dev/null || true\n' "$(id -u)" "$MEMORY_PATROL_PLIST_LABEL"
+    [[ "$have_file" == "1" ]] && printf '[dry-run] rm -f %q\n' "$MEMORY_PATROL_PLIST_PATH"
     return 0
   fi
   if [[ "$(uname -s)" == "Darwin" ]]; then
-    launchctl bootout "gui/$(id -u)/$ANCESTOR_PATROL_PLIST_LABEL" 2>/dev/null || true
+    launchctl bootout "gui/$(id -u)/$MEMORY_PATROL_PLIST_LABEL" 2>/dev/null || true
   fi
   [[ "$have_file" == "1" ]] || return 0
-  rm -f "$ANCESTOR_PATROL_PLIST_PATH"
+  rm -f "$MEMORY_PATROL_PLIST_PATH"
 }
 
 install_primary_patrol_plist() {
   if [[ "$ENABLE_AUTO_PATROL" != "1" ]]; then
     note "Step 6: auto-patrol disabled (default; pass --enable-auto-patrol to install a periodic plist that sends a natural-language patrol request)"
-    # Upgrade path: if a previous install had the plist enabled, tear it
-    # down so the project actually becomes manual-by-default instead of
-    # leaving a ghost LaunchAgent spraying /patrol-tick (or stale
-    # payloads) at the ancestor.
+    # Upgrade path: if a previous install had the plist enabled, tear it down
+    # so the project actually becomes manual-by-default.
     uninstall_primary_patrol_plist_if_present
     return 0
   fi
-  note "Step 6: install ancestor patrol LaunchAgent (--enable-auto-patrol)"
-  [[ -f "$ANCESTOR_PATROL_TEMPLATE" || "$DRY_RUN" == "1" ]] || die 31 ANCESTOR_PATROL_TEMPLATE_MISSING "missing patrol plist template: $ANCESTOR_PATROL_TEMPLATE"
+  note "Step 6: install QA patrol LaunchAgent (--enable-auto-patrol)"
+  [[ -f "$MEMORY_PATROL_TEMPLATE" || "$DRY_RUN" == "1" ]] || die 31 MEMORY_PATROL_TEMPLATE_MISSING "missing patrol plist template: $MEMORY_PATROL_TEMPLATE"
 
   local cadence_seconds="" launchd_domain=""
-  cadence_seconds="$(ancestor_patrol_cadence_seconds)"
+  cadence_seconds="$(memory_patrol_cadence_seconds)"
   launchd_domain="gui/$(id -u)"
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] mkdir -p %q %q\n' "$(dirname "$ANCESTOR_PATROL_PLIST_PATH")" "$ANCESTOR_PATROL_LOG_DIR"
-    printf '[dry-run] render %s -> %s\n' "$ANCESTOR_PATROL_TEMPLATE" "$ANCESTOR_PATROL_PLIST_PATH"
-    printf '[dry-run] launchctl bootout %s/%s 2>/dev/null || true\n' "$launchd_domain" "$ANCESTOR_PATROL_PLIST_LABEL"
-    printf '[dry-run] launchctl bootstrap %s %q\n' "$launchd_domain" "$ANCESTOR_PATROL_PLIST_PATH"
+    printf '[dry-run] mkdir -p %q %q\n' "$(dirname "$MEMORY_PATROL_PLIST_PATH")" "$MEMORY_PATROL_LOG_DIR"
+    printf '[dry-run] render %s -> %s\n' "$MEMORY_PATROL_TEMPLATE" "$MEMORY_PATROL_PLIST_PATH"
+    printf '[dry-run] launchctl bootout %s/%s 2>/dev/null || true\n' "$launchd_domain" "$MEMORY_PATROL_PLIST_LABEL"
+    printf '[dry-run] launchctl bootstrap %s %q\n' "$launchd_domain" "$MEMORY_PATROL_PLIST_PATH"
     return 0
   fi
 
-  mkdir -p "$(dirname "$ANCESTOR_PATROL_PLIST_PATH")" "$ANCESTOR_PATROL_LOG_DIR" \
-    || die 31 ANCESTOR_PATROL_DIR_FAILED "unable to create patrol plist/log directories"
+  mkdir -p "$(dirname "$MEMORY_PATROL_PLIST_PATH")" "$MEMORY_PATROL_LOG_DIR" \
+    || die 31 MEMORY_PATROL_DIR_FAILED "unable to create patrol plist/log directories"
 
   sed \
     -e "s|{PROJECT}|${PROJECT}|g" \
     -e "s|{CADENCE_SECONDS}|${cadence_seconds}|g" \
     -e "s|{CLAWSEAT_ROOT}|${CLAWSEAT_ROOT}|g" \
-    -e "s|{LOG_DIR}|${ANCESTOR_PATROL_LOG_DIR}|g" \
-    "$ANCESTOR_PATROL_TEMPLATE" > "$ANCESTOR_PATROL_PLIST_PATH" \
-    || die 31 ANCESTOR_PATROL_RENDER_FAILED "unable to render $ANCESTOR_PATROL_PLIST_PATH"
-  chmod 644 "$ANCESTOR_PATROL_PLIST_PATH" \
-    || die 31 ANCESTOR_PATROL_CHMOD_FAILED "unable to chmod $ANCESTOR_PATROL_PLIST_PATH"
+    -e "s|{LOG_DIR}|${MEMORY_PATROL_LOG_DIR}|g" \
+    "$MEMORY_PATROL_TEMPLATE" > "$MEMORY_PATROL_PLIST_PATH" \
+    || die 31 MEMORY_PATROL_RENDER_FAILED "unable to render $MEMORY_PATROL_PLIST_PATH"
+  chmod 644 "$MEMORY_PATROL_PLIST_PATH" \
+    || die 31 MEMORY_PATROL_CHMOD_FAILED "unable to chmod $MEMORY_PATROL_PLIST_PATH"
 
   if command -v plutil >/dev/null 2>&1; then
-    plutil -lint "$ANCESTOR_PATROL_PLIST_PATH" >/dev/null 2>&1 \
-      || die 31 ANCESTOR_PATROL_INVALID "rendered patrol plist is not valid XML: $ANCESTOR_PATROL_PLIST_PATH"
+    plutil -lint "$MEMORY_PATROL_PLIST_PATH" >/dev/null 2>&1 \
+      || die 31 MEMORY_PATROL_INVALID "rendered patrol plist is not valid XML: $MEMORY_PATROL_PLIST_PATH"
   fi
 
   if [[ "$(uname -s)" != "Darwin" ]]; then
-    warn "Skipping launchctl bootstrap for ancestor patrol on non-macOS host."
+    warn "Skipping launchctl bootstrap for QA patrol on non-macOS host."
     return 0
   fi
   if ! command -v launchctl >/dev/null 2>&1; then
     if is_sandbox_install; then
-      warn "Skipping launchctl bootstrap for ancestor patrol in sandbox/headless install: launchctl missing."
+      warn "Skipping launchctl bootstrap for QA patrol in sandbox/headless install: launchctl missing."
       return 0
     fi
-    die 31 ANCESTOR_PATROL_LAUNCHCTL_MISSING "launchctl is required to bootstrap $ANCESTOR_PATROL_PLIST_PATH"
+    die 31 MEMORY_PATROL_LAUNCHCTL_MISSING "launchctl is required to bootstrap $MEMORY_PATROL_PLIST_PATH"
   fi
 
-  launchctl bootout "${launchd_domain}/${ANCESTOR_PATROL_PLIST_LABEL}" 2>/dev/null || true
-  if ! launchctl bootstrap "$launchd_domain" "$ANCESTOR_PATROL_PLIST_PATH" 2>/dev/null; then
+  launchctl bootout "${launchd_domain}/${MEMORY_PATROL_PLIST_LABEL}" 2>/dev/null || true
+  if ! launchctl bootstrap "$launchd_domain" "$MEMORY_PATROL_PLIST_PATH" 2>/dev/null; then
     if is_sandbox_install; then
-      warn "Skipping launchctl bootstrap for ancestor patrol in sandbox/headless install."
+      warn "Skipping launchctl bootstrap for QA patrol in sandbox/headless install."
       return 0
     fi
-    die 31 ANCESTOR_PATROL_BOOTSTRAP_FAILED "failed to bootstrap $ANCESTOR_PATROL_PLIST_PATH"
+    die 31 MEMORY_PATROL_BOOTSTRAP_FAILED "failed to bootstrap $MEMORY_PATROL_PLIST_PATH"
   fi
 }
 
@@ -2103,9 +2109,8 @@ write_operator_guide() {
     return 0
   fi
 
-  # Compatibility anchor for tests that still check the old v1 text:
-  # `tmux kill-session -t ${PROJECT}-ancestor`. The rendered guide below uses
-  # `${primary_session_name}` so v2 memory-primary projects stay correct.
+  # The rendered guide uses `${primary_session_name}` so v2 memory-primary
+  # projects and imported legacy templates both stay correct.
   mkdir -p "$(dirname "$GUIDE_FILE")" || die 30 GUIDE_DIR_FAILED "unable to create $(dirname "$GUIDE_FILE")"
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
@@ -2181,7 +2186,7 @@ ${PRIMARY_SEAT_ID} seat 在每个 B 步开始前会先跑 brief drift check hook
 
 1. \`tmux kill-session -t ${primary_session_name}\`
 2. 重新启动 primary seat（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
-3. 让 ${PRIMARY_SEAT_ID} seat 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
+3. 让 ${PRIMARY_SEAT_ID} seat 重新读取 \`\$CLAWSEAT_MEMORY_BRIEF\`
 
 如果你暂时不 restart，也可以继续按旧 brief 跑，但它不会自动感知后续改动。
 EOF
@@ -2379,6 +2384,7 @@ launch_seat() {
 
   local -a cmd=(env "CLAWSEAT_ROOT=$CLAWSEAT_ROOT")
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
+  cmd+=("CLAWSEAT_MEMORY_BRIEF=$brief_path")
   cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   [[ -n "$seat_id" ]] && cmd+=("CLAWSEAT_SEAT=$seat_id")
   if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" != "claude" && -n "$launcher_model" ]]; then
@@ -2717,6 +2723,16 @@ print(json.dumps({
 PY
 }
 
+run_legacy_path_migration() {
+  [[ -f "$MIGRATE_ANCESTOR_PATHS_SCRIPT" ]] || return 0
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q --project %q\n' "$PYTHON_BIN" "$MIGRATE_ANCESTOR_PATHS_SCRIPT" "$PROJECT"
+    return 0
+  fi
+  "$PYTHON_BIN" "$MIGRATE_ANCESTOR_PATHS_SCRIPT" --project "$PROJECT" \
+    || warn "legacy path migration failed (non-fatal); run $MIGRATE_ANCESTOR_PATHS_SCRIPT --project $PROJECT"
+}
+
 main() {
   self_update_check "$@"
   parse_args "$@"
@@ -2725,6 +2741,7 @@ main() {
     exit 0
   fi
   prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
+  run_legacy_path_migration
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
@@ -2773,7 +2790,7 @@ main() {
   else
     warn "Skipping primary seat focus because no iTerm grid window was opened."
   fi
-  note "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt"
+  note "Step 9.5: persist Phase-A kickoff prompt to memory-kickoff.txt"
   persist_phase_a_kickoff_prompt
   touch_project_registry
   write_operator_guide

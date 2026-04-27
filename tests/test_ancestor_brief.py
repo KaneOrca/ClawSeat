@@ -1,7 +1,7 @@
 """Tests for core/tui/ancestor_brief.py — the renderer that produces the
-ancestor bootstrap brief consumed by the ancestor seat on first boot.
+memory bootstrap brief consumed by the ancestor seat on first boot.
 
-Spec: docs/schemas/ancestor-bootstrap-brief.md (v0.1).
+Spec: docs/schemas/memory-bootstrap-brief.md (v0.1).
 Scope: pure renderer + YAML envelope correctness, tmux liveness probe
 mocking, idempotent rendering, CLI entrypoint smoke.
 
@@ -263,7 +263,7 @@ class TestRenderEnvelope:
             project="install", profile_path=v2_profile,
         )
         meta, _ = _extract_yaml(ancestor_brief.render_brief(ctx))
-        assert meta["brief_schema"] == "ancestor-bootstrap"
+        assert meta["brief_schema"] == "memory-bootstrap"
         assert meta["brief_schema_version"] == "0.1"
         assert meta["project"] == "install"
         assert meta["profile_version"] == 2
@@ -278,13 +278,13 @@ class TestRenderEnvelope:
         meta, _ = _extract_yaml(ancestor_brief.render_brief(ctx))
         assert meta["checklist_phase_a"] == list(ancestor_brief.DEFAULT_PHASE_A_CHECKLIST)
 
-    def test_yaml_feishu_sender_is_ancestor(self, v2_profile, no_tmux):
+    def test_yaml_feishu_sender_is_memory(self, v2_profile, no_tmux):
         pytest.importorskip("yaml")
         ctx = ancestor_brief.load_context_from_profile(
             project="install", profile_path=v2_profile,
         )
         meta, _ = _extract_yaml(ancestor_brief.render_brief(ctx))
-        assert meta["observability"]["feishu_sender_seat"] == "ancestor"
+        assert meta["observability"]["feishu_sender_seat"] == "memory"
         assert meta["observability"]["feishu_lark_cli_identity"] == "planner"
 
     def test_yaml_custom_whitelist_respected(self, v2_profile, no_tmux):
@@ -312,7 +312,7 @@ class TestBody:
         # three hard rules so a skill drift can't break them silently.
         assert "NEVER upgrade" in out or "NEVER upgrade" in out.replace("\n", " ")
         assert "NEVER retire" in out or "NEVER retire" in out.replace("\n", " ")
-        assert "sender_seat: ancestor" in out
+        assert "sender_seat: memory" in out
 
     def test_body_references_phase_a_and_phase_b(self, v2_profile, no_tmux):
         ctx = ancestor_brief.load_context_from_profile(
@@ -327,7 +327,7 @@ class TestBody:
             project="install", profile_path=v2_profile,
         )
         out = ancestor_brief.render_brief(ctx)
-        assert "docs/schemas/ancestor-bootstrap-brief.md" in out
+        assert "docs/schemas/memory-bootstrap-brief.md" in out
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -340,7 +340,7 @@ class TestWrite:
         ctx = ancestor_brief.load_context_from_profile(
             project="install", profile_path=v2_profile,
         )
-        out = tmp_path / "handoffs" / "deep" / "ancestor-bootstrap.md"
+        out = tmp_path / "handoffs" / "deep" / "memory-bootstrap.md"
         written = ancestor_brief.write_brief(ctx, out_path=out)
         assert written == out and out.is_file()
 
@@ -383,7 +383,7 @@ class TestCLI:
         assert rc == 0
         out = capsys.readouterr().out
         assert out.startswith("---")
-        assert "ancestor-bootstrap" in out
+        assert "memory-bootstrap" in out
 
     def test_json_context_is_parseable(self, v2_profile, capsys, monkeypatch):
         monkeypatch.setattr(ancestor_brief, "_tmux_session_alive", lambda _: False)

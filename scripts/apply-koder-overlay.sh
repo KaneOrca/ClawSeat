@@ -317,7 +317,7 @@ Without Layer 2, non-@ messages will not reach koder.
   2. 选 app ${sender_app_id}
   3. 事件订阅 → 消息接收模式 → 选 "接收群聊所有消息"（非仅 @）
   4. 如 app 已 release，点击 "刷新 release"
-  5. 完成后回 ancestor 确认 "ok"，再继续 B5.5 / B6
+  5. 完成后回 memory 确认 "ok"，再继续 B5.5 / B6
 
 注：此步 lark-cli / Open API 不可编程，必须 UI 操作。
 配置不做 → bot 只响应 @，非 @ 消息到达不了 OpenClaw。
