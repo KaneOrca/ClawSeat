@@ -31,7 +31,9 @@ export const HomeView: React.FC = () => {
   const { onInitialize, user, isZenMode, t } = useHomeInit(V2_CONFIG);
   const { setView, showToast } = useArena();
   const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
-  const obstacleRef = useObstacle();
+  const marginalia01Ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  const marginalia02Ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  const introProseRef = useObstacle() as React.RefObject<HTMLParagraphElement>;
   const timeoutRef = useRef<number | null>(null);
   const [fieldState, setFieldState] = useState<FieldState>('FIELD_IDLE');
   const [activeTermId, setActiveTermId] = useState<HomeTerm['id'] | null>(null);
@@ -134,12 +136,9 @@ export const HomeView: React.FC = () => {
           pointerEvents: isZenMode ? 'none' : 'auto'
         }}
       >
-        <div
-          ref={obstacleRef as any}
-          style={{ position: 'relative', zIndex: 10 }}
-        >
+        <div style={{ position: 'relative', zIndex: 10 }}>
           {/* BLOCK 1 */}
-          <div data-module="marginalia-01" style={{
+          <div ref={marginalia01Ref} data-module="home-marginalia-01" style={{
             position: 'absolute',
             left: 'min(58vw, 760px)',
             top: 'clamp(3rem, 8vw, 7rem)',
@@ -153,7 +152,7 @@ export const HomeView: React.FC = () => {
           </div>
 
           {/* BLOCK 2 */}
-          <div data-module="marginalia-02" style={{
+          <div ref={marginalia02Ref} data-module="home-marginalia-02" style={{
             position: 'absolute',
             left: 0,
             top: 'clamp(26rem, 52vw, 34rem)',
@@ -179,6 +178,7 @@ export const HomeView: React.FC = () => {
             <div data-module="home-title" style={{ height: '80px', pointerEvents: 'none', visibility: 'hidden' }} />
 
             <p
+              ref={introProseRef}
               data-module="home-intro-prose"
               style={{
                 margin: '2rem 0 0',
@@ -293,8 +293,8 @@ export const HomeView: React.FC = () => {
             margin-left: 0 !important;
             max-width: 100% !important;
           }
-          .v2-home [data-module="marginalia-01"],
-          .v2-home [data-module="marginalia-02"] {
+          .v2-home [data-module="home-marginalia-01"],
+          .v2-home [data-module="home-marginalia-02"] {
             position: static !important;
             left: auto !important;
             top: auto !important;
@@ -304,7 +304,7 @@ export const HomeView: React.FC = () => {
             text-align: left !important;
             order: 2;
           }
-          .v2-home [data-module="marginalia-02"] {
+          .v2-home [data-module="home-marginalia-02"] {
             order: 3;
           }
           .v2-home [data-module="home-hero"] + * {

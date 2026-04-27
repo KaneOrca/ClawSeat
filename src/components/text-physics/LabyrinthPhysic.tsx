@@ -19,6 +19,49 @@ interface Span {
 
 const PADDING = 8;
 const MIN_SPAN_WIDTH = 20;
+const MAZE_DRIFT_PX = 24;
+const MOUSE_VOID_RADIUS = 96;
+const MOUSE_VOID_CORE = 0.6;
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function drawTextWithMouseVoid(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  lineHeight: number,
+  mouse: { x: number; y: number },
+): void {
+  const lineY = y + lineHeight / 2;
+  const nearestLineDistance = Math.abs(lineY - mouse.y);
+  const lineWidth = ctx.measureText(text).width;
+  if (
+    nearestLineDistance >= MOUSE_VOID_RADIUS ||
+    mouse.x < x - MOUSE_VOID_RADIUS ||
+    mouse.x > x + lineWidth + MOUSE_VOID_RADIUS
+  ) {
+    ctx.fillText(text, x, y);
+    return;
+  }
+
+  const previousAlpha = ctx.globalAlpha;
+  let cursorX = x;
+  for (const char of Array.from(text)) {
+    const charWidth = ctx.measureText(char).width;
+    const charCenterX = cursorX + charWidth / 2;
+    const distToMouse = Math.hypot(charCenterX - mouse.x, lineY - mouse.y);
+    if (distToMouse >= MOUSE_VOID_RADIUS * MOUSE_VOID_CORE) {
+      ctx.globalAlpha = previousAlpha * smoothstep(MOUSE_VOID_RADIUS * MOUSE_VOID_CORE, MOUSE_VOID_RADIUS, distToMouse);
+      ctx.fillText(char, cursorX, y);
+    }
+    cursorX += charWidth;
+  }
+  ctx.globalAlpha = previousAlpha;
+}
 
 /**
  * Compute free X-axis spans for a given Y row by subtracting all
@@ -153,23 +196,15 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
     while (currentY < height) {
       ctx.font = variantFont;
 
-      // MAZE LOGIC
-      let mazeInsetLeft = 0;
-      let mazeInsetRight = 0;
-      const pathSeed = Math.sin(currentY * 0.01) * 100;
-      if (pathSeed > 88) { mazeInsetLeft = 60; }
-      if (pathSeed < -88) { mazeInsetRight = 60; }
-
       // MULTI-SPAN OBSTACLE AVOIDANCE
       const freeSpans = computeFreeSpans(currentY, lineHeight, width, obstacles);
 
-      // Apply maze insets to spans
+      // Apply a continuous manuscript drift instead of hard random insets.
+      const mazeDrift = Math.sin(currentY * 0.012 + time * 0.00012) * MAZE_DRIFT_PX;
       const spans: Span[] = [];
       for (const span of freeSpans) {
-        let s = span.start;
-        let e = span.end;
-        if (s < mazeInsetLeft) s = mazeInsetLeft;
-        if (e > width - mazeInsetRight) e = width - mazeInsetRight;
+        const s = Math.max(0, span.start + mazeDrift);
+        const e = Math.min(width, span.end + mazeDrift);
         if (e - s >= MIN_SPAN_WIDTH) {
           spans.push({ start: s, end: e });
         }
@@ -212,7 +247,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
           continue;
         }
 
-        // VARIANT-SPECIFIC STYLING
         const distToMouse = Math.sqrt(
           Math.pow(currentY - mouse.y, 2) +
           Math.pow(startX + clampedWidth / 2 - mouse.x, 2)
@@ -241,7 +275,7 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
           }
         }
 
-        ctx.fillText(line.text, drawX, drawY);
+        drawTextWithMouseVoid(ctx, line.text, drawX, drawY, lineHeight, mouse);
 
         // Store first span position for soloist mapping
         if (!drewAnything) {
