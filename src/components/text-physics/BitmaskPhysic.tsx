@@ -16,6 +16,10 @@ const BASE_CELL_W = 10;
 const BASE_CELL_H = 14;
 const FONT = '11px monospace';
 const TRANSITION_EPSILON = 0.005;
+const SCROLL_PREDICT_FACTOR = 1.5;
+const JITTER_AMPLITUDE = 8;
+const FREQ_FACTOR_LOW = 0.6;
+const FREQ_FACTOR_HIGH = 1.4;
 
 // Aggressive LOD: scale cell size by DPI and viewport width
 function getCellSize(): { w: number; h: number } {
@@ -72,7 +76,7 @@ function featherRect(cx: number, cy: number, rx: number, ry: number, rw: number,
   const d = rectDist(cx, cy, rx, ry, rw, rh);
   if (d === 0) return OCCLUDED_FLOOR * (0.8 + cellNoise(cx, cy) * 0.2);
   if (d >= featherPx) return 1;
-  const jitter = cellNoise(cx, cy) * 8;
+  const jitter = cellNoise(cx, cy) * JITTER_AMPLITUDE;
   const dist = Math.max(0, d + jitter);
   const t = Math.min(1, dist / featherPx);
   return OCCLUDED_FLOOR + (1 - OCCLUDED_FLOOR) * t * t * (3 - 2 * t);
@@ -114,7 +118,7 @@ function getOcclusionAlpha(cx: number, cy: number, obstacles: RectObstacle[]): n
     const rawDist = Math.sqrt(dx * dx + dy * dy);
     if (rawDist < featherPx) {
       // Jitter the distance with coordinate noise to break straight edges
-      const jitter = cellNoise(cx, cy) * 8; // ±8px wobble
+      const jitter = cellNoise(cx, cy) * JITTER_AMPLITUDE;
       const dist = Math.max(0, rawDist + jitter);
 
       // Smooth cubic ease for organic falloff (not linear)
@@ -236,8 +240,8 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
 
         // Pixel-perfect mask occlusion (primary), geometric fallback only when no mask
         // Prediction: sample mask at predicted position (where text will be next frame)
-        const predX = (vp.scrollVelX + recoilVelX) * 1.5;
-        const predY = (vp.scrollVelY + recoilVelY) * 1.5;
+        const predX = (vp.scrollVelX + recoilVelX) * SCROLL_PREDICT_FACTOR;
+        const predY = (vp.scrollVelY + recoilVelY) * SCROLL_PREDICT_FACTOR;
         let occlusion: number;
         if (maskData && maskW === vp.width) {
           const maskSample = sampleMask(maskData, maskW, cx + predX, cy + predY);
@@ -258,8 +262,8 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
         // ── Neural data swarm: flow field + repulsion ─────────────────
 
         // Flow field: two crossing directional streams
-        const phase = t * 0.6 * freqMult;
-        const flowA = fsin(col * 0.12 + row * 0.08 + phase) + fsin(row * 0.15 - col * 0.05 + phase * 1.4);
+        const phase = t * FREQ_FACTOR_LOW * freqMult;
+        const flowA = fsin(col * 0.12 + row * 0.08 + phase) + fsin(row * 0.15 - col * 0.05 + phase * FREQ_FACTOR_HIGH);
         const flowB = fsin(col * 0.07 - row * 0.11 + phase * 0.7) + fsin((col + row) * 0.06 + phase * 1.1);
 
         const flowStrength = (flowA * flowA + flowB * flowB) * 0.25 * ampMult;
@@ -334,8 +338,8 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) 
     if (env.debugAlignment) {
       ctx.lineWidth = 1;
       // Apply same prediction offset as mask sampling
-      const diagPredX = (vp.scrollVelX + recoilVelX) * 1.5;
-      const diagPredY = (vp.scrollVelY + recoilVelY) * 1.5;
+      const diagPredX = (vp.scrollVelX + recoilVelX) * SCROLL_PREDICT_FACTOR;
+      const diagPredY = (vp.scrollVelY + recoilVelY) * SCROLL_PREDICT_FACTOR;
 
       for (const obs of obstacles) {
         // AABB — cyan

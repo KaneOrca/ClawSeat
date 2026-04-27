@@ -92,6 +92,7 @@ const PhysicsContext = createContext<PhysicsContextType | undefined>(undefined);
 const POLL_EVERY_N_FRAMES = 1;
 const CHANGE_THRESHOLD = 1; // px
 const SNAPSHOT_DEBOUNCE_MS = 50;
+const RECOIL_DECAY = 0.92;
 
 // ── CharRect decomposition with caching ─────────────────────────────
 
@@ -403,7 +404,7 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ...prev,
           effects: {
             ...prev.effects,
-            recoilVelocity: { x: recoilX * 0.92, y: recoilY * 0.92 },
+            recoilVelocity: { x: recoilX * RECOIL_DECAY, y: recoilY * RECOIL_DECAY },
           },
         };
       });
