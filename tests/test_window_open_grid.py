@@ -246,9 +246,8 @@ def test_open_grid_rejects_unregistered_project() -> None:
         )
 
 
-def test_open_grid_empty_roster_warns_and_uses_ancestor_only(
+def test_open_grid_empty_roster_uses_memory_fallback_and_rejects_no_workers(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     project = _project([])
     payloads: list[dict] = []
@@ -261,12 +260,7 @@ def test_open_grid_empty_roster_warns_and_uses_ancestor_only(
         lambda payload: payloads.append(payload) or {"status": "ok", "window_id": payload["title"]},
     )
 
-    result = agent_admin_window.open_grid_window(project)
+    with pytest.raises(agent_admin_window.AgentAdminWindowError, match="no worker seats"):
+        agent_admin_window.open_grid_window(project)
 
-    assert result["recovered"] is False
-    assert len(payloads) == 1
-    assert payloads[0]["title"] == "clawseat-spawn49"
-    assert payloads[0]["panes"] == [
-        {"label": "ancestor", "command": "tmux attach -t '=spawn49-ancestor'"}
-    ]
-    assert "ancestor-only grid" in capsys.readouterr().err
+    assert payloads == []

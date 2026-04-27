@@ -79,8 +79,8 @@
 **核心代码**:
 - `core/scripts/agent_admin_window.py:39` — `_PRIMARY_SEAT_IDS = frozenset({"ancestor", "memory"})` 双识别（已修）
 - `core/scripts/agent_admin_session.py` — 同款双识别（已修）
-- `core/lib/profile_validator.py:35` — `LEGAL_SEATS = {"ancestor", "planner", ...}` 应该把 ancestor 标 v1 legacy
-- `core/scripts/migrate_profile_to_v2.py:86` — migration 用，保留
+- `core/lib/profile_validator.py:35` — `LEGAL_SEATS` 接受 `memory` v2 primary 与 `ancestor` v1 alias
+- 历史 `migrate_profile_to_v2.py` 已删除；v0.7→v2 migration 已完成，operator 需要恢复时走 `scripts/install.sh --reinstall`
 - `core/scripts/seat_skill_mapping.py` — seat id → skill 映射，需检查
 - `core/launchers/agent-launcher.sh` — launcher 接受 seat id
 
@@ -121,7 +121,7 @@
 - `core/lib/machine_config.py` — machine 层
 - `core/scripts/agent_admin_template.py` / `agent_admin_layered.py` / `agent_admin_crud.py` / `agent_admin_parser.py`
 - `core/scripts/heartbeat_config.py`
-- `core/scripts/migrate_profile_to_v2.py` — migration 工具，保留
+- 历史 `migrate_profile_to_v2.py` — 已删除；v0.7→v2 migration 完成后不再保留反向 mutation 工具
 - `core/shell-scripts/send-and-verify.sh` — 通信脚本
 
 **文档**: `README.md`, `core/templates/shared/TOOLS/feishu.md`

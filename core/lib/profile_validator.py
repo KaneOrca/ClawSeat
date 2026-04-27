@@ -31,19 +31,20 @@ from machine_config import (  # noqa: E402
 
 PROFILE_SCHEMA_VERSION = 2
 
-# §7: legal seat names. `ancestor` stays as a v1 alias for migration
-# compatibility; v2 templates use `memory` as the primary seat. This set may
-# shrink in a future major release once v1 templates are sunset.
-LEGAL_SEATS = frozenset({"ancestor", "planner", "builder", "reviewer", "qa", "designer"})
-# §7 rule 3: minimum required.
-REQUIRED_SEATS = frozenset({"ancestor", "planner"})
+# §7: legal seat names. `ancestor` stays as a v1 primary-seat alias for
+# migration compatibility; v2 templates use `memory` as the primary seat.
+LEGAL_SEATS = frozenset({"ancestor", "memory", "planner", "builder", "reviewer", "qa", "designer"})
+# §7 rule 3: minimum required. A profile must declare planner plus either
+# memory (v2 canonical) or ancestor (v1 compatibility).
+REQUIRED_PLANNER = frozenset({"planner"})
+REQUIRED_PRIMARY = frozenset({"ancestor", "memory"})
 # §7 rule 10: only these may have parallel_instances > 1.
 PARALLEL_ALLOWED = frozenset({"builder", "reviewer", "qa"})
 # §7 rule 8: deprecated fields rejected in v2 profiles.
 DEPRECATED_FIELDS = frozenset({"heartbeat_transport", "heartbeat_owner", "heartbeat_receipt", "heartbeat_seats",
                                 "feishu_group_id", "runtime_seats", "materialized_seats"})
 # Seat names rejected in v2 profiles (rule 8 extended).
-_NUMBERED_SEAT_RE = re.compile(r"^(memory|koder|builder-\d+|reviewer-\d+|qa-\d+)$")
+_NUMBERED_SEAT_RE = re.compile(r"^(koder|builder-\d+|reviewer-\d+|qa-\d+)$")
 
 
 class ProfileValidationError(ValueError):
@@ -72,7 +73,7 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
     if version != PROFILE_SCHEMA_VERSION:
         errors.append(
             f"profile version must be {PROFILE_SCHEMA_VERSION}, got {version!r}. "
-            "Run `migrate-profile-to-v2 apply` to upgrade."
+            "Run `install.sh --reinstall <project>` to regenerate a canonical v2 profile."
         )
 
     # Rule 8 (deprecated fields)
@@ -80,7 +81,7 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
         if dep in raw:
             errors.append(
                 f"deprecated field {dep!r} must not appear in v2 profiles. "
-                "Remove it (migrate: `migrate-profile-to-v2 apply`)."
+                "Remove it or run `install.sh --reinstall <project>` to regenerate a canonical v2 profile."
             )
 
     # Rule 8 (seats): memory/koder/builder-N/reviewer-N/qa-N seat names
@@ -107,7 +108,7 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
             errors.append(
                 f"seat name {sname!r} is not allowed in v2 profiles. "
                 "Use the canonical role name (e.g. 'builder' with parallel_instances). "
-                "Run `migrate-profile-to-v2 apply`."
+                "Run `install.sh --reinstall <project>` to regenerate a canonical v2 profile."
             )
 
     # Rules 2, 3, 4: seats list
@@ -124,10 +125,14 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
             f"Allowed: {sorted(LEGAL_SEATS)}."
         )
 
-    missing_required = sorted(REQUIRED_SEATS - set(seats))
-    if missing_required:
+    seat_set = set(seats)
+    if not (REQUIRED_PLANNER & seat_set):
         errors.append(
-            f"'seats' must include {sorted(REQUIRED_SEATS)}; missing: {missing_required}."
+            "'seats' must include required seat: planner."
+        )
+    if not (REQUIRED_PRIMARY & seat_set):
+        errors.append(
+            "'seats' must include a primary seat: memory (v2) or ancestor (v1 compatibility)."
         )
 
     if len(seats) != len(set(seats)):

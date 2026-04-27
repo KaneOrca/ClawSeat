@@ -46,12 +46,12 @@ _PRIMARY_SEAT_IDS = frozenset({"ancestor", "memory"})
 
 def _project_primary_seat_id(project: Any) -> str:
     """Return the project's primary seat id (first engineer in template order
-    matching _PRIMARY_SEAT_IDS). Falls back to 'ancestor' for v1 compat."""
+    matching _PRIMARY_SEAT_IDS). Falls back to 'memory' for v2 canonicality."""
     for raw_engineer_id in getattr(project, "engineers", []) or []:
         engineer_id = str(raw_engineer_id)
         if engineer_id in _PRIMARY_SEAT_IDS:
             return engineer_id
-    return "ancestor"
+    return "memory"
 
 
 def tmux(
