@@ -92,6 +92,15 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - lane 之间冲突时，先标冲突，再决定重派还是 escalte。
 - 合并是 planner 的责任，不是 reviewer 或 qa 的责任。
 
+## 4.2 跨 Tool 交付协议
+
+不同 tool 的 Stop hook 能力不一致，交付协议必须走通用脚本，不依赖 Claude Code 私有便利机制。
+
+- Claude Code: `[DELIVER:...]` marker 可能被 Stop hook 自动扫描并触发交付；这只是 convenience，不是事实源。
+- Gemini / Codex: 必须显式调用 `complete_handoff.py` 写 receipt / DELIVERY，再用 `send-and-verify.sh --project <project>` 通知目标 seat。
+- 所有 tool 的 canonical path 相同：`dispatch_task.py` 负责派工，`complete_handoff.py` 负责 receipt，`send-and-verify.sh` 负责通知。
+- `[DELIVER:...]` marker 是 Claude Code convenience only，永远不要把它当作 primary delivery mechanism。
+
 ## 4.1 KB 维护（v2）
 
 Planner 在每次派工决策后维护自己的 domain KB，不写 Memory workspace，也不写 Memory-owned orphan KB。

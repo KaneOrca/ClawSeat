@@ -152,6 +152,15 @@ Memory 自有 orphan knowledge 只写在当前 project 下的单数目录：
   `complete_handoff.py`。
 - `[DELIVER:seat=<X>]` 是给 Stop-hook 的辅助标记，不替代结构化交付本身。
 
+## 跨 Tool 交付协议
+
+Memory 经常和 Claude Code、Gemini、Codex 混合项目协作。交付必须使用所有 tool 都能执行的通用脚本。
+
+- Claude Code: Stop hook 会 best-effort 扫描 `[DELIVER:...]` marker，这是便利自动化，不是 canonical receipt。
+- Gemini / Codex: 必须显式调用 `complete_handoff.py` 或 `memory_deliver.py`，再用 `send-and-verify.sh --project <project>` 通知目标 seat。
+- Canonical path: `dispatch_task.py` 派工，`complete_handoff.py` / `memory_deliver.py` 写 receipt，`send-and-verify.sh` 发通知。
+- `[DELIVER:...]` marker 是 Claude Code convenience only，永远不要作为 primary delivery mechanism。
+
 ## 禁止事项
 
 - 不调度其它 seat；不把自己变成 orchestrator

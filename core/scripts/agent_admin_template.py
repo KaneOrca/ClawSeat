@@ -143,6 +143,7 @@ class TemplateHandlers:
             "{{project}}": str(project.name),
             "{{profile}}": profile_display,
             "{{repo_root}}": str(project.repo_root),
+            "{{clawseat_root}}": str(_REPO_ROOT),
             "{{workspace}}": str(session.workspace),
             "{{agents_home}}": agents_home,
         }
@@ -272,7 +273,7 @@ class TemplateHandlers:
         )
         if engineer.skills:
             codex_lines.extend(["", *self.hooks.render_loaded_skills_lines(engineer, session.engineer_id)])
-        codex_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id, role_hint=engineer.role or None))
+        codex_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
 
         tasks_root = getattr(project, "tasks_root", f"{repo_root}/.tasks")
         profile_display = getattr(project, "profile_path", "")
@@ -309,7 +310,7 @@ class TemplateHandlers:
         claude_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             claude_lines.extend(["", *dispatch_playbook_lines])
-        claude_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id, role_hint=engineer.role or None))
+        claude_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
 
         gemini_lines = [
             f"# {session.engineer_id}",
@@ -339,7 +340,7 @@ class TemplateHandlers:
         gemini_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             gemini_lines.extend(["", *dispatch_playbook_lines])
-        gemini_lines.extend(_role_skill_section_lines(repo_root, session.engineer_id, role_hint=engineer.role or None))
+        gemini_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
 
         workspace_notes_lines = [
             "# Workspace Notes",
@@ -432,6 +433,12 @@ class TemplateHandlers:
                 project=project,
                 profile_display=profile_display,
             )
+            role_skill = "\n".join(
+                _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None)
+            )
+            if role_skill:
+                claude_memory = claude_memory.rstrip() + "\n" + role_skill + "\n"
+                gemini_memory = gemini_memory.rstrip() + "\n" + role_skill + "\n"
             rendered["AGENTS.md"] = gemini_memory if tool == "gemini" else claude_memory
             rendered["CLAUDE.md"] = claude_memory
             rendered["GEMINI.md"] = gemini_memory
