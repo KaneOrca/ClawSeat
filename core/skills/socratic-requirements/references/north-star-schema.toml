@@ -1,4 +1,4 @@
-# Reference schema for ~/.agents/projects/<project>/memory-data/north-star.toml.
+# Reference schema for ~/.agents/memory/projects/<project>/north-star.toml.
 # This file documents expected fields only; decision-log.py does not enforce it.
 
 [project]

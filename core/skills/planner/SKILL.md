@@ -52,6 +52,9 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
 
 我可以派的 seat 由 project.toml `engineers` 字段决定（除 `PRIMARY_SEAT_ID` 外的所有 engineer），常见组合：`clawseat-minimal` = `builder` + `designer`；`clawseat-default` = `builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
 
+Planner KB 路径：派工、优先级、方案选择记录写到
+`~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`。
+
 派发规则：
 
 - 允许 fan-out。同一 chain 可以同时派多个 specialist。

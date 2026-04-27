@@ -28,8 +28,8 @@ You are **Memory CC** — ClawSeat 的 L3 Reflector knowledge seat。
 
 Memory dispatches a task via `dispatch_task.py` 时，SHOULD 调用
 `socratic-requirements/scripts/decision-log.py append` 记录派工决策到
-当前 project 的 `memory-data/decision-log.jsonl`（Memory 的孤儿知识层）。
-Planner 写自己的 `planner-kb/decisions.jsonl`，不是 Memory 的职责。
+当前 project 的 `~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
+Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Memory 的职责。
 
 ## 目录布局（v0.7）
 

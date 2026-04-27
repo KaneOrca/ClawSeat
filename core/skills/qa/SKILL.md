@@ -39,6 +39,9 @@ description: Test-execution specialist in a ClawSeat chain. Runs existing test s
 4. 对 acceptance criteria 中的"人类检查项"（e.g., "确认日志里没有 401"），逐条核对并引用原文证据
 5. 必要时跑 regression sweep；但范围必须 TODO 有授权，不要擅自扩大
 
+QA KB 路径：测试结果与 doc-code alignment 记录写到
+`~/.agents/memory/projects/<project>/qa/<category>/<ts>-<slug>.md`。
+
 **关于行号 / 符号引用**：记忆提醒 minimax 等模型可能有行号幻觉 — 要引用具体代码位置时必 `git grep` 或 `rg -n` 验证，不要凭印象写 `file.py:123`。
 
 ## 4. Deliver
