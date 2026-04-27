@@ -140,6 +140,8 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 `DELIVERY.md` 必含 Scope、Results、Failures、Environment、Reproducibility，
 以及 TODO 要求时的 Verdict。
 
+若 QA 负责验收 builder 交付，必须检查 builder DELIVERY 的 `Docs Consulted` 段非空；外部 SDK/API/CLI 任务缺少 memory official-docs KB record 或明确 skip reason 时，结果标为 CHANGES_REQUESTED / FAIL。
+
 ## 通知层：[QA-NOTIFY:...] Marker
 
 无论 Patrol 还是 Dispatch 模式，QA 在最终输出末尾打印：

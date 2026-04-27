@@ -282,6 +282,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--reply-to", help="Seat that should receive completion back from the target.")
     parser.add_argument("--notes", default="dispatched via gstack-harness", help="TASKS.md note.")
+    parser.add_argument("--docs-consulted", default="", help="Memory KB record path for official-docs research.")
+    parser.add_argument("--docs-skip-reason", default="", help="Explicit reason official-docs research was not required.")
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
     add_notify_args(parser)
     parser.add_argument(
@@ -331,6 +333,20 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.task_type == "external-integration" and not (args.docs_consulted or args.docs_skip_reason):
+        print(
+            "external-integration task requires --docs-consulted <path> "
+            "or --docs-skip-reason <reason>",
+            file=sys.stderr,
+        )
+        return 2
+    docs_note = ""
+    if args.docs_consulted:
+        docs_note = f" docs_consulted:{args.docs_consulted}"
+    elif args.docs_skip_reason:
+        docs_note = f" docs_skip_reason:{args.docs_skip_reason}"
+    if docs_note and docs_note.strip() not in args.notes:
+        args.notes = f"{args.notes};{docs_note}"
     do_notify = resolve_notify(args)
     role_hint: str | None = getattr(args, "target_role", None)
 
@@ -422,6 +438,8 @@ def main() -> int:
         "test_policy": args.test_policy,
         "todo_path": str(todo_path),
         "reply_to": reply_to,
+        "docs_consulted": args.docs_consulted or None,
+        "docs_skip_reason": args.docs_skip_reason or None,
         "assigned_at": utc_now_iso(),
         "notified_at": None,
         "notify_message": None,

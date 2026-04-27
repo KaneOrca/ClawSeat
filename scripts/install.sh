@@ -96,6 +96,53 @@ PYTHON_BIN_OVERRIDE="${PYTHON_BIN:-}"
 PYTHON_BIN_VERSION=""
 PYTHON_BIN_RESOLUTION=""
 
+workspace_render_sha() {
+  local path="$1"
+  sed -n 's/^<!-- rendered_from_clawseat_sha=\([^ ]*\) .*$/\1/p' "$path" 2>/dev/null | head -1
+}
+
+stale_workspace_projects() {
+  local new_sha="$1"
+  local workspaces_root="$HOME/.agents/workspaces"
+  [[ -d "$workspaces_root" ]] || return 0
+  find "$workspaces_root" -mindepth 3 -maxdepth 3 \
+    \( -name CLAUDE.md -o -name AGENTS.md -o -name GEMINI.md \) -print 2>/dev/null \
+    | while IFS= read -r doc; do
+        local rendered_sha="" project=""
+        rendered_sha="$(workspace_render_sha "$doc")"
+        [[ -n "$rendered_sha" && "$rendered_sha" != "$new_sha" ]] || continue
+        project="$(basename "$(dirname "$(dirname "$doc")")")"
+        [[ -n "$project" ]] && printf '%s\n' "$project"
+      done | sort -u
+}
+
+prompt_workspace_rerender_after_update() {
+  local old_sha="$1" new_sha="$2"
+  local -a stale_projects=()
+  mapfile -t stale_projects < <(stale_workspace_projects "$new_sha")
+  ((${#stale_projects[@]} > 0)) || return 0
+  printf '[install] ClawSeat updated %s..%s. %d project(s) have stale workspaces.\n' \
+    "$old_sha" "$new_sha" "${#stale_projects[@]}" >&2
+  if [[ ! -t 0 ]]; then
+    warn "workspace re-render skipped in non-interactive mode; run: agent_admin engineer regenerate-workspace --project <project> --all-seats"
+    return 0
+  fi
+  local answer=""
+  read -r -p "Run regenerate-workspace --all-seats now? (Y/n) " answer
+  case "${answer:-Y}" in
+    Y|y|YES|Yes|yes)
+      local project_name=""
+      for project_name in "${stale_projects[@]}"; do
+        "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" engineer regenerate-workspace --project "$project_name" --all-seats --yes \
+          || warn "workspace re-render failed for $project_name (non-fatal)"
+      done
+      ;;
+    *)
+      warn "workspace re-render skipped; run later: agent_admin engineer regenerate-workspace --project <project> --all-seats"
+      ;;
+  esac
+}
+
 self_update_check() {
   if ! git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     note "[install] $REPO_ROOT is not a git worktree, skip self-update"
@@ -133,6 +180,7 @@ self_update_check() {
     note "[install] updating $REPO_ROOT to clawseat/main..."
     git -C "$REPO_ROOT" reset --hard clawseat/main
     note "[install] $local_sha -> $remote_sha"
+    prompt_workspace_rerender_after_update "$local_sha" "$remote_sha" || warn "workspace re-render prompt failed (non-fatal)"
     note "[install] re-executing install.sh with new code..."
     exec "$0" "$@"
   fi

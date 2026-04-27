@@ -67,7 +67,10 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - **Tests**：新增/更新的 test 名 + `pytest -q` 结果
 - **Regression sweep**：跑过的更广 test 子集 + 结果
 - **Risks / Blockers**：可能影响其它 lane 或需要 reviewer 特别注意的点
+- **Docs Consulted**：KB record path，或 `N/A — <reason>`；列出引用的具体 sections 与验证方式
 - **Commit**：是否已 commit；默认**不**自己 commit，除非 TODO 明确要求
+
+`Docs Consulted` 必须非空。外部 SDK/API/CLI（external SDK/API/CLI）任务应引用 memory 的官方文档 research record；非外部集成任务写 `N/A — <reason>`。
 
 ## 4.1 KB 维护（v2）
 
