@@ -360,8 +360,6 @@ class StoreHandlers:
             ]
         )
         for seat_id, override in sorted((project.seat_overrides or {}).items()):
-            if not override:
-                continue
             lines.extend(["", f"[seat_overrides.{seat_id}]"])
             for key, value in override.items():
                 if isinstance(value, bool):

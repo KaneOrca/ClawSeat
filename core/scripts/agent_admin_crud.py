@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from agent_admin_config import validate_runtime_combo
+from agent_admin_config import HOME, REPO_ROOT, SEND_AND_VERIFY_SH, validate_runtime_combo
 
 
 # ── Profile TOML helpers (text-based, preserves comments and order) ────────────
@@ -214,6 +214,55 @@ def _project_tool_root_path(project: str) -> Path:
     return project_tool_root(project)
 
 
+def _q(value: str) -> str:
+    import json
+
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _q_array(values: list[str]) -> str:
+    return "[" + ", ".join(_q(value) for value in values) + "]"
+
+
+def _render_dynamic_profile(
+    template_text: str,
+    *,
+    project: str,
+    repo_root: str,
+    profile_path: Path,
+    seats: list[str],
+    seat_roles: dict[str, str],
+) -> str:
+    tasks_root = HOME / ".agents" / "tasks" / project
+    workspace_root = HOME / ".agents" / "workspaces" / project
+    handoff_dir = tasks_root / "patrol" / "handoffs"
+    default_target = "planner" if "planner" in seats else (seats[0] if seats else "")
+    seat_roles_block = "\n".join(f"{seat} = {_q(seat_roles.get(seat, seat))}" for seat in seats)
+    seat_overrides_block = "\n\n".join(f"[seat_overrides.{seat}]" for seat in seats)
+    replacements = {
+        "{{project}}": project,
+        "{{profile_path}}": str(profile_path),
+        "{{repo_root}}": repo_root,
+        "{{tasks_root}}": str(tasks_root),
+        "{{project_doc}}": str(tasks_root / "PROJECT.md"),
+        "{{tasks_doc}}": str(tasks_root / "TASKS.md"),
+        "{{status_doc}}": str(tasks_root / "STATUS.md"),
+        "{{send_script}}": str(SEND_AND_VERIFY_SH),
+        "{{agent_admin}}": str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"),
+        "{{workspace_root}}": str(workspace_root),
+        "{{handoff_dir}}": str(handoff_dir),
+        "{{session_root}}": str(HOME / ".agents" / "sessions"),
+        "{{default_notify_target}}": default_target,
+        "{{seats}}": _q_array(seats),
+        "{{seat_roles_block}}": seat_roles_block,
+        "{{seat_overrides_block}}": seat_overrides_block,
+    }
+    rendered = template_text
+    for needle, value in replacements.items():
+        rendered = rendered.replace(needle, value)
+    return rendered.rstrip() + "\n"
+
+
 @dataclass
 class CrudHooks:
     error_cls: type[Exception]
@@ -293,21 +342,59 @@ class CrudHandlers:
         project_name = self.hooks.normalize_name(args.project)
         path = self.hooks.project_path(project_name)
         if path.exists():
-            raise self.hooks.error_cls(f"{project_name} already exists")
+            print(project_name)
+            return 0
         repo_root_value = (args.repo_root or "").strip()
         repo_root = str(Path(repo_root_value or os.getcwd()).expanduser())
+        template_name = str(getattr(args, "template", "") or "clawseat-minimal")
+        template = self.hooks.load_template(template_name)
+        merged = self.hooks.merge_template_local(
+            template,
+            {
+                "project_name": project_name,
+                "repo_root": repo_root,
+            },
+        )
+        engineer_ids = [
+            self.hooks.normalize_name(str(item.get("id", "")))
+            for item in merged["engineers"]
+            if str(item.get("id", "")).strip()
+        ]
+        seat_roles = {
+            self.hooks.normalize_name(str(item.get("id", ""))): str(item.get("role", "") or item.get("id", ""))
+            for item in merged["engineers"]
+            if str(item.get("id", "")).strip()
+        }
         project = self.hooks.project_cls(
             name=project_name,
-            repo_root=repo_root,
+            repo_root=merged["repo_root"],
             monitor_session=f"project-{project_name}-monitor",
-            engineers=[],
-            monitor_engineers=[],
-            template_name="",
-            seat_overrides={},
-            window_mode=args.window_mode,
-            open_detail_windows=bool(args.open_detail_windows),
+            engineers=list(engineer_ids),
+            monitor_engineers=list(engineer_ids),
+            template_name=str(template.get("template_name", template_name)),
+            seat_overrides={seat_id: {} for seat_id in engineer_ids},
+            window_mode=getattr(args, "window_mode", None) or str(merged["window_mode"]),
+            monitor_max_panes=len(engineer_ids) or int(merged["monitor_max_panes"]),
+            open_detail_windows=bool(args.open_detail_windows) or bool(merged["open_detail_windows"]),
         )
         self.hooks.write_project(project)
+        profile_path = HOME / ".agents" / "profiles" / f"{project_name}-profile-dynamic.toml"
+        if not profile_path.exists():
+            profile_template = (REPO_ROOT / "core" / "templates" / "profile-dynamic.template.toml").read_text(
+                encoding="utf-8"
+            )
+            self.hooks.write_text(
+                profile_path,
+                _render_dynamic_profile(
+                    profile_template,
+                    project=project_name,
+                    repo_root=project.repo_root,
+                    profile_path=profile_path,
+                    seats=engineer_ids,
+                    seat_roles=seat_roles,
+                ),
+                None,
+            )
         self.hooks.set_current_project(project.name)
         print(project.name)
         return 0
