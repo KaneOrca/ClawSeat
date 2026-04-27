@@ -1,7 +1,7 @@
-# ClawSeat Ancestor Brief — Phase-A (install)
+# ClawSeat Project-Memory Brief — Phase-A (install)
 
-> 你是 ClawSeat **始祖 CC**。当前项目: `${PROJECT_NAME}`（默认 install）。
-> 安装脚本已完成 host deps / env_scan / 六宫格 / memory seat。
+> 你是 ClawSeat **project-memory**。当前项目: `${PROJECT_NAME}`（默认 install）。
+> 安装脚本已完成 host deps / env_scan / workers 窗口 + memories 窗口 / memory seat。
 > 你的任务：接管剩余 bootstrap，按下面顺序跑 Phase-A。
 
 ## Meta-rule（最高优先级）
@@ -10,7 +10,7 @@
 
 1. `grep` `$CLAWSEAT_ANCESTOR_BRIEF` 找场景关键字（如 `重启`、`切换`、`lark-cli`、`window`、`seed`）
 2. 命中 Cookbook → 直接用 cookbook 里的 canonical 命令
-3. 未命中 Cookbook → 再 `grep` `${CLAWSEAT_ROOT}/core/skills/clawseat-ancestor/SKILL.md`
+3. 未命中 Cookbook → 再 `grep` `${CLAWSEAT_ROOT}/core/skills/clawseat-memory/SKILL.md`
 4. 仍未命中 → 报 operator："Cookbook 没覆盖此场景，请提供命令"
 
 禁止：
@@ -23,26 +23,42 @@
 
 - CLAWSEAT_ROOT: `${CLAWSEAT_ROOT}`
 - memory path: `${AGENT_HOME}/.agents/memory/machine/` (credentials/network/openclaw/github/current_context)
-- monitor grid: `clawseat-${PROJECT_NAME}` (iTerm window)
+- window topology: workers 窗口 `clawseat-${PROJECT_NAME}-workers` + memories 窗口 `clawseat-memories`
 - grid recovery: `agent_admin window open-grid ${PROJECT_NAME} [--recover] [--open-memory]`
-- memory iterm window: `machine-memory-claude`
-- seats 待拉起: planner, builder, reviewer, qa, designer
+- seats 待拉起: ${PENDING_SEATS_HUMAN}
   - install.sh Step 5.5 已通过 `agent_admin project bootstrap --template {CLAWSEAT_TEMPLATE_NAME} --local ...` 建好 project + engineer/session records
-  - 这 5 个 pane 当前都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
+  - workers 窗口中的 pane 当前都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`，你 spawn 对应 seat 后会自动 attach 到 canonical tmux session
 
 ## Seat TUI 生命周期（强制理解）
 
-1. install.sh Step 7 首次打开的 `clawseat-${PROJECT_NAME}` 六宫格，就是这个项目所有 seat 的持久 TUI 展示窗口。
-2. 除 ancestor 外，每个 pane 都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`：只支持这个 2 参数接口，不再支持旧的单参数 `<project-seat>`；它先通过 `agent_admin.py session-name` 解析 canonical session，再 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
+1. install.sh Step 7 首次打开的是 workers 窗口 `clawseat-${PROJECT_NAME}-workers`，另有共享 memories 窗口 `clawseat-memories`；二者构成 v2 双窗口布局。
+2. 除 primary seat（`${PROJECT_NAME}-${PRIMARY_SEAT_ID}`）外，每个 worker pane 都在跑 `scripts/wait-for-seat.sh ${PROJECT_NAME} <seat>`：只支持这个 2 参数接口，不再支持旧的单参数 `<project-seat>`；它先通过 `agent_admin.py session-name` 解析 canonical session，再 attach；seat 重启或 tmux client 断开后会自动 re-attach 回同一 iTerm pane。
 3. 不要手动 `tmux attach -t ${PROJECT_NAME}-<seat>` 去“救”某个 pane；这会污染 `wait-for-seat.sh` 所在 pane，把它从 canonical re-attach loop 里拽出来。
-4. 真正需要人工恢复的是六宫格窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
+4. 真正需要人工恢复的是 workers 窗口本身丢失/被关掉，此时用 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover`；不要手拼 osascript / iTerm driver。
+
+## Seat 失败诊断三步走（强制顺序）
+
+遇到 seat dead、pane 异常、长时间无响应、疑似认证失败、疑似 provider 断连时，先诊断，再决定是否 stop+start。强制顺序，不可跳：
+
+1. `tmux has-session -t '=<session>'` 检查 + `tmux capture-pane -t '=<session>:' -p | tail -10`，确认 seat 是真死，还是 tmux client 没 attach / pane 显示错位。
+2. `cat <runtime>/codex-home/log/codex-tui.log | tail -30` 看真实 error；Claude 看 `${AGENT_HOME}/Library/Logs/Claude/`，Gemini 看 `${AGENT_HOME}/.gemini/log/`。
+3. API tool 跑 `/v1/models` endpoint curl test；OAuth tool 先检查对应 OAuth status。
+4. 只有前 3 步都不指向已知问题，才 stop+start。
+
+也可一条命令出全图：
+
+```bash
+bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>
+```
+
+不许：凭印象 / 凭训练数据 / 凭单次表象（如 "401" 字面量）就跳 stop+start。
 
 ## Pane ↔ Seat 映射（强制理解）
 
-- 六宫格 pane 的身份以 `user.seat_id` 为准，不要靠 pane 显示名、滚动内容或你自己的视觉猜测判断。
+- workers 窗口 pane 的身份以 `user.seat_id` 为准，不要靠 pane 显示名、滚动内容或你自己的视觉猜测判断。
 - 如需核对当前窗口，把 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window list-panes --project ${PROJECT_NAME}` 当 canonical。
 - 默认布局固定为：
-  - `Row1-Col1 = ancestor`
+  - `Row1-Col1 = memory / primary seat`
   - `Row1-Col2 = planner`
   - `Row1-Col3 = builder`
   - `Row2-Col1 = reviewer`
@@ -52,7 +68,31 @@
 
 ## Phase-A Steps
 
+### Phase-A kickoff 触发协议
+
+`install.sh` 不再自动把 Phase-A kickoff 发进你的 TUI。启动后先等待 operator / install-memory 主动发送 kickoff，不要假设安装器已经替你发过。
+
+kickoff 文本由 `install.sh` 写入：
+
+```bash
+${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/patrol/handoffs/ancestor-kickoff.txt
+```
+
+operator 可以选择用 `send-and-verify.sh` 发送该文件内容，或手动 `cat` 后粘贴。收到 kickoff 后再按下面 B0-B7 顺序执行。
+
 ### B0 — env_scan LLM 分析（必须向用户汇报）
+
+## project.toml SSOT authority
+
+`${AGENT_HOME}/.agents/projects/${PROJECT_NAME}/project.toml` 的 `[seat_overrides]` 是 seat harness SSOT。
+memory MUST spawn seats per `seat_overrides` `tool` / `auth_mode` / `provider` literally.
+Do NOT infer provider from machine credentials or override without explicit operator flag.
+If `seat_overrides` does not include a seat, fall back to template default.
+Before writing `ancestor-provider-decision.md`, explicitly ack:
+
+```text
+Read project.toml seat_overrides: N overrides found. Decisions match overrides: yes/no
+```
 
 **B0.pre — 先读 install.sh 已写入的 harness overrides（强制）**：
 
@@ -93,6 +133,16 @@ operator 选"沿用"：把 overrides 内容作为 B0 决策写到
 
 operator 选"自定义"：继续走完 B0.0 memory query 和 B0.0.1 env_scan 原流程。
 
+`ancestor-provider-decision.md` 必须包含：
+
+```markdown
+## project.toml authority check
+- Source: ${AGENT_HOME}/.agents/projects/${PROJECT_NAME}/project.toml
+- Override count: <N>
+- Decisions match overrides: yes / no
+- Mismatches (if any): <list>
+```
+
 **B0.0 — memory query（强制）**：
 
 无论 B0.pre 选项为何，都先查 memory（为后续决策 / B0.0.1 env_scan 积累上下文）：
@@ -116,17 +166,17 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 （读本文件即完成）
 
 ### B2 — Verify memory seat
-`tmux has-session -t machine-memory-claude` 必须 rc=0；
+`tmux has-session -t "${PROJECT_NAME}-${PRIMARY_SEAT_ID}"` 必须 rc=0；
 否则重新拉起（`agent-launcher.sh --headless ...`）。
 
-### B2.5 — Bootstrap machine tenants + ancestor 快速概览
+### B2.5 — Bootstrap machine tenants + project-memory 快速概览
 
 **B2.5.0 — memory query（强制）**：
 先查 memory，确认 machine tenant bootstrap 的历史经验：
 
 ```bash
 python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
-  --search "bootstrap_machine_tenants machine.toml ancestor"
+  --search "bootstrap_machine_tenants machine.toml memory"
 ```
 
 读 `${AGENT_HOME}/.agents/memory/machine/openclaw.json` 的 `agents` 列表并灌进
@@ -138,7 +188,7 @@ python3 core/scripts/bootstrap_machine_tenants.py ${AGENT_HOME}/.agents/memory/
 
 成功判据：`list_openclaw_tenants()` 返回非空（若本机装了 OpenClaw）。
 
-跑完后，ancestor 自己 Read：
+跑完后，project-memory seat (${PRIMARY_SEAT_ID}) 自己 Read：
 - `${AGENT_HOME}/.agents/memory/machine/openclaw.json`
 - `${AGENT_HOME}/.openclaw/workspace.toml`（如存在）
 - `${AGENT_HOME}/.clawseat/machine.toml`
@@ -164,13 +214,13 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/query_memory.py \
 
 **B3.5.0 — project scope assertion（强制）**：
 
-在进入 B3.5 / B5 / B6 / B7 任何 seat 操作前，先确认当前 ancestor 的运行时身份没有串项目：
+在进入 B3.5 / B5 / B6 / B7 任何 seat 操作前，先确认当前 project-memory seat (${PRIMARY_SEAT_ID}) 的运行时身份没有串项目：
 
 ```bash
 [ "$(echo "$PROJECT_NAME")" ] || { echo "ARCH_VIOLATION: PROJECT_NAME unset"; exit 1; }
 ancestor_session="$(tmux display-message -p '#{session_name}')"
 echo "scope: project=$PROJECT_NAME ancestor_session=$ancestor_session"
-[ "$ancestor_session" = "${PROJECT_NAME}-ancestor" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
+[ "$ancestor_session" = "${PROJECT_NAME}-${PRIMARY_SEAT_ID}" ] || { echo "ARCH_VIOLATION: 始祖身份错位"; exit 1; }
 ```
 
 scope 不匹配 → halt，并告知 operator 先修正当前 iTerm / tmux 归属，不要继续 spawn seat。
@@ -187,7 +237,7 @@ if ! python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project show ${PROJECT
   echo "  1. 补 bootstrap: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bootstrap --template {CLAWSEAT_TEMPLATE_NAME} --local ${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/project-local.toml"
   echo "  2. project use: python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project use ${PROJECT_NAME}"
   echo "  3. 然后再回到 B3.5 / B4"
-  echo "  4. 如果只是 iTerm 六宫格丢失，先用 agent_admin window open-grid ${PROJECT_NAME} --recover 重开"
+  echo "  4. 如果只是 iTerm workers 窗口丢失，先用 agent_admin window open-grid ${PROJECT_NAME} --recover 重开"
   echo "**不要**绕过 L2 直接调 launcher；agent-launcher.sh 是 L3 INTERNAL-only（ARCH-CLARITY-047）"
   exit 1
 fi
@@ -195,7 +245,7 @@ fi
 
 每个 seat 只调用一次 `agent_admin session start-engineer`。启动后如果 seat 仍在 onboarding，先用 `agent_admin session status` / `tmux has-session` 查状态，不要反复 `start-engineer` 触发 retry。
 
-for seat in [planner, builder, reviewer, qa, designer]:
+for seat in [${PENDING_SEATS_HUMAN}]:
 1. 向用户交互："`${seat}` 用 bootstrapped default，还是切到 codex / gemini / 自定义 provider？"
    - 如需看当前默认，先跑：`python3 core/scripts/agent_admin.py show ${seat} --project ${PROJECT_NAME}`
 2. 如果用户改了 default，先重绑 session（不要直接调 launcher）：
@@ -216,7 +266,7 @@ for seat in [planner, builder, reviewer, qa, designer]:
    SEAT_SESSION="$(python3 core/scripts/agent_admin.py session-name ${seat} --project ${PROJECT_NAME})"
    until tmux has-session -t "=${SEAT_SESSION}" 2>/dev/null; do sleep 2; done
    ```
-6. 在六宫格里确认 `${seat}` pane 已从 wait-for-seat 自动 attach 到这个 session（用户目视确认）
+6. 在 workers 窗口里确认 `${seat}` pane 已从 wait-for-seat 自动 attach 到这个 session（用户目视确认）
 7. 下一个
 
 ### B5 — Feishu channel + koder overlay bind（5 子步）
@@ -238,7 +288,7 @@ cat ${AGENT_HOME}/.agents/memory/machine/openclaw.json
 - `${AGENT_HOME}/.agents/memory/machine/openclaw.json` 的 `agents[]` + `accounts[]`
 - `${AGENT_HOME}/.lark-cli/config.json`（如存在）
 
-ancestor 自己归纳，不再 `tmux send-keys` 给 memory，也不生成额外调研报告文件。
+project-memory seat (${PRIMARY_SEAT_ID}) 自己归纳，不再 `tmux send-keys` 给 memory，也不生成额外调研报告文件。
 
 整理成：
 1. 本机可用 openclaw agent：name / appId / account / app mode (user/bot) / 当前占用状态
@@ -267,7 +317,7 @@ lark-cli auth status --as bot
 
 #### B5.3 — 选 sender + 拉群 + 获取 chat_id
 
-operator 选完 agent 后，ancestor 给出指引：
+operator 选完 agent 后，project-memory 给出指引：
 
 ```text
 你选了 <selected_agent_name>。接下来请你在飞书：
@@ -283,7 +333,7 @@ operator 选完 agent 后，ancestor 给出指引：
 把 chat_id（格式 oc_xxxxxxxx）粘贴给我，或输入 'skip' 跳过进 CLI-only。
 ```
 
-#### B5.4 — operator 粘贴 chat_id → ancestor bind（4 字段）
+#### B5.4 — operator 粘贴 chat_id → project-memory bind（4 字段）
 
 ```bash
 python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bind \
@@ -293,7 +343,7 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bind \
   --feishu-sender-mode <user|bot|auto> \
   --openclaw-koder-agent <selected_agent_name> \
   --require-mention \
-  --bound-by ancestor
+  --bound-by memory
 ```
 
 #### B5.4.5 — 飞书 Layer 2 UI 配置（operator 手动，一次性）
@@ -303,7 +353,7 @@ python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py project bind \
 - 未完成时 B5.5 smoke 只能测 @ 路径，非 @ 需要等配置后重测
 - 配置完成后无需重启 OpenClaw，事件订阅会实时生效
 
-ancestor 行动：确认 operator 已完成 Layer 2 → 记录到 `phase-a-decisions.md` → 再继续 B5.5。
+project-memory seat (${PRIMARY_SEAT_ID}) 行动：确认 operator 已完成 Layer 2 → 记录到 `phase-a-decisions.md` → 再继续 B5.5。
 未确认 → 暂停 B5.5，不要自己推进。
 
 #### B5.5 — verify smoke dispatch
@@ -334,26 +384,27 @@ bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \
 - 不要裸写 `tmux send-keys -t <project>-<seat>`
 - 这个 wrapper 会先解析 canonical session，再做 Enter flush，避免 TUI 吞消息
 - 真正的正式派任务保持结构化，默认走 `core/skills/gstack-harness/scripts/dispatch_task.py`
+- 每次 dispatch 必须带 `--test-policy`；不许跨包继承上一个包的 test 规则。四个取值定义见 `core/skills/clawseat-memory/SKILL.md` 的 dispatch 章节。
 
 ### B7 — 写 STATUS.md
 ```text
 phase=ready
 completed_at=<ISO timestamp>
-providers=<ancestor + 5 seats + memory>
+providers=<primary seat + workers + memory>
 ```
 
-### B7.5 — ancestor 单向写 Phase-A 决策给 memory
+### B7.5 — project-memory seat (${PRIMARY_SEAT_ID}) 单向写 Phase-A 决策给 memory
 
 写 `${AGENT_HOME}/.agents/memory/learnings/${PROJECT_NAME}-phase-a-decisions.md`，记录：
 - provider 选择
 - seat roster / harness 决定
 - feishu binding 结果（或 CLI-only）
 
-这是 ancestor → memory 单向写入；不要 tmux send-keys 给 memory，不要求 memory 回复，也不阻塞 `phase=ready`。
+这是 project-memory seat (${PRIMARY_SEAT_ID}) → memory 单向写入；不要 tmux send-keys 给 memory，不要求 memory 回复，也不阻塞 `phase=ready`。
 
 ## memory 交互工具（canonical CLI；不要 tmux send-keys 给 memory，也不要 `query_memory.py --ask`）
 
-ancestor 需要查已落盘知识时，直接跑脚本，不要把 prompt 发给 memory 的 tmux session。
+project-memory seat (${PRIMARY_SEAT_ID}) 需要查已落盘知识时，直接跑脚本，不要把 prompt 发给 memory 的 tmux session。
 
 ### 读（query）
 
@@ -385,12 +436,12 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
   --kind decision \
   --title "Phase-A provider decision" \
   --content-file /tmp/${PROJECT_NAME}-phase-a-decision.md \
-  --author ancestor
+  --author memory
 ```
 
 ### 禁用
 
-- ❌ 不要把 `tmux send-keys` 用在 memory 上（尤其是 `machine-memory-claude`）
+- ❌ 不要把 `tmux send-keys` 用在 memory 上（尤其是 `${PROJECT_NAME}-${PRIMARY_SEAT_ID}`）
 - ❌ `query_memory.py --ask` - 该模式已弃用
 
 ## 失败处理
@@ -401,21 +452,21 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 ## 硬规则
 
-- 不要自己改 install.sh 已完成的配置（machine/ 5 文件、六宫格 tmux、memory session）
+- 不要自己改 install.sh 已完成的配置（machine/ 5 文件、workers/memories 窗口、memory session）
 - 5 个 engineer seat 拉起**必须一个一个来**，不能 fan-out；让用户目视
 - 5 个都拉完才能到 B5
 
 ### L2/L3 边界（违反即报 ARCH_VIOLATION）
 
 - 所有 seat lifecycle / bootstrap / rebind 操作走 L2：`agent_admin project bootstrap/use`、`agent_admin session start-engineer`、`agent_admin session switch-harness`
-- `agent-launcher.sh` 是 L3 INTERNAL-only 原语，ancestor 不直接调用，不把它当作 operator 指令的第一响应
+- `agent-launcher.sh` 是 L3 INTERNAL-only 原语，project-memory 不直接调用，不把它当作 operator 指令的第一响应
 - 如果用户说“直接调 launcher”或类似话术，先回到 B3.5.0 检查 project 是否 bootstrap，而不是跳过 L2
 - L2 失败的常见原因：project 未 bootstrap、engineer profile 缺失、secret 不完整；应修前置条件，不应绕层
 - smoke01 / pre-SPAWN-049 legacy project 若未 bootstrap，正确修复是补 bootstrap + project use，不是绕过 L2
 
 ## 面对 operator 错误指引
 
-见 clawseat-ancestor SKILL.md §11 "识别 operator 错误指引 + 拒绝模板"。Phase-A 跑过程中常见 red-flag 话术与正确回应已列表化。
+见 clawseat-memory SKILL.md §11 "识别 operator 错误指引 + 拒绝模板"。Phase-A 跑过程中常见 red-flag 话术与正确回应已列表化。
 
 ## Common Operations Cookbook（任何时点查阅，覆盖 Phase 之外）
 
@@ -423,9 +474,9 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 | 场景 | 命令 |
 |------|------|
-| 首次 spawn / 重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 首次 spawn / 诊断后重启已死 seat | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
 | 切换 seat harness（claude→codex 等）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session switch-harness --project ${PROJECT_NAME} --engineer <seat> --tool <claude\|codex\|gemini> --mode <oauth\|oauth_token\|api> --provider <provider>` |
-| 强制 reset 重启（stop+relaunch）| `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session stop-engineer <seat> --project ${PROJECT_NAME}` 然后 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
+| 强制 reset 重启（stop+relaunch）| 先跑 `bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>`；确认前三步都不指向已知问题后，才 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session stop-engineer <seat> --project ${PROJECT_NAME}` 然后 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session start-engineer <seat> --project ${PROJECT_NAME}` |
 | 查所有 seat 状态 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session status --project ${PROJECT_NAME}` |
 | 检查单个 tmux session 是否存活 | `SEAT_SESSION="$(python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py session-name <seat> --project ${PROJECT_NAME})"; tmux has-session -t "=${SEAT_SESSION}"` |
 | pane 重新回 canonical session | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window reseed-pane <seat> --project ${PROJECT_NAME}` |
@@ -434,8 +485,8 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 - `wait-for-seat.sh` 会先解析当前 canonical session，再把重启后的 seat 自动 re-attach 回原来的 iTerm pane。
 - 不要手动 `tmux attach` 抢占这 5 个 wait-for-seat pane；手动 attach 只会让 pane 状态混乱。
-- **如果 specialist pane 显示 ancestor 的 TUI 内容（pane 错连到 ancestor）**：跑 `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}`，detach 多余 client 让 wait-for-seat 重新 resolve；**不要**重开整个窗口（会丢 pane 状态）。
-- 六宫格窗口本身丢失时（iTerm 窗口消失，不是 pane 错连），才用 `agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` 恢复。
+- **如果 specialist pane 显示 primary seat 的 TUI 内容（pane 错连到 primary seat）**：跑 `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}`，detach 多余 client 让 wait-for-seat 重新 resolve；**不要**重开整个窗口（会丢 pane 状态）。
+- workers 窗口本身丢失时（iTerm 窗口消失，不是 pane 错连），才用 `agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` 恢复。
 
 ### Sandbox HOME / lark-cli
 
@@ -448,11 +499,11 @@ python3 ${CLAWSEAT_ROOT}/core/skills/memory-oracle/scripts/memory_write.py \
 
 | 场景 | 命令 |
 |------|------|
-| **specialist pane 显示 ancestor 内容**（pane 错连） | `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}` |
+| **specialist pane 显示 primary seat 内容**（pane 错连） | `bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh ${PROJECT_NAME}` |
 | 整个 iTerm 6 宫格窗口丢失 | `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window open-grid --project ${PROJECT_NAME} --recover` |
 | 同时开 memory 独立窗口 | 加 `--open-memory` flag |
 
-**诊断 pane 错连**：`tmux list-clients -t '=${PROJECT_NAME}-ancestor'`；若超过 1 个 client 说明 specialist pane 错接到 ancestor 上（详见 `docs/ITERM_TMUX_REFERENCE.md §3.1.1`）。`recover-grid.sh` 幂等安全。
+**诊断 pane 错连**：`tmux list-clients -t '=${PROJECT_NAME}-${PRIMARY_SEAT_ID}'`；若超过 1 个 client 说明 specialist pane 错接到 primary seat 上（详见 `docs/ITERM_TMUX_REFERENCE.md §3.1.1`）。`recover-grid.sh` 幂等安全。
 
 ### Brief drift
 

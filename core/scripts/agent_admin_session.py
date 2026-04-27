@@ -611,7 +611,9 @@ class SessionService:
                     env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
                         project_tool_root(session.project, home=_real_home_for_tool_seeding())
                     )
-                if session.engineer_id == "ancestor":
+                # Primary seat (ancestor or memory in v2 minimal) gets the
+                # ancestor-bootstrap brief injected as CLAWSEAT_ANCESTOR_BRIEF.
+                if session.engineer_id in ("ancestor", "memory"):
                     ancestor_brief = self._ancestor_brief_path(session.project)
                     if ancestor_brief.is_file():
                         env["CLAWSEAT_ANCESTOR_BRIEF"] = str(ancestor_brief)
@@ -677,8 +679,9 @@ class SessionService:
 
         # Auto-recover iTerm grid pane routing after any specialist seat
         # start / restart. When a seat's canonical tmux session comes up
-        # after grid open time, stray grid panes may have attached to
-        # install-ancestor instead (see scripts/recover-grid.sh / docs
+        # after grid open time, stray grid panes may have attached to the
+        # project's primary seat (v1 install-ancestor, v2 install-memory)
+        # instead (see scripts/recover-grid.sh / docs
         # ITERM_TMUX_REFERENCE.md §3.1.1). This hook is idempotent:
         # if no misroute exists it prints "ok" and exits 0.
         self._auto_recover_grid_after_start(session)

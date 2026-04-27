@@ -221,6 +221,7 @@ def test_render_plist_to_file(tmp_home, tmp_path):
     assert "<integer>300</integer>" in xml
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 def test_render_plist_valid_xml(tmp_home, tmp_path):
     """plutil -lint must accept the generated plist."""
     hc.main(["set", "--project", "install", "--cadence", "5min",
@@ -418,4 +419,3 @@ def test_beacon_concurrency_different_projects(tmp_path, tmp_path_factory):
         logged = stubs[i][1].read_text()
         assert f"oc_{proj}" in logged
         assert proj in logged
-

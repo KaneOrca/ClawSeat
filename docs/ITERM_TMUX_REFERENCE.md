@@ -65,30 +65,30 @@
 - 如果之前误开了多个同项目窗口，修复命令会清理旧窗口并恢复到单窗口多 tab 的布局
 - koder 的日常维护只需要记住这一个入口；不要把窗口维护分散到多个手工命令里
 
-## 3.1.1 六宫格 pane 错连恢复（install 布局专用）
+## 3.1.1 Workers 窗口 pane 错连恢复（install 布局专用）
 
-现象：specialist pane（planner/builder/reviewer/qa/designer）里显示的是 **ancestor 的 TUI 内容**，而不是自己 seat 的 Claude/Codex/Gemini 界面。
+现象：worker pane（planner/builder/designer）里显示的是 **memory 的 TUI 内容**，而不是自己 seat 的 Claude/Codex/Gemini 界面。
 
-根因（已观察）：grid 开窗时（install.sh Step 7）specialist tmux session 都还没存在；每个 pane 的 `wait-for-seat.sh` 在那个瞬态里可能错 attach 到 `install-ancestor`（目前已被 round-3+ 严格化，但旧窗口仍可能卡在此状态）。tmux-attach 阻塞成功后 while-true 循环不再 iterate，即便 canonical seat 后来起来也不会自动切回。
+根因（已观察）：workers 窗口开窗时（install.sh Step 7a）worker tmux session 可能还没存在；每个 pane 的 `wait-for-seat.sh` 在那个瞬态里可能错 attach 到 `<project>-memory`（目前已被 round-3+ 严格化，但旧窗口仍可能卡在此状态）。tmux-attach 阻塞成功后 while-true 循环不再 iterate，即便 canonical seat 后来起来也不会自动切回。
 
 诊断：
 ```bash
-env -u TMUX tmux list-clients -t '=<project>-ancestor'
-# 正常：1 个 client（ancestor pane 自己）
-# 错连：6 个 client（ancestor + 5 个错位 specialist pane）
+env -u TMUX tmux list-clients -t '=<project>-memory'
+# 正常：1 个 client（memory tab 自己）
+# 错连：多个 client（memory + 错位 worker pane）
 ```
 
 修复：
 ```bash
 bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh <project>
-# 等价手动操作：detach 所有 install-ancestor 的多余 client
+# 等价手动操作：detach 所有 <project>-memory 的多余 client
 # 每个被 detach 的 pane 的 wait-for-seat.sh 会自动 re-resolve + attach 到 canonical seat
 ```
 
-幂等：`recover-grid.sh` 若发现 ancestor 只有 1 个 client，直接 `ok` 退出，不做任何动作。
+幂等：`recover-grid.sh` 若发现 memory 只有 1 个 client，直接 `ok` 退出，不做任何动作。
 
 与 `window open-grid` 的区别：
-- `recover-grid.sh` — **保留现有 iTerm 窗口 + 6 个 pane**，只修正 client 路由；首选。
+- `recover-grid.sh` — **保留现有 workers 窗口 + pane**，只修正 client 路由；首选。
 - `window open-grid` — **新开 iTerm 窗口**；整个窗口丢失时使用。
 
 ## 3.2 脚本化回归入口
@@ -109,6 +109,6 @@ bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh <project>
 - `TMUX_CAPTURE_FAILED`：pane 不可读，优先确认会话是否存活、pane 是否在前端阻塞。  
 
 ## 5. 与安装 / 重入入口的衔接
-- v0.7 主链路默认走 `docs/INSTALL.md` 与 `scripts/install.sh`：预检、环境扫描、ancestor 拉起、六宫格与 memory 窗口由 install.sh 完成，然后交给 ancestor 接手后续席位。  
-- `scripts/launch_ancestor.sh` 只应视为 legacy helper / test fixture，不是 fresh install 的 canonical 入口。  
-- 若链路失败，当前实现会给出可执行修复建议，不做非阻断 GUI 降级。  
+- v0.7 主链路默认走 `docs/INSTALL.md` 与 `scripts/install.sh`：预检、环境扫描、memory 拉起、workers 窗口与 memories 窗口由 install.sh 完成，然后交给 memory 接手后续席位。
+- `scripts/launch_ancestor.sh` 只应视为 legacy helper / test fixture，不是 fresh install 的 canonical 入口。
+- 若链路失败，当前实现会给出可执行修复建议，不做非阻断 GUI 降级。

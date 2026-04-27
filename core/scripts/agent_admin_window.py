@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -10,6 +11,8 @@ import textwrap
 import time
 from pathlib import Path
 from typing import Any
+
+import projects_registry
 
 
 class AgentAdminWindowError(Exception):
@@ -30,6 +33,31 @@ _ITERM_PANES_DRIVER = Path(__file__).resolve().with_name("iterm_panes_driver.py"
 _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
 _MEMORY_WINDOW_TITLE = "machine-memory-claude"
+_MEMORIES_WINDOW_TITLE = "clawseat-memories"
+_MAX_ITERM_PANES = 8
+_V1_GRID_TEMPLATES = frozenset({
+    "",
+    "clawseat-default",
+    "clawseat-engineering",
+    "clawseat-creative",
+})
+
+# Per-project primary seat ids — the seat that is the user's first dialog
+# entry (orchestrator + memory + research). v1 templates name it "ancestor";
+# v2 clawseat-minimal renames to "memory" per RFC-001 §2.4. Code that special-
+# cases the primary seat (window grid, recovery hooks, brief env injection,
+# reseed restrictions) checks set membership instead of literal equality.
+_PRIMARY_SEAT_IDS = frozenset({"ancestor", "memory"})
+
+
+def _project_primary_seat_id(project: Any) -> str:
+    """Return the project's primary seat id (first engineer in template order
+    matching _PRIMARY_SEAT_IDS). Falls back to 'ancestor' for v1 compat."""
+    for raw_engineer_id in getattr(project, "engineers", []) or []:
+        engineer_id = str(raw_engineer_id)
+        if engineer_id in _PRIMARY_SEAT_IDS:
+            return engineer_id
+    return "ancestor"
 
 
 def tmux(
@@ -181,12 +209,12 @@ def _is_frontstage_engineer(engineer_id: str) -> bool:
 
 
 def _project_grid_seat_ids(project: Any) -> list[str]:
-    """Return the non-ancestor project seats in roster order."""
+    """Return the non-primary project seats (workers) in roster order."""
     roster: list[str] = []
     seen: set[str] = set()
     for raw_engineer_id in getattr(project, "engineers", []) or []:
         engineer_id = str(raw_engineer_id)
-        if engineer_id == "ancestor" or _is_frontstage_engineer(engineer_id):
+        if engineer_id in _PRIMARY_SEAT_IDS or _is_frontstage_engineer(engineer_id):
             continue
         if engineer_id in seen:
             continue
@@ -198,17 +226,18 @@ def _project_grid_seat_ids(project: Any) -> list[str]:
 def build_grid_payload(project: Any, *, wait_for_seat_script: Path | None = None) -> dict[str, Any]:
     wait_script = wait_for_seat_script or _WAIT_FOR_SEAT_SCRIPT
     seats = _project_grid_seat_ids(project)
+    primary_seat_id = _project_primary_seat_id(project)
     if not seats:
         print(
-            f"agent_admin_window: project {project.name} has no non-ancestor seats; "
-            "falling back to ancestor-only grid",
+            f"agent_admin_window: project {project.name} has no worker seats; "
+            f"falling back to {primary_seat_id}-only grid",
             file=sys.stderr,
         )
 
     panes: list[dict[str, str]] = [
         {
-            "label": "ancestor",
-            "command": f"tmux attach -t '={project.name}-ancestor'",
+            "label": primary_seat_id,
+            "command": f"tmux attach -t '={project.name}-{primary_seat_id}'",
         }
     ]
     for seat_id in seats:
@@ -228,7 +257,163 @@ def build_grid_payload(project: Any, *, wait_for_seat_script: Path | None = None
     return {"title": f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}", "panes": panes}
 
 
+def _worker_attach_pane(
+    *,
+    project_name: str,
+    seat_id: str,
+    wait_script: Path,
+) -> dict[str, str]:
+    return {
+        "label": seat_id,
+        "command": (
+            "bash "
+            + shlex.quote(str(wait_script))
+            + " "
+            + shlex.quote(project_name)
+            + " "
+            + shlex.quote(seat_id)
+        ),
+    }
+
+
+def _workers_recipe(n_total: int) -> list[list[object]]:
+    if n_total < 1:
+        return []
+    n_right = n_total - 1
+    if n_right == 0:
+        return []
+    recipe: list[list[object]] = [[0, True]]
+    if n_right == 1:
+        return recipe
+    if n_right == 2:
+        recipe.append([1, False])
+        return recipe
+
+    cols = (n_right + 1) // 2
+    for col in range(1, cols):
+        recipe.append([col, True])
+    cols_with_bottom = n_right - cols
+    for col in range(cols_with_bottom):
+        recipe.append([col + 1, False])
+    return recipe
+
+
+def _right_worker_order(n_right: int) -> list[int]:
+    if n_right <= 0:
+        return []
+    if n_right == 1:
+        return [0]
+    if n_right == 2:
+        return [0, 1]
+
+    cols = (n_right + 1) // 2
+    ordering: list[int] = []
+    for col in range(cols):
+        user_idx = col * 2
+        if user_idx < n_right:
+            ordering.append(user_idx)
+    for col in range(cols):
+        user_idx = col * 2 + 1
+        if user_idx < n_right:
+            ordering.append(user_idx)
+    return ordering
+
+
+def build_workers_payload(project: Any, *, wait_for_seat_script: Path | None = None) -> dict[str, Any]:
+    wait_script = wait_for_seat_script or _WAIT_FOR_SEAT_SCRIPT
+    workers = _project_grid_seat_ids(project)
+    if "planner" in workers:
+        workers = ["planner", *[seat_id for seat_id in workers if seat_id != "planner"]]
+    if not workers:
+        raise AgentAdminWindowError(f"project {project.name} has no worker seats for v2 workers window")
+    if len(workers) > _MAX_ITERM_PANES:
+        raise AgentAdminWindowError(
+            f"project {project.name} has {len(workers)} worker seats; "
+            f"workers window supports at most {_MAX_ITERM_PANES} panes"
+        )
+
+    main_worker = workers[0]
+    right_workers = workers[1:]
+    panes = [
+        _worker_attach_pane(
+            project_name=project.name,
+            seat_id=main_worker,
+            wait_script=wait_script,
+        )
+    ]
+    for worker_idx in _right_worker_order(len(right_workers)):
+        panes.append(
+            _worker_attach_pane(
+                project_name=project.name,
+                seat_id=right_workers[worker_idx],
+                wait_script=wait_script,
+            )
+        )
+    return {
+        "title": f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers",
+        "panes": panes,
+        "recipe": _workers_recipe(len(panes)),
+    }
+
+
+def _tmux_session_names() -> list[str]:
+    env = os.environ.copy()
+    env.pop("TMUX", None)
+    result = subprocess.run(
+        ["tmux", "ls", "-F", "#{session_name}"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def build_memories_payload(project: Any) -> dict[str, Any] | None:
+    del project  # The shared memories window is built from all registered project memory sessions.
+    tabs = [
+        {
+            "name": entry["name"],
+            "command": f"tmux attach -t '={entry['tmux_name']}'",
+        }
+        for entry in projects_registry.enumerate_projects()
+        if entry.get("name") and entry.get("tmux_name")
+    ]
+    if not tabs:
+        memory_sessions = sorted(
+            session
+            for session in _tmux_session_names()
+            if session.endswith("-memory") and session != _MEMORY_WINDOW_TITLE
+        )
+        tabs = [
+            {
+                "name": session[: -len("-memory")],
+                "command": f"tmux attach -t '={session}'",
+            }
+            for session in memory_sessions
+        ]
+    if not tabs:
+        return None
+    return {
+        "mode": "tabs",
+        "title": _MEMORIES_WINDOW_TITLE,
+        "tabs": tabs,
+        "ensure": True,
+    }
+
+
+def ensure_memories_pane(project: Any) -> dict[str, Any]:
+    payload = build_memories_payload(project)
+    if payload is None:
+        return {"status": "skipped", "reason": "no project memory tmux sessions"}
+    return run_iterm_panes_driver(payload)
+
+
 def build_memory_payload() -> dict[str, Any]:
+    """Return the v1-only global machine memory window payload."""
     return {
         "title": _MEMORY_WINDOW_TITLE,
         "panes": [
@@ -331,6 +516,7 @@ def focus_iterm_window(title: str) -> None:
 
 
 def open_memory_window() -> dict[str, Any]:
+    """Open the v1-only global machine memory window."""
     if not tmux_has_session(_MEMORY_WINDOW_TITLE):
         print(
             f"agent_admin_window: memory tmux session missing for {_MEMORY_WINDOW_TITLE}; "
@@ -351,6 +537,29 @@ def open_grid_window(
     recover: bool = False,
     open_memory: bool = False,
 ) -> dict[str, Any]:
+    template_name = str(getattr(project, "template_name", "") or "")
+    if template_name == "clawseat-minimal":
+        window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}-workers"
+        if recover and iterm_window_exists(window_title):
+            focus_iterm_window(window_title)
+            result: dict[str, Any] = {"status": "ok", "window_id": "", "recovered": True}
+        else:
+            result = run_iterm_panes_driver(build_workers_payload(project))
+            result["recovered"] = False
+        result["memories"] = ensure_memories_pane(project)
+        result["memory"] = {
+            "status": "skipped",
+            "reason": "v2 minimal uses memories tabs, not machine-memory-claude",
+        }
+        return result
+
+    if template_name not in _V1_GRID_TEMPLATES:
+        print(
+            f"agent_admin_window: unknown template_name {template_name!r}; "
+            "falling back to v1 grid window",
+            file=sys.stderr,
+        )
+
     window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project.name}"
     if recover and iterm_window_exists(window_title):
         focus_iterm_window(window_title)
@@ -429,12 +638,18 @@ async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -
 
     app = await iterm2.async_get_app(connection)
     target = await _find_reseed_target_session(app, project_name, seat_id)
+
     activate = getattr(target, "async_activate", None)
     if activate is not None:
         try:
             await activate()
+            await asyncio.sleep(0.1)
         except Exception:  # noqa: BLE001 focus is best-effort
             pass
+
+    await target.async_send_text("\x03")
+    await asyncio.sleep(0.05)
+
     wait_command = (
         "bash "
         + shlex.quote(str(_WAIT_FOR_SEAT_SCRIPT))
@@ -442,18 +657,35 @@ async def _reseed_pane_async(connection: Any, project_name: str, seat_id: str) -
         + shlex.quote(project_name)
         + " "
         + shlex.quote(seat_id)
-        + "\n"
     )
-    for payload in ("\x03", "\x02d", wait_command):
-        await target.async_send_text(payload)
-        await asyncio.sleep(0)
+    window_title = f"{_GRID_WINDOW_TITLE_PREFIX}{project_name}"
+    script = (
+        'tell application "iTerm2"\n'
+        "  repeat with w in windows\n"
+        f'    if (name of w as text) contains "{_sanitize_applescript_text(window_title)}" then\n'
+        "      repeat with t in tabs of w\n"
+        "        repeat with s in sessions of t\n"
+        '          tell s to set seatName to variable named "user.seat_id"\n'
+        f'          if (seatName as text) is "{_sanitize_applescript_text(seat_id)}" then\n'
+        f'            tell s to write text "{_sanitize_applescript_text(wait_command)}"\n'
+        "            return\n"
+        "          end if\n"
+        "        end repeat\n"
+        "      end repeat\n"
+        "    end if\n"
+        "  end repeat\n"
+        f'  error "reseed-pane: seat \'{_sanitize_applescript_text(seat_id)}\' not found in iTerm grid window \'{_sanitize_applescript_text(window_title)}\'"\n'
+        "end tell"
+    )
+    osascript(script)
+
     return {"status": "ok", "project": project_name, "seat_id": seat_id}
 
 
 def reseed_pane(project: Any, seat_id: str) -> dict[str, str]:
     seat = str(seat_id).strip()
-    if seat == "ancestor":
-        raise AgentAdminWindowError("cannot reseed ancestor pane")
+    if seat in _PRIMARY_SEAT_IDS:
+        raise AgentAdminWindowError(f"cannot reseed primary seat pane ({seat})")
     try:
         import iterm2  # type: ignore[import-not-found]
     except ImportError as exc:

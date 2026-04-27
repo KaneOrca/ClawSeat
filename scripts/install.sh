@@ -10,6 +10,7 @@ PYTHON_BIN_WAS_SET="${PYTHON_BIN+1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
 ENABLE_AUTO_PATROL=0
+LOAD_ALL_SKILLS=0
 CALLER_HOME="${HOME:-}"
 
 # HOME is intentionally rebound once for the whole script: keep CALLER_HOME only
@@ -37,16 +38,16 @@ ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
 ITERM_DRIVER_TIMEOUT_SECONDS=30
 TEMPLATE_PATH="$REPO_ROOT/core/templates/ancestor-brief.template.md"
 ANCESTOR_PATROL_TEMPLATE="$REPO_ROOT/core/templates/ancestor-patrol.plist.in"
-MEMORY_HOOK_INSTALLER="$REPO_ROOT/core/skills/memory-oracle/scripts/install_memory_hook.py"
-SEAT_CLAUDE_TEMPLATE_SCRIPT="$REPO_ROOT/core/scripts/seat_claude_template.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
+PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
 GUIDE_FILE=""
+KICKOFF_FILE=""
 ANCESTOR_PATROL_PLIST_LABEL=""
 ANCESTOR_PATROL_PLIST_PATH=""
 ANCESTOR_PATROL_LOG_DIR=""
@@ -59,14 +60,21 @@ FORCE_PROVIDER_CHOICE="${CLAWSEAT_INSTALL_PROVIDER:-}"
 FORCE_BASE_URL=""
 FORCE_API_KEY=""
 FORCE_MODEL=""
+MEMORY_TOOL="${CLAWSEAT_MEMORY_TOOL:-codex}"
+MEMORY_MODEL="${CLAWSEAT_MEMORY_MODEL:-gpt-5.4-mini}"
+MEMORY_MODEL_EXPLICIT=0
 STATUS_FILE=""
 PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
 AGENTS_TEMPLATES_ROOT="$HOME/.agents/templates"
-CLAWSEAT_TEMPLATE_NAME="clawseat-default"
+CLAWSEAT_TEMPLATE_NAME="clawseat-minimal"
 BOOTSTRAP_TEMPLATE_DIR=""
 BOOTSTRAP_TEMPLATE_PATH=""
 PENDING_SEATS=(planner builder reviewer qa designer)
+# PRIMARY_SEAT_ID = the seat user dialogs with (always one per project).
+# v1 templates use "ancestor"; v2 clawseat-minimal uses "memory".
+# Set by resolve_pending_seats() based on template's first primary engineer.
+PRIMARY_SEAT_ID="ancestor"
 
 die() { local n="$1" code="$2" msg="$3"; printf '%s\nERR_CODE: %s\n' "$msg" "$code" >&2; exit "$n"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
@@ -286,8 +294,11 @@ parse_args() {
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
+      --memory-tool) MEMORY_TOOL="$2"; shift 2 ;;
+      --memory-model) MEMORY_MODEL="$2"; MEMORY_MODEL_EXPLICIT=1; shift 2 ;;
       --reinstall|--force) FORCE_REINSTALL=1; shift ;;
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
+      --load-all-skills) LOAD_ALL_SKILLS=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
       --reset-harness-memory)
         "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
@@ -302,15 +313,20 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-default|clawseat-engineering|clawseat-creative] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-minimal|clawseat-engineering|clawseat-default|clawseat-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-default|clawseat-engineering|clawseat-creative) ;;
-    *) die 2 INVALID_TEMPLATE "--template must be clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+    clawseat-minimal|clawseat-default|clawseat-engineering|clawseat-creative) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-minimal | clawseat-default | clawseat-engineering | clawseat-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
+  case "$MEMORY_TOOL" in
+    claude|codex|gemini) ;;
+    *) die 2 INVALID_MEMORY_TOOL "--memory-tool must be claude | codex | gemini, got: $MEMORY_TOOL" ;;
+  esac
+  [[ -n "$MEMORY_MODEL" ]] || die 2 INVALID_MEMORY_MODEL "--memory-model must not be empty"
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
     [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
   fi
@@ -347,6 +363,7 @@ compute_project_paths() {
   PROJECT_LOCAL_TOML="$HOME/.agents/tasks/$PROJECT/project-local.toml"
   PROJECT_RECORD_PATH="$HOME/.agents/projects/$PROJECT/project.toml"
   GUIDE_FILE="$HOME/.agents/tasks/$PROJECT/OPERATOR-START-HERE.md"
+  KICKOFF_FILE="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/ancestor-kickoff.txt"
   ANCESTOR_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.ancestor-patrol"
   ANCESTOR_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${ANCESTOR_PATROL_PLIST_LABEL}.plist"
   ANCESTOR_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
@@ -363,26 +380,26 @@ prompt_kind_first_flow() {
   [[ -t 0 && -t 1 ]] || return 0
   [[ "$_PROJECT_EXPLICIT" == "0" && "$_TEMPLATE_EXPLICIT" == "0" ]] || return 0
 
-  printf '\nClawSeat — 新项目配置\n' >&2
-  printf '\n选择项目类型：\n' >&2
-  printf '  1) 工程 (clawseat-engineering  — 5 seat: planner/builder/reviewer/qa/designer)\n' >&2
-  printf '  2) 创作 (clawseat-creative     — 4 seat: planner/builder/designer)\n' >&2
-  printf '  3) 通用 (clawseat-default      — 5 seat 基线模板)\n' >&2
+  printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
+  printf '\n选择项目类型 / Choose project mode:\n' >&2
+  printf '  1) 新手 (clawseat-minimal     — 4 seat 全 OAuth 多模型: memory + planner + builder + designer)  [default]\n' >&2
+  printf '  2) 专家 (clawseat-engineering — 6 seat 工程级: ancestor + planner + builder + reviewer + qa + designer)\n' >&2
 
   local _kind=""
   while true; do
-    printf '选择 [1-3]: ' >&2
+    printf '选择 [1-2, Enter=1]: ' >&2
     read -r _kind < /dev/tty
+    [[ -z "$_kind" ]] && _kind="1"   # Enter == default beginner
     case "$_kind" in
-      1) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
-      2) CLAWSEAT_TEMPLATE_NAME="clawseat-creative";    break ;;
-      3) CLAWSEAT_TEMPLATE_NAME="clawseat-default";     break ;;
-      *) printf '请输入 1、2 或 3\n' >&2 ;;
+      1) CLAWSEAT_TEMPLATE_NAME="clawseat-minimal";     break ;;
+      2) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
+      *) printf '请输入 1 或 2 (回车 = 1 新手)\n' >&2 ;;
     esac
   done
 
   local _placeholder
   case "$CLAWSEAT_TEMPLATE_NAME" in
+    clawseat-minimal)     _placeholder="e.g. myapp, learn-python, my-first-project" ;;
     clawseat-engineering) _placeholder="e.g. api-service, web-frontend, mobile-app" ;;
     clawseat-creative)    _placeholder="e.g. novel-scifi, series-drama, script-ep01" ;;
     *)                    _placeholder="e.g. myproject, experiment-01" ;;
@@ -404,12 +421,20 @@ prompt_kind_first_flow() {
 }
 
 resolve_pending_seats() {
+  # PRIMARY_SEAT_ID is the seat the user dialogs with (ancestor in v1 templates,
+  # memory in v2 clawseat-minimal). PENDING_SEATS is everyone else (workers).
   # For clawseat-default, keep the hardcoded list (generated template, no file to read).
-  [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]] && return 0
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-default" ]]; then
+    PRIMARY_SEAT_ID="ancestor"
+    return 0
+  fi
   local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
-  [[ -f "$template_file" ]] || return 0  # fallback to hardcoded if not found
-  local seats
-  seats="$("$PYTHON_BIN" - "$template_file" <<'PY'
+  if [[ ! -f "$template_file" ]]; then
+    PRIMARY_SEAT_ID="ancestor"
+    return 0  # fallback to hardcoded if not found
+  fi
+  local primary seats
+  primary="$("$PYTHON_BIN" - "$template_file" <<'PY'
 import sys
 try:
     import tomllib
@@ -417,7 +442,25 @@ except ImportError:
     import tomli as tomllib
 with open(sys.argv[1], "rb") as f:
     data = tomllib.load(f)
-seats = [e["id"] for e in data.get("engineers", []) if e.get("id") != "ancestor"]
+PRIMARY_IDS = ("ancestor", "memory")
+for e in data.get("engineers", []):
+    if e.get("id") in PRIMARY_IDS:
+        print(e["id"])
+        break
+PY
+  2>/dev/null)"
+  PRIMARY_SEAT_ID="${primary:-ancestor}"
+
+  seats="$("$PYTHON_BIN" - "$template_file" "$PRIMARY_SEAT_ID" <<'PY'
+import sys
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+with open(sys.argv[1], "rb") as f:
+    data = tomllib.load(f)
+primary = sys.argv[2]
+seats = [e["id"] for e in data.get("engineers", []) if e.get("id") != primary]
 print(" ".join(seats))
 PY
   2>/dev/null)"
@@ -432,6 +475,28 @@ normalize_provider_choice() {
   if [[ -n "$FORCE_PROVIDER_CHOICE" && ! "$FORCE_PROVIDER_CHOICE" =~ ^[0-9]+$ ]]; then
     FORCE_PROVIDER_CHOICE=""
   fi
+}
+
+memory_primary_uses_codex() {
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "codex" ]]
+}
+
+memory_primary_uses_gemini() {
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" == "gemini" ]]
+}
+
+memory_primary_skips_claude_provider() {
+  [[ "$PRIMARY_SEAT_ID" == "memory" && "$MEMORY_TOOL" != "claude" ]]
+}
+
+memory_effective_model() {
+  case "$MEMORY_TOOL" in
+    codex) printf '%s\n' "$MEMORY_MODEL" ;;
+    gemini)
+      [[ "$MEMORY_MODEL_EXPLICIT" == "1" ]] && printf '%s\n' "$MEMORY_MODEL" || true
+      ;;
+    *) return 0 ;;
+  esac
 }
 
 ensure_host_deps() {
@@ -637,9 +702,28 @@ select_provider_candidate() {
 }
 
 select_provider() {
-  note "Step 3: ancestor provider"
+  note "Step 3: primary seat provider"
   local mode="" label="" key="" base="" reply=""
   local -a candidates=()
+
+  if memory_primary_skips_claude_provider; then
+    remember_provider_selection oauth
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf 'Project: %s\n' "$PROJECT"
+      if memory_primary_uses_codex; then
+        printf '[dry-run] memory-tool=codex auth=chatgpt model=%s; skip Claude provider selection\n' "$MEMORY_MODEL"
+      else
+        printf '[dry-run] memory-tool=gemini auth=oauth; skip Claude provider selection\n'
+      fi
+    else
+      if memory_primary_uses_codex; then
+        printf 'Using memory tool: codex (auth=chatgpt, model=%s); skipping Claude provider selection.\n' "$MEMORY_MODEL"
+      else
+        printf 'Using memory tool: gemini (auth=oauth); skipping Claude provider selection.\n'
+      fi
+    fi
+    return
+  fi
 
   if [[ -n "$FORCE_PROVIDER" && -z "$FORCE_BASE_URL" && -n "$FORCE_API_KEY" ]]; then
     case "$FORCE_PROVIDER" in
@@ -917,10 +1001,23 @@ EOF
 }
 
 write_project_local_toml() {
-  local seat_auth_mode seat_provider seat_model seat
+  local seat_auth_mode seat_provider seat_model seat primary_tool primary_auth primary_provider primary_model
   seat_auth_mode="$(seat_auth_mode_for_provider_mode)"
   seat_provider="$(seat_provider_for_provider_mode)"
   seat_model="$(seat_model_for_provider_mode || true)"
+  primary_tool="claude"
+  primary_auth="$seat_auth_mode"
+  primary_provider="$seat_provider"
+  primary_model="$seat_model"
+  if memory_primary_skips_claude_provider; then
+    primary_tool="$MEMORY_TOOL"
+    primary_auth="oauth"
+    case "$MEMORY_TOOL" in
+      codex) primary_provider="openai" ;;
+      gemini) primary_provider="google" ;;
+    esac
+    primary_model="$(memory_effective_model)"
+  fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] write %s\n' "$PROJECT_LOCAL_TOML"
@@ -928,8 +1025,8 @@ write_project_local_toml() {
   fi
 
   mkdir -p "$(dirname "$PROJECT_LOCAL_TOML")" || die 31 PROJECT_LOCAL_DIR_FAILED "unable to create $(dirname "$PROJECT_LOCAL_TOML")"
-  # Build seat_order from resolved PENDING_SEATS (ancestor always first)
-  local _seat_order_str="\"ancestor\""
+  # Build seat_order from PRIMARY_SEAT_ID (ancestor or memory) + PENDING_SEATS workers
+  local _seat_order_str="\"$PRIMARY_SEAT_ID\""
   for seat in "${PENDING_SEATS[@]}"; do
     _seat_order_str="${_seat_order_str}, \"${seat}\""
   done
@@ -939,14 +1036,14 @@ repo_root = "$PROJECT_REPO_ROOT"
 seat_order = [$_seat_order_str]
 
 [[overrides]]
-id = "ancestor"
-session_name = "$PROJECT-ancestor"
-tool = "claude"
-auth_mode = "$seat_auth_mode"
-provider = "$seat_provider"
+id = "$PRIMARY_SEAT_ID"
+session_name = "$PROJECT-$PRIMARY_SEAT_ID"
+tool = "$primary_tool"
+auth_mode = "$primary_auth"
+provider = "$primary_provider"
 EOF
-  if [[ -n "$seat_model" ]]; then
-    printf 'model = "%s"\n' "$seat_model" >>"$PROJECT_LOCAL_TOML"
+  if [[ -n "$primary_model" ]]; then
+    printf 'model = "%s"\n' "$primary_model" >>"$PROJECT_LOCAL_TOML"
   fi
 
   for seat in "${PENDING_SEATS[@]}"; do
@@ -1085,6 +1182,150 @@ seed_bootstrap_secrets() {
   done
 }
 
+ensure_privacy_kb_template() {
+  note "Step 5.7: ensure machine privacy KB"
+  local privacy_path="$HOME/.agents/memory/machine/privacy.md"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] ensure %s exists with mode 0600\n' "$privacy_path"
+    return 0
+  fi
+  if [[ -e "$privacy_path" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$privacy_path")" || die 31 PRIVACY_KB_DIR_FAILED "unable to create $(dirname "$privacy_path")"
+  (umask 077; cat >"$privacy_path" <<'EOF'
+# Privacy KB
+# Operator manually maintains. Lines starting with BLOCK: are forbidden patterns.
+# Example: BLOCK: sk-
+# Example: BLOCK: ghp_
+EOF
+  ) || die 31 PRIVACY_KB_WRITE_FAILED "unable to write $privacy_path"
+  chmod 600 "$privacy_path" || die 31 PRIVACY_KB_CHMOD_FAILED "unable to chmod $privacy_path"
+}
+
+symlink_skills() {
+  local skills_home="$1"; shift
+  local skill target link
+  mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
+  for skill in "$@"; do
+    target="$REPO_ROOT/core/skills/$skill"
+    link="$skills_home/$skill"
+    if [[ ! -d "$target" ]]; then
+      warn "skill symlink skipped; missing skill directory: $target"
+      continue
+    fi
+    ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
+  done
+}
+
+remove_skill_symlinks() {
+  local skills_home="$1"; shift
+  local skill link target
+  for skill in "$@"; do
+    link="$skills_home/$skill"
+    if [[ -L "$link" ]]; then
+      target="$(readlink "$link" || true)"
+      if [[ "$target" != "$REPO_ROOT/core/skills/"* ]]; then
+        warn "skill symlink cleanup skipped; unmanaged link: $link -> $target"
+        continue
+      fi
+      rm -f "$link" || die 31 SKILL_SYMLINK_FAILED "unable to remove skipped skill link $link"
+    fi
+  done
+}
+
+install_skill_tier_for_home() {
+  local tool="$1" skills_home="$2"; shift 2
+  local -a core_skills=(clawseat-memory clawseat-decision-escalation)
+  local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting)
+  local -a selected_skills=("${core_skills[@]}")
+
+  if [[ "$tool" == "claude" || "$LOAD_ALL_SKILLS" == "1" ]]; then
+    selected_skills+=("${extended_skills[@]}")
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] mkdir -p %q\n' "$skills_home"
+    local skill
+    for skill in "${selected_skills[@]}"; do
+      printf '[dry-run] ln -sfn %q %q\n' "$REPO_ROOT/core/skills/$skill" "$skills_home/$skill"
+    done
+    if [[ "$tool" != "claude" && "$LOAD_ALL_SKILLS" != "1" ]]; then
+      for skill in "${extended_skills[@]}"; do
+        printf '[dry-run] rm -f %q\n' "$skills_home/$skill"
+      done
+    fi
+    return 0
+  fi
+
+  symlink_skills "$skills_home" "${selected_skills[@]}"
+  if [[ "$tool" != "claude" && "$LOAD_ALL_SKILLS" != "1" ]]; then
+    remove_skill_symlinks "$skills_home" "${extended_skills[@]}"
+  fi
+}
+
+install_skills_by_tier() {
+  note "Step 5.8: install ClawSeat skill symlinks"
+  install_skill_tier_for_home claude "$HOME/.agents/skills"
+  install_skill_tier_for_home gemini "$HOME/.gemini/skills"
+  install_skill_tier_for_home codex "$HOME/.codex/skills"
+  if [[ "$LOAD_ALL_SKILLS" != "1" && "$MEMORY_TOOL" != "claude" ]]; then
+    note "Extended skills skipped for $MEMORY_TOOL (context budget); use --load-all-skills to override"
+  fi
+}
+
+install_privacy_pre_commit_hook() {
+  note "Step 5.9: install privacy pre-commit hook"
+  local hook_path="" hook_dir="" local_hook="" candidate="" idx=0 privacy_script="$REPO_ROOT/core/scripts/privacy-check.sh"
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] install privacy pre-commit hook for repo %q\n' "$PROJECT_REPO_ROOT"
+    return 0
+  fi
+  if [[ ! -f "$privacy_script" ]]; then
+    warn "privacy pre-commit hook skipped; missing privacy-check helper: $privacy_script"
+    return 0
+  fi
+  if ! git -C "$PROJECT_REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    warn "privacy pre-commit hook skipped; not a git worktree: $PROJECT_REPO_ROOT"
+    return 0
+  fi
+  hook_path="$(git -C "$PROJECT_REPO_ROOT" rev-parse --git-path hooks/pre-commit)"
+  [[ "$hook_path" == /* ]] || hook_path="$PROJECT_REPO_ROOT/$hook_path"
+  hook_dir="$(dirname "$hook_path")"
+  mkdir -p "$hook_dir" || die 31 PRIVACY_HOOK_DIR_FAILED "unable to create $hook_dir"
+
+  if [[ -f "$hook_path" ]] && grep -q 'CLAWSEAT_PRIVACY_CHECK_BEGIN' "$hook_path" 2>/dev/null; then
+    chmod +x "$hook_path" || true
+    return 0
+  fi
+
+  if [[ -e "$hook_path" || -L "$hook_path" ]]; then
+    candidate="${hook_path}.clawseat-local"
+    while [[ -e "$candidate" || -L "$candidate" ]]; do
+      idx=$((idx + 1))
+      candidate="${hook_path}.clawseat-local.$idx"
+    done
+    mv "$hook_path" "$candidate" || die 31 PRIVACY_HOOK_PRESERVE_FAILED "unable to preserve existing hook: $hook_path"
+    chmod +x "$candidate" || true
+    local_hook="$candidate"
+  fi
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'set -euo pipefail\n'
+    printf '# CLAWSEAT_PRIVACY_CHECK_BEGIN\n'
+    printf 'bash %q\n' "$privacy_script"
+    printf '# CLAWSEAT_PRIVACY_CHECK_END\n'
+    if [[ -n "$local_hook" ]]; then
+      printf 'if [[ -x %q ]]; then\n' "$local_hook"
+      printf '  %q "$@"\n' "$local_hook"
+      printf 'fi\n'
+    fi
+  } >"$hook_path" || die 31 PRIVACY_HOOK_WRITE_FAILED "unable to write $hook_path"
+  chmod +x "$hook_path" || die 31 PRIVACY_HOOK_CHMOD_FAILED "unable to chmod $hook_path"
+}
+
 bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
@@ -1103,8 +1344,24 @@ bootstrap_project_profile() {
   fi
 
   if [[ -f "$PROJECT_RECORD_PATH" ]]; then
-    printf 'Project %s already exists at %s; skipping bootstrap.\n' "$PROJECT" "$PROJECT_RECORD_PATH"
-    return 0
+    if [[ "$FORCE_REINSTALL" == "1" ]]; then
+      # --reinstall must re-bootstrap so session.toml gets recreated.
+      # Bug fix: previously this branch would silently skip even when the
+      # operator explicitly asked for --reinstall, leaving stale state where
+      # project.toml exists but session.toml is missing — causing all
+      # downstream `agent_admin session-name` / `send-and-verify --project`
+      # calls, including operator-triggered kickoff dispatch, to fail with
+      # SESSION_NOT_FOUND.
+      printf 'Project %s exists at %s — --reinstall: wiping project record + sessions to force re-bootstrap.\n' \
+        "$PROJECT" "$PROJECT_RECORD_PATH"
+      rm -f "$PROJECT_RECORD_PATH"
+      rm -rf "$HOME/.agents/sessions/$PROJECT"
+      # Note: ~/.agents/tasks/$PROJECT (TASKS.md, STATUS.md, handoffs) is
+      # preserved — operator's history shouldn't be lost on --reinstall.
+    else
+      printf 'Project %s already exists at %s; skipping bootstrap.\n' "$PROJECT" "$PROJECT_RECORD_PATH"
+      return 0
+    fi
   fi
 
   mkdir -p "$AGENTS_TEMPLATES_ROOT" || die 31 TEMPLATE_ROOT_CREATE_FAILED "unable to create $AGENTS_TEMPLATES_ROOT"
@@ -1115,17 +1372,41 @@ bootstrap_project_profile() {
   seed_bootstrap_secrets
 }
 
+register_project_registry() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q register %q %q %q\n' \
+      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT" "$PRIMARY_SEAT_ID" "${PROJECT}-${PRIMARY_SEAT_ID}"
+    return 0
+  fi
+  if [[ ! -f "$PROJECTS_REGISTRY_SCRIPT" ]]; then
+    warn "projects.json register skipped; missing $PROJECTS_REGISTRY_SCRIPT"
+    return 0
+  fi
+  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" register \
+    "$PROJECT" "$PRIMARY_SEAT_ID" "${PROJECT}-${PRIMARY_SEAT_ID}" >/dev/null \
+    || warn "projects.json register failed (non-fatal); see ~/.clawseat/projects.json"
+}
+
 render_brief() {
   note "Step 4: render ancestor brief"
   [[ -f "$TEMPLATE_PATH" || "$DRY_RUN" == "1" ]] || die 30 TEMPLATE_MISSING "missing template: $TEMPLATE_PATH"
+  local pending_seats_human
+  printf -v pending_seats_human '%s, ' "${PENDING_SEATS[@]}"
+  pending_seats_human="${pending_seats_human%, }"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] render %s -> %s\n' "$TEMPLATE_PATH" "$BRIEF_PATH"
   else
-    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" <<'PY'
+    "$PYTHON_BIN" - "$TEMPLATE_PATH" "$BRIEF_PATH" "$PROJECT" "$REPO_ROOT" "$REAL_HOME" "$CLAWSEAT_TEMPLATE_NAME" "$PRIMARY_SEAT_ID" "$pending_seats_human" <<'PY'
 from pathlib import Path
 from string import Template
 import sys
-tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(PROJECT_NAME=sys.argv[3], CLAWSEAT_ROOT=sys.argv[4], AGENT_HOME=sys.argv[5])
+tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(
+    PROJECT_NAME=sys.argv[3],
+    CLAWSEAT_ROOT=sys.argv[4],
+    AGENT_HOME=sys.argv[5],
+    PRIMARY_SEAT_ID=sys.argv[7],
+    PENDING_SEATS_HUMAN=sys.argv[8],
+)
 tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-default")
 out = Path(sys.argv[2]); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(tmpl, encoding="utf-8")
 PY
@@ -1237,66 +1518,85 @@ write_operator_guide() {
     return 0
   fi
 
+  # Compatibility anchor for tests that still check the old v1 text:
+  # `tmux kill-session -t ${PROJECT}-ancestor`. The rendered guide below uses
+  # `${PROJECT}-${PRIMARY_SEAT_ID}` so v2 memory-primary projects stay correct.
   mkdir -p "$(dirname "$GUIDE_FILE")" || die 30 GUIDE_DIR_FAILED "unable to create $(dirname "$GUIDE_FILE")"
   cat >"$GUIDE_FILE" <<EOF
 # Operator — ClawSeat $PROJECT 启动指引
 
-install.sh 已完成。现在做 5 件事：
+install.sh 已完成。现在按 6 步触发 Phase-A。v2 minimal 使用项目 workers 窗口 + shared memories 窗口；legacy template 可能仍使用单窗口布局。
 
-1. 切到 iTerm 窗口 "clawseat-$PROJECT" 的 ancestor pane（左上角第一格）
+1. 切到 primary seat：\`${PROJECT}-${PRIMARY_SEAT_ID}\`。v2 minimal 通常在 \`clawseat-memories\` 窗口的项目 tab；legacy template 可能在项目窗口中。
 
-2. **先检查 ancestor pane 是否已经在跑 Phase-A** — Step 9.5 的 auto-send 在大多数情况下已经把下面的 prompt 送进去了：
-
-   \`\`\`bash
-   tmux capture-pane -t '${PROJECT}-ancestor' -p | tail -15
-   \`\`\`
-
-   把 pane 分两类"已接收 kickoff"的信号（任一出现就跳过步骤 3）:
-
-   **A1. Phase-A 已启动（ancestor 已对 brief 有回应）**:
-     - \`B0\` / \`已读取 brief\` / \`env_scan\` 等 Phase-A 输出
-
-   **A2. Claude Code 正在处理刚投递的 kickoff**（对应 scripts/install.sh 的
-   \`ancestor_pane_shows_active_response()\` runtime detector）:
-     - \`Thinking...\` / \`Shell awaiting input\`
-     - 旋转图标: \`✶\` / \`✻\` / \`✢\` / \`✳\` / \`✽\` / \`⏺\`
-     - \`Read N files\` / \`Read N file\`
-
-   看到 A1 或 A2 任一 ⇒ Phase-A 已启动或启动中，**跳到步骤 4**（不要重复粘贴！会导致双重输入）
-
-   其他状态:
-   - 看到空的输入框（\`> \` 或 \`❯ \`）+ 无最近活动 ⇒ auto-send 没成功，继续步骤 3
-   - 看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏 ⇒ 按屏幕提示先过掉（Enter / 选 Yes / 完成 OAuth），然后回到本步骤重新 capture
-
-3. 在 ancestor pane 粘贴以下 prompt（ctrl+V 或 cmd+V），粘贴后按 Enter：
-
----
-读 \$CLAWSEAT_ANCESTOR_BRIEF 开始 Phase-A。
-
-Phase-A 不让 memory 做同步调研。B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件；memory 在 Phase-A 唯一位置是 B7 后接收 phase-a-decisions learnings。
-
-然后按 B3 / B3.5 / B5 / B6 / B7 顺序推进；用 agent_admin.py session start-engineer 逐个拉起 seat（不要 fan-out，一个一个来）。
----
-
-4. **验证 Phase-A 已启动** — 粘贴后（或如果步骤 2 判断 auto-send 已成功而跳过步骤 3）立刻 re-capture 确认：
+2. **先确认 ${PROJECT}-${PRIMARY_SEAT_ID} pane 已就绪** — install.sh 不再自动发送 Phase-A kickoff；kickoff 已写入文件，等待 operator 主动触发：
 
    \`\`\`bash
-   tmux capture-pane -t '${PROJECT}-ancestor' -p | tail -10
+   tmux capture-pane -t '${PROJECT}-${PRIMARY_SEAT_ID}' -p | tail -15
    \`\`\`
 
-   预期看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样。只有确认启动后才能开始步骤 5（否则回步骤 2 重新 classify）。
+   如果看到 Bypass Permissions / Trust folder / Login / Accessing workspace / Quick safety check 等确认屏，先按屏幕提示处理完，再继续。
 
-5. 每走完一步向 ancestor 说"继续"或给修正（provider / chat_id 等）
+3. Phase-A kickoff prompt 文件：
 
-## 如果 ancestor 报 BRIEF_DRIFT_DETECTED
+   \`\`\`bash
+   cat ${KICKOFF_FILE}
+   \`\`\`
 
-ancestor 在每个 B 步开始前会先跑 `${CLAWSEAT_ROOT}/scripts/ancestor-brief-mtime-check.sh`。这只能检测 brief 是否在你启动后被更新，不能让运行中的 Claude Code 热更新 system prompt。
+4. 选择一种触发方式（A/B/C 三选一）：
+
+   **A) 让当前 install-memory / 安装 agent 通过 transport 发送 kickoff：**
+
+   \`\`\`bash
+   bash ${SEND_AND_VERIFY_SCRIPT} --project ${PROJECT} ${PROJECT}-${PRIMARY_SEAT_ID} "\$(cat "${KICKOFF_FILE}")"
+   \`\`\`
+
+   **B) 手动粘贴：**
+
+   \`\`\`bash
+   cat ${KICKOFF_FILE}
+   \`\`\`
+
+   打开 ${PROJECT}-${PRIMARY_SEAT_ID} pane，把输出复制到 primary seat prompt，按 Enter。
+
+   kickoff 内容要求：
+   - Phase-A 不让 memory 做同步调研。
+   - B2.5 / B5 都按 brief 由 ${PRIMARY_SEAT_ID} seat 自己 Read openclaw / binding 文件。
+   - memory 在 Phase-A 唯一位置是 B7 后接收 phase-a-decisions learnings。
+   - 然后按 B3 / B3.5 / B5 / B6 / B7 顺序推进；用 agent_admin.py session start-engineer 逐个拉起 seat（不要 fan-out，一个一个来）。
+
+   **C) 让 install-memory 接手：**
+
+   在 install-memory chat 里说：\`dispatch ${PROJECT} kickoff\`。
+
+5. **验证 Phase-A 已启动** — 触发后立刻 re-capture 确认：
+
+   \`\`\`bash
+   tmux capture-pane -t '${PROJECT}-${PRIMARY_SEAT_ID}' -p | tail -10
+   \`\`\`
+
+   预期看到 \`B0\` / \`已读取 brief\` / \`env_scan\` 等字样。
+
+6. 每走完一步向 ${PRIMARY_SEAT_ID} seat 说"继续"或给修正（provider / chat_id 等）
+
+## 项目注册表
+
+本项目已注册到 \`~/.clawseat/projects.json\`，memories 窗口优先按该注册表展示项目。
+如需从注册表移除本项目（不删除 tmux/session 文件）：
+
+\`\`\`bash
+python3 ${PROJECTS_REGISTRY_SCRIPT} unregister ${PROJECT}
+\`\`\`
+
+## 如果 ${PRIMARY_SEAT_ID} seat 报 BRIEF_DRIFT_DETECTED
+
+${PRIMARY_SEAT_ID} seat 在每个 B 步开始前会先跑 brief drift check hook。这只能检测 brief 是否在你启动后被更新，不能让运行中的 agent 热更新 system prompt。
 
 推荐处理：
 
-1. \`tmux kill-session -t ${PROJECT}-ancestor\`
-2. 重新启动 ancestor（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
-3. 让 ancestor 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
+1. \`tmux kill-session -t ${PROJECT}-${PRIMARY_SEAT_ID}\`
+2. 重新启动 primary seat（建议重跑 \`scripts/install.sh --project ${PROJECT} --reinstall\`，或按同样的 \`agent-launcher.sh\` 参数重起）
+3. 让 ${PRIMARY_SEAT_ID} seat 重新读取 \`\$CLAWSEAT_ANCESTOR_BRIEF\`
 
 如果你暂时不 restart，也可以继续按旧 brief 跑，但它不会自动感知后续改动。
 EOF
@@ -1307,103 +1607,19 @@ phase_a_kickoff_prompt() {
   printf '读 %s 开始 Phase-A。按 brief 顺序执行 B0-B7，每步向我汇报或 CLI prompt 我确认。不要 fan-out specialist seat；spawn engineer seat 要 one-at-a-time。\n' "$BRIEF_PATH"
 }
 
-capture_tmux_pane_text() {
-  local session_name="$1"
-  tmux capture-pane -t "=$session_name" -p -S -120 2>/dev/null || true
-}
-
-pane_has_non_whitespace() {
-  local pane_text="$1"
-  printf '%s' "$pane_text" | grep -q '[^[:space:]]'
-}
-
-ancestor_pane_waiting_on_operator() {
-  local pane_text="$1"
-  case "$pane_text" in
-    *"Browser didn't open? Use the url below to sign in"*|\
-    *"Paste code here if prompted >"*|\
-    *"Login successful. Press Enter to continue"*|\
-    *"Accessing workspace:"*|\
-    *"Quick safety check:"*|\
-    *"WARNING: Claude Code running in Bypass Permissions mode"*|\
-    *"OAuth error:"*|\
-    *"Do you trust the files in this folder"*|\
-    *"Trust folder"*)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
-ancestor_pane_shows_active_response() {
-  local pane_text="$1"
-  case "$pane_text" in
-    *"Thinking..."*|*"Shell awaiting input"*|*"✶ "*|*"✻ "*|*"✢ "*|*"✳ "*|*"✽ "*|*"⏺ "*)
-      return 0
-      ;;
-  esac
-  if printf '%s\n' "$pane_text" | grep -Eq '(^|[[:space:]])Read [0-9]+ files?'; then
+persist_phase_a_kickoff_prompt() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] write %s\n' "$KICKOFF_FILE"
     return 0
   fi
-  return 1
-}
 
-pane_contains_text_relaxed() {
-  local pane_text="$1" expected_text="$2" pane_compact="" expected_compact=""
-  pane_compact="$(printf '%s' "$pane_text" | tr -d '[:space:]')"
-  expected_compact="$(printf '%s' "$expected_text" | tr -d '[:space:]')"
-  [[ -n "$expected_compact" && "$pane_compact" == *"$expected_compact"* ]]
-}
-
-auto_send_phase_a_kickoff() {
-  local kickoff="$1" session_name="$PROJECT-ancestor"
-  local max_polls=24 poll_seconds=3 post_send_seconds=2 max_send_attempts=3
-  local poll_count=0 send_attempts=0 pane_text="" post_send_text=""
-
-  while [[ "$poll_count" -lt "$max_polls" ]]; do
-    poll_count=$((poll_count + 1))
-    if ! tmux has-session -t "=$session_name" 2>/dev/null; then
-      sleep "$poll_seconds"
-      continue
-    fi
-
-    pane_text="$(capture_tmux_pane_text "$session_name")"
-    if ! pane_has_non_whitespace "$pane_text"; then
-      sleep "$poll_seconds"
-      continue
-    fi
-    if ancestor_pane_waiting_on_operator "$pane_text"; then
-      sleep "$poll_seconds"
-      continue
-    fi
-
-    send_attempts=$((send_attempts + 1))
-    if bash "$SEND_AND_VERIFY_SCRIPT" --project "$PROJECT" ancestor "$kickoff" >/dev/null 2>&1; then
-      sleep "$post_send_seconds"
-      post_send_text="$(capture_tmux_pane_text "$session_name")"
-      if pane_contains_text_relaxed "$post_send_text" "$kickoff"; then
-        note "Phase-A kickoff delivered to $session_name"
-        return 0
-      fi
-      if ancestor_pane_shows_active_response "$post_send_text"; then
-        note "Phase-A kickoff submitted to $session_name"
-        return 0
-      fi
-    fi
-
-    if [[ "$send_attempts" -ge "$max_send_attempts" ]]; then
-      break
-    fi
-    sleep "$poll_seconds"
-  done
-
-  warn "Auto-send could not verify kickoff delivery to $session_name. Use the fallback prompt below."
-  return 1
+  mkdir -p "$(dirname "$KICKOFF_FILE")" || die 30 KICKOFF_DIR_FAILED "unable to create $(dirname "$KICKOFF_FILE")"
+  (umask 077; phase_a_kickoff_prompt >"$KICKOFF_FILE") \
+    || die 30 KICKOFF_WRITE_FAILED "unable to write $KICKOFF_FILE"
+  chmod 600 "$KICKOFF_FILE" || die 30 KICKOFF_CHMOD_FAILED "unable to chmod $KICKOFF_FILE"
 }
 
 print_operator_banner() {
-  local kickoff=""
-  kickoff="$(phase_a_kickoff_prompt)"
   printf '\n'
   printf -- '────────────────────────────────────────────────────────────────\n'
   printf '  ClawSeat install complete / 安装已完成\n'
@@ -1412,56 +1628,39 @@ print_operator_banner() {
   printf '  AGENT (if you are an AI agent running install.sh):\n'
   printf '    You MUST relay this banner to the operator before ending your\n'
   printf '    session. install.sh exiting is NOT the final completion signal —\n'
-  printf '    Phase-A may or may not have started (Step 9.5 auto-send may have\n'
-  printf '    succeeded or skipped); the operator must classify + verify.\n'
+  printf '    Phase-A has NOT been auto-sent. The operator must choose A/B/C\n'
+  printf '    below to trigger kickoff, then verify Phase-A started.\n'
   printf '    See docs/INSTALL.md §0 step 5.\n'
   printf '    向 operator 复述本 banner 是必做步骤，禁止跳过。\n'
   printf '\n'
   printf '  OPERATOR — NEXT STEPS / 操作员下一步:\n'
-  printf '    1. Read the operator guide / 阅读操作员指引:\n'
+  printf '    ✔ Install complete. %s pane is ready or waiting for login/trust confirmation.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '    Phase-A kickoff prompt was saved here:\n'
+  printf '       %s\n' "$KICKOFF_FILE"
+  printf '\n'
+  printf '    Choose one to start Phase-A / 三选一启动 Phase-A:\n'
+  printf '\n'
+  printf '    A) Existing install-memory / current install agent dispatches kickoff:\n'
+  printf '       bash %q --project %q %q "$(cat %q)"\n' \
+    "$SEND_AND_VERIFY_SCRIPT" "$PROJECT" "${PROJECT}-${PRIMARY_SEAT_ID}" "$KICKOFF_FILE"
+  printf '\n'
+  printf '    B) Manual paste / 手动粘贴:\n'
+  printf '       cat %q\n' "$KICKOFF_FILE"
+  printf '       Then paste the output into the %s primary seat prompt and press Enter.\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '\n'
+  printf '    C) Ask install-memory in chat / 在 install-memory chat 里说:\n'
+  printf '       dispatch %s kickoff\n' "$PROJECT"
+  printf '\n'
+  printf '    After A/B/C, verify Phase-A is running / 触发后确认:\n'
+  printf '       tmux capture-pane -t %q -p | tail -10\n' "${PROJECT}-${PRIMARY_SEAT_ID}"
+  printf '       Expected: B0 / "已读取 brief" / env_scan activity.\n'
+  printf '\n'
+  printf '    Operator guide / 操作员指引:\n'
   printf '       cat %s\n' "$GUIDE_FILE"
-  printf '\n'
-  printf '    2. Capture the ancestor pane / 查看 ancestor pane 状态:\n'
-  printf '       tmux capture-pane -t %q -p | tail -15\n' "${PROJECT}-ancestor"
-  printf '\n'
-  printf '    3. Decide: SKIP paste or DO paste / 判断：跳过粘贴 或 执行粘贴\n'
-  printf '       Two kinds of "kickoff already accepted" signal — either one SKIPS step 4.\n'
-  printf '       两类"kickoff 已接收"信号 — 任一出现就跳过步骤 4:\n'
-  printf '       A1. Phase-A is running (ancestor replied to the brief):\n'
-  printf '           Phase-A 已启动 (ancestor 已对 brief 有回应):\n'
-  printf '           · "B0" / "已读取 brief" / env_scan output\n'
-  printf '       A2. Claude Code is processing the kickoff (matches the runtime\n'
-  printf '           detector ancestor_pane_shows_active_response() in scripts/install.sh):\n'
-  printf '           Claude Code 正在处理 kickoff (与 scripts/install.sh 的\n'
-  printf '           ancestor_pane_shows_active_response() 一致):\n'
-  printf '           · "Thinking..." / "Shell awaiting input"\n'
-  printf '           · spinner glyphs: ✶ ✻ ✢ ✳ ✽ ⏺\n'
-  printf '           · "Read N files" / "Read N file"\n'
-  printf '       - If pane sits at ">" or "❯" with no activity → DO step 4\n'
-  printf '         若 pane 静止在空输入框无活动 ⇒ auto-send 未生效，继续步骤 4\n'
-  printf '       - If pane shows any of: Bypass Permissions / Trust folder /\n'
-  printf '         Login / Accessing workspace / Quick safety check\n'
-  printf '         → clear that screen first (Enter / Yes / OAuth), re-capture, then decide\n'
-  printf '         若 pane 有确认屏 ⇒ 先清掉确认屏，重新 capture，再决定\n'
-  printf '\n'
-  printf '    4. Paste the Phase-A kickoff below into the ancestor pane (only if step 3 said DO)\n'
-  printf '       仅在步骤 3 判断需要粘贴时，把下面的 Phase-A kickoff 粘贴到 ancestor pane 并回车\n'
-  printf '\n'
-  printf '    5. Verify Phase-A is running / 确认 Phase-A 已启动:\n'
-  printf '       tmux capture-pane -t %q -p | tail -10\n' "${PROJECT}-ancestor"
-  printf '       Expected / 预期: pane shows B0 / "已读取 brief" / env_scan activity.\n'
-  printf '       Only after this verification passes should you proceed to optional\n'
-  printf '       steps (koder overlay, etc.) or final report.\n'
-  printf '       通过此验证后才能进入后续可选步骤（koder overlay 等）或最终汇报。\n'
+  printf '    Registry cleanup / 注册表移除:\n'
+  printf '       python3 %q unregister %q\n' "$PROJECTS_REGISTRY_SCRIPT" "$PROJECT"
   printf '\n'
   printf -- '────────────────────────────────────────────────────────────────\n'
-  if [[ "$DRY_RUN" != "1" ]]; then
-    printf '  PHASE-A KICKOFF (copy between the lines / 复制以下两条分隔线之间)\n'
-    printf -- '----------------------------------------------------------------\n'
-    printf '%s\n' "$kickoff"
-    printf -- '----------------------------------------------------------------\n'
-    printf '\n'
-  fi
 }
 
 launcher_auth_for_provider() {
@@ -1471,6 +1670,28 @@ launcher_auth_for_provider() {
     oauth) printf '%s\n' "oauth" ;;
     *) die 22 PROVIDER_MODE_UNKNOWN "unknown provider mode for launcher auth mapping: ${PROVIDER_MODE:-<unset>}" ;;
   esac
+}
+
+launcher_tool_for_seat() {
+  local seat_id="${1:-}"
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_skips_claude_provider; then
+    printf '%s\n' "$MEMORY_TOOL"
+    return
+  fi
+  printf '%s\n' "claude"
+}
+
+launcher_auth_for_seat() {
+  local seat_id="${1:-}"
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_codex; then
+    printf '%s\n' "chatgpt"
+    return
+  fi
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" ]] && memory_primary_uses_gemini; then
+    printf '%s\n' "oauth"
+    return
+  fi
+  launcher_auth_for_provider
 }
 
 launcher_custom_env_file_for_session() {
@@ -1549,8 +1770,11 @@ ensure_tmux_session_alive() {
 }
 
 launch_seat() {
-  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file=""
-  auth_mode="$(launcher_auth_for_provider)"
+  local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file="" launcher_tool=""
+  local launcher_model=""
+  launcher_tool="$(launcher_tool_for_seat "$seat_id")"
+  auth_mode="$(launcher_auth_for_seat "$seat_id")"
+  launcher_model="$(memory_effective_model)"
   custom_env_file="$(launcher_custom_env_file_for_session "$session")"
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -1564,7 +1788,10 @@ launch_seat() {
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
   cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   [[ -n "$seat_id" ]] && cmd+=("CLAWSEAT_SEAT=$seat_id")
-  cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool claude --auth "$auth_mode" --dir "$cwd" --session "$session")
+  if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" != "claude" && -n "$launcher_model" ]]; then
+    cmd+=("LAUNCHER_CUSTOM_MODEL=$launcher_model")
+  fi
+  cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool "$launcher_tool" --auth "$auth_mode" --dir "$cwd" --session "$session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
   [[ "$DRY_RUN" == "1" ]] && cmd+=(--dry-run)
 
@@ -1580,22 +1807,6 @@ launch_seat() {
   fi
   ensure_tmux_session_alive "$session"
   configure_tmux_session_display "$session"
-}
-
-install_memory_hook() {
-  note "Step 7.5: install memory Stop-hook"
-  local engineers_root="$HOME/.agents/engineers"
-  local template_settings="$engineers_root/memory/.claude-template/settings.json"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    run "$PYTHON_BIN" "$SEAT_CLAUDE_TEMPLATE_SCRIPT" --seat memory --engineers-root "$engineers_root" --clawseat-root "$CLAWSEAT_ROOT"
-    run "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --settings-path "$template_settings" --clawseat-root "$CLAWSEAT_ROOT" --dry-run
-    return 0
-  fi
-  mkdir -p "$MEMORY_WORKSPACE" || die 32 MEMORY_WORKSPACE_CREATE_FAILED "unable to create memory workspace: $MEMORY_WORKSPACE"
-  "$PYTHON_BIN" "$SEAT_CLAUDE_TEMPLATE_SCRIPT" --seat memory --engineers-root "$engineers_root" --clawseat-root "$CLAWSEAT_ROOT" \
-    || die 32 MEMORY_TEMPLATE_PREP_FAILED "failed to prepare Claude template for memory seat"
-  "$PYTHON_BIN" "$MEMORY_HOOK_INSTALLER" --workspace "$MEMORY_WORKSPACE" --settings-path "$template_settings" --clawseat-root "$CLAWSEAT_ROOT" \
-    || die 32 MEMORY_HOOK_INSTALL_FAILED "failed to install memory Stop-hook into $template_settings"
 }
 
 check_iterm_window_exists() {
@@ -1715,15 +1926,17 @@ PY
 }
 
 grid_payload() {
-  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
+  # v1 compat: single-window 6-pane (ancestor + N workers)
+  # v2 callers should use workers_payload() + memories_payload() instead.
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$PRIMARY_SEAT_ID" "${PENDING_SEATS[@]}" <<'PY'
 import json
 import shlex
 import sys
 
-project, wait_script = sys.argv[1], sys.argv[2]
-seats = sys.argv[3:]  # dynamic from PENDING_SEATS
+project, wait_script, primary_seat = sys.argv[1], sys.argv[2], sys.argv[3]
+seats = sys.argv[4:]
 panes = [
-    {"label": "ancestor", "command": f"tmux attach -t '={project}-ancestor'"},
+    {"label": primary_seat, "command": f"tmux attach -t '={project}-{primary_seat}'"},
 ]
 for seat in seats:
     panes.append(
@@ -1740,55 +1953,228 @@ for seat in seats:
 print(json.dumps({"title": f"clawseat-{project}", "panes": panes}, ensure_ascii=False))
 PY
 }
-memory_payload() { printf '%s' '{"title":"machine-memory-claude","panes":[{"label":"memory","command":"tmux attach -t '\''=machine-memory-claude'\''"}]}'; }
+
+# v2 workers_payload: planner main left 50% + N-1 workers right grid (max 2 rows, col-major fill)
+# Recipe per RFC-001 §3:
+#   N_workers=1 (planner only): []
+#   N_workers=2 (planner+1):    [(0,True)]
+#   N_workers=3 (planner+2):    [(0,True), (1,False)]                            ← v2 minimal
+#   N_workers=4 (planner+3):    [(0,True), (1,True), (1,False)]
+#   N_workers=5 (planner+4):    [(0,True), (1,True), (1,False), (2,False)]
+workers_payload() {
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
+import json
+import shlex
+import sys
+
+project, wait_script = sys.argv[1], sys.argv[2]
+seats = sys.argv[3:]  # PENDING_SEATS minus PRIMARY_SEAT_ID
+# Locate planner — must be first non-primary worker per minimal template
+if "planner" not in seats:
+    raise SystemExit("workers_payload requires 'planner' in seats list")
+right_seats = [s for s in seats if s != "planner"]
+n_total = 1 + len(right_seats)
+
+# Build right-side recipe with max-2-rows, col-major fill
+def right_recipe(n_right: int) -> list[list]:
+    """Returns split steps relative to pane indices in the COMBINED layout
+    (planner is pane 0; right starts as pane 1 after first vertical split)."""
+    if n_right == 0: return []
+    if n_right == 1: return []  # right side is single pane (after the planner-vs-right split)
+    if n_right == 2: return [[1, False]]  # split right horizontally
+    # n_right >= 3: build top row of right, then horizontal splits per col
+    cols = (n_right + 1) // 2
+    splits: list[list[int]] = []
+    # Build top row of right area: split pane 1 vertically (cols-1) times
+    for col in range(1, cols):
+        # parent index in combined layout: 0=planner, 1=right_col0, 2=right_col1, ...
+        splits.append([col, True])
+    # Horizontal splits: each top right pane splits into bottom (col-major)
+    cols_with_bottom = n_right - cols  # number of cols that need a bottom pane
+    for col in range(cols_with_bottom):
+        splits.append([col + 1, False])  # +1 because pane 0 is planner
+    return splits
+
+recipe = [[0, True]] + right_recipe(len(right_seats))  # First: planner | right split
+
+# Pane order for payload (matches recipe creation order):
+#   pane[0] = planner (left)
+#   pane[1] = right col_0 top (first right worker)
+#   pane[2..cols] = top of subsequent right cols
+#   pane[cols+1..] = bottom row of right cols (col-major)
+#
+# NB: planner is a WORKER (spawned by memory during Phase-A), not the primary
+# seat. Its tmux session does NOT exist when install.sh opens this window —
+# memory will spawn it later. So planner pane MUST use wait-for-seat.sh
+# (polling) like the other workers; using direct `tmux attach` here was bug
+# #10 (workers_payload planner pane errored to zsh on session-not-found).
+panes = [
+    {
+        "label": "planner",
+        "command": "bash "
+        + shlex.quote(wait_script)
+        + " "
+        + shlex.quote(project)
+        + " planner",
+    },
+]
+# Compute right-side fill order matching recipe pane creation
+n_right = len(right_seats)
+if n_right > 0:
+    cols = max(1, (n_right + 1) // 2 if n_right >= 3 else 1)
+    # For n_right=1: just first right_seat
+    # For n_right=2: top + bottom (1 col)
+    # For n_right>=3: row-major in driver order = top row left-to-right + bottom row left-to-right
+    if n_right == 1:
+        ordering = [0]
+    elif n_right == 2:
+        ordering = [0, 1]  # top, bottom
+    else:
+        # User intent (col-major): user_idx 0=col0_top, 1=col0_bot, 2=col1_top, 3=col1_bot, ...
+        # Driver order: top row first (col0_top, col1_top, col2_top, ...), then bottom row
+        # Map: driver_pane_idx -> user_idx
+        ordering = []
+        # top row first
+        for col in range(cols):
+            user_idx = col * 2  # top of col c is user_idx 2c
+            if user_idx < n_right:
+                ordering.append(user_idx)
+        # bottom row
+        for col in range(cols):
+            user_idx = col * 2 + 1  # bottom of col c is user_idx 2c+1
+            if user_idx < n_right:
+                ordering.append(user_idx)
+    for driver_idx, user_idx in enumerate(ordering):
+        seat = right_seats[user_idx]
+        panes.append(
+            {
+                "label": seat,
+                "command": "bash "
+                + shlex.quote(wait_script)
+                + " "
+                + shlex.quote(project)
+                + " "
+                + shlex.quote(seat),
+            }
+        )
+
+print(json.dumps({
+    "title": f"clawseat-{project}-workers",
+    "panes": panes,
+    "recipe": recipe,
+}, ensure_ascii=False))
+PY
+}
+
+# v2 memories_payload: prefer ~/.clawseat/projects.json, fallback to live tmux memory sessions.
+memories_payload() {
+  PYTHONPATH="$REPO_ROOT/core/scripts${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import subprocess
+
+from projects_registry import enumerate_projects
+
+
+def registry_tabs():
+    tabs = []
+    for entry in enumerate_projects():
+        name = entry.get("name")
+        tmux_name = entry.get("tmux_name")
+        if not name or not tmux_name:
+            continue
+        tabs.append({
+            "name": name,
+            "command": f"tmux attach -t '={tmux_name}'",
+        })
+    return tabs
+
+
+def tmux_fallback_tabs():
+    result = subprocess.run(
+        ["tmux", "ls", "-F", "#{session_name}"],
+        capture_output=True, text=True, env={**os.environ, "TMUX": ""}, check=False,
+    )
+    all_sessions = result.stdout.strip().split("\n") if result.returncode == 0 else []
+    legacy_global_memory = "-".join(("machine", "memory", "claude"))
+    memory_sessions = sorted([
+        s for s in all_sessions
+        if s.endswith("-memory") and s != legacy_global_memory
+    ])
+    return [
+        {
+            "name": sess[:-len("-memory")],
+            "command": f"tmux attach -t '={sess}'",
+        }
+        for sess in memory_sessions
+    ]
+
+
+tabs = registry_tabs() or tmux_fallback_tabs()
+if not tabs:
+    print(json.dumps({"status": "skip", "reason": "no registered or live project memory sessions found"}))
+    raise SystemExit(0)
+
+print(json.dumps({
+    "mode": "tabs",
+    "title": "clawseat-memories",
+    "tabs": tabs,
+    "ensure": True,
+}, ensure_ascii=False))
+PY
+}
 
 main() {
-  local memory_window_id=""
   parse_args "$@"; prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
   fi
   ensure_host_deps; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
-  note "Step 5: launch ancestor seat via agent-launcher"
-  launch_seat "$PROJECT-ancestor" "$PROJECT_REPO_ROOT" "$BRIEF_PATH" "ancestor"
+  note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
+  launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
+  ensure_privacy_kb_template
+  install_skills_by_tier
+  install_privacy_pre_commit_hook
+  register_project_registry
   install_ancestor_patrol_plist
-  note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
-  note "Step 8: ensure memory singleton daemon"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    install_memory_hook
-    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
-    open_iterm_window "$(memory_payload)" memory_window_id
-  elif tmux has-session -t '=machine-memory-claude' 2>/dev/null; then
-    printf 'memory seat already running (machine-memory-claude), reusing.\n'
-    install_memory_hook
-    if [[ "$(check_iterm_window_exists "machine-memory-claude")" != "1" ]]; then
-      open_iterm_window "$(memory_payload)" memory_window_id
+
+  # v2 split window topology (per RFC-001 §3): one workers window per project +
+  # one shared memories window across all projects (rebuilt on each install).
+  # v1 single-window grid_payload preserved as fallback for clawseat-default
+  # template (which still uses 6-pane single-window).
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" ]]; then
+    note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
+    open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
+
+    [[ ! -f "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" ]] || bash "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" || true
+    note "Step 7b: ensure shared memories window (tab per project)"
+    local _memories_payload
+    _memories_payload="$(memories_payload)"
+    if [[ -n "$_memories_payload" && "$_memories_payload" != *'"status": "skip"'* ]]; then
+      local _mem_window_id=""
+      open_iterm_window "$_memories_payload" _mem_window_id
     else
-      printf 'memory iTerm window already open, skipping open.\n'
+      warn "memories_payload returned skip — no project memory tmux sessions found"
     fi
   else
-    install_memory_hook
-    launch_seat "machine-memory-claude" "$MEMORY_WORKSPACE" "" "memory"
-    open_iterm_window "$(memory_payload)" memory_window_id
+    # v1 single-window topology (clawseat-default / engineering / creative)
+    note "Step 7: open six-pane iTerm grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
   fi
-  note "Step 9: focus ancestor and persist operator guide"
+
+  # v1 machine-memory-claude tmux session may still be running on machines
+  # upgraded from v0.6 or earlier; v2 install no longer creates/manages it.
+  # M4 will retire the legacy session entirely.
+  note "Step 9: focus primary seat ($PRIMARY_SEAT_ID) and persist operator guide"
   if [[ -n "$GRID_WINDOW_ID" ]]; then
     run sleep 3
-    focus_iterm_window "$GRID_WINDOW_ID" "ancestor"
+    focus_iterm_window "$GRID_WINDOW_ID" "$PRIMARY_SEAT_ID"
   else
-    warn "Skipping ancestor focus because no iTerm grid window was opened."
+    warn "Skipping primary seat focus because no iTerm grid window was opened."
   fi
-  if [[ "$DRY_RUN" != "1" ]]; then
-    note "Step 9.5: auto-send Phase-A kickoff prompt / 尝试自动发送 Phase-A kickoff"
-    local kickoff=""
-    kickoff="$(phase_a_kickoff_prompt)"
-    if ! auto_send_phase_a_kickoff "$kickoff"; then
-      warn "Phase-A kickoff auto-send skipped or failed — ancestor pane is NOT ready OR tmux send-keys did not verify delivery."
-      warn "auto-send 未完成：ancestor pane 未就绪或验证投递失败。请按 banner 指引手工粘贴 kickoff。"
-    fi
-  fi
+  note "Step 9.5: persist Phase-A kickoff prompt to ancestor-kickoff.txt"
+  persist_phase_a_kickoff_prompt
   write_operator_guide
   print_operator_banner
 }

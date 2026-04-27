@@ -202,7 +202,7 @@ def test_default_template_seat_order_unchanged(tmp_path):
     _copy_templates(root)
 
     result = _run_install(root, home, launcher_log, tmux_log, py_stubs,
-                          ["--project", "testdefault"])
+                          ["--project", "testdefault", "--template", "clawseat-default"])
     assert result.returncode == 0, result.stderr
 
     local_toml = home / ".agents" / "tasks" / "testdefault" / "project-local.toml"

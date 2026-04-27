@@ -295,6 +295,7 @@ def test_install_launchd_writes_plist(tmp_path):
     assert "<integer>60</integer>" in xml
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 def test_install_launchd_plist_valid_xml(tmp_path):
     dest = tmp_path / "test.plist"
     md.install_launchd(interval=60, dest=dest)

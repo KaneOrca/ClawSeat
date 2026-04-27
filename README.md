@@ -13,13 +13,19 @@
 ---
 
 ```
-┌─────────────────┬─────────────────┬─────────────────┐
-│    ancestor     │     planner     │     builder     │
-│    正在统筹     │    正在拆解     │    正在写代码   │
-├─────────────────┼─────────────────┼─────────────────┤
-│    reviewer     │       qa        │    designer     │
-│   正在审 diff   │    正在跑测试   │    正在改 UI    │
-└─────────────────┴─────────────────┴─────────────────┘
+clawseat-<project>-workers
+┌──────────────────────────┬──────────────────────┐
+│ planner main             │ builder              │
+│ 拆解 / 派工 / 合并        │ 写代码 / 跑测试       │
+│                          ├──────────────────────┤
+│                          │ designer             │
+│                          │ 视觉 / 交互 / 资源    │
+└──────────────────────────┴──────────────────────┘
+
+clawseat-memories
+┌─────────────────────────────────────────────────┐
+│ <project>-memory tabs, one project per tab      │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
@@ -38,7 +44,8 @@
 > use the directory as-is). Read `~/ClawSeat/docs/INSTALL.md` and follow
 > it. Ask me for every choice.
 
-九十秒后，你有六个 agent——在六格 iTerm 里各自跑着，各自住在沙箱里，互相说话。
+九十秒后，你有四个 agent——memory 在 memories 窗口，planner / builder /
+designer 在 workers 窗口，各自住在沙箱里，互相说话。
 
 > **你看。它们干活。**
 
@@ -69,22 +76,21 @@ overlay（把一个 OpenClaw agent 变成 ClawSeat 的反向信道）、state.db
 审计）、`/design-review`（视觉 QA）⋯⋯每一个都像请了个专家站你旁边。
 
 ClawSeat 借它的：builder 默认装 `/ship` + `/investigate` + `/land-and-deploy`；
-reviewer 装 `/review`；qa 装 `/qa`；designer 装 `/design-review` + `/design-shotgun`；
-planner 装 `/plan-eng-review` + `/plan-ceo-review` + `/plan-design-review`。每个
-seat 生来就会做自己该做的事。
+designer 装 `/design-review` + `/design-shotgun`；planner 装 `/plan-eng-review`、
+`/plan-ceo-review`、`/plan-design-review`，同时承担代码审查。每个 seat 生来就会做自己该做的事。
 
 ### 中间：ClawSeat — 编排粘合层
 
-把两者整合进 iTerm 六格：
+把两者整合进 iTerm 双窗口：
 
-- **6 seat roster**（ancestor / planner / builder / reviewer / qa / designer）
+- **4 seat roster**（memory / planner / builder / designer）
   ——每个对应一个 OpenClaw agent 身份 + 一组 gstack skills
 - **dispatch 协议**——三阶段状态机（assigned → notified → consumed），每一阶段
   写 `handoff.json` + `state.db`，seat 崩了能从上次位置接回
 - **intent 系统**——planner 派活时写 `--intent ship`，harness 自动注入 gstack
   trigger phrase + 对应 SKILL.md，builder 自动激活 `/ship` 方法论，不用谁记咒语
 - **AI 原生安装**——本来就该这样
-- **六格可视化**——本来也该这样
+- **workers window + memories window 可视化**——本来也该这样
 
 ---
 
@@ -93,15 +99,16 @@ seat 生来就会做自己该做的事。
 ### 你跟它对话，它就装好了。
 
 别家 agent 编排要 wizard、YAML DSL、集群 control plane。ClawSeat 只要一句话。
-你的 AI 自己 clone、扫环境、问 provider、拉 6 个 seat、引你走完 Phase-A。
+你的 AI 自己 clone、扫环境、问 provider、拉 4 个 seat、引你走完 Phase-A。
 
 > **这才叫 AI 原生。**
 
 ### 你看见它在干。
 
-不是 dashboard。不是 log 流。是六格活的 TUI，每一格是一个真正在思考的 agent。
+不是 dashboard。不是 log 流。是活的 TUI：memory 在 memories 窗口，workers
+在项目窗口，每一格是一个真正在思考的 agent。
 
-你看见 reviewer 否决 builder 的 diff。
+你看见 planner 否决 builder 的 diff。
 你看见 planner 拿 gstack `/plan-eng-review` 拆解需求。
 你看见 designer 和 builder 为一个按钮吵五个来回。
 
@@ -127,11 +134,11 @@ OpenClaw 的 SDK + ClawHub 市场，生态比我们大得多。
 
 | 你已经有 | 它给你 | ClawSeat 多给什么 |
 |---|---|---|
-| **Cursor / Windsurf** | IDE 内嵌一个 AI pair | 六个专业化 agent 并行，每人管自己的事（不是一个万能助手） |
+| **Cursor / Windsurf** | IDE 内嵌一个 AI pair | 四个专业化 agent 并行，每人管自己的事（不是一个万能助手） |
 | **Devin / Replit Agents** | 云端单 agent 跑长任务 | 本地、可看见、可打断、每一行代码都在你 Mac 上 |
 | **LangChain / LangGraph** | Python 框架写 agent 流程图 | 零 DSL、零 YAML 状态机；流程是 SKILL.md 自然语言 |
 | **AutoGen / CrewAI** | 多 agent 库，代码里组编队 | CLI 装一下就是一整队，不写 agent 代码 |
-| **OpenClaw 单用** | 多通道 AI 助手 + 插件市场 | 把它扩成研发团队，配 iTerm 六格 + gstack 方法论 |
+| **OpenClaw 单用** | 多通道 AI 助手 + 插件市场 | 把它扩成研发团队，配 iTerm workers/memories 窗口 + gstack 方法论 |
 | **gstack 单用** | 30+ Claude Code skill | 把它按 seat 角色分发，planner 派一句 intent 就自动激活正确咒语 |
 
 **共同点**：ClawSeat 不是取代任何一个——是把**你已经信的几个**缝合成一个你能**看见**的团队。
@@ -165,9 +172,9 @@ cd ~/ClawSeat && ./scripts/install.sh --project demo
 
 **Q: 我已经有 Cursor，为什么还要这个？**
 
-Cursor 给你 IDE 里一个 pair。ClawSeat 给你六个各司其职的专业化 agent。
-互补，不互斥。你可以在 Cursor 里改代码，同时 ClawSeat 的 reviewer 审你的
-diff、qa 跑回归。
+Cursor 给你 IDE 里一个 pair。ClawSeat 给你四个各司其职的专业化 agent。
+互补，不互斥。你可以在 Cursor 里改代码，同时 ClawSeat 的 planner 审你的
+diff、builder 跑回归。
 
 **Q: 这玩意只在 Mac 上能跑？**
 
@@ -189,9 +196,9 @@ phone-home。你能 grep 整个代码库搜 `http` 验证。
 
 **Q: 一个月烧多少 token？**
 
-六个 agent 同时活跃 ≈ 一个 Cursor Pro session × 6。实际用下来大头是
-builder 和 reviewer。我们建议 minimax-M2 这种国产 API 跑轻量 seat，
-Claude Opus 只给 ancestor + planner。配好混搭一天 $10-30 跑完整迭代。
+四个 agent 同时活跃 ≈ 一个 Cursor Pro session × 4。实际用下来大头是
+builder 和 planner。我们建议 minimax-M2 这种国产 API 跑轻量 seat，
+Claude Opus 只给 memory + planner。配好混搭一天 $10-30 跑完整迭代。
 
 **Q: 坏了怎么办？**
 

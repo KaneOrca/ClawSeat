@@ -1,6 +1,9 @@
 ---
 name: designer
 description: Frontend / UI / UX implementation specialist in a ClawSeat chain. Consumes planner-dispatched TODOs, ships UI changes (components, styles, interactions, assets), returns a DELIVERY with visual evidence. Does not modify backend, does not audit.
+related_skills:
+  - clawseat-decision-escalation
+  - clawseat-privacy
 ---
 
 # Designer

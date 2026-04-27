@@ -95,7 +95,7 @@ def _run_install(
     return result, launcher_log, tmux_log, iterm_payload_log, root
 
 
-def test_install_reuses_existing_memory_daemon_and_window(tmp_path: Path) -> None:
+def test_install_ignores_existing_legacy_memory_daemon_and_window(tmp_path: Path) -> None:
     result, launcher_log, tmux_log, iterm_payload_log, _ = _run_install(
         tmp_path,
         project="singleton50",
@@ -104,20 +104,24 @@ def test_install_reuses_existing_memory_daemon_and_window(tmp_path: Path) -> Non
     )
 
     assert result.returncode == 0, result.stderr
-    assert "memory seat already running (machine-memory-claude), reusing." in result.stdout
-    assert "memory iTerm window already open, skipping open." in result.stdout
+    assert "memory seat already running (machine-memory-claude), reusing." not in result.stdout
+    assert "memory iTerm window already open, skipping open." not in result.stdout
 
     records = _read_jsonl(launcher_log)
     assert [record["session"] for record in records] == ["singleton50-ancestor"]
 
     tmux_log_text = tmux_log.read_text(encoding="utf-8")
     assert "kill-session -t =machine-memory-claude" not in tmux_log_text
+    assert "set-option -t machine-memory-claude" not in tmux_log_text
 
     payloads = _read_jsonl(iterm_payload_log)
-    assert [payload["title"] for payload in payloads] == ["clawseat-singleton50"]
+    assert [payload["title"] for payload in payloads] == [
+        "clawseat-singleton50-workers",
+        "clawseat-memories",
+    ]
 
 
-def test_install_starts_memory_daemon_and_window_when_missing(tmp_path: Path) -> None:
+def test_install_does_not_start_legacy_memory_daemon_when_missing(tmp_path: Path) -> None:
     result, launcher_log, _, iterm_payload_log, _ = _run_install(
         tmp_path,
         project="singleton51",
@@ -128,15 +132,12 @@ def test_install_starts_memory_daemon_and_window_when_missing(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "singleton51-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["singleton51-ancestor"]
 
     payloads = _read_jsonl(iterm_payload_log)
     assert [payload["title"] for payload in payloads] == [
-        "clawseat-singleton51",
-        "machine-memory-claude",
+        "clawseat-singleton51-workers",
+        "clawseat-memories",
     ]
 
 

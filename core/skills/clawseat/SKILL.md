@@ -1,6 +1,6 @@
 ---
 name: clawseat
-description: Canonical product entrypoint for ClawSeat. Use this skill when OpenClaw, Feishu, Claude Code, or Codex should load ClawSeat as an installable workflow and route to the v0.7 `scripts/install.sh` playbook.
+description: "Product entrypoint; routes ClawSeat installs and runtime handoffs."
 ---
 
 # ClawSeat
@@ -69,8 +69,9 @@ spawn another `koder`, and do not rewrite the install flow around it.
 - Do NOT run `start_seat.py --seat koder` — that creates a redundant tmux session
 - Do NOT bootstrap a project named after yourself (e.g. `koder-frontstage`)
 - The canonical project name is `install`
-- The tmux-backed project grid is still `ancestor`, `planner`, `builder`,
-  `reviewer`, `qa`, `designer`
+- The tmux-backed worker roster comes from the project's `project.toml`
+  `engineers` list; minimal defaults to `planner`, `builder`, `designer`,
+  while clawseat-default still includes `reviewer` and `qa`
 - Once ancestor is prompt-ready, seat lifecycle and patrol belong to ancestor
 - `koder` is not the install frontstage and is not part of the six-pane grid
 

@@ -1,6 +1,6 @@
 ---
 name: clawseat-install
-description: Install ClawSeat on the current machine. v0.7 CLI-first flow — the invoking Claude Code reads `docs/INSTALL.md` from the cloned repo and executes it as a playbook. Use when a user says "install ClawSeat", "安装 ClawSeat", or asks to bootstrap a fresh project from zero.
+description: "Installer playbook; bootstraps ClawSeat projects through install.sh."
 ---
 
 # ClawSeat Install (v0.7 — CLI-first)

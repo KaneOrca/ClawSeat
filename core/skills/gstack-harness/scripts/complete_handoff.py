@@ -20,6 +20,7 @@ from _common import (
     _try_announce_planner_event,
     add_notify_args,
     append_consumed_ack,
+    append_status_dispatch_event,
     append_task_to_queue,
     broadcast_feishu_group_message,
     build_delegation_report_text,
@@ -329,6 +330,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary", help="Delivery summary text.")
     parser.add_argument("--status", default="completed", help="Delivery status.")
     parser.add_argument("--verdict", help="Canonical review verdict.")
+    parser.add_argument("--commit", help="Optional commit SHA to include in STATUS.md ack log.")
+    parser.add_argument(
+        "--test-policy",
+        choices=["UPDATE", "FREEZE", "EXTEND", "N/A"],
+        help="Optional test policy override for STATUS.md ack log; normally read from dispatch receipt.",
+    )
     parser.add_argument(
         "--frontstage-disposition",
         help="Canonical planner->frontstage outcome: AUTO_ADVANCE or USER_DECISION_NEEDED.",
@@ -346,6 +353,31 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _receipt_test_policy(
+    profile: object,
+    *,
+    receipt: dict[str, object],
+    task_id: str,
+    source: str,
+    target: str,
+    override: str | None = None,
+) -> str | None:
+    if override:
+        return override
+    value = receipt.get("test_policy")
+    if isinstance(value, str) and value:
+        return value
+    try:
+        reverse = load_json(profile.handoff_path(task_id, target, source))  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 best-effort status decoration
+        reverse = None
+    if isinstance(reverse, dict):
+        value = reverse.get("test_policy")
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
@@ -361,6 +393,16 @@ def main() -> int:
     receipt["correlation_id"] = correlation_id
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
+    receipt_test_policy = _receipt_test_policy(
+        profile,
+        receipt=receipt,
+        task_id=args.task_id,
+        source=args.source,
+        target=args.target,
+        override=args.test_policy,
+    )
+    if receipt_test_policy:
+        receipt["test_policy"] = receipt_test_policy
 
     if args.ack_only:
         ack_line, ack_path = append_consumed_ack_with_fallback(
@@ -378,6 +420,14 @@ def main() -> int:
             seat=args.source,
             primary=receipt_path,
             payload=receipt,
+        )
+        append_status_dispatch_event(
+            profile.status_doc,
+            source=args.source,
+            task_id=args.task_id,
+            verdict=args.verdict,
+            commit=args.commit,
+            test_policy=receipt_test_policy,
         )
         print(ack_line)
         print(f"receipt: {receipt_path}")
@@ -645,6 +695,14 @@ def main() -> int:
         project=profile.project_name,
         source=args.source,
         disposition=args.frontstage_disposition or "",
+    )
+    append_status_dispatch_event(
+        profile.status_doc,
+        source=args.source,
+        task_id=args.task_id,
+        verdict=args.verdict,
+        commit=args.commit,
+        test_policy=receipt_test_policy,
     )
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")

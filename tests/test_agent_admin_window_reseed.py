@@ -75,19 +75,21 @@ def test_parser_registers_reseed_pane() -> None:
     assert args.project == "install"
 
 
-def test_reseed_pane_sends_interrupt_detach_and_wait_command(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reseed_pane_sends_interrupt_and_writes_wait_command(monkeypatch: pytest.MonkeyPatch) -> None:
     reviewer = _FakeSession("reviewer")
     _install_fake_iterm(monkeypatch, _FakeApp([_FakeWindow("clawseat-install", [reviewer])]))
+    scripts: list[str] = []
+    monkeypatch.setattr(agent_admin_window, "osascript", scripts.append)
 
     project = SimpleNamespace(name="install")
     result = agent_admin_window.reseed_pane(project, "reviewer")
 
     assert result == {"status": "ok", "project": "install", "seat_id": "reviewer"}
-    assert reviewer.sent_text == [
-        "\x03",
-        "\x02d",
-        f"bash {agent_admin_window._WAIT_FOR_SEAT_SCRIPT} install reviewer\n",
-    ]
+    assert reviewer.sent_text == ["\x03"]
+    assert len(scripts) == 1
+    assert 'tell application "iTerm2"' in scripts[0]
+    assert 'if (seatName as text) is "reviewer"' in scripts[0]
+    assert f'tell s to write text "bash {agent_admin_window._WAIT_FOR_SEAT_SCRIPT} install reviewer"' in scripts[0]
 
 
 def test_reseed_pane_raises_when_seat_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -103,5 +105,5 @@ def test_reseed_pane_raises_when_seat_not_found(monkeypatch: pytest.MonkeyPatch)
 def test_reseed_pane_rejects_ancestor(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_iterm(monkeypatch, _FakeApp([]))
 
-    with pytest.raises(agent_admin_window.AgentAdminWindowError, match="cannot reseed ancestor pane"):
+    with pytest.raises(agent_admin_window.AgentAdminWindowError, match="cannot reseed primary seat pane"):
         agent_admin_window.reseed_pane(SimpleNamespace(name="install"), "ancestor")

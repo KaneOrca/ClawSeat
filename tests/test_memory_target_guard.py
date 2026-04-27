@@ -156,6 +156,7 @@ def _invoke_main_with_argv(module, argv: list[str]) -> int:
                 "--task-id", "t9-test-1",
                 "--title", "should-be-blocked",
                 "--objective", "body",
+                "--test-policy", "UPDATE",
             ],
         ),
         (
@@ -167,6 +168,7 @@ def _invoke_main_with_argv(module, argv: list[str]) -> int:
                 "--task-id", "t9-test-2",
                 "--title", "should-be-blocked",
                 "--objective", "body",
+                "--test-policy", "UPDATE",
             ],
         ),
     ],

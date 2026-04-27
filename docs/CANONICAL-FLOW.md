@@ -2,7 +2,7 @@
 
 > Shortest 明确、最不容误解的 ClawSeat dispatch / completion / ACK 协议说明。
 >
-> **v0.7 范式**：operator ↔ ancestor 走 **CLI 直接交互**；飞书通道为**可选 write-only
+> **v0.7 范式**：operator ↔ memory 走 **CLI 直接交互**；飞书通道为**可选 write-only
 > 广播** + 可选的 **koder 反向通道**（见 [INSTALL.md](INSTALL.md) §4）。本文件描述的
 > dispatch / completion / ACK 协议在 CLI-only 和 Feishu-enabled 模式下**均适用**；
 > 差异只在"是否经飞书转发"这一步。
@@ -24,6 +24,7 @@ python3 dispatch_task.py \
   --task-id <TASK_ID> \
   --title '<TITLE>' \
   --objective '<OBJECTIVE>' \
+  --test-policy UPDATE \
   --reply-to <reply_to_seat>
 ```
 
@@ -57,7 +58,7 @@ python3 complete_handoff.py \
 2. 若配置了飞书群且 `CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1`，则向飞书群广播delegation report
 3. 写入 machine-readable handoff receipt（`Consumed:` 待前端标记后写入）
 
-> **Review gate**：如果任务会修改 docs / templates / skills / protocol / config / source code，planner 不应直接把它当成 review-free 的自闭环任务。默认先走 `builder-1`（如需实现），再走 `reviewer-1`，最后才允许 frontstage closeout。纯审查/调研任务只有在任务本身明确声明 review-free 时才可跳过 review lane。
+> **Review gate**：如果任务会修改 docs / templates / skills / protocol / config / source code，planner 不应直接把它当成 review-free 的自闭环任务。默认先走 builder（如需实现），再由 planner 做代码审查，最后才允许 frontstage closeout。纯审查/调研任务只有在任务本身明确声明 review-free 时才可跳过 review lane。
 
 ---
 
@@ -72,7 +73,7 @@ python3 complete_handoff.py \
 ```
 [OC_DELEGATION_REPORT_V1]
 project=<project>
-lane=<planning|builder|reviewer|qa|designer|frontstage>
+lane=<planning|builder|designer|frontstage>
 task_id=<TASK_ID>
 dispatch_nonce=<nonce>
 report_status=<in_progress|done|needs_decision|blocked>
@@ -194,7 +195,7 @@ OpenClaw bridge 操作方法：
    - 验证 base URL / endpoint 是否可达
    - 验证 auth_mode / provider 是否与 seat 配置一致
 
-`qa-1` 默认不负责明文 secret 录入，但应在配置变更具备连通性或回归风险时介入验证，尤其包括：
+planner 默认不负责明文 secret 录入，但应在配置变更具备连通性或回归风险时安排验证，尤其包括：
 
 - Feishu bridge 配置
 - 新 API key

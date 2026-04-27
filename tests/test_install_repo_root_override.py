@@ -1,4 +1,4 @@
-"""FR-7: install.sh --repo-root flag routes PROJECT_REPO_ROOT to ancestor launch + project-local.toml."""
+"""FR-7: install.sh --repo-root flag routes PROJECT_REPO_ROOT to project-local.toml."""
 from __future__ import annotations
 
 import importlib.util
@@ -44,8 +44,8 @@ def _run_dry(tmp_path: Path, extra_args: list[str]) -> subprocess.CompletedProce
 
 # ── dry-run assertions ─────────────────────────────────────────────────────────
 
-def test_repo_root_in_ancestor_dir_flag(tmp_path: Path) -> None:
-    """--repo-root passes through to ancestor launch_seat --dir (dry-run verification)."""
+def test_repo_root_does_not_override_primary_workspace_dir(tmp_path: Path) -> None:
+    """--repo-root does not replace the primary seat workspace launch CWD."""
     target_dir = tmp_path / "myrepo"
     target_dir.mkdir()
     result = _run_dry(tmp_path, [
@@ -58,10 +58,11 @@ def test_repo_root_in_ancestor_dir_flag(tmp_path: Path) -> None:
     assert "project-local.toml" in result.stdout, (
         f"Expected 'project-local.toml' in dry-run output:\n{result.stdout}"
     )
-    # dry-run should print ancestor launch with --dir pointing to target_dir
-    assert f"--dir {target_dir}" in result.stdout, (
-        f"Expected '--dir {target_dir}' in dry-run output:\n{result.stdout}"
+    memory_workspace = tmp_path / "home" / ".agents" / "workspaces" / "testproj" / "memory"
+    assert f"--dir {memory_workspace}" in result.stdout, (
+        f"Expected '--dir {memory_workspace}' in dry-run output:\n{result.stdout}"
     )
+    assert f"--dir {target_dir}" not in result.stdout
 
 
 def test_nonexistent_repo_root_dies_2(tmp_path: Path) -> None:
@@ -120,6 +121,10 @@ def test_repo_root_written_to_project_local_toml_content(tmp_path: Path) -> None
     assert f'repo_root = "{target_dir}"' in content, (
         f"Expected repo_root = \"{target_dir}\" in project-local.toml:\n{content}"
     )
+    records = _read_jsonl(launcher_log)
+    assert [record["dir"] for record in records] == [
+        str(home / ".agents" / "workspaces" / "projfoo" / "memory")
+    ]
 
 
 def test_default_repo_root_is_clawseat_root(tmp_path: Path) -> None:

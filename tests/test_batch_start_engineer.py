@@ -76,6 +76,11 @@ def _make_handlers(
     monitor_engineers: list[str] | None = None,
     window_mode: str = "tabs-1up",
     fail_ids: set[str] | None = None,
+    tool_by_engineer: dict[str, str] | None = None,
+    auth_by_engineer: dict[str, str] | None = None,
+    provider_by_engineer: dict[str, str] | None = None,
+    seat_overrides: dict[str, dict[str, str]] | None = None,
+    provision_heartbeat=None,
 ):
     svc = _FakeSessionService()
     if fail_ids:
@@ -83,14 +88,22 @@ def _make_handlers(
     open_recorder = _Recorder()
 
     def resolve(eid: str, project_name: str | None = None):  # noqa: ARG001
+        tool = (tool_by_engineer or {}).get(eid, "claude")
+        auth_mode = (auth_by_engineer or {}).get(eid, "oauth")
+        provider = (provider_by_engineer or {}).get(
+            eid,
+            {"claude": "anthropic", "codex": "openai", "gemini": "google"}.get(tool, "unknown"),
+        )
         return SimpleNamespace(
             engineer_id=eid,
-            session=f"{project_name or 'demo'}-{eid}-claude",
+            session=f"{project_name or 'demo'}-{eid}-{tool}",
             project=project_name or "demo",
-            tool="claude",
+            tool=tool,
+            auth_mode=auth_mode,
+            provider=provider,
         )
 
-    def provision_heartbeat(session):  # noqa: ARG001
+    def default_provision_heartbeat(session):  # noqa: ARG001
         return (True, "")
 
     def load_project_or_current(project_name: str | None):
@@ -99,6 +112,7 @@ def _make_handlers(
             monitor_engineers=monitor_engineers if monitor_engineers is not None else engineer_ids,
             engineers=engineer_ids,
             window_mode=window_mode,
+            seat_overrides=seat_overrides or {},
         )
 
     def load_project_sessions(project_name: str):  # noqa: ARG001
@@ -111,7 +125,7 @@ def _make_handlers(
         error_cls=RuntimeError,
         load_project_or_current=load_project_or_current,
         resolve_engineer_session=resolve,
-        provision_session_heartbeat=provision_heartbeat,
+        provision_session_heartbeat=provision_heartbeat or default_provision_heartbeat,
         load_project_sessions=load_project_sessions,
         tmux_has_session=lambda _name: True,
         load_projects=lambda: {},
@@ -127,9 +141,21 @@ def _make_handlers(
 
 
 def _args(engineers, **overrides):
-    defaults = dict(project=None, reset=False, no_iterm=False)
+    defaults = dict(project=None, reset=False, no_iterm=False, accept_override=False)
     defaults.update(overrides)
     return SimpleNamespace(engineers=engineers, **defaults)
+
+
+def _start_args(engineer: str, **overrides):
+    defaults = dict(project=None, reset=False, accept_override=False)
+    defaults.update(overrides)
+    return SimpleNamespace(engineer=engineer, **defaults)
+
+
+def _heartbeat_args(engineer: str, **overrides):
+    defaults = dict(project=None, force=False, dry_run=False)
+    defaults.update(overrides)
+    return SimpleNamespace(engineer=engineer, **defaults)
 
 
 # ── Invariant 1: every requested seat is started ──────────────────────────────
@@ -144,6 +170,162 @@ def test_all_requested_seats_are_started():
     )
     started_ids = [eid for eid, _ in svc.started]
     assert sorted(started_ids) == ["builder-1", "designer-1", "planner", "reviewer-1"]
+
+
+def test_start_engineer_skips_heartbeat_for_codex_memory(capsys):
+    calls: list[str] = []
+
+    def provision_heartbeat(session):
+        calls.append(session.engineer_id)
+        return (True, "heartbeat should not run for codex")
+
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        provision_heartbeat=provision_heartbeat,
+    )
+
+    rc = handlers.session_start_engineer(_start_args("memory", project="cartooner"))
+
+    assert rc == 0
+    assert [eid for eid, _ in svc.started] == ["memory"]
+    assert calls == []
+    out = capsys.readouterr().out
+    assert "cartooner-memory-codex" in out
+    assert "heartbeat" not in out
+
+
+def test_batch_start_engineer_provisions_heartbeat_only_for_claude(capsys):
+    calls: list[str] = []
+
+    def provision_heartbeat(session):
+        calls.append(session.engineer_id)
+        return (True, f"{session.engineer_id}: heartbeat ok")
+
+    engineer_ids = ["memory", "planner", "designer"]
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=engineer_ids,
+        tool_by_engineer={"memory": "codex", "planner": "claude", "designer": "gemini"},
+        provision_heartbeat=provision_heartbeat,
+    )
+
+    rc = handlers.session_batch_start_engineer(_args(engineer_ids, project="cartooner"))
+
+    assert rc == 0
+    assert {eid for eid, _ in svc.started} == set(engineer_ids)
+    assert calls == ["planner"]
+    out = capsys.readouterr().out
+    assert "planner: heartbeat ok" in out
+    assert "memory: heartbeat" not in out
+    assert "designer: heartbeat" not in out
+
+
+def test_provision_heartbeat_gracefully_skips_codex_memory(capsys):
+    def provision_heartbeat(session):  # noqa: ARG001
+        raise AssertionError("non-Claude heartbeat skip should not call provision hook")
+
+    handlers, _svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        provision_heartbeat=provision_heartbeat,
+    )
+
+    rc = handlers.session_provision_heartbeat(_heartbeat_args("memory", project="cartooner"))
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "memory: heartbeat skipped for codex session" in out
+
+
+def test_start_engineer_fails_when_project_seat_override_tool_mismatches():
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        seat_overrides={
+            "memory": {
+                "tool": "claude",
+                "auth_mode": "oauth",
+                "provider": "anthropic",
+            }
+        },
+    )
+
+    try:
+        handlers.session_start_engineer(_start_args("memory", project="cartooner"))
+    except RuntimeError as exc:
+        message = str(exc)
+        assert "project.toml seat_override requires tool=claude but got tool=codex" in message
+        assert "Use --accept-override to bypass" in message
+    else:
+        raise AssertionError("expected project.toml seat_override mismatch to fail")
+
+    assert svc.started == []
+
+
+def test_start_engineer_accept_override_bypasses_mismatch(capsys):
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        seat_overrides={
+            "memory": {
+                "tool": "claude",
+                "auth_mode": "oauth",
+                "provider": "anthropic",
+            }
+        },
+    )
+
+    rc = handlers.session_start_engineer(
+        _start_args("memory", project="cartooner", accept_override=True)
+    )
+
+    assert rc == 0
+    assert [eid for eid, _ in svc.started] == ["memory"]
+    assert "warn: project.toml seat_override requires tool=claude but got tool=codex" in capsys.readouterr().err
+
+
+def test_start_engineer_project_seat_override_match_passes():
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory"],
+        tool_by_engineer={"memory": "codex"},
+        seat_overrides={
+            "memory": {
+                "tool": "codex",
+                "auth_mode": "oauth",
+                "provider": "openai",
+            }
+        },
+    )
+
+    rc = handlers.session_start_engineer(_start_args("memory", project="cartooner"))
+
+    assert rc == 0
+    assert [eid for eid, _ in svc.started] == ["memory"]
+
+
+def test_batch_start_engineer_validates_overrides_before_any_spawn():
+    handlers, svc, _open = _make_handlers(
+        engineer_ids=["memory", "planner"],
+        tool_by_engineer={"memory": "codex", "planner": "claude"},
+        seat_overrides={
+            "planner": {
+                "tool": "codex",
+                "auth_mode": "oauth",
+                "provider": "openai",
+            }
+        },
+    )
+
+    try:
+        handlers.session_batch_start_engineer(
+            _args(["memory", "planner"], project="cartooner", no_iterm=True)
+        )
+    except RuntimeError as exc:
+        assert "project.toml seat_override requires tool=codex but got tool=claude" in str(exc)
+    else:
+        raise AssertionError("expected batch-start-engineer override mismatch to fail")
+
+    assert svc.started == []
 
 
 # ── Invariant 2: Phase 2 fires AFTER all Phase 1 work finishes ───────────────

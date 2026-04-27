@@ -272,6 +272,8 @@ def main() -> int:
             "Smoke task",
             "--objective",
             "Review the change set",
+            "--test-policy",
+            "UPDATE",
             env=feishu_env,
         )
         todo_text = (tasks_root / "reviewer-1" / "TODO.md").read_text(encoding="utf-8")

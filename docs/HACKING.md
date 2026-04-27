@@ -10,15 +10,15 @@
 |---|---|
 | **让某个 seat 行为变狠**（planner 更严 / builder 更激进） | `core/skills/<role>/SKILL.md`（纯自然语言，不是代码） |
 | **加一个新 seat**（比如 `integrator`） | `core/scripts/seat_skill_mapping.py` 加一行映射；同名 skill 放 `core/skills/integrator/SKILL.md` |
-| **删一个 seat**（六格里不想要 designer） | 项目的 `project-local.toml` 改 `seat_order`；或 install 时 `--template` 选不带 designer 的 |
-| **给某 seat 换装 gstack skill**（reviewer 要加 `/cso` 安全审计） | `core/scripts/seat_skill_mapping.py` 对应 seat 的 skills 列表加一行 |
+| **删一个 seat**（workers 窗口里不想要 designer） | 项目的 `project-local.toml` 改 `seat_order`；或 install 时 `--template` 选不带 designer 的 |
+| **给某 seat 换装 gstack skill**（planner 要加 `/cso` 安全审计） | `core/scripts/seat_skill_mapping.py` 对应 seat 的 skills 列表加一行 |
 | **加一个新 intent**（比如 `--intent refactor`） | `core/skills/gstack-harness/scripts/dispatch_task.py::INTENT_MAP` 加一条键值对 |
 | **换 LLM provider**（builder 不用 Claude 了改用 Codex） | 项目的 `project-local.toml::[overrides]` 改 `builder` 的 `tool` + `auth_mode` + `provider` |
 | **换 LLM 模型**（换成某个 minimax 专属模型） | 同上，加 `model = "..."` |
 | **换通道**（不用 Feishu，用 Slack） | 不是改 ClawSeat——去 [OpenClaw plugin SDK](https://github.com/openclaw/openclaw) 写一个 Slack 插件；ClawSeat 这侧把 `feishu_sender_mode` 关掉就行 |
 | **加一个新模板**（自定义 roster） | 在 `templates/` 加一个 `.toml`，install 时 `--template <name>` |
 | **改 install UX**（加新 flag / 改 banner） | `scripts/install.sh`（但这属于 code 改动，走 install 项目组 planner） |
-| **给 ancestor 加一个 Phase-B 步骤** | `core/templates/ancestor-brief.template.md` 加 B 系列步骤 |
+| **给 memory 加一个 Phase-B 步骤** | bootstrap brief 模板加 B 系列步骤 |
 | **改 dispatch 协议**（加新状态 / 改 handoff 格式） | `core/skills/gstack-harness/` 下脚本 + `references/chain-protocol.md` |
 | **禁用/启用飞书通知** | `CLAWSEAT_FEISHU_ENABLED=0` 环境变量；或 `PROJECT_BINDING.toml` 删掉 `feishu_group_id` |
 | **禁用/启用巡检 launchd** | `scripts/install.sh --enable-auto-patrol` 或装完后 `launchctl unload ~/Library/LaunchAgents/com.clawseat.*.plist` |
@@ -35,7 +35,7 @@ ClawSeat/
 │   ├── install.sh                 # L1 — operator 入口
 │   ├── clean-slate.sh             # 重置到装前状态
 │   ├── apply-koder-overlay.sh     # 绑 OpenClaw agent 做反向信道
-│   ├── recover-grid.sh            # iTerm 六格被破坏时恢复
+│   ├── recover-grid.sh            # iTerm workers 窗口被破坏时恢复
 │   └── hooks/                     # seat 生命周期 hook
 ├── core/
 │   ├── launchers/
@@ -46,7 +46,7 @@ ClawSeat/
 │   │   ├── seat_skill_mapping.py  # seat → skills 映射（你最常改的文件）
 │   │   └── seat_claude_template.py # 把 skills copytree 进 sandbox
 │   ├── skills/
-│   │   ├── clawseat-ancestor/     # ancestor 专属
+│   │   ├── clawseat-memory/       # memory 专属
 │   │   ├── planner/               # ClawSeat dispatch planner
 │   │   ├── gstack-harness/        # dispatch 协议实现
 │   │   ├── memory-oracle/         # memory seat 行为
@@ -61,7 +61,7 @@ ClawSeat/
 │   │   └── ...
 │   ├── transport/
 │   │   └── transport_router.py    # dispatch/notify/complete 单一入口
-│   └── templates/                 # ancestor-brief / patrol plist 模板源
+│   └── templates/                 # bootstrap brief / patrol plist 模板源
 ├── templates/                     # 项目模板（default / engineering / creative）
 ├── docs/                          # 你现在读的这堆
 ├── tests/                         # pytest 套件（~2200+ 测试）

@@ -18,7 +18,7 @@ from _common import (
     _should_announce_planner_event,
     _try_announce_planner_event,
     add_notify_args,
-    append_status_note,
+    append_status_dispatch_event,
     append_task_to_queue,
     assert_target_not_memory,
     broadcast_feishu_group_message,
@@ -269,6 +269,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
+    parser.add_argument(
+        "--test-policy",
+        required=True,
+        choices=["UPDATE", "FREEZE", "EXTEND", "N/A"],
+        help=(
+            "UPDATE: tests must follow code changes; "
+            "FREEZE: do not touch tests; "
+            "EXTEND: add new tests only; "
+            "N/A: doc/config only, no testable code"
+        ),
+    )
     parser.add_argument("--reply-to", help="Seat that should receive completion back from the target.")
     parser.add_argument("--notes", default="dispatched via gstack-harness", help="TASKS.md note.")
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
@@ -387,6 +398,7 @@ def main() -> int:
         task_type=args.task_type,
         review_required=args.review_required,
         correlation_id=correlation_id,
+        test_policy=args.test_policy,
     )
     upsert_tasks_row(
         profile.tasks_doc,
@@ -396,10 +408,6 @@ def main() -> int:
         status="pending",
         notes=args.notes,
     )
-    append_status_note(
-        profile.status_doc,
-        args.status_note or f"{args.source} dispatched {args.task_id} to {args.target}",
-    )
     receipt = {
         "kind": "dispatch",
         "task_id": args.task_id,
@@ -407,6 +415,7 @@ def main() -> int:
         "source": args.source,
         "target": args.target,
         "title": args.title,
+        "test_policy": args.test_policy,
         "todo_path": str(todo_path),
         "reply_to": reply_to,
         "assigned_at": utc_now_iso(),
@@ -508,6 +517,13 @@ def main() -> int:
         role_hint=role_hint,
         title=args.title,
         correlation_id=correlation_id,
+    )
+    append_status_dispatch_event(
+        profile.status_doc,
+        source=args.source,
+        task_id=args.task_id,
+        target=args.target,
+        test_policy=args.test_policy,
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")

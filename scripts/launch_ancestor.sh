@@ -19,6 +19,7 @@ fi
 SEND_AND_VERIFY="$CLAWSEAT_ROOT/core/shell-scripts/send-and-verify.sh"
 AGENT_LAUNCHER="$CLAWSEAT_ROOT/core/launchers/agent-launcher.sh"
 AGENT_ADMIN="$CLAWSEAT_ROOT/core/scripts/agent_admin.py"
+AGENTCTL="$CLAWSEAT_ROOT/core/shell-scripts/agentctl.sh"
 ANCESTOR_SKILL="$CLAWSEAT_ROOT/core/skills/clawseat-ancestor/SKILL.md"
 
 # ── argument parsing ────────────────────────────────────────────────────
@@ -106,6 +107,33 @@ check_secrets_auth_mode() {
 validate_runtime_combo
 CHECK_SECRETS_MODE="$(check_secrets_auth_mode)"
 
+resolve_primary_seat_id() {
+  python3 - "$PROJECT" <<'PY'
+from pathlib import Path
+import sys
+import tomllib
+
+project = sys.argv[1]
+project_toml = Path.home() / ".agents" / "projects" / project / "project.toml"
+try:
+    with project_toml.open("rb") as fh:
+        data = tomllib.load(fh)
+except Exception:
+    print("ancestor")
+    raise SystemExit(0)
+
+engineers = data.get("engineers")
+if isinstance(engineers, list) and engineers:
+    primary = str(engineers[0]).strip()
+    if primary:
+        print(primary)
+        raise SystemExit(0)
+print("ancestor")
+PY
+}
+PRIMARY_SEAT_ID="$(resolve_primary_seat_id)"
+[[ -n "$PRIMARY_SEAT_ID" ]] || PRIMARY_SEAT_ID="ancestor"
+
 # ── credential check ────────────────────────────────────────────────────
 
 # agent-launcher.sh --check-secrets exits 1 with JSON when credential missing.
@@ -129,7 +157,7 @@ fi
 switch_cmd=(
   python3 "$AGENT_ADMIN" session switch-harness
   --project "$PROJECT"
-  --engineer ancestor
+  --engineer "$PRIMARY_SEAT_ID"
   --tool "$TOOL"
   --mode "$AUTH_MODE"
   --provider "$PROVIDER"
@@ -143,10 +171,14 @@ fi
 # ── start tmux session ─────────────────────────────────────────────────
 
 start_rc=0
-python3 "$AGENT_ADMIN" session start-engineer ancestor --project "$PROJECT" \
+python3 "$AGENT_ADMIN" session start-engineer "$PRIMARY_SEAT_ID" --project "$PROJECT" \
   || { echo "TMUX_SESSION_START_FAILED: start-engineer returned $?" >&2; exit 4; }
 
-session_name="${PROJECT}-ancestor-${TOOL}"
+session_name=""
+if [[ -x "$AGENTCTL" ]]; then
+  session_name="$("$AGENTCTL" session-name "$PRIMARY_SEAT_ID" --project "$PROJECT" 2>/dev/null || true)"
+fi
+session_name="${session_name:-${PROJECT}-${PRIMARY_SEAT_ID}-${TOOL}}"
 
 # ── inject ancestor bootstrap prompt ────────────────────────────────────
 

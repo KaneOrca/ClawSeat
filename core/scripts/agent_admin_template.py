@@ -128,6 +128,28 @@ class TemplateHandlers:
     def __init__(self, hooks: TemplateHooks) -> None:
         self.hooks = hooks
 
+    def _render_workspace_memory_template(
+        self,
+        variant: str,
+        *,
+        session: Any,
+        project: Any,
+        profile_display: str,
+    ) -> str:
+        template_path = _REPO_ROOT / "core" / "templates" / f"workspace-memory.template.md.{variant}"
+        text = template_path.read_text(encoding="utf-8")
+        agents_home = str(Path(session.workspace).expanduser().parents[2])
+        replacements = {
+            "{{project}}": str(project.name),
+            "{{profile}}": profile_display,
+            "{{repo_root}}": str(project.repo_root),
+            "{{workspace}}": str(session.workspace),
+            "{{agents_home}}": agents_home,
+        }
+        for needle, value in replacements.items():
+            text = text.replace(needle, value)
+        return text
+
     def _render_claude_settings(self, session: Any, engineer: Any = None) -> str:
         import json
         try:
@@ -396,7 +418,24 @@ class TemplateHandlers:
         )
         if heartbeat_manifest_text:
             template_map.setdefault(tool, {})["HEARTBEAT_MANIFEST.toml"] = heartbeat_manifest_text
-        return template_map.get(tool, {})
+        rendered = template_map.get(tool, {})
+        if session.engineer_id == "memory":
+            claude_memory = self._render_workspace_memory_template(
+                "claude",
+                session=session,
+                project=project,
+                profile_display=profile_display,
+            )
+            gemini_memory = self._render_workspace_memory_template(
+                "gemini",
+                session=session,
+                project=project,
+                profile_display=profile_display,
+            )
+            rendered["AGENTS.md"] = gemini_memory if tool == "gemini" else claude_memory
+            rendered["CLAUDE.md"] = claude_memory
+            rendered["GEMINI.md"] = gemini_memory
+        return rendered
 
     def apply_template(
         self,

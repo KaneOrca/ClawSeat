@@ -41,6 +41,8 @@ def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_pat
             "--dry-run",
             "--project",
             "spawn49",
+            "--template",
+            "clawseat-default",
             "--provider",
             "minimax",
         ],
@@ -59,9 +61,9 @@ def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_pat
     assert result.returncode == 0, result.stderr
     output = result.stdout + result.stderr
 
-    assert output.count("agent-launcher.sh") == 2
+    assert output.count("agent-launcher.sh") == 1
     assert "spawn49-ancestor" in output
-    assert "machine-memory-claude" in output
+    assert "machine-memory-claude" not in output
     assert "project bootstrap --template clawseat-default --local" in output
     for seat in ("planner", "builder", "reviewer", "qa", "designer"):
         assert f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}" in output
@@ -78,6 +80,8 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             str(root / "scripts" / "install.sh"),
             "--project",
             "spawn49",
+            "--template",
+            "clawseat-default",
             "--provider",
             "minimax",
         ],
@@ -156,7 +160,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     assert guide_path.is_file()
     guide_text = guide_path.read_text(encoding="utf-8")
     assert "Phase-A 不让 memory 做同步调研" in guide_text
-    assert "B2.5 / B5 都按 brief 由 ancestor 自己 Read openclaw / binding 文件" in guide_text
+    assert "B2.5 / B5 都按 brief 由 ancestor seat 自己 Read openclaw / binding 文件" in guide_text
     assert "B7 后接收 phase-a-decisions learnings" in guide_text
     assert "agent_admin.py session start-engineer" in guide_text
     assert "第一步：让 memory 做 openclaw 生态调研（brief B2.6）" not in guide_text
@@ -191,6 +195,8 @@ for name in ("network", "openclaw", "github", "current_context"):
             str(root / "scripts" / "install.sh"),
             "--project",
             "custom49",
+            "--template",
+            "clawseat-default",
             "--base-url",
             "https://custom.api.invalid/v1",
             "--api-key",
@@ -228,10 +234,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "claude-custom-49" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "custom49-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["custom49-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://custom.api.invalid/v1"
@@ -317,6 +320,8 @@ for name in ("network", "openclaw", "github", "current_context"):
             str(root / "scripts" / "install.sh"),
             "--project",
             "mini49",
+            "--template",
+            "clawseat-default",
             "--provider",
             "minimax",
             "--api-key",
@@ -351,10 +356,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "ANTHROPIC_MODEL=MiniMax-M2.7-highspeed" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "mini49-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["mini49-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
@@ -389,6 +391,8 @@ for name in ("network", "openclaw", "github", "current_context"):
             str(root / "scripts" / "install.sh"),
             "--project",
             "console49",
+            "--template",
+            "clawseat-default",
             "--provider",
             "anthropic_console",
             "--api-key",
@@ -422,10 +426,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "export ANTHROPIC_AUTH_TOKEN" not in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "console49-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["console49-ancestor"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://api.anthropic.com"

@@ -54,6 +54,18 @@ def test_clawseat_engineering_builder_is_codex_oauth() -> None:
     assert builder["provider"] == "openai"
 
 
+def test_clawseat_minimal_memory_defaults_to_codex() -> None:
+    data = _load("clawseat-minimal")
+    seats = _validate_seats(data)
+    memory = next(e for e in seats if e["id"] == "memory")
+    assert memory["tool"] == "codex"
+    assert memory["auth_mode"] == "oauth"
+    assert memory["provider"] == "openai"
+    assert memory["model"] == "gpt-5.4-mini"
+    assert memory["default_tool"] == "codex"
+    assert memory["default_model"] == "gpt-5.4-mini"
+
+
 def test_clawseat_creative_loads_with_four_seats() -> None:
     data = _load("clawseat-creative")
     seats = _validate_seats(data)

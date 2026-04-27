@@ -61,12 +61,9 @@ printf 'Linux\\n'
 
     assert result.returncode == 0, result.stderr
     assert "WARN: Skipping iTerm window open in sandbox/headless install: native iTerm panes require macOS." in result.stderr
-    assert "WARN: Skipping ancestor focus because no iTerm grid window was opened." in result.stderr
+    assert "WARN: Skipping primary seat focus because no iTerm grid window was opened." in result.stderr
     assert "ClawSeat install complete" in result.stdout
     assert not iterm_payload_log.exists()
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == [
-        "sandbox49-ancestor",
-        "machine-memory-claude",
-    ]
+    assert [record["session"] for record in records] == ["sandbox49-ancestor"]

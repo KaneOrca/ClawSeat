@@ -91,7 +91,8 @@ python3 $CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py \
   --task-id {workflow_id}_{step_index} \
   --title "<step name>" \
   --task-type implementation \
-  --objective "<step 详细说明>"
+  --objective "<step 详细说明>" \
+  --test-policy UPDATE
 ```
 
 每个 step 的 `task_id` 格式：`{workflow_id}_{step_index}`（如 `video-production-pipeline-v1_1`）

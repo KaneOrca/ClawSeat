@@ -199,6 +199,7 @@ def _dispatch_cmd(
         "--task-id", task_id,
         "--title", "test notify fail",
         "--objective", "test objective",
+        "--test-policy", "UPDATE",
         "--reply-to", "planner",
     ] + (extra or [])
     return subprocess.run(cmd, capture_output=True, text=True, timeout=15,

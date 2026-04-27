@@ -1,0 +1,186 @@
+# clawseat-minimal — v2 Self-Contained Project Template
+#
+# 4-seat 自闭环项目单元：
+#   - <project>-memory       (memory + research + decision + dispatch + dialog;
+#                             独立 iTerm 窗口；用户对话第一入口)
+#   - <project>-planner-claude   (规划 + 代码审查; workers 窗口 pane)
+#   - <project>-builder-codex    (代码编写; workers 窗口 pane)
+#   - <project>-designer-gemini  (审美判断; workers 窗口 pane)
+#
+# 角色边界（与 v1 重要区别）：
+#   - 没有独立 reviewer seat — planner 自审 (Claude 强项就是判断/审查)
+#   - 没有独立 builder/qa seat — builder 是 codex (强项是写代码)
+#   - 没有 ancestor seat — memory 接管 (memory 是其能力，不是单独 seat)
+#   - 没有全局 memory — 每项目自闭环
+#
+# 依据: docs/rfc/RFC-001-self-contained-project-architecture.md
+
+version = 1
+template_name = "clawseat-minimal"
+description = "v2 self-contained 4-seat project: memory orchestrates from dedicated window, planner+builder+designer share 3-pane worker grid"
+
+# ── window layout ─────────────────────────────────────────────────────────────
+# Two iTerm windows per project. Memory gets its own window (user's primary
+# conversation surface). Workers share a 3-pane grid window.
+
+#
+# Per RFC-001 §3 (locked 2026-04-26):
+# - memory pane lives in the GLOBAL "clawseat-memories" window (shared across all projects)
+# - workers (planner + 3 right-side workers) live in per-project "clawseat-<project>-workers"
+# - planner is "main" in workers window: occupies left 50%, others fill right side
+#   using grid_for_n() formula (max 2 rows, expand cols, col-major fill order)
+
+[window_layout]
+shared_memories_window_title = "clawseat-memories"            # 全局窗口, 所有项目 memory 在这
+workers_window_title         = "clawseat-{PROJECT}-workers"   # 每项目独立 workers 窗口
+
+[window_layout.workers_grid]
+left_main_seat   = "planner"
+left_main_width  = "50%"
+right_seats      = ["builder", "designer"]   # 用 grid_for_n(N_right) 排列
+right_fill_order = "col-major"               # 先填左列上→下，再下一列
+
+# ── defaults ──────────────────────────────────────────────────────────────────
+
+[defaults]
+home_mode = "real"               # 所有 seat 默认 REAL_HOME (OAuth 必需)
+dangerously_skip_permissions = true
+window_mode = "split-2"          # memory 独立窗口 + workers grid 窗口
+monitor_max_panes = 4
+
+# ── seats ─────────────────────────────────────────────────────────────────────
+
+# Memory: project's brain — memory + research + dispatch + dialog
+#
+# Why "memory" not "ancestor": v1 called this seat "ancestor" but its primary
+# CAPABILITY is owning the project's persistent memory + actively researching
+# before deciding. The seat IS the project's memory. Naming it `<project>-memory`
+# makes cross-project dispatch unambiguous: `tmux-send install-memory "..."` is
+# obviously talking to install project's brain.
+[[engineers]]
+id = "memory"
+display_name = "Memory"
+role = "project-memory"            # 包含 ancestor + memory + research 多重能力
+window = "memory"                  # 走 memory_window_title (独立窗口)
+human_facing = true                # 用户对话入口
+patrol_authority = true
+unblock_authority = true
+dispatch_authority = true          # 派工给本项目 workers
+escalation_authority = true        # 跨项目协作: 直接 tmux-send <other>-memory dispatch
+review_authority = false           # 代码审查交给 planner (Claude 思维强)
+
+tool = "codex"                     # 默认 Codex ChatGPT auth; 可用 install.sh --memory-tool claude 覆盖
+auth_mode = "oauth"
+provider = "openai"
+model = "gpt-5.4-mini"
+default_tool = "codex"
+default_model = "gpt-5.4-mini"
+
+# Memory skill 配置 (M1 placeholder, M2 接成熟方案)
+[engineers.memory_skill]
+kind = "filesystem-placeholder"   # M1: ~/.agents/memory/<project>/notes.md + TASKS.md + STATUS.md
+# M2 候选: "mem0" | "letta" | "anthropic-builtin" | "vector-lancedb"
+# kind = "mem0"
+# config_path = "~/.clawseat/memory-skills/mem0.toml"
+
+# Research capability
+[engineers.research_capability]
+# M1: 直接 Bash + Read 工具 (grep 代码 / 跑命令 / 查文件)
+# M2: 加 webfetch / MCP 等专业研究工具
+tools = ["Bash", "Read", "Grep", "Glob"]
+# M2: tools += ["WebFetch", "MCP:openai-deepresearch", ...]
+
+# ── Planner: 规划 + 代码审查 (合并 v1 planner + v1 reviewer) ────────────────────
+#
+# Planner 不写代码 (那是 builder 的事), 也不审视觉 (designer 的事).
+# 用 Claude 的强判断/审阅能力去 review builder 的 codex 输出.
+[[engineers]]
+id = "planner"
+display_name = "Planner"
+role = "planner-reviewer"          # 规划 + 代码审查
+window = "workers"
+window_pane = "top-left"
+human_facing = false
+review_authority = true            # 代码侧 review
+dispatch_authority = false         # 只接 memory dispatch, 不主动派别人
+
+tool = "claude"                    # 默认 claude (思维强 + 长上下文 review)
+auth_mode = "oauth"                # 可切 api
+provider = "anthropic"             # 可切 openai (codex) | google (gemini) | minimax | xcode-best | ark
+
+[engineers.planner.alternatives]
+# Operator 通过 `agent_admin engineer rebind planner --tool=X --auth-mode=Y --provider=Z` 切换
+allowed_tools = ["claude", "codex", "gemini"]
+allowed_auth_modes = ["oauth", "api"]
+allowed_providers = ["anthropic", "openai", "google", "minimax", "xcode-best", "ark"]
+
+# ── Builder: 代码执行 (用 codex 的 codegen 强项) ──────────────────────────────
+#
+# Builder 写代码、跑命令、做实际编辑. Codex 的 GPT-5.4 codegen 是强项.
+# 不审 (planner 审), 不评视觉 (designer 评).
+[[engineers]]
+id = "builder"
+display_name = "Builder"
+role = "code-builder"
+window = "workers"
+window_pane = "top-right"
+human_facing = false
+review_authority = false           # 不审, 自己写的代码由 planner review
+
+tool = "codex"                     # 默认 codex (GPT-5.4 codegen 强)
+auth_mode = "oauth"                # 可切 api (--provider xcode-best)
+provider = "openai"
+
+[engineers.builder.alternatives]
+allowed_tools = ["codex", "claude"]
+allowed_auth_modes = ["oauth", "api"]
+allowed_providers = ["openai", "anthropic", "xcode-best", "minimax", "ark"]
+
+# Builder api 模式默认走 xcode-best (operator 明确要求)
+[engineers.builder.api_defaults]
+provider = "xcode-best"
+
+# ── Designer: 审美 + 视觉/UX 评审 ────────────────────────────────────────────
+#
+# Designer 不生成代码也不写规划; 它评审视觉效果 + 用户体验 + 美学.
+# Gemini 多模态视觉是强项.
+[[engineers]]
+id = "designer"
+display_name = "Designer"
+role = "aesthetic-reviewer"
+window = "workers"
+window_pane = "bottom-full"
+human_facing = false
+review_authority = true            # 审美/视觉侧 review
+
+tool = "gemini"                    # 默认 gemini (Google 多模态视觉强)
+auth_mode = "oauth"
+provider = "google"
+
+[engineers.designer.alternatives]
+allowed_tools = ["gemini", "claude"]
+allowed_auth_modes = ["oauth", "api"]
+allowed_providers = ["google", "anthropic", "minimax"]
+
+# ── notes for v2 implementer ──────────────────────────────────────────────────
+#
+# Window 创建顺序:
+#   a. 先创建 memory iTerm 窗口 (1 pane) → launch <project>-memory tmux session
+#   b. 再创建 workers iTerm 窗口 (3 panes) → launch planner / builder / designer
+#   c. memory 窗口默认 focus (用户对话入口)
+#
+# 跨项目 dispatch:
+#   memory seat 知道有哪些其他项目: 读 ~/.clawseat/projects.json 注册表
+#   install.sh 创建项目时往该注册表追加一行
+#
+# M2 watchdog 与本模板的接口:
+#   - watchdog 监控 memory_window_title + workers_window_title 存在性
+#   - watchdog 监控 4 个 tmux session 健康度
+#   - memory seat 通过 ~/.clawseat/state/cmdq.jsonl 给 watchdog 派活
+#
+# M3 自定义模板继承示例 (尚未实现):
+#   用户可写 templates/clawseat-myproject.toml:
+#     extends = "clawseat-minimal"
+#     [[engineers.overrides]]
+#     id = "designer"
+#     tool = "claude"        # 不要 gemini 改 claude

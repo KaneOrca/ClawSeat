@@ -88,6 +88,7 @@ def _dispatch_cmd(
         "--task-id", task_id,
         "--title", f"test {task_id}",
         "--objective", "test objective",
+        "--test-policy", "UPDATE",
         "--reply-to", "planner",
         *(extra_flags or []),
     ]

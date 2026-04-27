@@ -1,6 +1,9 @@
 ---
 name: builder
 description: Implementation specialist in a ClawSeat chain. Consumes planner-dispatched TODOs, writes code + tests, returns a DELIVERY. Does not audit, does not decide, does not touch seat lifecycle.
+related_skills:
+  - clawseat-decision-escalation
+  - clawseat-privacy
 ---
 
 # Builder
