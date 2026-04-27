@@ -53,7 +53,7 @@ def _run_install(
         "--project",
         project,
         "--template",
-        "clawseat-default",
+        "clawseat-creative",
         "--memory-tool",
         memory_tool,
         "--provider",

@@ -8,8 +8,8 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
-_MINIMAL_TEMPLATE = _REPO / "templates" / "clawseat-minimal.toml"
-_DEFAULT_TEMPLATE = _REPO / "templates" / "clawseat-default.toml"
+_CREATIVE_TEMPLATE = _REPO / "templates" / "clawseat-creative.toml"
+_ENGINEERING_TEMPLATE = _REPO / "templates" / "clawseat-engineering.toml"
 
 
 def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -40,14 +40,14 @@ def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.Complet
 
 
 def test_install_profile_includes_qa() -> None:
-    minimal = _MINIMAL_TEMPLATE.read_text(encoding="utf-8")
-    default = _DEFAULT_TEMPLATE.read_text(encoding="utf-8")
+    creative = _CREATIVE_TEMPLATE.read_text(encoding="utf-8")
+    engineering = _ENGINEERING_TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'id = "qa"' in minimal
-    assert 'role = "qa"' in minimal
-    assert 'right_seats      = ["builder", "qa", "designer"]' in minimal
-    assert "monitor_max_panes = 5" in minimal
-    assert "monitor_max_panes = 5" in default
+    assert 'id = "qa"' in creative
+    assert 'role = "qa"' in creative
+    assert 'right_seats = ["builder", "qa", "designer"]' in creative
+    assert "monitor_max_panes = 5" in creative
+    assert "monitor_max_panes = 6" in engineering
 
 
 def test_install_sh_invokes_install_qa_hook(tmp_path: Path) -> None:

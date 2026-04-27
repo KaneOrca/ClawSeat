@@ -41,7 +41,7 @@ def _bootstrap_project(tmp_path: Path) -> Path:
             "project",
             "bootstrap",
             "--template",
-            "clawseat-default",
+            "clawseat-engineering",
             "--local",
             str(local_toml),
         ],
@@ -66,14 +66,14 @@ def test_project_bootstrap_populates_seat_claude_templates(tmp_path: Path) -> No
     reviewer_template = engineers_root / "reviewer" / ".claude-template"
     qa_template = engineers_root / "qa" / ".claude-template"
     designer_template = engineers_root / "designer" / ".claude-template"
-    ancestor_template = engineers_root / "ancestor" / ".claude-template"
+    memory_template = engineers_root / "memory" / ".claude-template"
 
     assert planner_template.is_dir()
     assert builder_template.is_dir()
     assert reviewer_template.is_dir()
     assert qa_template.is_dir()
     assert designer_template.is_dir()
-    assert ancestor_template.is_dir()
+    assert memory_template.is_dir()
 
     assert {path.name for path in (planner_template / "skills").iterdir()} == {
         "planner",
@@ -105,8 +105,8 @@ def test_project_bootstrap_populates_seat_claude_templates(tmp_path: Path) -> No
         "gstack-harness",
         "tmux-basics",
     }
-    assert {path.name for path in (ancestor_template / "skills").iterdir()} == {
-        "clawseat-ancestor",
+    assert {path.name for path in (memory_template / "skills").iterdir()} == {
+        "memory-oracle",
         "clawseat",
         "gstack-harness",
         "tmux-basics",

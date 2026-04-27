@@ -66,4 +66,4 @@ printf 'Linux\\n'
     assert not iterm_payload_log.exists()
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["sandbox49-ancestor-claude"]
+    assert [record["session"] for record in records] == ["sandbox49-memory-claude"]

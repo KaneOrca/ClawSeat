@@ -285,7 +285,7 @@ subagent 全返回后，memory：
 
 1. pane 身份以 iTerm session variable `user.seat_id` 为准，不要看 pane title、当前输出内容或历史滚屏来猜。
 2. 需要核对时，运行 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window list-panes --project ${PROJECT_NAME}`，把它当唯一 canonical 映射。
-3. 布局取决于项目 `template_name`：`clawseat-minimal` 走 "workers + memories" 双窗口（planner main 左 50%，右侧 N-1 worker 网格；shared `clawseat-memories` tab 一项目一 tab）；`clawseat-default` / `engineering` / `creative` 仍走 legacy single-window grid。具体形状以 `install.sh workers_payload()` / `agent_admin_window.build_workers_payload()` 为准。
+3. 布局取决于项目 `template_name`：`clawseat-creative` / `clawseat-engineering` 走 "workers + memories" 双窗口（planner main 左 50%，右侧 N-1 worker 网格；shared `clawseat-memories` tab 一项目一 tab）。具体形状以 `install.sh workers_payload()` / `agent_admin_window.build_workers_payload()` 为准。
 4. 某个 pane 内容错位时，先核对 `user.seat_id`，再决定是否 `window reseed-pane <seat> --project ${PROJECT_NAME}`；不要直接把显示上像“reviewer”的 pane 当 reviewer。
 
 **bootstrap/use 语义**：

@@ -38,7 +38,7 @@ def test_clawseat_engineering_loads_with_six_seats() -> None:
     seats = _validate_seats(data)
     assert len(seats) == 6, f"expected 6 seats, got {len(seats)}: {[s['id'] for s in seats]}"
     seat_ids = [s["id"] for s in seats]
-    assert "ancestor" in seat_ids
+    assert "memory" in seat_ids
     assert "planner" in seat_ids
     assert "builder" in seat_ids
     assert "reviewer" in seat_ids
@@ -54,28 +54,25 @@ def test_clawseat_engineering_builder_is_codex_oauth() -> None:
     assert builder["provider"] == "openai"
 
 
-def test_clawseat_minimal_memory_defaults_to_codex() -> None:
-    data = _load("clawseat-minimal")
-    seats = _validate_seats(data)
-    memory = next(e for e in seats if e["id"] == "memory")
-    assert memory["tool"] == "codex"
-    assert memory["auth_mode"] == "oauth"
-    assert memory["provider"] == "openai"
-    assert memory["model"] == "gpt-5.4-mini"
-    assert memory["default_tool"] == "codex"
-    assert memory["default_model"] == "gpt-5.4-mini"
-
-
-def test_clawseat_creative_loads_with_four_seats() -> None:
+def test_clawseat_creative_memory_defaults_to_claude_oauth() -> None:
     data = _load("clawseat-creative")
     seats = _validate_seats(data)
-    assert len(seats) == 4, f"expected 4 seats, got {len(seats)}: {[s['id'] for s in seats]}"
+    memory = next(e for e in seats if e["id"] == "memory")
+    assert memory["tool"] == "claude"
+    assert memory["auth_mode"] == "oauth"
+    assert memory["provider"] == "anthropic"
+
+
+def test_clawseat_creative_loads_with_five_seats() -> None:
+    data = _load("clawseat-creative")
+    seats = _validate_seats(data)
+    assert len(seats) == 5, f"expected 5 seats, got {len(seats)}: {[s['id'] for s in seats]}"
     seat_ids = [s["id"] for s in seats]
-    assert "ancestor" in seat_ids
+    assert "memory" in seat_ids
     assert "planner" in seat_ids
     assert "builder" in seat_ids   # codex classification seat
+    assert "qa" in seat_ids
     assert "designer" in seat_ids  # gemini writing + scoring seat
-    assert "qa" not in seat_ids    # qa removed in creative seat redesign
 
 
 def test_clawseat_creative_builder_skills_has_classify_not_write() -> None:
@@ -110,4 +107,6 @@ def test_clawseat_creative_planner_role() -> None:
     planner = next(e for e in data["engineers"] if e["id"] == "planner")
     assert planner["role"] == "creative-planner"
     assert planner["tool"] == "claude"
-    assert planner["auth_mode"] == "oauth"
+    assert planner["auth_mode"] == "api"
+    assert planner["provider"] == "deepseek"
+    assert planner["model"] == "deepseek-v4-pro"

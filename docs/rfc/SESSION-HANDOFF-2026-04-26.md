@@ -33,7 +33,7 @@ ClawSeat v2 架构 (RFC-001) 已设计 + 部分实施完成。**install-memory +
 | `/Users/ywf/coding/ClawSeat` | 主仓 on `main` (115 commits 落后，未动) |
 | `docs/rfc/RFC-001-self-contained-project-architecture.md` | v2 完整架构 |
 | `docs/rfc/M1-issues-backlog.md` | 12 issue 完整追踪 + 5 批次规划 + operator 反馈区 |
-| `templates/clawseat-minimal.toml` | 4-seat 模板 (memory + planner + builder + designer) |
+| `templates/retired-v2-starter.toml` | 4-seat 模板 (memory + planner + builder + designer) |
 | `scripts/install.sh` | install 入口 (含 PRIMARY_SEAT_ID + 2-mode prompt + workers/memories 双窗口) |
 | `core/scripts/iterm_panes_driver.py` | iTerm 窗口驱动 (含 recipe override 机制) |
 | `core/scripts/agent_admin_window.py` | 窗口管理 (PRIMARY_SEAT_ID 抽象) |
@@ -91,7 +91,7 @@ aeba4c7  docs: backlog 文件 (M1-issues-backlog.md, 9 issues)
 f3907bb  docs: 锁定窗口拓扑设计 (RFC §3 + minimal template window_layout)
 807d281  fix: kind-first prompt 文本对齐 (planner+builder+designer)
 e0d3395  refactor: PRIMARY_SEAT_ID 抽象 (install.sh 8 处 + Python 5 处) + 模板角色重分
-70c0a73  feat: 2-mode prompt + clawseat-minimal whitelist + reinstall session resurrect
+70c0a73  feat: 2-mode prompt + retired-v2-starter whitelist + reinstall session resurrect
 7a2cae0  docs: RFC-001 v1 草案
 ```
 
@@ -118,7 +118,7 @@ iTerm 窗口:
 ```
 phase=ready
 completed_at=2026-04-26T02:10:00Z
-template=clawseat-minimal (v2)
+template=retired-v2-starter (v2)
 roster=memory(=ancestor), planner, builder, designer
 ```
 

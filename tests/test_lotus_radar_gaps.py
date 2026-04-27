@@ -46,7 +46,7 @@ def test_project_create_generates_complete_project_toml(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     data = _load_toml(home / ".agents" / "projects" / "lotus-radar" / "project.toml")
-    assert data["template_name"] == "clawseat-minimal"
+    assert data["template_name"] == "clawseat-creative"
     assert data["window_mode"] == "split-2"
     assert data["monitor_max_panes"] == 5
     assert data["engineers"] == ["memory", "planner", "builder", "qa", "designer"]

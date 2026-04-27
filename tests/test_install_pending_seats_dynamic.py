@@ -1,8 +1,7 @@
 """Tests for dynamic PENDING_SEATS resolution from template.
 
 Verifies that install.sh reads seat list from template TOML instead of
-hardcoding, so clawseat-creative produces a different seat_order than
-clawseat-default.
+hardcoding, so creative and engineering produce different seat_order values.
 """
 from __future__ import annotations
 
@@ -57,8 +56,8 @@ def _copy_templates(root):
         shutil.copytree(str(src), str(dst), dirs_exist_ok=True)
 
 
-def test_creative_template_seat_order_excludes_reviewer_qa(tmp_path):
-    """clawseat-creative project-local.toml must not contain reviewer or qa in seat_order."""
+def test_creative_template_seat_order_excludes_reviewer(tmp_path):
+    """clawseat-creative project-local.toml has the 5-seat creative roster."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     _copy_templates(root)
 
@@ -70,11 +69,9 @@ def test_creative_template_seat_order_excludes_reviewer_qa(tmp_path):
     assert local_toml.exists(), f"project-local.toml not written. stdout:\n{result.stdout}"
     content = local_toml.read_text(encoding="utf-8")
 
+    assert 'seat_order = ["memory", "planner", "builder", "qa", "designer"]' in content
     assert "reviewer" not in content, (
         f"reviewer should not appear in creative project-local.toml:\n{content}"
-    )
-    assert "qa" not in content or '"qa"' not in content.split("seat_order")[0], (
-        f"qa should not appear in seat_order for creative:\n{content}"
     )
 
 
@@ -196,20 +193,17 @@ def test_engineering_qa_seat_gets_template_model(tmp_path):
     )
 
 
-def test_default_template_seat_order_unchanged(tmp_path):
-    """clawseat-default project-local.toml keeps the standard 6-seat order."""
+def test_engineering_template_seat_order_includes_reviewer(tmp_path):
+    """clawseat-engineering project-local.toml keeps the 6-seat engineering order."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     _copy_templates(root)
 
     result = _run_install(root, home, launcher_log, tmux_log, py_stubs,
-                          ["--project", "testdefault", "--template", "clawseat-default"])
+                          ["--project", "testengineering", "--template", "clawseat-engineering"])
     assert result.returncode == 0, result.stderr
 
-    local_toml = home / ".agents" / "tasks" / "testdefault" / "project-local.toml"
+    local_toml = home / ".agents" / "tasks" / "testengineering" / "project-local.toml"
     assert local_toml.exists()
     content = local_toml.read_text(encoding="utf-8")
 
-    # Default should still have the full seat list
-    assert "planner" in content
-    assert "builder" in content
-    assert "reviewer" in content
+    assert 'seat_order = ["memory", "planner", "builder", "reviewer", "qa", "designer"]' in content

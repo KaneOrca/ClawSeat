@@ -32,7 +32,7 @@ def _write_engineer_profile(tmp_path: Path, seat: str, default_tool: str) -> Pat
     return home
 
 
-def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_path: Path) -> None:
+def test_install_dry_run_only_launches_memory_and_uses_lazy_wait_panes(tmp_path: Path) -> None:
     root, home, _, _, py_stubs = _fake_install_root(tmp_path)
     result = subprocess.run(
         [
@@ -42,7 +42,7 @@ def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_pat
             "--project",
             "spawn49",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             "--provider",
             "minimax",
         ],
@@ -62,10 +62,10 @@ def test_install_dry_run_only_launches_ancestor_and_uses_lazy_wait_panes(tmp_pat
     output = result.stdout + result.stderr
 
     assert output.count("agent-launcher.sh") == 1
-    assert "spawn49-ancestor" in output
+    assert "spawn49-memory-claude" in output
     assert "machine-memory-claude" not in output
-    assert "project bootstrap --template clawseat-default --local" in output
-    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+    assert "project bootstrap --template clawseat-creative --local" in output
+    for seat in ("planner", "builder", "qa", "designer"):
         assert f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}" in output
 
 
@@ -81,7 +81,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             "--project",
             "spawn49",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             "--provider",
             "minimax",
         ],
@@ -111,7 +111,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             "project",
             "bootstrap",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             "--local",
             str(home / ".agents" / "tasks" / "spawn49" / "project-local.toml"),
         ],
@@ -125,47 +125,34 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
         "--no-monitor",
     ] in [call["argv"] for call in bootstrap_calls]
 
-    template_text = (
-        home / ".agents" / "templates" / "clawseat-default" / "template.toml"
-    ).read_text(encoding="utf-8")
-    assert 'id = "ancestor"' in template_text
-    assert 'id = "planner"' in template_text
-    assert 'id = "designer"' in template_text
-    assert 'provider = "minimax"' in template_text
-    assert 'auth_mode = "api"' in template_text
-
     local_text = (
         home / ".agents" / "tasks" / "spawn49" / "project-local.toml"
     ).read_text(encoding="utf-8")
-    assert 'seat_order = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]' in local_text
-    assert 'session_name = "spawn49-ancestor-claude"' in local_text
-    assert local_text.count("[[overrides]]") == 6
-    assert 'auth_mode = "api"' in local_text
+    assert 'seat_order = ["memory", "planner", "builder", "qa", "designer"]' in local_text
+    assert 'session_name = "spawn49-memory-claude"' in local_text
+    assert local_text.count("[[overrides]]") == 5
+    assert 'provider = "deepseek"' in local_text
     assert 'provider = "minimax"' in local_text
     assert "materialized_seats" not in local_text
     assert "runtime_seats" not in local_text
 
     payloads = _read_jsonl(iterm_payload_log)
     grid_payload = payloads[0]
-    assert grid_payload["title"] == "clawseat-spawn49"
+    assert grid_payload["title"] == "clawseat-spawn49-workers"
     commands = {pane["label"]: pane["command"] for pane in grid_payload["panes"]}
-    assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor-claude'"
-    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+    for seat in ("planner", "builder", "qa", "designer"):
         assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}"
 
-    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
-        secret_path = home / ".agents" / "secrets" / "claude" / "minimax" / f"{seat}.env"
-        assert secret_path.is_file()
-        text = secret_path.read_text(encoding="utf-8")
-        assert "ANTHROPIC_AUTH_TOKEN" in text
-        assert "https://api.minimaxi.com/anthropic" in text
-    assert not (home / ".agents" / "secrets" / "claude" / "minimax" / "ancestor.env").exists()
+    planner_secret = home / ".agents" / "secrets" / "claude" / "deepseek" / "planner.env"
+    assert planner_secret.is_file()
+    assert "deepseek-v4-pro" in planner_secret.read_text(encoding="utf-8")
+    assert not (home / ".agents" / "secrets" / "claude" / "minimax" / "memory.env").exists()
 
     guide_path = home / ".agents" / "tasks" / "spawn49" / "OPERATOR-START-HERE.md"
     assert guide_path.is_file()
     guide_text = guide_path.read_text(encoding="utf-8")
     assert "Phase-A 不让 memory 做同步调研" in guide_text
-    assert "B2.5 / B5 都按 brief 由 ancestor seat 自己 Read openclaw / binding 文件" in guide_text
+    assert "B2.5 / B5 都按 brief 由 memory seat 自己 Read openclaw / binding 文件" in guide_text
     assert "B7 后接收 phase-a-decisions learnings" in guide_text
     assert "agent_admin.py session start-engineer" in guide_text
     assert "第一步：让 memory 做 openclaw 生态调研（brief B2.6）" not in guide_text
@@ -201,7 +188,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "custom49",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             "--base-url",
             "https://custom.api.invalid/v1",
             "--api-key",
@@ -239,7 +226,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "claude-custom-49" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["custom49-ancestor-claude"]
+    assert [record["session"] for record in records] == ["custom49-memory-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://custom.api.invalid/v1"
@@ -326,7 +313,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "mini49",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             "--provider",
             "minimax",
             "--api-key",
@@ -361,7 +348,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "ANTHROPIC_MODEL=MiniMax-M2.7-highspeed" in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["mini49-ancestor-claude"]
+    assert [record["session"] for record in records] == ["mini49-memory-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://api.minimaxi.com/anthropic"
@@ -397,7 +384,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "console49",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             "--provider",
             "anthropic_console",
             "--api-key",
@@ -431,7 +418,7 @@ for name in ("network", "openclaw", "github", "current_context"):
     assert "export ANTHROPIC_AUTH_TOKEN" not in provider_env
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["console49-ancestor-claude"]
+    assert [record["session"] for record in records] == ["console49-memory-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://api.anthropic.com"

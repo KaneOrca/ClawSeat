@@ -347,7 +347,7 @@ class CrudHandlers:
             return 0
         repo_root_value = (args.repo_root or "").strip()
         repo_root = str(Path(repo_root_value or os.getcwd()).expanduser())
-        template_name = str(getattr(args, "template", "") or "clawseat-minimal")
+        template_name = str(getattr(args, "template", "") or "clawseat-creative")
         template = self.hooks.load_template(template_name)
         merged = self.hooks.merge_template_local(
             template,

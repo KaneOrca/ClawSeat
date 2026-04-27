@@ -32,7 +32,7 @@ def _run_install(
     brief_path = home / ".agents" / "tasks" / "kickoff50" / "patrol" / "handoffs" / "ancestor-bootstrap.md"
     if pane_snapshots is not None or steady_pane_text is not None:
         pane_dir.mkdir(parents=True, exist_ok=True)
-        session_name = "kickoff50-ancestor-claude"
+        session_name = "kickoff50-memory-claude"
         for index, pane_text in enumerate(pane_snapshots or [], start=1):
             (pane_dir / f"{session_name}.{index}.txt").write_text(
                 pane_text.replace("{BRIEF_PATH}", str(brief_path)),
@@ -50,7 +50,7 @@ def _run_install(
         "--project",
         "kickoff50",
         "--template",
-        "clawseat-default",
+        "clawseat-creative",
         "--provider",
         "minimax",
     ])
@@ -140,7 +140,7 @@ def test_install_persists_phase_a_kickoff_after_tui_ready(tmp_path: Path) -> Non
     assert "send-keys -l -t kickoff50-ancestor-claude" not in tmux_output
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["kickoff50-ancestor-claude"]
+    assert [record["session"] for record in records] == ["kickoff50-memory-claude"]
 
 
 def test_install_writes_operator_triggered_kickoff_without_auto_send(tmp_path: Path) -> None:

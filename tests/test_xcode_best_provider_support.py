@@ -53,6 +53,13 @@ def _run_install(
     input_text: str = "",
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    if "xcode-best" in args:
+        shared_secret = home / ".agent-runtime" / "secrets" / "claude" / "xcode-best.env"
+        shared_secret.parent.mkdir(parents=True, exist_ok=True)
+        shared_secret.write_text(
+            "ANTHROPIC_AUTH_TOKEN=sk-xcode-force\nANTHROPIC_BASE_URL=https://xcode.best\n",
+            encoding="utf-8",
+        )
     agent_admin_log = tmp_path / "agent_admin.jsonl"
     iterm_payload_log = tmp_path / "iterm_payload.jsonl"
     result = subprocess.run(
@@ -62,7 +69,7 @@ def _run_install(
             "--project",
             project,
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
             *args,
         ],
         input=input_text,
@@ -91,6 +98,12 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
     agent_admin_log = tmp_path / "agent_admin.jsonl"
     iterm_payload_log = tmp_path / "iterm_payload.jsonl"
     _write_xcode_scan_script(root, api_key="sk-xcode-menu")
+    shared_secret = home / ".agent-runtime" / "secrets" / "claude" / "xcode-best.env"
+    shared_secret.parent.mkdir(parents=True, exist_ok=True)
+    shared_secret.write_text(
+        "ANTHROPIC_AUTH_TOKEN=sk-xcode-menu\nANTHROPIC_BASE_URL=https://xcode.best\n",
+        encoding="utf-8",
+    )
 
     result = subprocess.run(
         [
@@ -99,7 +112,9 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
             "--project",
             "xcodemenu50",
             "--template",
-            "clawseat-default",
+            "clawseat-creative",
+            "--all-api-provider",
+            "xcode-best",
         ],
         input="1\n",
         capture_output=True,
@@ -129,12 +144,12 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
     assert "ANTHROPIC_AUTH_TOKEN=sk-xcode-menu" in provider_env
     assert "ANTHROPIC_BASE_URL=https://xcode.best" in provider_env
 
-    reviewer_secret = (home / ".agents" / "secrets" / "claude" / "xcode-best" / "reviewer.env").read_text(encoding="utf-8")
-    assert "ANTHROPIC_AUTH_TOKEN=sk-xcode-menu" in reviewer_secret
-    assert "ANTHROPIC_BASE_URL=https://xcode.best" in reviewer_secret
+    planner_secret = (home / ".agents" / "secrets" / "claude" / "xcode-best" / "planner.env").read_text(encoding="utf-8")
+    assert "ANTHROPIC_AUTH_TOKEN=sk-xcode-menu" in planner_secret
+    assert "ANTHROPIC_BASE_URL=https://xcode.best" in planner_secret
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["xcodemenu50-ancestor-claude"]
+    assert [record["session"] for record in records] == ["xcodemenu50-memory-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://xcode.best"
@@ -145,7 +160,7 @@ def test_install_provider_xcode_best_with_api_key_auto_fills_base_url(tmp_path: 
     result, home, launcher_log, _root = _run_install(
         tmp_path,
         project="xcodeforce50",
-        args=["--provider", "xcode-best", "--api-key", "sk-xcode-force"],
+        args=["--provider", "xcode-best", "--api-key", "sk-xcode-force", "--all-api-provider", "xcode-best"],
     )
 
     assert result.returncode == 0, result.stderr
@@ -162,7 +177,7 @@ def test_install_provider_xcode_best_with_api_key_auto_fills_base_url(tmp_path: 
     assert "ANTHROPIC_BASE_URL=https://xcode.best" in planner_secret
 
     records = _read_jsonl(launcher_log)
-    assert [record["session"] for record in records] == ["xcodeforce50-ancestor-claude"]
+    assert [record["session"] for record in records] == ["xcodeforce50-memory-claude"]
     for record in records:
         assert record["custom_api_key_present"] is True
         assert record["custom_base_url"] == "https://xcode.best"

@@ -42,6 +42,7 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     (root / "core" / "scripts").mkdir(parents=True, exist_ok=True)
     (root / "core" / "shell-scripts").mkdir(parents=True, exist_ok=True)
     (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(_REPO / "templates", root / "templates", dirs_exist_ok=True)
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
     shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
@@ -455,7 +456,7 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
 
     records = _read_jsonl(launcher_log)
     expected_sessions = [
-        "smoketest-ancestor-claude",
+        "smoketest-memory-claude",
     ]
     assert [record["session"] for record in records] == expected_sessions
 
@@ -486,5 +487,5 @@ def test_install_launches_isolated_seats_via_launcher(tmp_path: Path) -> None:
 
     tmux_output = tmux_log.read_text(encoding="utf-8")
     assert "new-session" not in tmux_output
-    assert "kill-session -t =smoketest-ancestor-claude" in tmux_output
-    assert "send-keys -t smoketest-ancestor-claude Enter" not in tmux_output
+    assert "kill-session -t =smoketest-memory-claude" in tmux_output
+    assert "send-keys -t smoketest-memory-claude Enter" not in tmux_output
