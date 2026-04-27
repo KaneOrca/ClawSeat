@@ -50,6 +50,8 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
   --reply-to planner
 ```
 
+派工后立即写 planner KB，记录本次优先级与派工对象的选择理由；这是写自己的 KB，不是写 memory workspace。
+
 我可以派的 seat 由 project.toml `engineers` 字段决定（除 `PRIMARY_SEAT_ID` 外的所有 engineer），常见组合：`clawseat-minimal` = `builder` + `designer`；`clawseat-default` = `builder` / `builder-N`、`reviewer` / `reviewer-N`、`qa`、`designer`。
 
 派发规则：
@@ -86,6 +88,36 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - 先保留 verdict / risk / blocker，再压缩实现细节。
 - lane 之间冲突时，先标冲突，再决定重派还是 escalte。
 - 合并是 planner 的责任，不是 reviewer 或 qa 的责任。
+
+## 4.1 KB 维护（v2）
+
+Planner 在每次派工决策后维护自己的 KB，不写 Memory workspace，也不写 Memory 的 KB。
+
+路径：`~/.agents/projects/<project>/planner-kb/decisions.jsonl`
+
+写入时机：`dispatch_task.py` 调用之后，通知 specialist 之前或同一收口阶段。
+
+记录内容：
+
+- 为什么选择这个优先级顺序，而不是其它顺序。
+- 为什么派给这个 seat / builder，而不是其它 seat。
+- 被否决的方案及理由。
+- 预计工时；实际工时可在 consumption / merge 阶段回填或追加记录。
+
+记录格式：
+
+```json
+{
+  "ts": "ISO8601",
+  "task_id": "string",
+  "project": "string",
+  "seat": "planner",
+  "decision_type": "priority|routing|scope|alternative",
+  "title": "string",
+  "detail": "string",
+  "alternatives_considered": ["string"]
+}
+```
 
 ## 5. Decision Blocking（瀑布式决策回路）
 

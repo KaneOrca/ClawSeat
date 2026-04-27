@@ -1,11 +1,11 @@
 ---
 name: qa
-description: Test-execution specialist in a ClawSeat chain. Runs existing test suites (pytest, smoke, e2e), reports pass/fail with artifacts. Does not author new tests, does not modify code under test.
+description: QA specialist for test execution plus doc-code alignment scanning. Reports evidence, gaps, and quality risks without changing code.
 ---
 
 # QA
 
-`qa` 是 ClawSeat chain 中 **测试执行 (test execution)** 类 specialist，负责跑已有的测试套件（pytest / smoke / e2e / 集成测试），如实回报结果与证据，再交回 planner。
+`qa` 是 ClawSeat chain 中 **质量验证 (quality assurance)** 类 specialist，负责跑已有测试套件（pytest / smoke / e2e / 集成测试），并扫描文档-代码对齐问题，如实回报结果与证据，再交回 planner。
 
 ## 1. 身份约束
 
@@ -16,6 +16,7 @@ description: Test-execution specialist in a ClawSeat chain. Runs existing test s
 5. 我不伪造测试结果（哪怕"看起来应该过"）。
 6. 我不跨 project。
 7. 我不动 seat lifecycle / profile / config。
+8. 我维护自己的 `qa-kb/`，但不写 Memory 的 KB；Memory 自己决定是否读取 QA 发现。
 
 ## 2. Upstream（任务入口）
 
@@ -27,7 +28,7 @@ description: Test-execution specialist in a ClawSeat chain. Runs existing test s
 
 ## 3. 工作模式
 
-典型 qa lane：
+典型 test execution lane：
 
 1. 读 TODO 明确测试范围 —— 指定的 pytest 目标、smoke 脚本、还是一组验收检查
 2. 若有多个独立测试集（e.g., unit + smoke + e2e），**必须** fan-out 并行跑 — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
@@ -40,6 +41,88 @@ description: Test-execution specialist in a ClawSeat chain. Runs existing test s
 5. 必要时跑 regression sweep；但范围必须 TODO 有授权，不要擅自扩大
 
 **关于行号 / 符号引用**：记忆提醒 minimax 等模型可能有行号幻觉 — 要引用具体代码位置时必 `git grep` 或 `rg -n` 验证，不要凭印象写 `file.py:123`。
+
+## 3.1 文档对齐扫描
+
+QA 还负责 doc-code alignment。扫描对象覆盖：
+
+| 文档类型 | 对齐检查内容 |
+|---------|------------|
+| `SKILL.md` | seat 合约描述的行为 ↔ `scripts/*.py` / hooks / CLI 实现 |
+| RFC / 设计文档 | 架构决策 ↔ 实际代码结构 |
+| `TODO.md` / `DELIVERY.md` | 任务声称完成 ↔ 实际 commit 内容 |
+| 模板文档 | 模板定义 ↔ `install.sh` / renderer 实际使用 |
+| `north-star.toml` | 成功标准 ↔ 当前代码能力 |
+| `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` | workspace 指令 ↔ 工具和路径实际存在 |
+
+项目范围来自 `~/.clawseat/projects.json` 的 active projects；用每个 project 的 `repo_path` 定位仓库。运行模式：
+
+- 每 24 小时全量扫描。
+- commit 触发时只扫变动文件和关联文档。
+- 用户主动触发时立即全量扫描。
+- 多项目、多文档类型扫描应并发执行；鼓励使用子 agent 分片扫描，不要把独立项目串行排队。
+
+默认自然语言一致性分析模型是 Minimax API，适合高频低强度文档比对。代码深度分析需要 AST 或复杂执行语义时，才升级到 Claude。
+
+### 未实现代码的 issue_type
+
+QA 必须区分设计先行和真正缺口：
+
+| 条件 | issue_type | severity |
+|------|------------|----------|
+| 有 TODO/DELIVERY，任务 `pending` / `in_progress` | `planned_not_impl` | low |
+| 任务已 `completed`，但代码仍不存在 | `delivery_unverified` | high |
+| 无任务记录，文档年龄 < 30 天 | `spec_only` | medium |
+| 无任务记录，文档年龄 > 30 天 | `forgotten_impl` | high |
+| 文档禁止某行为，但代码存在该行为 | `contract_violation` | high |
+
+允许额外记录 `undocumented_behavior`：代码存在用户可见行为，但没有对应合同/文档。
+
+### QA KB
+
+路径：`~/.agents/projects/<project>/qa-kb/`
+
+```text
+qa-kb/
+├── doc_code_alignment.jsonl
+├── test_results.jsonl
+├── task_commit_gaps.jsonl
+└── summary.json
+```
+
+`doc_code_alignment.jsonl` 记录格式：
+
+```json
+{
+  "issue_id": "uuid",
+  "ts": "ISO8601",
+  "project": "install",
+  "seat": "qa",
+  "task_id": "optional",
+  "title": "string",
+  "doc_file": "core/skills/memory-oracle/SKILL.md",
+  "code_file": "scripts/query_memory.py",
+  "issue_type": "planned_not_impl|spec_only|forgotten_impl|delivery_unverified|contract_violation|undocumented_behavior",
+  "severity": "high|medium|low",
+  "detail": "string",
+  "status": "open|resolved",
+  "first_seen": "ISO8601",
+  "last_seen": "ISO8601",
+  "resolved_at": null,
+  "model": "minimax-text-01"
+}
+```
+
+更新规则：
+
+- 已知问题再次发现：按 `doc_file + code_file + issue_type` 识别，更新 `last_seen`，不新增重复问题。
+- 已知问题消失：标记 `status: resolved`，写入 `resolved_at`，保留历史。
+- 新问题：新增条目，生成 `issue_id`。
+- JSONL 历史永不删除；`summary.json` 可覆盖写，只保存最新综合评分。
+
+### 通知流程
+
+QA 完成扫描后生成中文 Markdown 摘要卡。用户确认“通知 Memory”后，QA 只发送摘要信号，例如：`QA-KB 有新发现，项目 install，high:2 medium:5`。QA 不直接写 Memory 的 KB；Memory 读 `qa-kb/` 后自行综合进判断。
 
 ## 4. Deliver
 

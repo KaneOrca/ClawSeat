@@ -38,7 +38,8 @@ related_skills:
 3. 做代码/脚本/配置/模板变更
 4. 写/更新 pytest（或语言等价）覆盖新增行为 + 回归
 5. 本地跑测试；不过不 deliver
-6. 把改动范围、测试结果、风险写入 `DELIVERY.md`
+6. 把关键实现决策写入 builder KB
+7. 把改动范围、测试结果、风险写入 `DELIVERY.md`
 
 允许的改动范围：代码、shell 脚本、Python 模块、模板、docs、测试。
 **不允许**：skill 协议文本（那是 planner/架构师 gate）、`machine.toml`、profile、`openclaw.json`、secrets。
@@ -64,6 +65,36 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 - **Regression sweep**：跑过的更广 test 子集 + 结果
 - **Risks / Blockers**：可能影响其它 lane 或需要 reviewer 特别注意的点
 - **Commit**：是否已 commit；默认**不**自己 commit，除非 TODO 明确要求
+
+## 4.1 KB 维护（v2）
+
+Builder 在每次交付时维护自己的 KB，不写 Memory 的 KB。
+
+路径：`~/.agents/projects/<project>/builder-kb/decisions.jsonl`
+
+写入时机：调用 `complete_handoff.py` 之前，和更新 `DELIVERY.md` 同一收口阶段。
+
+记录内容：
+
+- 选择了哪种实现方案，以及为什么没有选其它方案。
+- 遇到的技术约束，例如为什么不能用某个库、API、工具或架构。
+- 跨文件隐式依赖，例如 A 模块依赖 B 模块的初始化顺序。
+- 被注释掉或删除的代码的原因。
+
+记录格式：
+
+```json
+{
+  "ts": "ISO8601",
+  "task_id": "string",
+  "project": "string",
+  "seat": "builder",
+  "decision_type": "implementation|dependency|deletion|constraint",
+  "title": "string",
+  "detail": "string",
+  "files_affected": ["path"]
+}
+```
 
 ## 5. Anti-patterns
 
