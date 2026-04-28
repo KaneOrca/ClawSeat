@@ -27,3 +27,16 @@ def test_install_help_lists_builtin_templates_and_provider_deprecation() -> None
 def test_templates_directory_has_builtin_rosters() -> None:
     roster_names = sorted(path.name for path in (REPO / "templates").glob("clawseat-*.toml"))
     assert roster_names == ["clawseat-creative.toml", "clawseat-engineering.toml", "clawseat-solo.toml"]
+
+
+def test_solo_option_in_menu() -> None:
+    """Selecting option 3 in prompt_kind_first_flow maps to clawseat-solo."""
+    script = f"source {REPO / 'scripts/install/lib/project.sh'}; prompt_template_for_choice 3"
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "clawseat-solo"

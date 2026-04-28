@@ -113,6 +113,8 @@ def test_install_detects_ark_candidate_and_applies_default_model(tmp_path: Path)
             "arkmenu50",
             "--template",
             "clawseat-creative",
+            "--provider",
+            "1",
         ],
         input="1\n",
         capture_output=True,
@@ -129,6 +131,7 @@ def test_install_detects_ark_candidate_and_applies_default_model(tmp_path: Path)
             "TMUX_LOG_FILE": str(tmux_log),
             "AGENT_ADMIN_LOG": str(agent_admin_log),
             "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+            "CLAWSEAT_TRUST_PROMPT_SLEEP_SECONDS": "0",
         },
         check=False,
     )

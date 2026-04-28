@@ -4,6 +4,13 @@
 # callers may source install.sh from any current working directory.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+require_tty_for_provider_prompt() {
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    die 2 NON_TTY_NO_PROVIDER \
+      "non-TTY environment detected (e.g. agent-launcher sandbox); use --provider <flag>. Run: bash scripts/install.sh --help"
+  fi
+}
+
 export_line() { printf 'export %s=%q\n' "$1" "$2"; }
 
 remember_provider_selection() {
@@ -468,6 +475,7 @@ select_provider() {
       i=$((i+1))
     done
     printf '  [c] enter custom base_url + api_key manually\n'
+    require_tty_for_provider_prompt
     read -r -p "Choose [1]: " reply
     reply="${reply:-1}"
     if [[ "$reply" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= ${#candidates[@]} )); then
@@ -489,7 +497,7 @@ select_provider() {
     fi
   fi
 
-  [[ -t 0 ]] || die 22 INTERACTIVE_REQUIRED "provider selection requires a tty when auto-detection is insufficient."
+  require_tty_for_provider_prompt
   if [[ ${#candidates[@]} -eq 0 ]]; then
     printf '未检测到可用的 Claude Code 登录方式。请输入：\n'
   fi

@@ -133,13 +133,19 @@ PY
 ```
 上述 harness 已由 install.sh 写入 project-local.toml。
   回车 / y —— 沿用全部（推荐；B0.0 memory query 仍会跑，但跳过 B0.0.1 env_scan 重复扫描）
-  c     —— 自定义，进入 B0.0.1 env_scan + LLM 分析 + 重选
+  t     —— 切换模板后重建 harness overrides（先向 operator 展示模板摘要）
+           - clawseat-creative: 5-seat 创意模板（memory + planner + builder + patrol + designer）
+           - clawseat-engineering: 6-seat 工程模板（memory + planner + builder + reviewer + patrol + designer）
+           - clawseat-solo: 3-seat 全 OAuth 创作 minimal（memory + builder + designer）
+  c     —— 完全自定义，进入 B0.0.1 env_scan + LLM 分析 + 重选
 ```
 
 operator 选"沿用"：把 overrides 内容作为 B0 决策写到
 `${AGENT_HOME}/.agents/tasks/${PROJECT_NAME}/memory-provider-decision.md`，仍跑 B0.0 memory query（强制不变），然后**跳过 B0.0.1**，进 B1。
 
-operator 选"自定义"：继续走完 B0.0 memory query 和 B0.0.1 env_scan 原流程。
+operator 选"切换模板"：先列出上述 3 个模板 reference 段，再让 operator 选择目标模板；用所选模板重建 harness overrides 后，继续 B0.0 memory query。
+
+operator 选"完全自定义"：继续走完 B0.0 memory query 和 B0.0.1 env_scan 原流程。
 
 `memory-provider-decision.md` 必须包含：
 

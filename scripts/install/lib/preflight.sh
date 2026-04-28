@@ -4,6 +4,35 @@
 # callers may source install.sh from any current working directory.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+_preflight_note() {
+  if declare -F note >/dev/null 2>&1; then
+    note "$@"
+  else
+    printf '==> %s\n' "$*"
+  fi
+}
+
+_preflight_warn() {
+  if declare -F warn >/dev/null 2>&1; then
+    warn "$@"
+  else
+    printf 'WARN: %s\n' "$*" >&2
+  fi
+}
+
+detect_sandbox_home() {
+  local resolved_home="" real_home=""
+  resolved_home="$(cd ~ 2>/dev/null && pwd || printf '%s\n' "$HOME")"
+  real_home="${CLAWSEAT_REAL_HOME:-$resolved_home}"
+  if [[ "$resolved_home" != "$HOME" || "$real_home" != "$HOME" ]]; then
+    _preflight_warn "sandbox HOME: \$HOME=$HOME but ~ resolves to $resolved_home"
+    _preflight_warn "Use absolute paths. Some INSTALL.md examples with ~ may fail."
+    _preflight_warn "Example: use $resolved_home/coding/ClawSeat instead of ~/coding/ClawSeat"
+  else
+    _preflight_note "HOME: $HOME"
+  fi
+}
+
 resolve_python_candidate() {
   local candidate="$1"
   if [[ "$candidate" == */* ]]; then
@@ -215,6 +244,7 @@ _select_fresh_clawseat_root() {
 
 
 ensure_host_deps() {
+  detect_sandbox_home
   note "Step 1: preflight"
   if [[ "$FORCE_REINSTALL" != "1" && -f "$STATUS_FILE" ]] && grep -q '^phase=ready$' "$STATUS_FILE"; then
     # Round-8: even on the "already installed" fast-path, honor the

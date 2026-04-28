@@ -96,6 +96,7 @@ def test_repo_root_written_to_project_local_toml_content(tmp_path: Path) -> None
             str(root / "scripts" / "install.sh"),
             "--project", "projfoo",
             "--repo-root", str(target_dir),
+            "--provider", "1",
         ],
         input="\n",
         capture_output=True,
@@ -110,6 +111,7 @@ def test_repo_root_written_to_project_local_toml_content(tmp_path: Path) -> None
             "PYTHON_BIN": sys.executable,
             "LOG_FILE": str(launcher_log),
             "TMUX_LOG_FILE": str(tmux_log),
+            "CLAWSEAT_TRUST_PROMPT_SLEEP_SECONDS": "0",
         },
         check=False,
     )
@@ -132,7 +134,7 @@ def test_default_repo_root_is_clawseat_root(tmp_path: Path) -> None:
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
 
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh"), "--project", "projbar"],
+        ["bash", str(root / "scripts" / "install.sh"), "--project", "projbar", "--provider", "1"],
         input="\n",
         capture_output=True,
         text=True,
@@ -146,6 +148,7 @@ def test_default_repo_root_is_clawseat_root(tmp_path: Path) -> None:
             "PYTHON_BIN": sys.executable,
             "LOG_FILE": str(launcher_log),
             "TMUX_LOG_FILE": str(tmux_log),
+            "CLAWSEAT_TRUST_PROMPT_SLEEP_SECONDS": "0",
         },
         check=False,
     )
