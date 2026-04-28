@@ -1,6 +1,13 @@
 ---
 name: clawseat-memory-reporting
-description: "Logs dispatch/completion events; maintains project STATUS.md registry."
+description: >
+  Reporting helper for recording ClawSeat dispatch and completion events into
+  durable project status surfaces. Use when logging a new dispatch, a
+  specialist delivery, a consumed ACK, or a STATUS.md registry update. Also use
+  when a chain needs consistent chat tail blocks or auditable progress history.
+  Covers event normalization, status registry maintenance, and delivery
+  traceability. Do NOT use for deciding task ownership, writing implementation
+  code, reviewing diffs, or replacing planner/memory authority.
 version: "1.0"
 status: draft
 author: memory

@@ -1,6 +1,14 @@
 ---
 name: clawseat-install
-description: "Installer playbook; bootstraps ClawSeat projects through install.sh."
+description: >
+  Installer playbook for bootstrapping ClawSeat projects from the repository
+  install flow. Use when the user asks to install ClawSeat, initialize a
+  project, understand install.sh flags, recover an install, or follow
+  docs/INSTALL.md setup steps. Also use when validating installer prerequisites
+  or CLI-first onboarding. Covers install command discovery, environment
+  assumptions, and resume guidance. Do NOT use for post-install task dispatch,
+  normal /cs re-entry, code implementation, or modifying machine profiles
+  without the install procedure.
 ---
 
 # ClawSeat Install (v0.7 — CLI-first)

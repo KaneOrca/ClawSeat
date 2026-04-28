@@ -240,3 +240,149 @@ path = "~/.gstack/repos/gstack/.agents/skills/gstack-checkpoint/SKILL.md"
 required = false
 roles = ["planner-dispatcher", "builder"]
 description = "Save and resume working state checkpoints across sessions"
+
+# ── OpenClaw migrated skills (2026-04-28) ──────────────────────────
+
+[[skills]]
+name = "find-skills"
+source = "openclaw-migrated"
+path = "~/.agents/skills/find-skills/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Search and discover available agent skills from ClawHub and local installs"
+
+[[skills]]
+name = "agent-reach"
+source = "openclaw-migrated"
+path = "~/.agents/skills/agent-reach/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Search and read public web, social, video, and repository sources"
+
+[[skills]]
+name = "cartooner-artisan"
+source = "openclaw-migrated"
+path = "~/.agents/skills/cartooner-artisan/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Persist Cartooner creative assets with metadata"
+
+[[skills]]
+name = "cartooner-browser"
+source = "openclaw-migrated"
+path = "~/.agents/skills/cartooner-browser/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Control Cartooner inspiration browser through OpenClaw browser tooling"
+
+[[skills]]
+name = "cartooner-resource-ops"
+source = "openclaw-migrated"
+path = "~/.agents/skills/cartooner-resource-ops/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Operate Cartooner project and asset files deterministically"
+
+[[skills]]
+name = "cartooner-video"
+source = "openclaw-migrated"
+path = "~/.agents/skills/cartooner-video/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Create and manage Cartooner video workflows"
+
+[[skills]]
+name = "remotion-delegation"
+source = "openclaw-migrated"
+path = "~/.agents/skills/remotion-delegation/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Delegate Remotion animation implementation and verify renders"
+
+[[skills]]
+name = "remotion-video-production"
+source = "openclaw-migrated"
+path = "~/.agents/skills/remotion-video-production/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Produce programmable Remotion videos from React frame logic"
+
+[[skills]]
+name = "storyboard-forge"
+source = "openclaw-migrated"
+path = "~/.agents/skills/storyboard-forge/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Plan and route multi-panel storyboard image generation"
+
+[[skills]]
+name = "storyboard-expert"
+source = "openclaw-migrated"
+path = "~/.agents/skills/storyboard-expert/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Persist storyboard frames and manifests into project workspaces"
+
+[[skills]]
+name = "script-analyst"
+source = "openclaw-migrated"
+path = "~/.agents/skills/script-analyst/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Analyze scripts into structured production and storyboard inputs"
+
+[[skills]]
+name = "script-writing-expert"
+source = "openclaw-migrated"
+path = "~/.agents/skills/script-writing-expert/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Persist generated Fountain scripts into the narrative workspace"
+
+[[skills]]
+name = "viral-copywriter"
+source = "openclaw-migrated"
+path = "~/.agents/skills/viral-copywriter/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Write high-density Chinese viral social copy with fact checks"
+
+[[skills]]
+name = "nano-banana"
+source = "openclaw-migrated"
+path = "~/.agents/skills/nano-banana/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Guide Gemini Image API prompt engineering for Nano Banana models"
+
+[[skills]]
+name = "art-director-expert"
+source = "openclaw-migrated"
+path = "~/.agents/skills/art-director-expert/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Persist character design and turnaround assets into project workspaces"
+
+[[skills]]
+name = "pdf"
+source = "openclaw-migrated"
+path = "~/.agents/skills/pdf/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Read, edit, create, combine, split, OCR, and secure PDF files"
+
+[[skills]]
+name = "pptx"
+source = "openclaw-migrated"
+path = "~/.agents/skills/pptx/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Read, create, edit, combine, and inspect PowerPoint presentations"
+
+[[skills]]
+name = "xlsx"
+source = "openclaw-migrated"
+path = "~/.agents/skills/xlsx/SKILL.md"
+required = false
+roles = ["memory"]
+description = "Read, create, clean, transform, and write spreadsheet files"

@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Verifies assigned diffs, tests, demos, and emits a canonical verdict.
+description: Independent verification seat for ClawSeat diffs, tests, demos, and delivery evidence. Use when planner requests a review, when a builder delivery needs validation, when regression risk must be checked, or when a canonical Verdict is required. Also use when confirming acceptance criteria without changing artifacts. Covers diff review, targeted test execution, demo verification, and PASS/FAIL reporting. Do NOT use for writing implementation patches, planning workflow ownership, visual design creation, scheduled patrols, or user intake.
 ---
 # Reviewer
 ## Identity

@@ -144,16 +144,18 @@ def _candidate_docs(root: Path, *, source: str) -> Iterable[Path]:
     docs: dict[str, Path] = {}
     for child in sorted(root.iterdir()):
         if child.is_dir() or child.is_symlink():
-            for name in ("SKILL.md", "README.md"):
+            names = ("SKILL.md", "README.md") if source == "marketplace" else ("SKILL.md",)
+            for name in names:
                 doc = child / name
                 if doc.exists():
                     docs[str(doc.resolve())] = doc
     for doc in root.rglob("SKILL.md"):
         if doc.exists():
             docs[str(doc.resolve())] = doc
-    for doc in root.rglob("README.md"):
-        if doc.exists():
-            docs[str(doc.resolve())] = doc
+    if source == "marketplace":
+        for doc in root.rglob("README.md"):
+            if doc.exists():
+                docs[str(doc.resolve())] = doc
     return sorted(docs.values(), key=lambda path: str(path))
 
 

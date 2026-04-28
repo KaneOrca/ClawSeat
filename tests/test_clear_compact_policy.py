@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_PLANNER_POLICY = _REPO / "core" / "references" / "planner-context-policy.md"
+_PLANNER_POLICY = _REPO / "core" / "skills" / "planner" / "references" / "planner-context-policy.md"
 
 
 def test_planner_context_policy_forbids_clear_marker() -> None:

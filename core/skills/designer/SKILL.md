@@ -1,6 +1,6 @@
 ---
 name: designer
-description: Creates visual/text/multimodal artifacts and reviews user-facing experience.
+description: Creative and visual-quality seat for ClawSeat user-facing artifacts, prompts, multimedia assets, and experience review. Use when planner assigns visual design, copy, image prompts, multimodal analysis, UI/UX/a11y review, or creative artifact production. Also use when an output needs taste judgment beyond code correctness. Covers asset creation, design critique, content polish, and artifacts/ delivery. Do NOT use for backend implementation, logic-only code review, patrol sweeps, seat lifecycle, or secrets handling without privacy review.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Designer

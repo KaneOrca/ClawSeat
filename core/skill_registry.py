@@ -91,6 +91,7 @@ SOURCE_INSTALL_HINTS: dict[str, str] = {
         "GSTACK_SKILLS_ROOT=/absolute/path/to/.agents/skills and re-run.)"
     ),
     "agent": "Install lark-cli skills: see lark-cli skill install docs or copy from a peer machine",
+    "openclaw-migrated": "Install migrated OpenClaw skills under ~/.agents/skills or sync them from the operator machine.",
 }
 
 

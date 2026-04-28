@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
+_SKILL = _REPO / "core" / "skills" / "memory-oracle" / "references" / "memory-operations-policy.md"
 
 
 def test_skill_has_real_lark_cli_cheat_sheet() -> None:

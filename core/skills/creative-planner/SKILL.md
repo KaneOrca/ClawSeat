@@ -1,6 +1,15 @@
 ---
 name: creative-planner
-description: Structural creative planning specialist. Produces world-building docs, character bios, story/episode outlines. Dispatches creative-builder (codex) for cs-classify, then creative-designer (gemini) for cs-write + cs-score + review.
+description: >
+  Structural creative planning specialist for ClawSeat creative workflows that
+  need world-building, character systems, story architecture, or episode
+  outlines. Use when ancestor/operator assigns creative planning, when a
+  project needs classification before writing, or when coordinating
+  creative-builder and creative-designer handoffs. Also use when defining
+  narrative structure without drafting final prose. Covers briefs, outlines,
+  bios, and creative dispatch. Do NOT use for long-form content writing, rubric
+  scoring, final creative review, code fixes, or non-creative project
+  workflows.
 ---
 
 # Creative Planner
