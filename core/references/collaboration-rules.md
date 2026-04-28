@@ -215,3 +215,26 @@ Specialists:
 - Execute their assigned lane.
 - Deliver to planner.
 - Do not self-expand into intake, planning, or approval roles.
+
+## assign_owner Pseudocode
+
+Planner enforces liveness before dispatch. The available seat list is already
+filtered to alive seats by `query_seat_liveness(project)`.
+
+```python
+def assign_owner(step, seats_available):
+    # seats_available = query_seat_liveness(project) — alive only
+    for seat in seats_available:
+        if seat.role == step.owner_role:
+            return seat  # 派工首选: direct dispatch
+    # Not found: try restart
+    if restart_seat(project, step.owner_role):
+        return get_seat(project, step.owner_role)  # now alive
+    # Restart failed: SWALLOW
+    if step.owner_role == "memory":
+        raise EscalationRequired("memory dead + restart failed → AskUserQuestion")
+    return f"planner [SWALLOW={step.owner_role}]"  # planner absorbs
+```
+
+Memory is never swallowed. If memory is dead and restart fails, the workflow
+must escalate to an operator-visible decision path.
