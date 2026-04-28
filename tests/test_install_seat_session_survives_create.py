@@ -95,6 +95,8 @@ def _real_launcher_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path,
     shutil.copy2(_REPO / "core" / "launchers" / "agent-launcher.sh", launcher_dir / "agent-launcher.sh")
     shutil.copy2(_REPO / "core" / "launchers" / "agent-launcher-common.sh", launcher_dir / "agent-launcher-common.sh")
     shutil.copy2(_REPO / "core" / "launchers" / "agent-launcher-discover.py", launcher_dir / "agent-launcher-discover.py")
+    shutil.copytree(_REPO / "core" / "launchers" / "helpers", launcher_dir / "helpers")
+    shutil.copytree(_REPO / "core" / "launchers" / "runtimes", launcher_dir / "runtimes")
     (launcher_dir / "agent-launcher.sh").chmod(0o755)
     (launcher_dir / "agent-launcher-common.sh").chmod(0o755)
     (launcher_dir / "agent-launcher-discover.py").chmod(0o755)

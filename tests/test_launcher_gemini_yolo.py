@@ -1,15 +1,15 @@
-"""Pin tests: all gemini exec paths in agent-launcher.sh include -y (--yolo)."""
+"""Pin tests: all Gemini runtime exec paths include -y (--yolo)."""
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
-_LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
+_GEMINI_RUNTIME = _REPO / "core" / "launchers" / "runtimes" / "gemini.sh"
 
 
 def _launcher_text() -> str:
-    return _LAUNCHER.read_text(encoding="utf-8")
+    return _GEMINI_RUNTIME.read_text(encoding="utf-8")
 
 
 def test_all_exec_gemini_have_yolo_flag() -> None:

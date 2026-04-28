@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
 
 _REPO = Path(__file__).resolve().parents[1]
 _WRAPPER = _REPO / "core" / "shell-scripts" / "lark-cli"
-_LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
+_LAUNCHER_SANDBOX = _REPO / "core" / "launchers" / "helpers" / "sandbox.sh"
 
 
 def test_wrapper_exists_and_is_executable() -> None:
@@ -275,11 +275,11 @@ def test_wrapper_does_not_loop_when_reachable_via_multiple_symlinks(
 
 
 def test_launcher_seed_user_tool_dirs_references_wrapper() -> None:
-    """Regression guard: agent-launcher.sh::seed_user_tool_dirs must
+    """Regression guard: helpers/sandbox.sh::seed_user_tool_dirs must
     symlink the wrapper into $runtime_home/bin/lark-cli and prepend
     that bin dir to PATH. We check by text since we don't run the
     launcher end-to-end in this test."""
-    launcher_text = _LAUNCHER.read_text(encoding="utf-8")
+    launcher_text = _LAUNCHER_SANDBOX.read_text(encoding="utf-8")
     assert "core/shell-scripts/lark-cli" in launcher_text, (
         "launcher must reference the wrapper source path"
     )
