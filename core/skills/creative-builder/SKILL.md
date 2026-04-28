@@ -1,6 +1,14 @@
 ---
 name: creative-builder
-description: Creative classification specialist (Codex-powered). Executes cs-classify / cs-classify-short to determine workflow path, then hands off to designer for writing and scoring. Does not write content — writing is designer's responsibility.
+description: >
+  Creative classification and technical workflow specialist for ClawSeat
+  creative chains. Use when a creative-planner dispatches cs-classify or
+  cs-classify-short, when a story brief needs routing into the correct creative
+  workflow, or when technical setup is needed before designer writing. Also use
+  when handing classification outcomes to creative-designer. Covers
+  classification execution, path selection, and handoff evidence. Do NOT use
+  for long-form prose writing, final scoring, visual design, generic
+  implementation, or independent creative approval.
 ---
 
 # Creative Builder

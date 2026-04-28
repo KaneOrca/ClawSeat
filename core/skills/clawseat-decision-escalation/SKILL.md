@@ -1,6 +1,14 @@
 ---
 name: clawseat-decision-escalation
-description: "Routes decisions blocked by automation to operator; enforces 3-option gate."
+description: >
+  Decision escalation gate for ClawSeat situations blocked by automation or
+  missing operator authority. Use when a workflow needs a user decision, when
+  privacy or Feishu routing requires explicit approval, or when the correct
+  next action has multiple viable choices. Also use when preparing three-option
+  decision payloads for memory/operator review. Covers option framing,
+  blocking-context capture, and safe escalation. Do NOT use for routine
+  dispatch, code implementation, autonomous planning, or direct Feishu delivery
+  without memory authority.
 version: "1.0"
 status: draft
 author: machine-memory

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_DOC = _REPO / "core" / "references" / "workflow-doc-schema.md"
+_DOC = _REPO / "core" / "skills" / "planner" / "references" / "workflow-doc-schema.md"
 
 
 def _text() -> str:

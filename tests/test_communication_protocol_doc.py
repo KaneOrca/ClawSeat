@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_DOC = _REPO / "core" / "references" / "communication-protocol.md"
+_DOC = _REPO / "core" / "skills" / "gstack-harness" / "references" / "communication-protocol.md"
 
 
 def _text() -> str:

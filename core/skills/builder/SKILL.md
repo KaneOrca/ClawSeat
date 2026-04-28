@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Implements assigned code, script, test, config, template, and doc changes.
+description: Implementation seat for ClawSeat workflow steps assigned by planner. Use when planner dispatches a brief, when you receive a [DISPATCH:] notification, or when fixing bugs, adding features, writing tests, refactoring code, or editing scripts and docs. Also use when implementing schema changes, templates, installers, or configuration from an in-flight workflow. Covers artifact authoring, local validation, and DELIVERY.md handoff. Do NOT use for code review, visual QA, scheduled patrol sweeps, operator intake, or memory authority decisions.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Builder

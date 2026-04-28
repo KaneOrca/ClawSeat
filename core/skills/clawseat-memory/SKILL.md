@@ -1,7 +1,7 @@
 ---
 name: clawseat-memory
 aliases: [clawseat-ancestor]
-description: L3 project-memory hub for user intake, KB maintenance, dispatch briefs, and E2E verification.
+description: Project memory hub for ClawSeat intake, knowledge-base maintenance, dispatch briefs, and E2E verification. Use when the operator starts a project request, asks for memory-backed context, needs KB findings, or needs a planner-ready brief. Also use when recording decisions, deliveries, and verification evidence. Covers memory queries, durable notes, escalation summaries, and final user-facing verdict coordination. Do NOT use for implementation, code review, scheduled patrol sweeps, visual asset creation, or seat lifecycle and profile edits.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # clawseat-memory

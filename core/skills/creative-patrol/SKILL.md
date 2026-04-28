@@ -1,6 +1,14 @@
 ---
 name: creative-patrol
-description: "[DEPRECATED] Superseded by creative-designer (which now handles creative review + scoring). Use creative-designer skill instead. This file is kept for reference only."
+description: >
+  Deprecated creative patrol reference retained only for backward compatibility
+  with older ClawSeat creative workflows. Use when reading legacy
+  documentation, migrating old creative-patrol mentions, or understanding why
+  creative-designer now owns creative review and scoring. Also use when
+  preserving historical handoff context during compatibility cleanup. Covers
+  legacy passive scoring semantics and migration notes. Do NOT use for new
+  creative reviews, new scoring work, active dispatch, implementation, or any
+  task that can use creative-designer.
 deprecated: true
 superseded_by: creative-designer
 ---

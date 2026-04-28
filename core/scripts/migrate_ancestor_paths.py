@@ -16,6 +16,60 @@ SEAT_ROLE_MIGRATIONS = [
     {"old": "qa", "new": "patrol", "alias_until": "2026-10-28", "type": "seat_role"},
 ]
 
+# Ref doc moves keep old core/references/* symlinks for the same 6-month
+# compatibility window. Install-time project migrations can consult this table
+# when rewriting durable task receipts, local notes, or generated docs.
+REF_DOC_PATH_MIGRATIONS = [
+    {
+        "old": "core/references/communication-protocol.md",
+        "new": "core/skills/gstack-harness/references/communication-protocol.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/collaboration-rules.md",
+        "new": "core/skills/planner/references/collaboration-rules.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/memory-operations-policy.md",
+        "new": "core/skills/memory-oracle/references/memory-operations-policy.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/workflow-doc-schema.md",
+        "new": "core/skills/planner/references/workflow-doc-schema.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/workflow-collaboration-template.md",
+        "new": "core/skills/planner/references/workflow-collaboration-template.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/max-iterations-policy.md",
+        "new": "core/skills/planner/references/max-iterations-policy.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/context-management-template.md",
+        "new": "core/skills/clawseat-memory/references/context-management-template.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+    {
+        "old": "core/references/planner-context-policy.md",
+        "new": "core/skills/planner/references/planner-context-policy.md",
+        "alias_until": "2026-10-28",
+        "type": "ref_doc_path",
+    },
+]
+
 
 def real_home() -> Path:
     override = os.environ.get("CLAWSEAT_REAL_HOME", "").strip()

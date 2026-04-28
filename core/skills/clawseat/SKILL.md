@@ -1,6 +1,14 @@
 ---
 name: clawseat
-description: "Product entrypoint; routes ClawSeat installs and runtime handoffs."
+description: >
+  Product-level ClawSeat entrypoint for install discovery and runtime handoff
+  guidance across OpenClaw, Feishu, Claude Code, and Codex contexts. Use when a
+  user says ClawSeat, wants to start the product, asks how to enter the system,
+  or needs the correct install versus re-entry path. Also use when routing
+  first-contact product intent. Covers entrypoint selection and handoff to
+  install or /cs. Do NOT use for specialist workflow execution, direct code
+  changes, detailed installer flag authority, or project-specific memory
+  decisions.
 ---
 
 # ClawSeat

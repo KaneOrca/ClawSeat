@@ -1,6 +1,13 @@
 ---
 name: clawseat-privacy
-description: "Pre-commit check gate; blocks exposure of secrets, API keys, tokens."
+description: >
+  Privacy gate for ClawSeat messages, commits, and artifacts that may expose
+  secrets or sensitive operator data. Use when preparing broadcasts, Feishu
+  messages, DELIVERY summaries, commits, logs, or any content containing
+  tokens, API keys, credentials, private paths, or customer data. Also use when
+  a seat suspects accidental leakage. Covers secret detection, redaction
+  guidance, and escalation for unsafe content. Do NOT use for general code
+  review, product decisions, or approving content that has not been inspected.
 version: "1.0"
 status: draft
 author: machine-memory

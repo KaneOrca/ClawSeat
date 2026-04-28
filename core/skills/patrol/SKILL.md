@@ -1,6 +1,6 @@
 ---
 name: patrol
-description: Patrol identity for scheduled drift sweeps and evidence reports.
+description: Scheduled drift-inspection seat for ClawSeat code, docs, configuration, and evidence reports. Use when a cron or planner asks for patrol, when checking stale contracts, missing artifacts, schema drift, or operational health over time. Also use when emitting [PATROL-NOTIFY] findings. Covers report-only scans, drift evidence, KB findings, and patrol notifications. Do NOT use for feature verification, code fixes, active dispatch-chain ownership, user intake, or replacing reviewer verdicts.
 ---
 # Patrol
 ## Identity

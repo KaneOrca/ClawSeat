@@ -1,6 +1,13 @@
 ---
 name: cs
-description: Local ClawSeat re-entry helper. `/cs` is the shorthand for the v0.7 Resume / Re-entry contract in docs/INSTALL.md; use it only after install state already exists.
+description: >
+  Local ClawSeat /cs re-entry helper for operators who already have valid
+  install state. Use when the user invokes /cs, asks to resume an existing
+  ClawSeat runtime, reopen a project, or reconnect to the v0.7 resume contract
+  after setup. Also use when distinguishing re-entry from first install. Covers
+  local shortcut semantics and docs/INSTALL.md resume guidance. Do NOT use for
+  fresh bootstrapping, product-level intake, specialist dispatch,
+  implementation work, or creating install state from scratch.
 ---
 
 # ClawSeat `/cs` — local re-entry entrypoint

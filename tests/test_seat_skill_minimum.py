@@ -26,10 +26,10 @@ def test_specialist_skills_under_60_lines() -> None:
 
 
 def test_skills_contain_workflow_collaboration_section() -> None:
-    workflow = (_REPO / "core" / "references" / "workflow-collaboration-template.md").read_text(
+    workflow = (_REPO / "core" / "skills" / "planner" / "references" / "workflow-collaboration-template.md").read_text(
         encoding="utf-8"
     ).split("\n", 2)[2].strip()
-    context = (_REPO / "core" / "references" / "context-management-template.md").read_text(
+    context = (_REPO / "core" / "skills" / "clawseat-memory" / "references" / "context-management-template.md").read_text(
         encoding="utf-8"
     ).split("\n", 2)[2].strip()
 

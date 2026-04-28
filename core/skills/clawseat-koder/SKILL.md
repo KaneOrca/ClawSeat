@@ -1,6 +1,14 @@
 ---
 name: clawseat-koder
-description: "OpenClaw Koder bridge: translates decision payloads, routes Feishu replies, enforces privacy."
+description: >
+  OpenClaw Koder bridge for translating ClawSeat decision payloads and routing
+  Feishu replies through the approved privacy boundary. Use when sending
+  operator-facing decision summaries, processing Feishu responses, or syncing
+  OpenClaw agent messages with ClawSeat memory. Also use when a handoff needs
+  Koder-compatible wording or reply parsing. Covers payload translation,
+  message routing, and privacy-aware response handling. Do NOT use for local
+  code execution, planner dispatch, generic chat, or bypassing the privacy
+  gate.
 version: "2.0"
 status: stable
 author: machine-memory

@@ -1,6 +1,14 @@
 ---
 name: creative-designer
-description: Creative execution and review specialist (Gemini-powered). Executes cs-write for long-form content, runs cs-score for rubric-based scoring, and reviews the complete deliverable. Issues APPROVED / APPROVED_WITH_NITS / CHANGES_REQUESTED verdicts.
+description: >
+  Creative execution and review specialist for ClawSeat long-form writing,
+  rubric scoring, and final creative verdicts. Use when creative-planner
+  assigns cs-write, cs-score, deliverable review, chapter drafting, rewrite
+  passes, or APPROVED/CHANGES_REQUESTED judgment. Also use when a creative
+  artifact needs Gemini-powered prose and quality assessment. Covers writing,
+  scoring, review evidence, and final verdict delivery. Do NOT use for
+  structural planning, classification-only tasks, code implementation, or
+  deprecated creative-patrol responsibilities.
 ---
 
 # Creative Designer — Writer + Scorer + Reviewer

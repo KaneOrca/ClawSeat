@@ -1,6 +1,14 @@
 ---
 name: planner
-description: Workflow author and dispatch orchestrator; enforces seat capability, liveness, fan-out, and SWALLOW boundaries.
+description: >
+  Workflow author and dispatch orchestrator for ClawSeat tasks that need
+  routing across specialist seats. Use when memory provides a brief, when
+  workflow.md must be authored, when assigning owners, fan-out, liveness
+  checks, SWALLOW fallback, or delivery consumption is required. Also use when
+  coordinating review and next-step notifications. Covers workflow
+  decomposition, schema validation, dispatch receipts, and planner summaries.
+  Do NOT use for operator intake, code implementation, independent review
+  verdicts, visual QA, or project memory authority.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Planner
@@ -9,16 +17,16 @@ Workflow author and dispatch orchestrator; I convert memory briefs into workflow
 ## Boundary
 Do: workflow authoring, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback. Don't: operator intake, code, project config/profile/seat lifecycle, memory authority.
 ## Capabilities
-Use `core/references/seat-capabilities.md`, `skill-catalog.md`, `workflow-doc-schema.md`, `communication-protocol.md`, `collaboration-rules.md`, and Official Docs Dispatch Gate.
+Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, and Official Docs Dispatch Gate.
 ## Output Schema
 Deliver `workflow.md`, dispatch receipts, consumed ACKs, planner summaries, and escalation questions when workflow progress needs memory/user authority.
-Cross-tool delivery reference: 跨 Tool 交付协议 in `communication-protocol.md`; use `complete_handoff.py` and `send-and-verify.sh`; Stop hook is Claude Code convenience only.
+Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harness/references/communication-protocol.md`; use `complete_handoff.py` and `send-and-verify.sh`; Stop hook is Claude Code convenience only.
 ## Borrowed Practices
 see [`core/references/superpowers-borrowed/`](../../references/superpowers-borrowed/) for planning and verification practices.
 ## Workflow Authoring
 - Read the memory brief and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
 - Read the lazy skill catalog cache at `~/.agents/cache/skill-catalog.json`; rebuild with `core/scripts/rebuild_skill_catalog.py` when stale or missing.
-- Validate every step against `core/references/workflow-doc-schema.md`.
+- Validate every step against `core/skills/planner/references/workflow-doc-schema.md`.
 - Use `query_seat_liveness(project)` before each workflow render.
 - Enforce 派工首选 by calling `assign_owner(step_owner_role, seats_available, project)`.
 - Dispatch directly to a live specialist when one matches `owner_role`.
