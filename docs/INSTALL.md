@@ -1,5 +1,7 @@
 # ClawSeat v0.7 Install Playbook
 
+> 🇨🇳 [中文版本 / Chinese version](INSTALL.zh-CN.md)
+
 ## TL;DR
 
 New project? Run:

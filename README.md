@@ -223,6 +223,7 @@ license MIT，attribution 在 [`core/references/superpowers-borrowed/ATTRIBUTION
 
 ## 深入
 
+- [INSTALL guide](docs/INSTALL.md) | [安装指南（中文）](docs/INSTALL.zh-CN.md)
 - [`docs/INSTALL.md`](docs/INSTALL.md) — 你的 AI 会自己读
 - [`docs/OPENCLAW.md`](docs/OPENCLAW.md) — ClawSeat 怎么用 OpenClaw 的
 - [`docs/GSTACK.md`](docs/GSTACK.md) — 哪个 seat 装哪些 gstack skill
