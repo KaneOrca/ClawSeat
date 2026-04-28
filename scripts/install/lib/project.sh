@@ -534,7 +534,20 @@ ensure_qa_engineer_record() {
     || die 31 QA_ENGINEER_CREATE_FAILED "unable to create patrol engineer session for $PROJECT"
 }
 
+template_has_seat() {
+  local target="$1" seat
+  [[ "$PRIMARY_SEAT_ID" == "$target" ]] && return 0
+  for seat in "${PENDING_SEATS[@]}"; do
+    [[ "$seat" == "$target" ]] && return 0
+  done
+  return 1
+}
+
 install_qa_bootstrap() {
+  if ! template_has_seat "patrol"; then
+    note "Step 7.6: patrol bootstrap skipped (template has no patrol seat)"
+    return 0
+  fi
   note "Step 7.6: install patrol hook + patrol cron"
   local patrol_workspace="$HOME/.agents/workspaces/$PROJECT/patrol"
   ensure_qa_engineer_record

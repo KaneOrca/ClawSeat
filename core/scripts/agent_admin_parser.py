@@ -164,14 +164,14 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_create_nested.add_argument(
         "--template",
         default="clawseat-creative",
-        help="Project roster template to use (default: clawseat-creative; also: clawseat-engineering)",
+        help="Project roster template to use (default: clawseat-creative; also: clawseat-engineering, clawseat-solo)",
     )
     project_create_nested.add_argument("--window-mode", choices=["tabs-1up", "tabs-2up", "split-2"], default=None)
     project_create_nested.add_argument("--open-detail-windows", action="store_true")
     project_create_nested.set_defaults(func=hooks.cmd_project_create)
 
     project_bootstrap_nested = project_sub.add_parser("bootstrap")
-    project_bootstrap_nested.add_argument("--template", required=True, help="Template name (clawseat-creative | clawseat-engineering)")
+    project_bootstrap_nested.add_argument("--template", required=True, help="Template name (clawseat-creative | clawseat-engineering | clawseat-solo)")
     project_bootstrap_nested.add_argument(
         "--local",
         required=True,

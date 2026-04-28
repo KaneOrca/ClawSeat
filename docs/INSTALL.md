@@ -278,7 +278,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--project <name>` | Install or reinstall a named ClawSeat project. Defaults to `install`. |
 | `--repo-root <path>` | Set the target project repository used as seat cwd. |
 | `--force-repo-root <path>` | Override the ClawSeat install code root when auto-detecting multiple worktrees is wrong. |
-| `--template <clawseat-creative\|clawseat-engineering>` | Select the roster template. Creative has 5 seats; engineering has 6. |
+| `--template <clawseat-creative\|clawseat-engineering\|clawseat-solo>` | Select the roster template. Creative has 5 seats; engineering has 6; solo has 3. |
 | `--memory-tool <claude\|codex\|gemini>` | Override the primary memory seat tool. Non-Claude tools skip Claude provider selection. |
 | `--memory-model <model>` | Set the memory model when the selected memory tool supports an explicit model. |
 | `--provider <mode\|n>` | Select the memory-seat provider by detected candidate number or mode. |
@@ -292,6 +292,12 @@ bash scripts/install.sh --reset-harness-memory
 | `--dry-run` | Print planned actions without mutating host state where supported. |
 | `--reset-harness-memory` | Delete remembered per-seat harness choices and exit. |
 | `--help` / `-h` | Print the parser-owned usage line. |
+
+Available templates:
+
+- `clawseat-creative`: 5-seat creative template (memory + planner + builder + patrol + designer).
+- `clawseat-engineering`: 6-seat engineering template (memory + planner + builder + reviewer + patrol + designer).
+- `clawseat-solo`: 3-seat creative template (memory + builder + designer), all OAuth, memory SWALLOWs planner.
 
 Security note: `--api-key` is visible in `ps` output and shell history. Prefer:
 
@@ -311,7 +317,7 @@ What `install.sh` does in order:
 2. Resolve Python ≥3.11 before importing anything that needs `tomllib`.
 3. Resolve the project template and roster. `clawseat-creative` renders
    `memory, planner, builder, patrol, designer`; `clawseat-engineering` adds
-   `reviewer`.
+   `reviewer`; `clawseat-solo` renders only `memory, builder, designer`.
 4. Run legacy path migration and seat liveness reconciliation.
 5. Verify host dependencies and run
    `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
