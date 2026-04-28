@@ -13,14 +13,21 @@ def _read(relpath: str) -> str:
     return (_REPO / relpath).read_text(encoding="utf-8")
 
 
+def _install_code() -> str:
+    parts = [_read("scripts/install.sh")]
+    lib_dir = _REPO / "scripts" / "install" / "lib"
+    parts.extend(path.read_text(encoding="utf-8") for path in sorted(lib_dir.glob("*.sh")))
+    return "\n".join(parts)
+
+
 def test_install_primary_seat_default_is_memory() -> None:
-    text = _read("scripts/install.sh")
+    text = _install_code()
     assert 'PRIMARY_SEAT_ID="memory"' in text
     assert 'PRIMARY_SEAT_ID="ancestor"' not in text
 
 
 def test_install_uses_memory_bootstrap_paths() -> None:
-    text = _read("scripts/install.sh")
+    text = _install_code()
     assert "memory-bootstrap.template.md" in text
     assert "memory-bootstrap.md" in text
     assert "memory-kickoff.txt" in text
