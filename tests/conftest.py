@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,6 +28,40 @@ for _p in _EXTRA_PATHS:
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
+
+def _current_tmux_sessions() -> set[str]:
+    try:
+        raw = subprocess.check_output(
+            ["tmux", "list-sessions", "-F", "#S"],
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ).decode().splitlines()
+    except Exception:
+        raw = []
+    return {session.strip() for session in raw if session.strip()}
+
+
+def _non_current_project_sessions(project: str) -> set[str]:
+    return {
+        session
+        for session in _current_tmux_sessions()
+        if not session.startswith(f"{project}-")
+    }
+
+
+@pytest.fixture(autouse=True, scope="session")
+def assert_no_cross_project_session_kill():
+    """Fail the sweep if any pre-existing non-project tmux session disappears."""
+    project = os.environ.get("CLAWSEAT_PROJECT", "install")
+    before = _non_current_project_sessions(project)
+    yield
+    after = _non_current_project_sessions(project)
+    killed = before - after
+    assert not killed, (
+        f"pytest sweep killed cross-project tmux sessions: {killed}. "
+        "If PTY exhaustion, send [BLOCKED:reason=pty-exhaustion] and escalate — do NOT self-resolve."
+    )
+
 
 @pytest.fixture()
 def repo_root() -> Path:

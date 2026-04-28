@@ -107,6 +107,7 @@ Failure mode 表:
 | Privacy gate blocked | sender | memory | memory/user |
 | Contradictory task spec | current owner | planner | planner, then memory if unresolved |
 | Missing durable artifact | receiver | sender and planner | planner |
+| PTY_EXHAUSTION | builder: stop + send `[BLOCKED:reason=pty-exhaustion]`; NEVER stop cross-project sessions; planner -> memory escalation | planner | memory |
 
 Escalation message requirements:
 
