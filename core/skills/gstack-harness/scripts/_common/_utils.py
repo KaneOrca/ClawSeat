@@ -81,6 +81,7 @@ def role_sort_key(seat: str, role: str, *, heartbeat_owner: str = "") -> tuple[i
         "planner": 1,
         "builder": 2,
         "reviewer": 3,
+        "patrol": 4,
         "qa": 4,
         "designer": 5,
         "specialist": 50,

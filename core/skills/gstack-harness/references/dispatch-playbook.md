@@ -40,7 +40,7 @@ python3 <repo-root>/core/skills/gstack-harness/scripts/dispatch_task.py \
   --reply-to planner
 ```
 
-Swap `--target` for `reviewer-1`, `qa-1`, or `designer-1` as needed.
+Swap `--target` for `reviewer-1`, `patrol-1`, or `designer-1` as needed.
 When a Feishu group is configured, the dispatch helper only posts the planner
 release broadcast when legacy group broadcasting is explicitly enabled. That
 legacy path is opt-in, not the default control packet for koder-facing routing.

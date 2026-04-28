@@ -8,7 +8,7 @@ name = "gstack-harness"
 source = "bundled"
 path = "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md"
 required = true
-roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "qa", "designer"]
+roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "patrol", "designer"]
 description = "Shared runtime: seat schema, dispatch/completion/ACK protocol, heartbeat, patrol"
 
 [[skills]]
@@ -74,7 +74,7 @@ name = "tmux-basics"
 source = "bundled"
 path = "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md"
 required = false
-roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "qa"]
+roles = ["frontstage-supervisor", "planner-dispatcher", "builder", "reviewer", "patrol"]
 description = "tmux session control: commands, ClawSeat wrappers, pitfalls, self-diagnosis"
 
 [[skills]]
@@ -124,7 +124,7 @@ name = "gstack-browse"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-browse/SKILL.md"
 required = false
-roles = ["builder", "reviewer", "qa", "designer"]
+roles = ["builder", "reviewer", "patrol", "designer"]
 description = "Headless browser for QA testing and visual inspection"
 
 [[skills]]
@@ -148,7 +148,7 @@ name = "gstack-qa"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-qa/SKILL.md"
 required = true
-roles = ["qa"]
+roles = ["patrol"]
 description = "Full QA testing with bug fixing"
 
 [[skills]]
@@ -156,7 +156,7 @@ name = "gstack-qa-only"
 source = "gstack"
 path = "~/.gstack/repos/gstack/.agents/skills/gstack-qa-only/SKILL.md"
 required = false
-roles = ["qa"]
+roles = ["patrol"]
 description = "Report-only QA testing without fixing"
 
 [[skills]]

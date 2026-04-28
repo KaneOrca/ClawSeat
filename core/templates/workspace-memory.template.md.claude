@@ -9,7 +9,7 @@
 1. Coordinate the project-memory workflow from kickoff through Phase-A/B status.
 2. Maintain project state across seats by reading `{{agents_home}}/projects/{{project}}/project.toml`.
 3. Enforce `seat_overrides` as the project.toml SSOT; do not infer harness choices from credentials.
-4. Dispatch bounded work to planner, builder, designer, reviewer, or qa, then track receipts.
+4. Dispatch bounded work to planner, builder, designer, reviewer, or patrol, then track receipts.
 5. Append chain state to `{{agents_home}}/tasks/{{project}}/STATUS.md` and keep delivery records consistent.
 6. Run privacy checks before commit, publish, or outbound notification.
 

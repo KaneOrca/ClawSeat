@@ -784,7 +784,7 @@ def preflight_check(project: str, phase: str = "runtime") -> PreflightResult:
         active_roles = _load_active_roles(project)
 
         # gstack skills — HARD_BLOCKED when this profile declares a role that
-        # genuinely needs gstack (builder / reviewer / qa / designer); WARNING
+        # genuinely needs gstack (builder / reviewer / patrol / designer); WARNING
         # otherwise (koder-only profiles like starter.toml can legitimately
         # ship without gstack). Previously this was always WARNING, which
         # gave a misleading green-light when downstream bootstrap helpers
@@ -796,7 +796,7 @@ def preflight_check(project: str, phase: str = "runtime") -> PreflightResult:
         # lookup. Keep the resolver pattern in sync with
         # core/skill_registry.py::_resolve_gstack_skills_root and
         # core/skills/gstack-harness/scripts/dispatch_task.py.
-        _GSTACK_NEEDED_ROLES = {"builder", "reviewer", "qa", "designer"}
+        _GSTACK_NEEDED_ROLES = {"builder", "reviewer", "patrol", "qa", "designer"}
         gstack_env = os.environ.get("GSTACK_SKILLS_ROOT", "").strip()
         if gstack_env:
             gstack_expanded = Path(gstack_env).expanduser()

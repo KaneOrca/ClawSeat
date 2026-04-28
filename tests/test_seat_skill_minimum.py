@@ -10,7 +10,7 @@ _SKILLS = {
     "planner": _REPO / "core" / "skills" / "planner" / "SKILL.md",
     "builder": _REPO / "core" / "skills" / "builder" / "SKILL.md",
     "reviewer": _REPO / "core" / "skills" / "reviewer" / "SKILL.md",
-    "qa": _REPO / "core" / "skills" / "qa" / "SKILL.md",
+    "patrol": _REPO / "core" / "skills" / "patrol" / "SKILL.md",
     "designer": _REPO / "core" / "skills" / "designer" / "SKILL.md",
 }
 _SPECIALIST_LIMIT = 60

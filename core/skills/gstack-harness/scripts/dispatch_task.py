@@ -146,7 +146,7 @@ INTENT_MAP: dict[str, dict[str, str]] = {
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-review/SKILL.md",
         "description": "pre-landing PR review (NOT plan-review; for final diff check)",
     },
-    # ── QA intents (qa-1) ────────────────────────────────────────────
+    # Patrol intents use the gstack QA marketplace skills.
     "qa-test": {
         "trigger": "QA — systematically test this web app and fix bugs found (test → fix → verify loop)",
         "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-qa/SKILL.md",

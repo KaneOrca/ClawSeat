@@ -63,14 +63,14 @@ def test_load_role_skill_content_strips_frontmatter(tmp_path: Path) -> None:
 
 
 def test_load_role_skill_content_handles_no_frontmatter(tmp_path: Path) -> None:
-    skill_dir = tmp_path / "core" / "skills" / "qa"
+    skill_dir = tmp_path / "core" / "skills" / "patrol"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("# QA\n\nbody only.\n", encoding="utf-8")
-    info = agent_admin_template._load_role_skill_content(tmp_path, "qa")
+    (skill_dir / "SKILL.md").write_text("# Patrol\n\nbody only.\n", encoding="utf-8")
+    info = agent_admin_template._load_role_skill_content(tmp_path, "patrol")
     assert info is not None
     role, body = info
-    assert role == "qa"
-    assert body.startswith("# QA")
+    assert role == "patrol"
+    assert body.startswith("# Patrol")
 
 
 def test_load_role_skill_content_returns_none_for_unknown_seat(tmp_path: Path) -> None:
@@ -156,7 +156,7 @@ def test_role_skill_section_lines_contains_canonical_header(tmp_path: Path) -> N
         ("planner", "planner"),
         ("builder", "builder"),
         ("reviewer", "reviewer"),
-        ("qa", "qa"),
+        ("patrol", "patrol"),
         ("designer", "designer"),
         ("memory", "memory-oracle"),
         ("ancestor", "clawseat-ancestor"),
@@ -223,12 +223,12 @@ def test_real_repo_creative_builder_skill_has_classify_not_write() -> None:
     )
 
 
-def test_real_repo_role_skill_section_for_qa_includes_contract_marker() -> None:
-    """Pin a distinctive QA SKILL.md marker so deleting the contract fails this test."""
-    lines = agent_admin_template._role_skill_section_lines(_REPO, "qa")
+def test_real_repo_role_skill_section_for_patrol_includes_contract_marker() -> None:
+    """Pin a distinctive patrol SKILL.md marker so deleting the contract fails this test."""
+    lines = agent_admin_template._role_skill_section_lines(_REPO, "patrol")
     joined = "\n".join(lines)
     assert "## Role SKILL (canonical)" in joined
-    # QA contract must carry the no-author-new-tests constraint
+    # Patrol contract must carry the no-author-new-tests constraint
     assert "不写新 tests" in joined or "write new tests" in joined.lower()
 
 

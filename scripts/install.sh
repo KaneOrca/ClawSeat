@@ -48,8 +48,11 @@ CLAWSEAT_CLI_SCRIPT="$REPO_ROOT/core/scripts/clawseat-cli.sh"
 SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
 WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py"
-QA_HOOK_INSTALLER="$REPO_ROOT/core/skills/qa/scripts/install_qa_hook.py"
-QA_PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/qa/scripts/install_qa_patrol_cron.py"
+PATROL_HOOK_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_hook.py"
+PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_cron.py"
+# Backward-compatible variable exports for callers that source install.sh.
+QA_HOOK_INSTALLER="$PATROL_HOOK_INSTALLER"
+QA_PATROL_CRON_INSTALLER="$PATROL_CRON_INSTALLER"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
@@ -83,7 +86,7 @@ AGENTS_TEMPLATES_ROOT="$HOME/.agents/templates"
 CLAWSEAT_TEMPLATE_NAME="clawseat-creative"
 BOOTSTRAP_TEMPLATE_DIR=""
 BOOTSTRAP_TEMPLATE_PATH=""
-PENDING_SEATS=(planner builder reviewer qa designer)
+PENDING_SEATS=(planner builder reviewer patrol designer)
 # PRIMARY_SEAT_ID = the seat user dialogs with (always one per project).
 # Canonical templates use "memory"; imported legacy templates may use "ancestor".
 # Set by resolve_pending_seats() based on template's first primary engineer.

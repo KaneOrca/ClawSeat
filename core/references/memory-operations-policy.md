@@ -20,7 +20,7 @@ and `query_memory.py --ask`. 不要把 `tmux send-keys` 用在 project memory se
 ### 5.2 跨 seat 文本通讯（canonical）
 
 Use `bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh`; red flag:
-你自己 tmux send-keys 给 planner/builder/qa 发消息. Patrol automation is opt-in via
+你自己 tmux send-keys 给 planner/builder/patrol 发消息. Patrol automation is opt-in via
 `--enable-auto-patrol`.
 
 ### 5.3 dispatch diagnostics

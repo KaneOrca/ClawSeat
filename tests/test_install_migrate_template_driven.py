@@ -77,10 +77,10 @@ def test_migrate_template_driven_fills_missing_overrides(tmp_path: Path) -> None
     )
     assert result.returncode == 0, result.stderr
     data = tomllib.loads(project_path.read_text(encoding="utf-8"))
-    assert data["engineers"] == ["memory", "planner", "builder", "reviewer", "qa", "designer"]
+    assert data["engineers"] == ["memory", "planner", "builder", "reviewer", "patrol", "designer"]
     assert data["monitor_max_panes"] == 6
     assert data["seat_overrides"]["planner"]["provider"] == "deepseek"
-    assert data["seat_overrides"]["qa"]["model"] == "MiniMax-M2.7-highspeed"
+    assert data["seat_overrides"]["patrol"]["model"] == "MiniMax-M2.7-highspeed"
     assert data["seat_overrides"]["builder"]["provider"] == "operator-keep"
 
 
@@ -89,8 +89,8 @@ def test_migrate_template_driven_skips_complete_profile(tmp_path: Path) -> None:
         [
             'name = "migratecase"',
             'template_name = "clawseat-engineering"',
-            'engineers = ["memory", "planner", "builder", "reviewer", "qa", "designer"]',
-            'monitor_engineers = ["memory", "planner", "builder", "reviewer", "qa", "designer"]',
+            'engineers = ["memory", "planner", "builder", "reviewer", "patrol", "designer"]',
+            'monitor_engineers = ["memory", "planner", "builder", "reviewer", "patrol", "designer"]',
             "monitor_max_panes = 6",
             "",
             "[seat_overrides.memory]",
@@ -114,7 +114,7 @@ def test_migrate_template_driven_skips_complete_profile(tmp_path: Path) -> None:
             'auth_mode = "oauth"',
             'provider = "anthropic"',
             "",
-            "[seat_overrides.qa]",
+            "[seat_overrides.patrol]",
             'tool = "claude"',
             'auth_mode = "api"',
             'provider = "minimax"',

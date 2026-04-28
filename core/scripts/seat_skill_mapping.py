@@ -15,7 +15,8 @@ SEAT_SKILL_MAP: Final[dict[str, str]] = {
     "memory": "memory-oracle",
     "builder": "builder",
     "reviewer": "reviewer",
-    "qa": "qa",
+    "patrol": "patrol",
+    "qa": "patrol",
     "designer": "designer",
 }
 

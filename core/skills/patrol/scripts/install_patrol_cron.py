@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Install or remove QA patrol cron entries."""
+"""Install or remove patrol cron entries."""
 from __future__ import annotations
 
 import argparse
 import subprocess
 from pathlib import Path
 
-MARKER = "# ClawSeat QA patrol"
-SCRIPT = Path(__file__).resolve().with_name("qa_patrol_cron.sh")
+MARKER = "# ClawSeat patrol"
+SCRIPT = Path(__file__).resolve().with_name("patrol_cron.sh")
 
 
 def _current_crontab() -> str:

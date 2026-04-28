@@ -64,7 +64,7 @@ The scorer reads deliverables and produces structured scoring artifacts; it does
 | Template | Executor | Typical use |
 |----------|----------|-------------|
 | `clawseat-creative` | `creative-designer` (gemini oauth) | Creative content scoring |
-| `clawseat-engineering` | `qa` (claude minimax api) | Engineering deliverable validation |
+| `clawseat-engineering` | `patrol` (claude minimax api) | Engineering deliverable validation |
 
 Skill 不绑定特定工具；executor 自行执行评分逻辑。
 

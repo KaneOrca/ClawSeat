@@ -71,7 +71,7 @@ spawn another `koder`, and do not rewrite the install flow around it.
 - The canonical project name is `install`
 - The tmux-backed worker roster comes from the project's `project.toml`
   `engineers` list; minimal defaults to `planner`, `builder`, `designer`,
-  while the engineering template includes `reviewer` and `qa`
+  while the engineering template includes `reviewer` and `patrol`
 - Once project memory is prompt-ready, seat lifecycle and patrol belong to memory
 - `koder` is not the install frontstage and is not part of the workers window
 

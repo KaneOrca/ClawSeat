@@ -73,7 +73,7 @@ class SeatDeclaration:
     tool: str
     auth_mode: str
     provider: str
-    parallel_instances: int | None = None  # only builder/reviewer/qa
+    parallel_instances: int | None = None  # only builder/reviewer/patrol
     # state aggregates across `sessions`:
     #   alive   — every session passes tmux has-session
     #   pending — one or more sessions not yet alive (first boot or partial spawn)
@@ -173,10 +173,11 @@ def load_context_from_profile(
     seats_raw = raw.get("seats", [])
     seat_overrides = raw.get("seat_overrides", {}) or {}
     seats: list[SeatDeclaration] = []
-    for role in seats_raw:
-        ov = seat_overrides.get(role, {}) or {}
+    for raw_role in seats_raw:
+        role = "patrol" if raw_role == "qa" else raw_role
+        ov = seat_overrides.get(role) or seat_overrides.get(raw_role, {}) or {}
         sessions = _session_names(project, role, ov)
-        parallel = ov.get("parallel_instances") if role in {"builder", "reviewer", "qa"} else None
+        parallel = ov.get("parallel_instances") if role in {"builder", "reviewer", "patrol", "qa"} else None
         # State across sessions: alive iff EVERY session passes has-session;
         # any miss → pending (B4 will spawn the gaps).
         state = "alive" if all(_tmux_session_alive(s) for s in sessions) else "pending"
@@ -221,13 +222,13 @@ def load_context_from_profile(
     )
 
 
-_FAN_OUT_ROLES = frozenset({"builder", "reviewer", "qa"})
+_FAN_OUT_ROLES = frozenset({"builder", "reviewer", "patrol", "qa"})
 
 
 def _session_names(project: str, role: str, overrides: dict[str, Any]) -> list[str]:
     """Canonical tmux session name(s) per role.
 
-    - Fan-out-capable roles (builder/reviewer/qa) always get `<project>-<role>-<N>-<tool>`
+    - Fan-out-capable roles (builder/reviewer/patrol) always get `<project>-<role>-<N>-<tool>`
       with one entry per `parallel_instances` (default 1 → still `<role>-1-<tool>`).
       Matches operator-machine convention: install-builder-1-claude,
       install-reviewer-1-codex etc.

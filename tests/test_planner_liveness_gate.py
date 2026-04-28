@@ -49,7 +49,7 @@ def test_liveness_gate_returns_alive_seats_only(
                     "alive",
                     (now - timedelta(seconds=600)).isoformat(),
                 ),
-                ("install", "qa", "install-qa-claude", "dead", now.isoformat()),
+                ("install", "patrol", "install-patrol-claude", "dead", now.isoformat()),
                 ("other", "builder", "other-builder-codex", "alive", now.isoformat()),
             ],
         )

@@ -596,7 +596,7 @@ def render_agents(
 - remind active loop owner: ✅
 - dispatch: ❌ (planner only — see SOUL.md)
 - review: ❌
-- qa: ❌
+- verification: ❌
 - design: ❌
 
 ## Dispatch protocol

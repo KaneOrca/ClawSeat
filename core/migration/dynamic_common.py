@@ -52,6 +52,7 @@ ROLE_PRIORITY = {
     "planner": 1,
     "builder": 2,
     "reviewer": 3,
+    "patrol": 4,
     "qa": 4,
     "designer": 5,
     "specialist": 50,

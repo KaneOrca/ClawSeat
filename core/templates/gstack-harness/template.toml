@@ -97,12 +97,12 @@ role_details = [
   "engineer-task initialization, research coordination, execution planning, next-hop routing, and durable consumption of specialist completions",
   "planner owns Feishu user-identity closeout AND mid-chain decision-gates through `OC_DELEGATION_REPORT_V1`. the user is in Feishu, not in your tmux pane — when an interactive gstack skill (plan-eng-review / plan-ceo-review / plan-design-review / plan-devex-review) OR a `gstack-careful` destructive-command guard blocks on an operator choice, DO NOT wait in the tmux pane. emit the skill's question as an OC_DELEGATION_REPORT_V1 via `send_delegation_report.py --report-status needs_decision --user-gate required --decision-hint ask_user --human-summary '<the plain-Chinese version of the skill question>'`, wait for the user's Feishu reply, then feed the reply back into the skill. legacy group broadcast stays opt-in only",
   "planner must verify Feishu auth before first send: run `send_delegation_report.py --check-auth`; if status is not ok, tell the user to run `lark-cli auth login` in a terminal with browser access",
-  "planner coordinates specialists but does not absorb concrete implementation, review, QA, or design execution",
+  "planner coordinates specialists but does not absorb concrete implementation, review, patrol, or design execution",
   "when the group bridge is user-identity based, emit `OC_DELEGATION_REPORT_V1` for koder-facing receipts instead of relying on sender identity",
   "use gstack-plan-eng-review for engineering plan review, plan-ceo-review for strategy, plan-design-review for UX, plan-devex-review for DX",
   "use gstack-ship for PR creation, gstack-land-and-deploy for merge + production verification",
   "use gstack-checkpoint to save/resume state on long task chains",
-  "when dispatching to a specialist, pass dispatch_task.py --intent <key> to preselect the gstack skill trigger for that specialist (builder: ship/land/investigate/freeze/unfreeze; reviewer: code-review; qa: qa-test/qa-only; designer: design-critique/design-html/design-shotgun). if no intent fits, omit --intent and state the reason in --objective. the target→intent mapping table is in your own AGENTS.md Dispatch Playbook — read it before every multi-specialist chain.",
+  "when dispatching to a specialist, pass dispatch_task.py --intent <key> to preselect the gstack skill trigger for that specialist (builder: ship/land/investigate/freeze/unfreeze; reviewer: code-review; patrol: qa-test/qa-only; designer: design-critique/design-html/design-shotgun). if no intent fits, omit --intent and state the reason in --objective. the target→intent mapping table is in your own AGENTS.md Dispatch Playbook — read it before every multi-specialist chain.",
 ]
 
 [[engineers]]
@@ -223,8 +223,9 @@ role_details = [
 ]
 
 [[engineers]]
-id = "qa"
-role = "qa"
+# qa is a 6-month alias — both names accepted
+id = "patrol"
+role = "patrol"
 tool = "claude"
 auth_mode = "api"
 provider = "minimax"
@@ -258,8 +259,9 @@ role_details = [
 ]
 
 [[engineers]]
-id = "qa-1"
-role = "qa"
+# qa is a 6-month alias — both names accepted
+id = "patrol-1"
+role = "patrol"
 tool = "claude"
 auth_mode = "api"
 provider = "minimax"

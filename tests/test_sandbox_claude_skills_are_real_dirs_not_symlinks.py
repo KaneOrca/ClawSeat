@@ -89,7 +89,7 @@ def test_memory_seat_has_stop_hook_in_sandbox(tmp_path: Path) -> None:
 
 
 def test_non_memory_seats_lack_stop_hook_in_sandbox(tmp_path: Path) -> None:
-    _real_home, runtime_home = _prepare_runtime(tmp_path, "qa")
+    _real_home, runtime_home = _prepare_runtime(tmp_path, "patrol")
 
     settings = json.loads((runtime_home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert settings["hooks"] == {}

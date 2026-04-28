@@ -26,7 +26,7 @@ def test_engineering_template_has_six_memory_primary_seats() -> None:
         "planner",
         "builder",
         "reviewer",
-        "qa",
+        "patrol",
         "designer",
     ]
 

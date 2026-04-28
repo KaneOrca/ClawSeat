@@ -8,6 +8,7 @@ try:
     from seat_claude_template import ensure_seat_claude_template
 except ModuleNotFoundError:  # pragma: no cover
     from .seat_claude_template import ensure_seat_claude_template
+from patrol_alias import normalize_seat_role, patrol_legacy_aliases
 
 
 @dataclass
@@ -234,17 +235,25 @@ class StoreHandlers:
         template_engineers: list[dict] = []
         seen_ids: set[str] = set()
         for engineer in template.get("engineers", []):
-            engineer_id = self.hooks.normalize_name(str(engineer.get("id", "")))
+            engineer_id = normalize_seat_role(self.hooks.normalize_name(str(engineer.get("id", ""))))
             if engineer_id in seen_ids:
                 raise self.hooks.error_cls(f"Template declares duplicate engineer id: {engineer_id}")
             seen_ids.add(engineer_id)
             merged_engineer = dict(engineer)
             merged_engineer["id"] = engineer_id
+            if str(merged_engineer.get("role", "")).strip():
+                merged_engineer["role"] = normalize_seat_role(str(merged_engineer["role"]))
+            aliases = list(merged_engineer.get("aliases", []))
+            for alias in patrol_legacy_aliases(engineer_id):
+                if alias not in aliases:
+                    aliases.append(alias)
+            if aliases:
+                merged_engineer["aliases"] = aliases
             template_engineers.append(merged_engineer)
 
         override_map: dict[str, dict] = {}
         for override in local.get("overrides", []):
-            engineer_id = self.hooks.normalize_name(str(override.get("id", "")))
+            engineer_id = normalize_seat_role(self.hooks.normalize_name(str(override.get("id", ""))))
             if engineer_id not in seen_ids:
                 raise self.hooks.error_cls(f"Override references unknown engineer id: {engineer_id}")
             if engineer_id in override_map:
@@ -264,22 +273,22 @@ class StoreHandlers:
             final_engineers.append(merged_engineer)
 
         seat_order_raw = [
-            self.hooks.normalize_name(str(item))
+            normalize_seat_role(self.hooks.normalize_name(str(item)))
             for item in local.get("seat_order", [])
             if str(item).strip()
         ]
         materialized_seats_raw = [
-            self.hooks.normalize_name(str(item))
+            normalize_seat_role(self.hooks.normalize_name(str(item)))
             for item in local.get("materialized_seats", [])
             if str(item).strip()
         ]
         runtime_seats_raw = [
-            self.hooks.normalize_name(str(item))
+            normalize_seat_role(self.hooks.normalize_name(str(item)))
             for item in local.get("runtime_seats", [])
             if str(item).strip()
         ]
         bootstrap_seats_raw = [
-            self.hooks.normalize_name(str(item))
+            normalize_seat_role(self.hooks.normalize_name(str(item)))
             for item in local.get("bootstrap_seats", [])
             if str(item).strip()
         ]
@@ -461,12 +470,16 @@ class StoreHandlers:
         qa_authority: bool = False,
         design_authority: bool = False,
     ) -> Any:
-        engineer_id = self.hooks.normalize_name(engineer_id)
+        engineer_id = normalize_seat_role(self.hooks.normalize_name(engineer_id))
+        resolved_aliases = list(aliases or [])
+        for alias in patrol_legacy_aliases(engineer_id):
+            if alias not in resolved_aliases:
+                resolved_aliases.append(alias)
         return self.hooks.engineer_cls(
             engineer_id=engineer_id,
             display_name=display_name or engineer_id,
-            aliases=list(aliases or []),
-            role=role or engineer_id,
+            aliases=resolved_aliases,
+            role=normalize_seat_role(role) or engineer_id,
             role_details=list(role_details or []),
             skills=list(skills or []),
             human_facing=human_facing,
@@ -536,7 +549,8 @@ class StoreHandlers:
         launch_args: list[str] | None = None,
         wrapper: str = "",
     ) -> Any:
-        engineer_id = self.hooks.normalize_name(engineer_id)
+        original_engineer_id = self.hooks.normalize_name(engineer_id)
+        engineer_id = normalize_seat_role(original_engineer_id)
         identity = self.hooks.identity_name(tool, auth_mode, provider, engineer_id, project.name)
         workspace = self.hooks.workspaces_root / project.name / engineer_id
         runtime_dir = self.hooks.runtime_dir_for_identity(tool, auth_mode, identity)
@@ -553,6 +567,16 @@ class StoreHandlers:
         legacy_sessions = []
         if legacy_session:
             legacy_sessions.append(legacy_session)
+        for alias in patrol_legacy_aliases(engineer_id):
+            alias_session = self.hooks.session_name_for(project.name, alias, tool)
+            if alias_session == canonical_session:
+                alias_session = f"{project.name}-{alias}-{tool}"
+            if alias_session not in legacy_sessions:
+                legacy_sessions.append(alias_session)
+        if original_engineer_id != engineer_id:
+            original_session = f"{project.name}-{original_engineer_id}-{tool}"
+            if original_session not in legacy_sessions:
+                legacy_sessions.append(original_session)
         if effective_session != canonical_session and canonical_session not in legacy_sessions:
             legacy_sessions.append(canonical_session)
         return self.hooks.session_record_cls(

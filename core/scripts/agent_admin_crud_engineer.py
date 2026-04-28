@@ -14,6 +14,7 @@ from agent_admin_crud_base import (
     _update_profile_seat,
     archive_session_artifacts,
 )
+from patrol_alias import normalize_seat_role, patrol_alias_candidates
 
 
 class EngineerCrud:
@@ -35,7 +36,8 @@ class EngineerCrud:
             except Exception:
                 continue
             for spec in template.get("engineers", []):
-                if self.hooks.normalize_name(str(spec.get("id", ""))) == engineer_id:
+                spec_id = normalize_seat_role(self.hooks.normalize_name(str(spec.get("id", ""))))
+                if spec_id in patrol_alias_candidates(engineer_id):
                     return {
                         "tool": str(spec.get("tool", "") or ""),
                         "mode": str(spec.get("auth_mode", "") or ""),
@@ -46,7 +48,7 @@ class EngineerCrud:
     def engineer_create(self, args: Any) -> int:
         projects = self.hooks.load_projects()
         project = projects[args.project]
-        engineer_id = self.hooks.normalize_name(args.engineer)
+        engineer_id = normalize_seat_role(self.hooks.normalize_name(args.engineer))
         defaults = self._engineer_template_defaults(project, engineer_id)
         tool = getattr(args, "tool", None) or defaults.get("tool") or "claude"
         mode = getattr(args, "mode", None) or defaults.get("mode") or "oauth"
@@ -107,7 +109,9 @@ class EngineerCrud:
             else:
                 try:
                     session_data = self.hooks.load_toml(session_toml)
-                    role_val = (getattr(args, "role", None) or "").strip() or engineer_id.split("-")[0]
+                    role_val = normalize_seat_role(
+                        (getattr(args, "role", None) or "").strip() or engineer_id.split("-")[0]
+                    )
                     _update_profile_seat(
                         Path(profile_path),
                         engineer_id,

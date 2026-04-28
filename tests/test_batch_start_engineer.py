@@ -332,7 +332,7 @@ def test_batch_start_engineer_validates_overrides_before_any_spawn():
 
 
 def test_phase2_fires_after_all_phase1_returns():
-    engineer_ids = ["planner", "builder-1", "reviewer-1", "designer-1", "qa-1"]
+    engineer_ids = ["planner", "builder-1", "reviewer-1", "designer-1", "patrol-1"]
     handlers, svc, open_recorder = _make_handlers(engineer_ids=engineer_ids)
     handlers.session_batch_start_engineer(_args(engineer_ids))
 

@@ -2,7 +2,7 @@
 
 ## Applies To
 
-- All ClawSeat seats (koder, planner, builder-*, reviewer-*, qa-*, designer-*)
+- All ClawSeat seats (koder, planner, builder-*, reviewer-*, patrol-*, designer-*)
 - The ancestor Claude Code agent running any of the above
 - Any script or hook that needs to consume an environment fact
 

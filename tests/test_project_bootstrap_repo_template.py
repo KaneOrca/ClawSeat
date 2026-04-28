@@ -64,6 +64,6 @@ def test_project_bootstrap_supports_repo_root_single_file_template(tmp_path: Pat
     assert len(engineer_tomls) == 5
     assert {
         path.parent.name for path in session_tomls
-    } == {"memory", "planner", "builder", "qa", "designer"}
+    } == {"memory", "planner", "builder", "patrol", "designer"}
     planner_session = agents_root / "sessions" / "spawn49" / "planner" / "session.toml"
     assert 'session = "spawn49-planner"' in planner_session.read_text(encoding="utf-8")

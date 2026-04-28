@@ -42,7 +42,7 @@ def test_clawseat_engineering_loads_with_six_seats() -> None:
     assert "planner" in seat_ids
     assert "builder" in seat_ids
     assert "reviewer" in seat_ids
-    assert "qa" in seat_ids
+    assert "patrol" in seat_ids
     assert "designer" in seat_ids
 
 
@@ -71,7 +71,7 @@ def test_clawseat_creative_loads_with_five_seats() -> None:
     assert "memory" in seat_ids
     assert "planner" in seat_ids
     assert "builder" in seat_ids   # codex classification seat
-    assert "qa" in seat_ids
+    assert "patrol" in seat_ids
     assert "designer" in seat_ids  # gemini writing + scoring seat
 
 

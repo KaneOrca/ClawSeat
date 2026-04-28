@@ -26,6 +26,7 @@ from agent_admin_session_base import (
     _real_home_for_tool_seeding,
     SessionStartError,
 )
+from patrol_alias import normalize_seat_role
 
 
 class SessionStartLifecycle:
@@ -203,14 +204,15 @@ class SessionStartLifecycle:
                 ("planner", "planner"),
                 ("reviewer", "reviewer"),
                 ("designer", "designer"),
-                ("qa", "qa"),
+                ("patrol", "patrol"),
+                ("qa", "patrol"),
                 ("memory", "memory"),
                 ("koder", "koder"),
                 ("engineer", "builder"),
             ):
                 if value == prefix or value.startswith(prefix + "-"):
                     return role
-            return value or "specialist"
+            return normalize_seat_role(value) or "specialist"
 
         project_engineers = getattr(session, "project_engineers", None)
         if isinstance(project_engineers, dict):

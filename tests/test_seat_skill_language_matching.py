@@ -8,7 +8,7 @@ _SKILL_PATHS = [
     "core/skills/memory-oracle/SKILL.md",
     "core/skills/planner/SKILL.md",
     "core/skills/builder/SKILL.md",
-    "core/skills/qa/SKILL.md",
+    "core/skills/patrol/SKILL.md",
     "core/skills/designer/SKILL.md",
     "core/skills/reviewer/SKILL.md",
 ]

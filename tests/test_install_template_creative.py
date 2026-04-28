@@ -21,7 +21,7 @@ def test_creative_template_has_five_memory_primary_seats() -> None:
     data = _creative()
     assert data["defaults"]["window_mode"] == "split-2"
     assert data["defaults"]["monitor_max_panes"] == 5
-    assert [seat["id"] for seat in data["engineers"]] == ["memory", "planner", "builder", "qa", "designer"]
+    assert [seat["id"] for seat in data["engineers"]] == ["memory", "planner", "builder", "patrol", "designer"]
 
 
 def test_creative_template_memory_is_claude_oauth() -> None:
@@ -35,5 +35,5 @@ def test_creative_template_api_workers_have_seed_providers() -> None:
     seats = {seat["id"]: seat for seat in _creative()["engineers"]}
     assert seats["planner"]["provider"] == "deepseek"
     assert seats["planner"]["model"] == "deepseek-v4-pro"
-    assert seats["qa"]["provider"] == "minimax"
-    assert seats["qa"]["model"] == "MiniMax-M2.7-highspeed"
+    assert seats["patrol"]["provider"] == "minimax"
+    assert seats["patrol"]["model"] == "MiniMax-M2.7-highspeed"

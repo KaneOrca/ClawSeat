@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_HOOK = _REPO / "core" / "skills" / "qa" / "scripts" / "hooks" / "qa-stop-hook.sh"
+_HOOK = _REPO / "core" / "skills" / "patrol" / "scripts" / "hooks" / "patrol-stop-hook.sh"
 
 
 def _write_feishu(tmp_path: Path) -> tuple[Path, Path]:
@@ -43,7 +43,7 @@ def _run_hook(tmp_path: Path, message: str) -> tuple[subprocess.CompletedProcess
 def test_marker_detection_valid(tmp_path: Path) -> None:
     proc, log = _run_hook(
         tmp_path,
-        "[QA-NOTIFY:project=install,scope=patrol,high=1,medium=2,low=3]",
+        "[PATROL-NOTIFY:project=install,scope=patrol,high=1,medium=2,low=3]",
     )
     assert proc.returncode == 0
     assert "high=1 medium=2 low=3" in log.read_text(encoding="utf-8")
@@ -56,13 +56,13 @@ def test_marker_detection_missing(tmp_path: Path) -> None:
 
 
 def test_marker_malformed_returns_zero(tmp_path: Path) -> None:
-    proc, log = _run_hook(tmp_path, "[QA-NOTIFY:project=install,badtoken]")
+    proc, log = _run_hook(tmp_path, "[PATROL-NOTIFY:project=install,badtoken]")
     assert proc.returncode == 0
     assert not log.exists()
 
 
 def test_summary_card_path_resolution(tmp_path: Path) -> None:
-    summary = tmp_path / ".agents" / "memory" / "projects" / "install" / "qa" / "_summary.md"
+    summary = tmp_path / ".agents" / "memory" / "projects" / "install" / "patrol" / "_summary.md"
     summary.parent.mkdir(parents=True)
     summary.write_text("# QA Summary\nAll clear.\n", encoding="utf-8")
     proc, log = _run_hook(
@@ -76,11 +76,11 @@ def test_summary_card_path_resolution(tmp_path: Path) -> None:
 def test_marker_includes_session_and_project(tmp_path: Path) -> None:
     proc, log = _run_hook(
         tmp_path,
-        "[QA-NOTIFY:project=install,scope=patrol,high=0,medium=0,low=0]",
+        "[PATROL-NOTIFY:project=install,scope=patrol,high=0,medium=0,low=0]",
     )
     text = log.read_text(encoding="utf-8")
     assert proc.returncode == 0
-    assert "[QA scope=patrol]" in text
-    assert "_via QA @" in text
+    assert "[PATROL scope=patrol]" in text
+    assert "_via Patrol @" in text
     assert "project=install" in text
     assert "session=" in text

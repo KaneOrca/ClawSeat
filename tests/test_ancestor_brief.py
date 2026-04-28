@@ -46,14 +46,14 @@ handoff_dir = "~/.agents/tasks/install/patrol/handoffs"
 machine_services = ["memory"]
 openclaw_frontstage_agent = "yu"
 
-seats = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
+seats = ["ancestor", "planner", "builder", "reviewer", "patrol", "designer"]
 
 [seat_roles]
 ancestor = "ancestor"
 planner = "planner-dispatcher"
 builder = "builder"
 reviewer = "reviewer"
-qa = "qa"
+patrol = "patrol"
 designer = "designer"
 
 [seat_overrides.ancestor]
@@ -78,7 +78,7 @@ auth_mode = "api"
 provider = "xcode-best"
 parallel_instances = 2
 
-[seat_overrides.qa]
+[seat_overrides.patrol]
 tool = "claude"
 auth_mode = "api"
 provider = "minimax"
@@ -145,7 +145,7 @@ class TestLoadContext:
             project="install", profile_path=v2_profile,
         )
         roles = [s.role for s in ctx.seats]
-        assert roles == ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]
+        assert roles == ["ancestor", "planner", "builder", "reviewer", "patrol", "designer"]
 
     def test_parallel_only_on_fan_out_seats(self, v2_profile, no_tmux):
         ctx = ancestor_brief.load_context_from_profile(
@@ -154,7 +154,7 @@ class TestLoadContext:
         by_role = {s.role: s for s in ctx.seats}
         assert by_role["builder"].parallel_instances == 1
         assert by_role["reviewer"].parallel_instances == 2
-        assert by_role["qa"].parallel_instances == 1
+        assert by_role["patrol"].parallel_instances == 1
         # Singletons must NOT carry parallel_instances
         assert by_role["ancestor"].parallel_instances is None
         assert by_role["planner"].parallel_instances is None

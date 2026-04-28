@@ -81,7 +81,7 @@ Rules:
 - DELIVERY schema remains the swallowed role schema.
 - Tests and acceptance criteria remain the swallowed role criteria.
 - Planner records that the role was swallowed in delivery or status.
-- Planner may swallow builder, reviewer, qa, patrol, or designer only when the
+- Planner may swallow builder, reviewer, patrol, or designer only when the
   task explicitly allows it or the seat is unavailable and the risk is accepted.
 - Planner never SWALLOW memory.
 - Memory authority cannot be swallowed because it includes user intake,

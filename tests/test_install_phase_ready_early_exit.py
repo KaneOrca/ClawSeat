@@ -22,7 +22,7 @@ _write_executable = _HELPERS._write_executable
 def _write_ready_status(home: Path, project: str) -> Path:
     status_path = home / ".agents" / "tasks" / project / "STATUS.md"
     status_path.parent.mkdir(parents=True, exist_ok=True)
-    status_path.write_text("phase=ready\nproviders=ancestor planner builder reviewer qa designer memory\n", encoding="utf-8")
+    status_path.write_text("phase=ready\nproviders=ancestor planner builder reviewer patrol designer memory\n", encoding="utf-8")
     return status_path
 
 

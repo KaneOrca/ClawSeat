@@ -173,7 +173,7 @@ ClawSeat distinguishes 派单 from 派工.
 
 Forbidden boundary crossings:
 
-- Memory never sends a dispatch directly to builder, reviewer, patrol, qa, or
+- Memory never sends a dispatch directly to builder, reviewer, patrol, or
   designer.
 - Planner never replaces memory intake or final user-facing decision ownership.
 - Specialists never self-assign new chain work.
@@ -186,7 +186,7 @@ Markers are literal hints carried in task or message text.
 - `[COMPACT-REQUESTED]` asks the target to compact after preserving active state.
 - `[DELIVER:seat=X]` asks a specialist to deliver to the named seat.
 - `[PATROL-NOTIFY:scope=patrol]` routes a patrol-scoped notification.
-- `[QA-NOTIFY]` is an alias for QA notification when legacy text uses that
+- `[QA-NOTIFY]` is an alias for patrol notification when legacy text uses that
   shorter marker.
 
 Markers do not override authority. A marker that conflicts with role boundary

@@ -107,7 +107,7 @@ def render_idle_todo(profile: HarnessProfile, seat: str) -> str:
             f"{seat} template已初始化。当前没有已派发任务。若你刚完成 planner 初始化，"
             "请尽快把 ready 状态回给 koder/frontstage，方便其完成项目绑定与 Feishu 群联调；"
             "若 frontstage 提供了 group ID 和项目绑定，请先完成群联调测试并向用户发送首条测试消息，提示其收到后直接回复希望完成什么任务；"
-            "若当前链路是测试、验证、smoke 或回归重任务，请同步拉起 qa-1 作为验证席位；"
+            "若当前链路是测试、验证、smoke 或回归重任务，请同步拉起 patrol-1 作为验证席位；"
             "否则先阅读 WORKSPACE_CONTRACT.toml 与 workspace guide，等待新的 dispatch。"
         )
     else:

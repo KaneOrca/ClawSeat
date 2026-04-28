@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 init_specialist.py — systemic IDENTITY / SOUL / MEMORY scaffolding for
-non-koder specialist seats (planner / builder / reviewer / qa / designer /
+non-koder specialist seats (planner / builder / reviewer / patrol / designer /
 memory-oracle).
 
 Why this exists
@@ -96,7 +96,7 @@ MANAGED_FILES = (
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Scaffold IDENTITY/SOUL/MEMORY for a specialist seat.")
     p.add_argument("--profile", required=True, help="Path to the project profile TOML.")
-    p.add_argument("--seat", required=True, help="Specialist seat id (planner / builder-1 / reviewer-1 / qa-1 / designer-1 / memory).")
+    p.add_argument("--seat", required=True, help="Specialist seat id (planner / builder-1 / reviewer-1 / patrol-1 / designer-1 / memory).")
     p.add_argument(
         "--workspace",
         default="",
@@ -220,7 +220,7 @@ _ROLE_SPECIFIC_SOUL: dict[str, list[str]] = {
         "审代码时顺带审 bash 调用日志和 PR diff 里的 `tmux send-keys`：specialist 给非自己 seat 发送即 protocol violation，verdict = CHANGES_REQUESTED。",
         "质量第一：不放过最后的 1% 缺陷；但也不为造分堆 nit。",
     ],
-    "qa": [
+    "patrol": [
         "smoke / 回归 / 验证 lane；读规格跑脚本，不改实现代码。",
         "完成后 `complete_handoff.py` 回 planner，附结构化结果（通过 / 失败 / 待决策）。",
         "不存储明文 secrets：验证 key / URL / provider 可用性，不做长期 owner。",

@@ -12,7 +12,7 @@ Without `--intent`, the target seat runs on default AI behaviour — the gstack 
 |---|---|---|
 | `builder-1` | Implementation, ship a PR | `ship`, `land`, `investigate`, `freeze`, `unfreeze` |
 | `reviewer-1` | Pre-landing PR review | `code-review` |
-| `qa-1` | Test / bug-hunt a web app | `qa-test`, `qa-only` |
+| `patrol-1` | Test / bug-hunt a web app | `qa-test`, `qa-only` |
 | `designer-1` | Design audit / finalize UI | `design-critique`, `design-html`, `design-shotgun` |
 
 For plan-phase intents (planner's own skills):
@@ -37,7 +37,7 @@ Only activate skills the target seat actually has:
 
 - `builder-1`: gstack-ship, gstack-land-and-deploy, gstack-investigate, gstack-freeze, gstack-unfreeze, gstack-browse, gstack-careful, gstack-checkpoint
 - `reviewer-1`: gstack-review, gstack-browse, gstack-careful
-- `qa-1`: gstack-qa, gstack-qa-only, gstack-browse
+- `patrol-1`: gstack-qa, gstack-qa-only, gstack-browse
 - `designer-1`: gstack-design-html, gstack-design-review, gstack-design-shotgun, gstack-browse
 
 Sending `--intent design-critique` to `builder-1` will NOT work — that skill is not on that seat.

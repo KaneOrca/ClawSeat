@@ -22,7 +22,7 @@ myproject-koder       # frontstage (OpenClaw mode: no tmux, koder IS the agent)
 myproject-planner     # planner-dispatcher
 myproject-builder-1   # builder
 myproject-reviewer-1  # reviewer
-myproject-qa-1        # qa
+myproject-patrol-1    # patrol
 myproject-designer-1  # designer
 ```
 

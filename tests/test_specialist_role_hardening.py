@@ -3,7 +3,7 @@
 Coverage:
   - template.toml contains the hard ban text for builder-1
   - template.toml contains the hard ban text for reviewer-1
-  - template.toml contains the hard ban text for qa-1
+  - template.toml contains the hard ban text for patrol-1
   - template.toml contains the hard ban text for designer-1
   - hard ban text does NOT contain the softened "unless" escape hatch
   - --user-summary is referenced as the compliant exit
@@ -65,13 +65,13 @@ def test_hard_ban_appears_in_reviewer_section():
     assert _HARD_BAN in reviewer_section, "Hard ban missing from reviewer-1 role_details"
 
 
-def test_hard_ban_appears_in_qa_section():
+def test_hard_ban_appears_in_patrol_section():
     text = _template_text()
-    qa_idx = text.find('id = "qa-1"')
-    assert qa_idx >= 0
-    next_engineer = text.find('[[engineers]]', qa_idx + 1)
-    qa_section = text[qa_idx: next_engineer if next_engineer > 0 else len(text)]
-    assert _HARD_BAN in qa_section, "Hard ban missing from qa-1 role_details"
+    patrol_idx = text.find('id = "patrol-1"')
+    assert patrol_idx >= 0
+    next_engineer = text.find('[[engineers]]', patrol_idx + 1)
+    patrol_section = text[patrol_idx: next_engineer if next_engineer > 0 else len(text)]
+    assert _HARD_BAN in patrol_section, "Hard ban missing from patrol-1 role_details"
 
 
 def test_hard_ban_appears_in_designer_section():
