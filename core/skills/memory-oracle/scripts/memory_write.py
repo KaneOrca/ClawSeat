@@ -237,6 +237,33 @@ def _update_scan_index(path: Path) -> None:
         _ = exc
 
 
+def _update_link_graph(path: Path, memory_root: Path) -> None:
+    """Run extract_links.py to refresh typed-link / backlink indexes for this page.
+
+    Failures are silenced — link graph is a best-effort derivative index, never
+    blocking on writes.
+    """
+    if path.suffix not in (".md", ".json"):
+        return
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                str(_SCRIPTS / "extract_links.py"),
+                "--file",
+                str(path),
+                "--memory-dir",
+                str(memory_root),
+                "--quiet",
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        _ = exc
+
+
 def _append_memory_note_index(
     memory_root: Path,
     *,
@@ -397,8 +424,10 @@ def main() -> int:
         }
         _write_markdown_note(out_path, metadata, content)
         _update_scan_index(out_path)
+        _drop_memory_root = Path(args.memory_dir).expanduser().resolve()
+        _update_link_graph(out_path, _drop_memory_root)
         _append_memory_note_index(
-            Path(args.memory_dir).expanduser().resolve(),
+            _drop_memory_root,
             note_id=note_id,
             project=args.project,
             kind=args.kind,
@@ -484,6 +513,7 @@ def main() -> int:
         _append_jsonl(record, out_path)
     else:
         _write_fact(record, out_path)
+        _update_link_graph(out_path, memory_root)
 
     if not args.quiet:
         result = {
