@@ -108,7 +108,7 @@ def test_migrate_project_profile_adds_patrol(tmp_path: Path) -> None:
     migrated = tomllib.loads(project_toml.read_text(encoding="utf-8"))
     assert migrated["engineers"] == ["memory", "planner", "builder", "designer", "patrol"]
     assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "memory", "patrol"]
-    assert migrated["monitor_max_panes"] == 5
+    assert migrated["monitor_max_panes"] == 4
     assert migrated["seat_overrides"]["builder"]["provider"] == "openai"
     assert migrated["seat_overrides"]["patrol"]["auth_mode"] == "api"
     assert migrated["seat_overrides"]["patrol"]["provider"] == "minimax"

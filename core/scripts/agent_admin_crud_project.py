@@ -69,7 +69,7 @@ class ProjectCrud:
             template_name=str(template.get("template_name", template_name)),
             seat_overrides={seat_id: {} for seat_id in engineer_ids},
             window_mode=getattr(args, "window_mode", None) or str(merged["window_mode"]),
-            monitor_max_panes=len(engineer_ids) or int(merged["monitor_max_panes"]),
+            monitor_max_panes=int(merged["monitor_max_panes"]) or len(engineer_ids),
             open_detail_windows=bool(args.open_detail_windows) or bool(merged["open_detail_windows"]),
         )
         self.hooks.write_project(project)

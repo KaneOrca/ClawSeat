@@ -1,5 +1,5 @@
 name = "clawseat"
-version = "0.1.0"
+version = "0.2.0"
 description = "ClawSeat 多席位控制面框架"
 
 [modules]
@@ -25,6 +25,10 @@ optional = [
   "adapters/projects/openclaw",
   "docs",
 ]
+
+[templates]
+clawseat-creative = "templates/clawseat-creative.toml"
+clawseat-engineering = "templates/clawseat-engineering.toml"
 
 [entrypoints]
 openclaw_marketplace = "marketplace.json"

@@ -46,7 +46,7 @@ def test_install_profile_includes_patrol() -> None:
     assert 'id = "patrol"' in creative
     assert 'role = "patrol"' in creative
     assert 'right_seats = ["builder", "patrol", "designer"]' in creative
-    assert "monitor_max_panes = 5" in creative
+    assert "monitor_max_panes = 4" in creative
     assert "monitor_max_panes = 6" in engineering
 
 
