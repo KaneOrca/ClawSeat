@@ -26,20 +26,22 @@ def _assert_skill_links(root: Path, skills_home: Path, skills: tuple[str, ...]) 
         assert os.readlink(link) == str(root / "core" / "skills" / skill)
 
 
-def _assert_no_skill_links(skills_home: Path, skills: tuple[str, ...]) -> None:
+def _assert_tool_mirror_links(home: Path, skills_home: Path, skills: tuple[str, ...]) -> None:
     for skill in skills:
-        assert not (skills_home / skill).exists()
+        link = skills_home / skill
+        assert link.is_symlink()
+        assert os.readlink(link) == str(home / ".agents" / "skills" / skill)
 
 
-def test_codex_tier_registration_core_only(tmp_path: Path) -> None:
+def test_codex_tier_registration_mirrors_agents_ssot(tmp_path: Path) -> None:
     root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
     result = _run_install(root, home, py_stubs, project="t3codex", memory_tool="codex")
     assert result.returncode == 0, result.stderr
 
+    _assert_skill_links(root, home / ".agents" / "skills", (*_CORE_SKILLS, *_EXTENDED_SKILLS))
     skills_home = home / ".codex" / "skills"
-    _assert_skill_links(root, skills_home, _CORE_SKILLS)
-    _assert_no_skill_links(skills_home, _EXTENDED_SKILLS)
-    assert "Extended skills skipped for codex" in result.stdout
+    _assert_tool_mirror_links(home, skills_home, (*_CORE_SKILLS, *_EXTENDED_SKILLS))
+    assert "Extended skills skipped" not in result.stdout
 
 
 def test_codex_tier_registration_removes_stale_extended_links(tmp_path: Path) -> None:
@@ -52,8 +54,7 @@ def test_codex_tier_registration_removes_stale_extended_links(tmp_path: Path) ->
     result = _run_install(root, home, py_stubs, project="t3stale", memory_tool="codex")
     assert result.returncode == 0, result.stderr
 
-    _assert_skill_links(root, skills_home, _CORE_SKILLS)
-    _assert_no_skill_links(skills_home, _EXTENDED_SKILLS)
+    _assert_tool_mirror_links(home, skills_home, (*_CORE_SKILLS, *_EXTENDED_SKILLS))
 
 
 def test_claude_tier_registration_core_and_extended(tmp_path: Path) -> None:
@@ -63,15 +64,16 @@ def test_claude_tier_registration_core_and_extended(tmp_path: Path) -> None:
 
     skills_home = home / ".agents" / "skills"
     _assert_skill_links(root, skills_home, (*_CORE_SKILLS, *_EXTENDED_SKILLS))
+    _assert_tool_mirror_links(home, home / ".claude" / "skills", (*_CORE_SKILLS, *_EXTENDED_SKILLS))
     assert "Extended skills skipped" not in result.stdout
 
 
-def test_gemini_tier_registration_core_only(tmp_path: Path) -> None:
+def test_gemini_tier_registration_mirrors_agents_ssot(tmp_path: Path) -> None:
     root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
     result = _run_install(root, home, py_stubs, project="t3gemini", memory_tool="gemini")
     assert result.returncode == 0, result.stderr
 
+    _assert_skill_links(root, home / ".agents" / "skills", (*_CORE_SKILLS, *_EXTENDED_SKILLS))
     skills_home = home / ".gemini" / "skills"
-    _assert_skill_links(root, skills_home, _CORE_SKILLS)
-    _assert_no_skill_links(skills_home, _EXTENDED_SKILLS)
-    assert "Extended skills skipped for gemini" in result.stdout
+    _assert_tool_mirror_links(home, skills_home, (*_CORE_SKILLS, *_EXTENDED_SKILLS))
+    assert "Extended skills skipped" not in result.stdout

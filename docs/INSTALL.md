@@ -516,6 +516,31 @@ agent_admin session start-project "$FOO" --reset
 
 ---
 
+## Multi-worktree machines
+
+If you maintain multiple ClawSeat worktrees (for example `/Users/you/ClawSeat`
+and `/Users/you/coding/ClawSeat`), `install.sh` automatically detects the
+freshest install code root. A worktree on `main` is preferred, and detached or
+stale worktrees are skipped with a warning so ClawSeat skill symlinks do not
+point at old SKILL content.
+
+To override autodetection:
+
+```bash
+bash scripts/install.sh --project myproject --force-repo-root /Users/you/coding/ClawSeat
+```
+
+`--repo-root` still means the target project repository. Use
+`--force-repo-root` only when you need to override the ClawSeat install code
+root.
+
+During install, `~/.agents/skills/` is the skill symlink source of truth.
+`install.sh` mirrors that directory into `~/.claude/skills/`,
+`~/.gemini/skills/`, and `~/.codex/skills/` so every supported tool can
+discover the same ClawSeat-visible skill set.
+
+---
+
 ## Failure modes (consolidated)
 
 | Code | Symptom | Recovery |
