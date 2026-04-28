@@ -58,6 +58,9 @@ class ParserHooks:
     cmd_engineer_refresh_workspace: Callable[[Any], int]
     cmd_engineer_regenerate_workspace: Callable[[Any], int]
     cmd_engineer_secret_set: Callable[[Any], int]
+    cmd_task_create: Callable[[Any], int]
+    cmd_task_list_pending: Callable[[Any], int]
+    cmd_task_update_status: Callable[[Any], int]
     cmd_tui: Callable[[Any], int]
     # P1 layered-model (see docs/schemas/v0.4-layered-model.md):
     cmd_project_koder_bind: Callable[[Any], int]
@@ -584,6 +587,27 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     secret.add_argument("key")
     secret.add_argument("value")
     secret.set_defaults(func=hooks.cmd_engineer_secret_set)
+
+    task = sub.add_parser("task")
+    task_sub = task.add_subparsers(dest="task_command", required=True)
+
+    task_create = task_sub.add_parser("create")
+    task_create.add_argument("task_id")
+    task_create.add_argument("--project", required=True)
+    task_create.add_argument("--workflow-template", default="")
+    task_create.set_defaults(func=hooks.cmd_task_create)
+
+    task_list_pending = task_sub.add_parser("list-pending")
+    task_list_pending.add_argument("--project", required=True)
+    task_list_pending.add_argument("--owner-role", required=True)
+    task_list_pending.set_defaults(func=hooks.cmd_task_list_pending)
+
+    task_update_status = task_sub.add_parser("update-status")
+    task_update_status.add_argument("task_id")
+    task_update_status.add_argument("step_name")
+    task_update_status.add_argument("status", choices=["pending", "in_progress", "done", "blocked"])
+    task_update_status.add_argument("--project", required=True)
+    task_update_status.set_defaults(func=hooks.cmd_task_update_status)
 
     identity = sub.add_parser("identity")
     identity_sub = identity.add_subparsers(dest="identity_command", required=True)

@@ -79,6 +79,10 @@ from agent_admin_resolve import ResolveHandlers, ResolveHooks
 from agent_admin_session import SessionHooks, SessionService, SessionStartError
 from agent_admin_store import StoreHandlers, StoreHooks
 from agent_admin_switch import SwitchHandlers, SwitchHooks
+from agent_admin_task import TaskCommandError
+from agent_admin_task import create_task as task_create
+from agent_admin_task import list_pending as task_list_pending
+from agent_admin_task import update_status as task_update_status
 from agent_admin_template import TemplateHandlers, TemplateHooks
 from agent_admin_tui import TuiHooks, run_tui_app
 from agent_admin_window import (
@@ -1155,6 +1159,18 @@ def cmd_engineer_secret_set(args: argparse.Namespace) -> int:
     return CRUD_HANDLERS.engineer_secret_set(args)
 
 
+def cmd_task_create(args: argparse.Namespace) -> int:
+    return task_create(args)
+
+
+def cmd_task_list_pending(args: argparse.Namespace) -> int:
+    return task_list_pending(args)
+
+
+def cmd_task_update_status(args: argparse.Namespace) -> int:
+    return task_update_status(args)
+
+
 def cmd_window_config_monitor(args: argparse.Namespace) -> int:
     project = load_project_or_current(args.project)
     engineers = [normalize_name(item) for item in args.engineers.split(",") if item.strip()]
@@ -1227,6 +1243,9 @@ PARSER_HOOKS = ParserHooks(
     cmd_engineer_refresh_workspace=cmd_engineer_refresh_workspace,
     cmd_engineer_regenerate_workspace=cmd_engineer_regenerate_workspace,
     cmd_engineer_secret_set=cmd_engineer_secret_set,
+    cmd_task_create=cmd_task_create,
+    cmd_task_list_pending=cmd_task_list_pending,
+    cmd_task_update_status=cmd_task_update_status,
     cmd_tui=cmd_tui,
     cmd_project_koder_bind=cmd_project_koder_bind,
     cmd_machine_memory_show=cmd_machine_memory_show,
@@ -1291,7 +1310,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(remaining)
     try:
         return args.func(args)
-    except (AgentAdminError, AgentAdminWindowError, SessionStartError) as exc:
+    except (AgentAdminError, AgentAdminWindowError, SessionStartError, TaskCommandError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
