@@ -198,9 +198,9 @@ design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
-  "~/.gstack/repos/gstack/.agents/skills/gstack-design-review/SKILL.md",
-  "~/.gstack/repos/gstack/.agents/skills/gstack-design-shotgun/SKILL.md",
-  "~/.gstack/repos/gstack/.agents/skills/gstack-design-html/SKILL.md",
+  "~/.claude/skills/design-review/SKILL.md",
+  "~/.claude/skills/design-shotgun/SKILL.md",
+  "~/.claude/skills/design-html/SKILL.md",
 ]
 role_details = [
   "visual design seat powered by Gemini; handles UI/UX design and visual review tasks",

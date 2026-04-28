@@ -16,7 +16,7 @@ right_fill_order = "col-major"
 home_mode = "real"
 dangerously_skip_permissions = true
 window_mode = "split-2"
-monitor_max_panes = 5
+monitor_max_panes = 4
 open_detail_windows = false
 workspace_tools = [
   "TOOLS/memory.md",

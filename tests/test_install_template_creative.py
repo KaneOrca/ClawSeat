@@ -17,10 +17,10 @@ def _creative() -> dict:
         return tomllib.load(handle)
 
 
-def test_creative_template_has_five_memory_primary_seats() -> None:
+def test_creative_template_has_five_seats_and_four_worker_panes() -> None:
     data = _creative()
     assert data["defaults"]["window_mode"] == "split-2"
-    assert data["defaults"]["monitor_max_panes"] == 5
+    assert data["defaults"]["monitor_max_panes"] == 4
     assert [seat["id"] for seat in data["engineers"]] == ["memory", "planner", "builder", "patrol", "designer"]
 
 

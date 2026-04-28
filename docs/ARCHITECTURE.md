@@ -230,17 +230,17 @@ Recent structural changes:
 
 ### Project Templates
 
-Three built-in project templates in `templates/`:
+Two built-in project templates in `templates/`:
 
-| Template | Seats | Use case |
-|----------|-------|----------|
-| `clawseat-creative` | memory, planner (claude/deepseek), builder (codex/openai), qa (claude/minimax), designer (gemini) | v2 default self-contained creative project |
-| `clawseat-engineering` | memory, planner (claude), builder (codex/openai), designer (gemini) | Engineering with specialised tools |
-| `clawseat-creative` | memory, planner (claude), builder (codex/openai), designer (gemini) | Fiction / screenplay / creative work |
+| Template | Seats | Count |
+|----------|-------|-------|
+| `clawseat-creative` | memory planner builder patrol designer | 5 |
+| `clawseat-engineering` | memory planner builder reviewer patrol designer | 6 |
 
 **Creative template seat responsibilities:**
 - `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure
 - `builder` (codex/oauth): workflow classification — cs-classify / cs-classify-short; delivers classification to designer
+- `patrol` (claude/minimax): scheduled or planner-requested evidence collection; reports without modifying code
 - `designer` (gemini/oauth): long-form writing (cs-write) + rubric scoring (cs-score) + review — issues APPROVED / CHANGES_REQUESTED verdicts to planner
 
 **Capability skill layer** (`core/skills/cs-*/`): tool-agnostic interface contracts (WHAT, not HOW). cs-classify routes long-form vs short-form; cs-structure runs the Hollywood Writers Room (Agent Teams); cs-write executes long-form content; cs-score applies rubric-based scoring. Workflow composition is the planner's responsibility, not the skills'.

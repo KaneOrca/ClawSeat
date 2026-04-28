@@ -248,12 +248,50 @@ Additional flags:
 # Install for a different project's repo
 bash scripts/install.sh --project myproject --repo-root /path/to/myproject
 
+# Override the ClawSeat install code root on multi-worktree machines
+bash scripts/install.sh --project myproject --force-repo-root /Users/you/ClawSeat
+
+# Choose a non-Claude primary memory tool
+bash scripts/install.sh --memory-tool codex --memory-model gpt-5.2
+bash scripts/install.sh --memory-tool gemini
+
+# Force every API-auth worker seat onto the same provider family
+bash scripts/install.sh --all-api-provider minimax
+
+# Install the optional patrol cron entries
+bash scripts/install.sh --enable-auto-patrol
+
+# Mirror every bundled ClawSeat skill into all supported tool homes
+bash scripts/install.sh --load-all-skills
+
 # Disable Feishu notifications (no lark-cli required)
 CLAWSEAT_FEISHU_ENABLED=0 bash scripts/install.sh --project myproj
 
 # Forget remembered per-seat harness choices from a previous run
 bash scripts/install.sh --reset-harness-memory
 ```
+
+### CLI Reference
+
+| Flag | Meaning |
+|------|---------|
+| `--project <name>` | Install or reinstall a named ClawSeat project. Defaults to `install`. |
+| `--repo-root <path>` | Set the target project repository used as seat cwd. |
+| `--force-repo-root <path>` | Override the ClawSeat install code root when auto-detecting multiple worktrees is wrong. |
+| `--template <clawseat-creative\|clawseat-engineering>` | Select the roster template. Creative has 5 seats; engineering has 6. |
+| `--memory-tool <claude\|codex\|gemini>` | Override the primary memory seat tool. Non-Claude tools skip Claude provider selection. |
+| `--memory-model <model>` | Set the memory model when the selected memory tool supports an explicit model. |
+| `--provider <mode\|n>` | Select the memory-seat provider by detected candidate number or mode. |
+| `--all-api-provider <provider>` | Override every API-auth worker seat provider. Supported modes match the parser: `minimax`, `deepseek`, `ark`, `xcode-best`, `anthropic_console`, `custom_api`. |
+| `--base-url <url> --api-key <key> [--model <name>]` | Force a custom Claude-compatible API provider for the memory seat. |
+| `--api-key <key> [--model <name>]` | Used with `--provider minimax\|deepseek\|ark\|xcode-best\|anthropic_console` to force that provider explicitly. |
+| `--reinstall` / `--force` | Rebuild an existing project instead of exiting at `phase=ready`. A following bare word is treated as the project name for compatibility. |
+| `--uninstall <project>` | Remove the project from the projects registry. |
+| `--enable-auto-patrol` | Install optional daily/weekly patrol cron entries. Without it, stale patrol LaunchAgents are removed during preflight. |
+| `--load-all-skills` | Install all bundled ClawSeat skills for non-Claude tools too. Claude always receives the full set. |
+| `--dry-run` | Print planned actions without mutating host state where supported. |
+| `--reset-harness-memory` | Delete remembered per-seat harness choices and exit. |
+| `--help` / `-h` | Print the parser-owned usage line. |
 
 Security note: `--api-key` is visible in `ps` output and shell history. Prefer:
 
@@ -267,27 +305,42 @@ Use `--base-url + --api-key` only for CI / agent automation / no-env / no-tty ca
 
 What `install.sh` does in order:
 
-1. Detect host OS and install / verify `tmux`, `iTerm2` (macOS), Python ≥3.11, `claude` binary.
-2. Run `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
+1. Parse flags, resolve the real user HOME, optionally pick the freshest
+   ClawSeat worktree, and load the install library modules from
+   `scripts/install/lib/`.
+2. Resolve Python ≥3.11 before importing anything that needs `tomllib`.
+3. Resolve the project template and roster. `clawseat-creative` renders
+   `memory, planner, builder, patrol, designer`; `clawseat-engineering` adds
+   `reviewer`.
+4. Run legacy path migration and seat liveness reconciliation.
+5. Verify host dependencies and run
+   `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
    → produces `machine/{credentials,network,openclaw,github,current_context}.json`.
-3. Pick memory provider from `credentials.json` by heuristic unless explicit
-   `--base-url + --api-key` already short-circuited detection:
-   Minimax → DashScope → Anthropic → prompt operator for `base_url + api_key`.
-4. Write provider env under `~/.agents/tasks/install/`.
-5. Render the bootstrap brief under
-   `~/.agents/tasks/install/patrol/handoffs/` (substitute `${PROJECT_NAME}`, `${CLAWSEAT_ROOT}`).
-6. Launch only `install-memory` via `core/launchers/agent-launcher.sh`
+6. Select the primary memory provider:
+   `--memory-tool codex|gemini` skips Claude provider selection; Claude memory
+   builds candidates from `credentials.json` in this order: `MINIMAX_API_KEY`;
+   `ANTHROPIC_AUTH_TOKEN` classified by base URL as minimax, deepseek,
+   xcode-best, or custom; `ANTHROPIC_API_KEY`; `CLAUDE_CODE_OAUTH_TOKEN`;
+   `DASHSCOPE_API_KEY`; `ARK_API_KEY`; host OAuth. Explicit `--base-url
+   --api-key`, `--provider <mode>`, and `--provider <n>` override the detected
+   default. If no candidate is usable in a non-tty run, install exits with
+   `INTERACTIVE_REQUIRED`.
+7. Write the selected memory provider env under
+   `~/.agents/tasks/<project>/memory-provider.env`.
+8. Render the bootstrap brief under
+   `~/.agents/tasks/<project>/patrol/handoffs/memory-bootstrap.md` with
+   template, primary-seat, and pending-seat substitutions.
+9. Launch only `<project>-memory` via `core/launchers/agent-launcher.sh`
    with sandbox HOME isolation.
-7. Bootstrap the project roster via `agent_admin project bootstrap`:
-   write project / engineer / session records for
-   `memory, planner, builder, designer`, but do **not** start
-   their tmux seats yet.
-8. Launch the per-project workers window via `core/scripts/iterm_panes_driver.py`
-   (iTerm2 native panes — **not** nested tmux): the planner pane is primary on
-   the left; builder and designer attach on the right once memory spawns them.
-9. Ensure the shared memories window exists with one tab per project memory
-   session.
-10. Write the Phase-A kickoff prompt under `patrol/handoffs/` and print the
+10. Bootstrap or migrate the project profile with `agent_admin project bootstrap`,
+    seed secrets, install skill mirrors, privacy hooks, and project registry
+    entries.
+11. Launch the per-project workers window via `core/scripts/iterm_panes_driver.py`
+    (iTerm2 native panes — **not** nested tmux): the planner pane is primary on
+    the left; the other workers attach once memory spawns them.
+12. Ensure the shared memories window exists with one tab per project memory
+    session.
+13. Write the Phase-A kickoff prompt under `patrol/handoffs/` and print the
     operator banner with confirm-then-dispatch choices.
 
 Verify:
@@ -300,7 +353,7 @@ done
 for s in install-memory; do
   tmux has-session -t "$s" || echo "MISSING $s"
 done
-for s in install-planner install-builder install-designer; do
+for s in install-planner install-builder install-patrol install-designer; do
   tmux has-session -t "$s" 2>/dev/null && echo "UNEXPECTED $s"
 done
 ```
@@ -308,11 +361,14 @@ done
 Failure codes:
 
 ```text
-PREREQ_MISSING: <tmux|iterm2|python311|claude>
-ENV_SCAN_FAILED: expected ~/.agents/memory/machine/*.json missing
-PROVIDER_NO_KEY: no usable provider key and operator did not supply one
-GRID_LAUNCH_FAILED: memory session or lazy workers window failed to appear
-ITERM_DRIVER_FAIL: iTerm pane driver failed to open the workers or memories window
+MISSING_PYTHON311: no supported Python >= 3.11 found
+INVALID_PYTHON_BIN: PYTHON_BIN was set but is missing or too old
+PREFLIGHT_FAILED: bootstrap preflight returned HARD_BLOCKED or failed
+ENV_SCAN_INCOMPLETE: expected ~/.agents/memory/machine/*.json missing
+INTERACTIVE_REQUIRED: provider selection needs a tty when auto-detection is insufficient
+PROVIDER_NOT_FOUND: requested provider mode/candidate was not detected
+ITERM_DRIVER_FAILED: iTerm pane driver timed out or exited non-zero
+ITERM_LAYOUT_FAILED: iTerm pane driver returned a non-ok layout payload
 ```
 
 `install.sh` ends by printing:
@@ -343,7 +399,7 @@ Memory executes Phase-A in order:
 | B2-verify-memory | `tmux has-session -t <project>-memory`; relaunch once if dead. | Memory seat alive. |
 | B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
 | B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
-| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker in `planner, builder, designer`: ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
+| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`planner, builder, patrol, designer`, plus `reviewer` for engineering): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
 | B5-verify-feishu-binding | Read project binding metadata from `~/.agents/projects/install/project.toml` / `project-local.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
 | B6-smoke | If `feishu_group_id` set, memory triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, memory runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<memory + workers>`. |
@@ -362,7 +418,7 @@ Verify:
 ```bash
 grep -q '^phase=ready$' ~/.agents/tasks/install/STATUS.md
 grep -q '^providers=' ~/.agents/tasks/install/STATUS.md
-for s in install-memory install-planner install-builder install-designer; do
+for s in install-memory install-planner install-builder install-patrol install-designer; do
   tmux has-session -t "$s" || echo "MISSING $s"
 done
 ```
@@ -439,7 +495,7 @@ Reversing the overlay: restore from backups in `<workspace>/.backup-koder-overla
 
 ClawSeat supports multiple concurrent projects (sessions prefixed `<project>-<seat>`).
 
-### Create a new engineering project (default template)
+### Create a new project (default creative template)
 
 ```bash
 bash scripts/install.sh --project <new-name>
@@ -452,14 +508,15 @@ hood, so the same lazy-spawn install flow works for additional projects too.
 
 ### Create a creative project (clawseat-creative template)
 
-For fiction, screenplay, or other creative work — uses a 4-seat roster
-(memory / planner:claude / builder:codex / designer:gemini):
+For fiction, screenplay, or other creative work — uses a 5-seat roster
+(memory / planner:claude / builder:codex / patrol:claude / designer:gemini):
 
 | Seat | Tool | Role |
 |------|------|------|
 | memory | claude/oauth | lifecycle ops, patrol |
 | planner | claude/oauth | planning, workflow orchestration, unit decomposition |
 | builder | codex/oauth | workflow classification (cs-classify / cs-classify-short) |
+| patrol | claude/api | scheduled or planner-requested verification evidence |
 | designer | gemini/oauth | long-form writing (cs-write), rubric scoring (cs-score), creative review (APPROVED / CHANGES_REQUESTED) |
 
 ```bash
@@ -484,7 +541,16 @@ agent_admin project bootstrap \
 agent_admin project use myproject
 ```
 
-For an engineering team project with codex builder + gemini designer:
+For an engineering team project, use the 6-seat engineering template:
+
+| Seat | Tool | Role |
+|------|------|------|
+| memory | claude/oauth | lifecycle ops and dispatch |
+| planner | claude/api | planning and chain-level coordination |
+| builder | codex/oauth | implementation |
+| reviewer | claude/oauth | independent code review |
+| patrol | claude/api | verification and evidence collection |
+| designer | gemini/oauth | UI/UX design and visual review |
 
 ```bash
 agent_admin project bootstrap \
@@ -543,14 +609,50 @@ discover the same ClawSeat-visible skill set.
 
 ## Failure modes (consolidated)
 
+Common install-script failures:
+
 | Code | Symptom | Recovery |
 |------|---------|----------|
-| `INSTALL_BROKEN` | repo missing or `scripts/install.sh` absent | reclone or restore install entrypoint |
-| `PREREQ_MISSING` | tmux / iTerm2 / Python 3.11 / claude missing | install the dep, rerun Step 2 |
-| `ENV_SCAN_FAILED` | machine JSON files missing | rerun Step 2; debug `scan_environment.py` if repeatable |
-| `PROVIDER_NO_KEY` | no provider key, operator skipped prompt | supply a valid key, rerun Step 2 |
-| `GRID_LAUNCH_FAILED` | install-* sessions missing | rerun Step 2 |
-| `ITERM_DRIVER_FAIL` | pane driver error | verify iTerm2 + Python SDK, rerun Step 2 |
+| `MISSING_PYTHON311` / `INVALID_PYTHON_BIN` | Python is absent, too old, or `PYTHON_BIN` points at an unsupported executable. | Install/use Python 3.11+ and rerun Step 2. |
+| `PREFLIGHT_FAILED` | bootstrap preflight found a hard block. | Apply the printed fix command, then rerun Step 2. |
+| `ENV_SCAN_INCOMPLETE` | a required `~/.agents/memory/machine/*.json` scan artifact is missing. | Rerun Step 2; inspect `scan_environment.py` output if repeatable. |
+| `INTERACTIVE_REQUIRED` | provider selection needs input but stdin is not a tty. | Pass `--provider <n|mode>` or `--base-url --api-key`. |
+| `PROVIDER_NOT_FOUND` / `INVALID_PROVIDER_CHOICE` | the requested provider mode or candidate number is not usable on this host. | Re-run without the override, pick a detected candidate, or supply explicit API flags. |
+| `ITERM2_PYTHON_MISSING` / `ITERM_DRIVER_FAILED` / `ITERM_LAYOUT_FAILED` | iTerm2 pane creation failed or returned a bad layout payload. | Verify iTerm2 automation and Python SDK access, then rerun Step 2. |
+| `TMUX_SESSION_CREATE_FAILED` / `TMUX_SESSION_DIED_AFTER_LAUNCH` | a seat tmux session failed during launch. | Inspect tmux stderr and the seat workspace, then restart the affected seat. |
+
+Full install-script error-code inventory from `scripts/install.sh` and
+`scripts/install/lib/*.sh`:
+
+| Source | Codes |
+|--------|-------|
+| `install.sh` | `COMMAND_FAILED`, `INVALID_FLAGS`, `INVALID_MEMORY_MODEL`, `INVALID_MEMORY_TOOL`, `INVALID_PROJECT` |
+| | `INVALID_REPO_ROOT`, `INVALID_TEMPLATE`, `UNKNOWN_FLAG` |
+| `lib/preflight.sh` | `ENV_SCAN_INCOMPLETE`, `INVALID_PYTHON_BIN`, `MISSING_PYTHON311`, `PREFLIGHT_FAILED` |
+| `lib/project.sh` | `AGENT_ADMIN_MISSING`, `BRIEF_CHMOD_FAILED`, `GUIDE_CHMOD_FAILED`, `GUIDE_DIR_FAILED`, `INVALID_PROJECT` |
+| | `KICKOFF_CHMOD_FAILED`, `KICKOFF_DIR_FAILED`, `KICKOFF_WRITE_FAILED`, `PROJECTS_REGISTRY_MISSING` |
+| | `PROJECT_BOOTSTRAP_FAILED`, `PROJECT_LOCAL_CHMOD_FAILED`, `PROJECT_LOCAL_DIR_FAILED` |
+| | `PROJECT_PROFILE_BACKUP_FAILED`, `PROJECT_PROFILE_MIGRATE_FAILED`, `QA_ENGINEER_CREATE_FAILED` |
+| | `TEMPLATE_CHMOD_FAILED`, `TEMPLATE_DIR_CREATE_FAILED`, `TEMPLATE_MISSING`, `TEMPLATE_ROOT_CREATE_FAILED` |
+| | `WAIT_SCRIPT_MISSING` |
+| `lib/provider.sh` | `INTERACTIVE_REQUIRED`, `INVALID_PROVIDER_CHOICE`, `PROVIDER_ENV_CHMOD_FAILED`, `PROVIDER_ENV_DIR_FAILED` |
+| | `PROVIDER_ENV_WRITE_FAILED`, `PROVIDER_INPUT_MISSING`, `PROVIDER_MODE_UNKNOWN`, `PROVIDER_NOT_FOUND` |
+| `lib/secrets.sh` | `DEEPSEEK_SECRET_CHMOD_FAILED`, `DEEPSEEK_SECRET_DIR_FAILED`, `DEEPSEEK_SECRET_WRITE_FAILED` |
+| | `PRIVACY_KB_CHMOD_FAILED`, `PRIVACY_KB_DIR_FAILED`, `PRIVACY_KB_WRITE_FAILED`, `PROJECT_SECRET_CHMOD_FAILED` |
+| | `PROJECT_SECRET_DIR_FAILED`, `PROJECT_SECRET_WRITE_FAILED`, `PROVIDER_MODE_UNKNOWN` |
+| `lib/skills.sh` | `PRIVACY_HOOK_CHMOD_FAILED`, `PRIVACY_HOOK_DIR_FAILED`, `PRIVACY_HOOK_PRESERVE_FAILED` |
+| | `PRIVACY_HOOK_WRITE_FAILED`, `SKILL_SYMLINK_DIR_FAILED`, `SKILL_SYMLINK_FAILED` |
+| `lib/window.sh` | `ITERM2_PYTHON_MISSING`, `ITERM_DRIVER_FAILED`, `ITERM_FOCUS_FAILED`, `ITERM_LAYOUT_FAILED` |
+| | `ITERM_MACOS_ONLY`, `MEMORY_PATROL_BOOTSTRAP_FAILED`, `MEMORY_PATROL_CHMOD_FAILED`, `MEMORY_PATROL_DIR_FAILED` |
+| | `MEMORY_PATROL_INVALID`, `MEMORY_PATROL_LAUNCHCTL_MISSING`, `MEMORY_PATROL_RENDER_FAILED` |
+| | `MEMORY_PATROL_TEMPLATE_MISSING`, `TMUX_CWD_CREATE_FAILED`, `TMUX_SESSION_CREATE_FAILED` |
+| | `TMUX_SESSION_DIED_AFTER_LAUNCH` |
+
+Phase-A and optional overlay failures are emitted by memory or helper scripts,
+not by `scripts/install.sh` itself:
+
+| Code | Symptom | Recovery |
+|------|---------|----------|
 | `B2-memory-dead` | memory seat dead | memory halts, reports |
 | `B2.5-bootstrap-failed` | machine.toml tenant write failed | check `~/.clawseat/` permissions |
 | `B3-binding-mismatch` | openclaw binding project mismatch | fix binding, retry Phase-A |

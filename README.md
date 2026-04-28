@@ -19,6 +19,9 @@ clawseat-<project>-workers
 │ planner main             │ builder              │
 │ 拆解 / 派工 / 合并         │ 写代码 / 跑测试       │
 │                          ├──────────────────────┤
+│                          │ patrol               │
+│                          │ 巡检 / 证据 / 回归    │
+│                          ├──────────────────────┤
 │                          │ designer             │
 │                          │ 视觉 / 交互 / 资源    │
 └──────────────────────────┴──────────────────────┘
@@ -45,8 +48,9 @@ clawseat-memories
 > use the directory as-is). Read `~/ClawSeat/docs/INSTALL.md` and follow
 > it. Ask me for every choice.
 
-九十秒后，你有四个 agent。memory 在 memories 窗口，planner / builder /
-designer 在 workers 窗口。各自住在沙箱里，互相说话。
+九十秒后，你有 5-6 个 seat（取决于模板）。memory 在 memories 窗口，
+planner / builder / patrol / designer 在 workers 窗口；engineering 模板
+再加 reviewer。各自住在沙箱里，互相说话。
 
 > **你看。它们干活。**
 
@@ -100,6 +104,8 @@ API，是一个 agent 学会了**做事的态度**。
 | memory | OpenClaw memory agent | gstack `/cs` 系列 | brainstorming / writing-plans / verification |
 | planner | OpenClaw planner agent | `/plan-eng-review` `/plan-ceo-review` | writing-plans / executing-plans / finishing-a-branch |
 | builder | OpenClaw builder agent | `/ship` `/investigate` `/land-and-deploy` | executing-plans / TDD / code-review × 2 / subagent-driven-dev |
+| reviewer | OpenClaw reviewer agent | `/review` | receiving-code-review / verification-before-completion |
+| patrol | OpenClaw patrol agent | scheduled evidence scans | verification-before-completion / systematic-debugging |
 | designer | OpenClaw designer agent | `/design-review` `/design-shotgun` | brainstorming |
 
 ---
@@ -204,7 +210,7 @@ license MIT，attribution 在 [`core/references/superpowers-borrowed/ATTRIBUTION
 
 **Q: 一个月烧多少 token？**
 
-四个 agent 同时活跃 ≈ 一个 Cursor Pro × 4。大头是 builder 和 planner。
+5-6 个 seat 同时活跃，成本取决于模板和 provider。大头是 builder 和 planner。
 建议 minimax-M2 这种国产 API 跑轻量 seat，Claude Opus 只给 memory + planner。
 混搭一天 $10–30 跑完整迭代。
 
