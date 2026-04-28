@@ -76,3 +76,25 @@ def test_skill_catalog_lazy_cache_works(tmp_path: Path) -> None:
     )
     assert second.returncode == 0, second.stderr
     assert json.loads(second.stdout) == first_payload
+
+
+def test_skill_catalog_no_duplicates_md_and_json() -> None:
+    """Both skill-catalog.md and JSON cache have no duplicate skill entries."""
+    cache = Path("~/.agents/cache/skill-catalog.json").expanduser()
+    if cache.exists():
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        keys = [(skill["name"], skill["source"]) for skill in data.get("skills", [])]
+        assert len(keys) == len(set(keys)), "JSON cache has duplicate skill entries"
+
+    md = _CATALOG.read_text(encoding="utf-8")
+    rows = [
+        line
+        for line in md.splitlines()
+        if line.startswith("| ") and not line.startswith("| ---") and not line.startswith("| Skill |")
+    ]
+    keys: list[tuple[str, str]] = []
+    for row in rows:
+        parts = [part.strip() for part in row.strip("|").split("|")]
+        if len(parts) >= 2:
+            keys.append((parts[0], parts[1]))
+    assert len(keys) == len(set(keys)), "skill-catalog.md has duplicate skill entries"

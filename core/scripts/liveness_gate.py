@@ -42,8 +42,8 @@ def restart_seat(project: str, role: str, timeout_seconds: int = 60) -> bool:
     command = [
         sys.executable,
         str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"),
-        "session",
-        "start-engineer",
+        "window",
+        "open-engineer",
         role,
         "--project",
         project,

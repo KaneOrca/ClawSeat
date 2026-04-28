@@ -189,6 +189,10 @@ Restart evidence:
 - Record the restart command or helper used.
 - Notify the recovered hub with `consumed` or `escalation` as appropriate.
 
+> ⚠️ Restart command: MUST use `window open-engineer` (full tmux+iTerm chain).
+> `session start-engineer` only respawns tmux — iTerm stays attached to dead session.
+> See `core/scripts/agent_admin_commands.py::window_open_engineer` for implementation.
+
 ## 8. 派单/派工 boundary / 派单 / 派工 Boundary
 
 This is the rules-layer version of the protocol boundary.

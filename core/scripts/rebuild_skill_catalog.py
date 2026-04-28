@@ -66,6 +66,75 @@ def _write_cache(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def catalog_markdown_path() -> Path:
+    return REPO_ROOT / "core" / "references" / "skill-catalog.md"
+
+
+def _write_markdown_catalog(path: Path, payload: dict) -> None:
+    skills = payload.get("skills", [])
+    lines = [
+        "# Skill Catalog",
+        "",
+        "Generated foundation catalog for planner routing and skill discovery. Run "
+        "`python3 core/scripts/rebuild_skill_catalog.py --force --update-md` to refresh this snapshot and the lazy JSON cache at `~/.agents/cache/skill-catalog.json`.",
+        "",
+        "## Source Notes",
+        "",
+        "- `~/.agents/skills/` - ClawSeat project and machine workflow skills.",
+        "- `~/.claude/skills/` - gstack and local Claude skills.",
+        "- `~/.claude/plugins/marketplaces/` - Anthropic/Claude marketplace plugin docs.",
+        "- `core/references/superpowers-borrowed/` - imported engineering practice references.",
+        "",
+        f"Total unique entries in this catalog: {len(skills)}.",
+        "",
+        "| Skill | Source | Purpose | When to use | Command form |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for skill in skills:
+        source = str(skill.get("source", ""))
+        name = str(skill.get("name", ""))
+        description = str(skill.get("description", ""))
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(name),
+                    _md_cell(_source_label(source)),
+                    _md_cell(description),
+                    _md_cell(_when_to_use(source)),
+                    _md_cell(f"Skill: {name}"),
+                ]
+            )
+            + " |"
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _md_cell(value: str) -> str:
+    compact = re.sub(r"\s+", " ", value).strip()
+    compact = compact.replace("|", "\\|")
+    if len(compact) > 120:
+        compact = compact[:117].rstrip() + "..."
+    return compact
+
+
+def _source_label(source: str) -> str:
+    return {
+        "clawseat": "~/.agents/skills/",
+        "gstack": "~/.claude/skills/",
+        "marketplace": "~/.claude/plugins/marketplaces/",
+        "superpowers": "core/references/superpowers-borrowed/",
+    }.get(source, source)
+
+
+def _when_to_use(source: str) -> str:
+    if source == "clawseat":
+        return "ClawSeat seat workflow needs this role capability"
+    if source == "superpowers":
+        return "Planner or specialist needs a borrowed engineering practice"
+    return "Use when the matching workflow is requested"
+
+
 def _candidate_docs(root: Path, *, source: str) -> Iterable[Path]:
     if not root.exists():
         return []
@@ -192,8 +261,15 @@ def load_or_rebuild(*, force: bool = False) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Rebuild the ClawSeat skill catalog cache.")
     parser.add_argument("--force", action="store_true", help="ignore the 30 minute lazy cache TTL")
+    parser.add_argument(
+        "--update-md",
+        action="store_true",
+        help="also rewrite core/references/skill-catalog.md from rebuilt JSON cache",
+    )
     args = parser.parse_args()
-    payload = load_or_rebuild(force=args.force)
+    payload = load_or_rebuild(force=args.force or args.update_md)
+    if args.update_md:
+        _write_markdown_catalog(catalog_markdown_path(), payload)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
