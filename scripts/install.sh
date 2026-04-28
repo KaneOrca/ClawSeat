@@ -205,7 +205,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -214,8 +214,8 @@ PY
   fi
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-engineering|clawseat-creative) ;;
-    *) die 2 INVALID_TEMPLATE "--template must be clawseat-creative | clawseat-engineering, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+    clawseat-engineering|clawseat-creative|clawseat-solo) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-creative | clawseat-engineering | clawseat-solo, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
   if [[ -n "$MEMORY_TOOL" ]]; then
     case "$MEMORY_TOOL" in
@@ -310,7 +310,7 @@ main() {
   # v2 split window topology (per RFC-001 §3): one workers window per project +
   # one shared memories window across all projects (rebuilt on each install).
   if [[ "$PRIMARY_SEAT_ID" == "memory" ]]; then
-    note "Step 7a: open per-project workers window (planner main + ${#PENDING_SEATS[@]} workers)"
+    note "Step 7a: open per-project workers window (${#PENDING_SEATS[@]} template workers)"
     open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
 
     [[ ! -f "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" ]] || bash "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" || true

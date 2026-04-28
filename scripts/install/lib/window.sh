@@ -306,69 +306,85 @@ print(json.dumps({"title": f"clawseat-{project}", "panes": panes}, ensure_ascii=
 PY
 }
 
-# v2 workers_payload: planner main left 50% + N-1 workers right grid (max 2 rows, col-major fill)
+# v2 workers_payload: template-defined main worker left 50% + N-1 workers right grid (max 2 rows, col-major fill)
 # Recipe per RFC-001 §3:
-#   N_workers=1 (planner only): []
-#   N_workers=2 (planner+1):    [(0,True)]
-#   N_workers=3 (planner+2):    [(0,True), (1,False)]                            ← v2 minimal
-#   N_workers=4 (planner+3):    [(0,True), (1,True), (1,False)]
-#   N_workers=5 (planner+4):    [(0,True), (1,True), (1,False), (2,False)]
+#   N_workers=1 (main only): []
+#   N_workers=2 (main+1):    [(0,True)]
+#   N_workers=3 (main+2):    [(0,True), (1,False)]                            ← v2 minimal
+#   N_workers=4 (main+3):    [(0,True), (1,True), (1,False)]
+#   N_workers=5 (main+4):    [(0,True), (1,True), (1,False), (2,False)]
 
 workers_payload() {
-  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "${PENDING_SEATS[@]}" <<'PY'
+  "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml" "${PENDING_SEATS[@]}" <<'PY'
 import json
 import shlex
 import sys
+from pathlib import Path
 
-project, wait_script = sys.argv[1], sys.argv[2]
-seats = sys.argv[3:]  # PENDING_SEATS minus PRIMARY_SEAT_ID
-# Locate planner — must be first non-primary worker per minimal template
-if "planner" not in seats:
-    raise SystemExit("workers_payload requires 'planner' in seats list")
-right_seats = [s for s in seats if s != "planner"]
-n_total = 1 + len(right_seats)
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+project, wait_script, template_path = sys.argv[1], sys.argv[2], Path(sys.argv[3])
+seats = sys.argv[4:]  # PENDING_SEATS minus PRIMARY_SEAT_ID
+if not seats:
+    raise SystemExit("workers_payload requires at least one worker seat")
+
+layout = {}
+if template_path.is_file():
+    with template_path.open("rb") as fh:
+        data = tomllib.load(fh)
+    layout = data.get("window_layout", {}).get("workers_grid", {})
+
+main_seat = str(layout.get("left_main_seat") or ("planner" if "planner" in seats else seats[0]))
+if main_seat not in seats:
+    raise SystemExit(f"workers_payload left_main_seat {main_seat!r} is not in seats list")
+
+configured_right = [str(seat) for seat in layout.get("right_seats", []) if str(seat) in seats and str(seat) != main_seat]
+remaining = [seat for seat in seats if seat != main_seat and seat not in configured_right]
+right_seats = configured_right + remaining
 
 # Build right-side recipe with max-2-rows, col-major fill
 def right_recipe(n_right: int) -> list[list]:
     """Returns split steps relative to pane indices in the COMBINED layout
-    (planner is pane 0; right starts as pane 1 after first vertical split)."""
+    (main worker is pane 0; right starts as pane 1 after first vertical split)."""
     if n_right == 0: return []
-    if n_right == 1: return []  # right side is single pane (after the planner-vs-right split)
+    if n_right == 1: return []  # right side is single pane (after the main-vs-right split)
     if n_right == 2: return [[1, False]]  # split right horizontally
     # n_right >= 3: build top row of right, then horizontal splits per col
     cols = (n_right + 1) // 2
     splits: list[list[int]] = []
     # Build top row of right area: split pane 1 vertically (cols-1) times
     for col in range(1, cols):
-        # parent index in combined layout: 0=planner, 1=right_col0, 2=right_col1, ...
+        # parent index in combined layout: 0=main, 1=right_col0, 2=right_col1, ...
         splits.append([col, True])
     # Horizontal splits: each top right pane splits into bottom (col-major)
     cols_with_bottom = n_right - cols  # number of cols that need a bottom pane
     for col in range(cols_with_bottom):
-        splits.append([col + 1, False])  # +1 because pane 0 is planner
+        splits.append([col + 1, False])  # +1 because pane 0 is main
     return splits
 
-recipe = [[0, True]] + right_recipe(len(right_seats))  # First: planner | right split
+recipe = [[0, True]] + right_recipe(len(right_seats))  # First: main | right split
 
 # Pane order for payload (matches recipe creation order):
-#   pane[0] = planner (left)
+#   pane[0] = main worker (left)
 #   pane[1] = right col_0 top (first right worker)
 #   pane[2..cols] = top of subsequent right cols
 #   pane[cols+1..] = bottom row of right cols (col-major)
 #
-# NB: planner is a WORKER (spawned by memory during Phase-A), not the primary
-# seat. Its tmux session does NOT exist when install.sh opens this window —
-# memory will spawn it later. So planner pane MUST use wait-for-seat.sh
-# (polling) like the other workers; using direct `tmux attach` here was bug
-# #10 (workers_payload planner pane errored to zsh on session-not-found).
+# NB: workers are spawned by memory during Phase-A, not launched directly by
+# install.sh. Their tmux sessions may not exist yet, so every worker pane uses
+# wait-for-seat.sh instead of direct `tmux attach`.
 panes = [
     {
-        "label": "planner",
+        "label": main_seat,
         "command": "bash "
         + shlex.quote(wait_script)
         + " "
         + shlex.quote(project)
-        + " planner",
+        + " "
+        + shlex.quote(main_seat),
     },
 ]
 # Compute right-side fill order matching recipe pane creation

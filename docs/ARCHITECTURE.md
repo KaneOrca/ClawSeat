@@ -232,10 +232,11 @@ Recent structural changes:
 
 Two built-in project templates in `templates/`:
 
-| Template | Seats | Count |
-|----------|-------|-------|
-| `clawseat-creative` | memory planner builder patrol designer | 5 |
-| `clawseat-engineering` | memory planner builder reviewer patrol designer | 6 |
+| Template | Seats | Count | Use case |
+|----------|-------|-------|----------|
+| `clawseat-creative` | memory planner builder patrol designer | 5 | Default creative chain |
+| `clawseat-engineering` | memory planner builder reviewer patrol designer | 6 | Engineering chain with independent reviewer |
+| `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + designer (gemini oauth) | 3 | Creative-focused, memory SWALLOWs planner |
 
 **Creative template seat responsibilities:**
 - `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure

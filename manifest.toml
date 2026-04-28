@@ -29,6 +29,7 @@ optional = [
 [templates]
 clawseat-creative = "templates/clawseat-creative.toml"
 clawseat-engineering = "templates/clawseat-engineering.toml"
+clawseat-solo = { path = "templates/clawseat-solo.toml", description = "Minimal 3-seat creation-focused, all OAuth top models, memory SWALLOWs planner" }
 
 [entrypoints]
 openclaw_marketplace = "marketplace.json"
