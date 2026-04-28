@@ -170,7 +170,9 @@ cat "${CODEX_HOME:?}/config.toml"
 
 
 def test_agent_launcher_codex_exec_sites_all_include_yolo_flag() -> None:
-    text = _LAUNCHER.read_text(encoding="utf-8")
+    text = (_REPO / "core" / "launchers" / "runtimes" / "codex.sh").read_text(
+        encoding="utf-8"
+    )
     needle = 'exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir"'
 
     assert text.count(needle) == 4

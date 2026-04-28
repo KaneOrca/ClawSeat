@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 _REPO = Path(__file__).resolve().parents[1]
 _SCRIPTS = _REPO / "core" / "scripts"
-_LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
+_LAUNCHER_AUTH = _REPO / "core" / "launchers" / "helpers" / "auth.sh"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
@@ -25,7 +25,7 @@ import agent_admin_session as aas  # noqa: E402
 
 
 def _accepted_launcher_auth_pairs() -> set[tuple[str, str]]:
-    text = _LAUNCHER.read_text(encoding="utf-8")
+    text = _LAUNCHER_AUTH.read_text(encoding="utf-8")
     match = re.search(
         r'validate_auth_mode\(\)\s*\{.*?case "\$tool:\$auth" in(?P<body>.*?)\n\s*\*\)',
         text,
@@ -136,4 +136,3 @@ def test_launcher_secret_targets_keys_are_valid_tool_auth_pairs() -> None:
             f"LAUNCHER_SECRET_TARGETS key ({tool!r}, {launcher_auth!r}) is not "
             f"a valid launcher auth pair"
         )
-

@@ -19,6 +19,12 @@ _DETERMINISTIC_LAUNCHER_SOURCES = (
     "agent-launcher.sh",
     "agent-launcher-common.sh",
     "agent-launcher-fuzzy.py",
+    "helpers/auth.sh",
+    "helpers/env.sh",
+    "helpers/sandbox.sh",
+    "runtimes/claude.sh",
+    "runtimes/codex.sh",
+    "runtimes/gemini.sh",
 )
 _FORBIDDEN_INTERACTIVE_PATTERNS = (
     "osascript",
@@ -45,6 +51,12 @@ _FORBIDDEN_INTERACTIVE_PATTERNS = (
     "claude.sh",
     "codex.sh",
     "gemini.sh",
+    "helpers/auth.sh",
+    "helpers/env.sh",
+    "helpers/sandbox.sh",
+    "runtimes/claude.sh",
+    "runtimes/codex.sh",
+    "runtimes/gemini.sh",
 ])
 def test_no_hardcoded_user_paths(name):
     """Source must not reference /Users/ywf anywhere — clawseat is multi-user."""
@@ -143,8 +155,42 @@ def test_dry_run_prints_expected_fields(tool, auth):
     assert result.returncode == 0, f"dry-run failed: {result.stderr}"
     out = result.stdout
     assert f"tool:     {tool}" in out
+    assert f"auth:     {auth}" in out
     assert f"session:  {expected_session}" in out
     assert "dir:" in out
+
+
+@pytest.mark.parametrize("tool,auth", [
+    ("claude", "oauth"),
+    ("claude", "oauth_token"),
+    ("claude", "anthropic-console"),
+    ("claude", "minimax"),
+    ("claude", "deepseek"),
+    ("claude", "xcode"),
+    ("claude", "custom"),
+    ("codex", "chatgpt"),
+    ("codex", "xcode"),
+    ("codex", "custom"),
+    ("gemini", "oauth"),
+    ("gemini", "primary"),
+    ("gemini", "custom"),
+])
+def test_launcher_split_auth_modes_still_validate(tool, auth, tmp_path: Path):
+    """Every supported auth mode must still reach dry-run after the split."""
+    env = {"LAUNCHER_CUSTOM_API_KEY": "test-key"} if auth == "custom" else None
+
+    result = _run([
+        str(_LAUNCHERS / "agent-launcher.sh"),
+        "--tool", tool,
+        "--auth", auth,
+        "--session", "auth-smoke",
+        "--dir", str(tmp_path),
+        "--dry-run",
+    ], env=env)
+
+    assert result.returncode == 0, result.stderr
+    assert f"tool:     {tool}" in result.stdout
+    assert f"auth:     {auth}" in result.stdout
 
 
 def test_dry_run_does_not_double_suffix_explicit_session():
@@ -311,6 +357,40 @@ def test_helper_paths_are_self_relative():
     text = (_LAUNCHERS / "agent-launcher.sh").read_text()
     assert 'HELPER="$LAUNCHER_DIR/agent-launcher-common.sh"' in text
     assert 'DISCOVER_HELPER="$LAUNCHER_DIR/agent-launcher-discover.py"' in text
+
+
+def test_launcher_bash_source_resolution_from_arbitrary_cwd(tmp_path: Path):
+    result = _run([
+        "bash",
+        "-lc",
+        (
+            f"cd {tmp_path} && "
+            "CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY=1 "
+            f"source {str(_LAUNCHERS / 'agent-launcher.sh')!r} && "
+            'printf "%s\\n" "$LAUNCHER_DIR" && '
+            "declare -F run_claude_runtime >/dev/null && "
+            "declare -F seed_user_tool_dirs >/dev/null"
+        ),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(_LAUNCHERS)
+
+
+def test_launcher_helper_bash_source_resolution_from_arbitrary_cwd(tmp_path: Path):
+    result = _run([
+        "bash",
+        "-lc",
+        (
+            f"cd {tmp_path} && "
+            f"source {str(_LAUNCHERS / 'helpers' / 'env.sh')!r} && "
+            'printf "%s\\n" "$LAUNCHER_DIR" && '
+            "declare -F launcher_config_value >/dev/null"
+        ),
+    ])
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(_LAUNCHERS)
 
 
 # ─────────────────────────────────────────────────────────────────────
