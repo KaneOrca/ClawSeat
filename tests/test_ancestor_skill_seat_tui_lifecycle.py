@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
+_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
 
 
 def test_ancestor_skill_documents_seat_tui_lifecycle() -> None:

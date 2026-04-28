@@ -7,7 +7,7 @@ _REPO = Path(__file__).resolve().parents[1]
 
 
 def test_memory_skill_requires_official_docs_kb_for_external_integrations() -> None:
-    text = (_REPO / "core" / "skills" / "clawseat-memory" / "SKILL.md").read_text(encoding="utf-8")
+    text = (_REPO / "core" / "references" / "memory-operations-policy.md").read_text(encoding="utf-8")
 
     assert "Official Documentation Gate" in text
     assert "~/.agents/memory/projects/<project>/findings/" in text

@@ -5,7 +5,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _SCRIPT = _REPO / "scripts" / "memory-brief-mtime-check.sh"
-_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
+_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
 _INSTALL = _REPO / "scripts" / "install.sh"
 _PROJECT_LIB = _REPO / "scripts" / "install" / "lib" / "project.sh"
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
+_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
 
 
 def test_ancestor_skill_canonicalizes_window_ops_through_agent_admin() -> None:

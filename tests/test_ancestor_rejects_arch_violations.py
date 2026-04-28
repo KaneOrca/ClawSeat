@@ -5,7 +5,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _BRIEF_TEMPLATE = _REPO / "core" / "templates" / "memory-bootstrap.template.md"
-_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
+_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
 
 
 def test_ancestor_brief_points_to_skill_section_11() -> None:
