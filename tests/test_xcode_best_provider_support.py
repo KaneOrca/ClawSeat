@@ -115,6 +115,8 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
             "clawseat-creative",
             "--all-api-provider",
             "xcode-best",
+            "--provider",
+            "1",
         ],
         input="1\n",
         capture_output=True,
@@ -131,6 +133,7 @@ def test_install_detects_xcode_best_candidate_and_auto_fills_base_url(tmp_path: 
             "TMUX_LOG_FILE": str(_tmux_log),
             "AGENT_ADMIN_LOG": str(agent_admin_log),
             "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+            "CLAWSEAT_TRUST_PROMPT_SLEEP_SECONDS": "0",
         },
         check=False,
     )

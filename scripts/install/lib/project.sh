@@ -4,34 +4,50 @@
 # callers may source install.sh from any current working directory.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+prompt_template_for_choice() {
+  case "${1:-1}" in
+    ""|1) printf '%s\n' "clawseat-creative" ;;
+    2) printf '%s\n' "clawseat-engineering" ;;
+    3) printf '%s\n' "clawseat-solo" ;;
+    *) return 1 ;;
+  esac
+}
+
+prompt_placeholder_for_template() {
+  case "$1" in
+    clawseat-creative)    printf '%s\n' "e.g. cartooner, artistic-tool" ;;
+    clawseat-engineering) printf '%s\n' "e.g. coding-project, webapp" ;;
+    clawseat-solo)        printf '%s\n' "e.g. minimal-solo, creative-side-project" ;;
+    *)                    printf '%s\n' "e.g. myproject, experiment-01" ;;
+  esac
+}
+
 prompt_kind_first_flow() {
-  # Skip when: non-TTY, or either flag was explicitly provided.
-  [[ -t 0 && -t 1 ]] || return 0
+  # Skip when either flag was explicitly provided.
   [[ "$_PROJECT_EXPLICIT" == "0" && "$_TEMPLATE_EXPLICIT" == "0" ]] || return 0
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    die 2 NON_TTY_NO_TEMPLATE \
+      "non-TTY environment detected; use --template <name>. Run: bash scripts/install.sh --help"
+  fi
 
   printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
   printf '\n选择项目类型 / Choose project mode:\n' >&2
   printf '  1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]\n' >&2
   printf '  2) 工程项目 (6 seat: + reviewer 独立审查)\n' >&2
+  printf '  3) 创作 minimal (3 seat: memory + builder + designer, all OAuth)\n' >&2
 
   local _kind=""
   while true; do
-    printf '选择 [1-2, Enter=1]: ' >&2
+    printf '选择 [1-3, Enter=1]: ' >&2
     read -r _kind < /dev/tty
-    [[ -z "$_kind" ]] && _kind="1"   # Enter == default beginner
-    case "$_kind" in
-      1) CLAWSEAT_TEMPLATE_NAME="clawseat-creative";    break ;;
-      2) CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"; break ;;
-      *) printf '请输入 1 或 2 (回车 = 1 创作项目)\n' >&2 ;;
-    esac
+    if CLAWSEAT_TEMPLATE_NAME="$(prompt_template_for_choice "$_kind")"; then
+      break
+    fi
+    printf '请输入 1、2 或 3 (回车 = 1 创作项目)\n' >&2
   done
 
   local _placeholder
-  case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-creative)    _placeholder="e.g. novel-scifi, series-drama, script-ep01" ;;
-    clawseat-engineering) _placeholder="e.g. api-service, web-frontend, mobile-app" ;;
-    *)                    _placeholder="e.g. myproject, experiment-01" ;;
-  esac
+  _placeholder="$(prompt_placeholder_for_template "$CLAWSEAT_TEMPLATE_NAME")"
 
   local _name="" _attempt=0
   while [[ $_attempt -lt 3 ]]; do

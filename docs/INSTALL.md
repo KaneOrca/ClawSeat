@@ -10,6 +10,11 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 
 That is the one canonical command. Everything else is internal plumbing.
 
+> Note: In sandbox environments (for example, agent-launcher), `~` may
+> resolve to a non-standard path. Use an absolute path such as
+> `/Users/ywf/coding/ClawSeat/` or your actual install location when commands
+> involving `~/ClawSeat/` behave unexpectedly.
+
 > Target executor: Claude Code (agent, not human).
 > This file is the install SSOT. `scripts/install.sh` owns host bootstrap and
 > runtime startup; once memory is prompt-ready, memory owns Phase-A.
@@ -52,6 +57,9 @@ You are invoked to install ClawSeat on this machine.
    `git clone https://github.com/KaneOrca/ClawSeat ~/ClawSeat`.
    Then read `~/ClawSeat/docs/INSTALL.md` (your <CLAWSEAT_ROOT>/docs/INSTALL.md)
    and execute it end-to-end.
+
+   Sandbox note: if `~` resolves inside an agent runtime, use the absolute
+   path `/Users/ywf/coding/ClawSeat/` or your actual ClawSeat checkout path.
 
 2. Install preferences (operator fills these in before running):
    - Project name:           <PROJECT_NAME>       (e.g. "install" for first-time setup)
@@ -225,7 +233,7 @@ cd "$CLAWSEAT_ROOT"
 bash scripts/install.sh
 ```
 
-> **交互模式（kind-first）**：如果未传 `--template` 和 `--project`，install.sh 会先问项目类型（创作 / 工程），再根据类型显示对应 placeholder 询问项目名。CI 环境（非 TTY）自动跳过交互，使用 `clawseat-creative` 模板和默认项目名；如需指定，传 `--project <name> --template <kind>`。
+> **交互模式（kind-first）**：如果未传 `--template` 和 `--project`，install.sh 会先问项目类型（创作 / 工程 / solo），再根据类型显示对应 placeholder 询问项目名。CI / sandbox 环境（非 TTY）不会进入交互提示；请显式传 `--project <name> --template <kind>`。
 
 Dry-run preflight:
 
@@ -299,6 +307,28 @@ Available templates:
 - `clawseat-engineering`: 6-seat engineering template (memory + planner + builder + reviewer + patrol + designer).
 - `clawseat-solo`: 3-seat creative template (memory + builder + designer), all OAuth, memory SWALLOWs planner.
 
+### Provider Selection — CLI Flag Mapping
+
+When running in non-interactive environments (agent-launcher, CI, scripts),
+use explicit flags to skip the interactive provider menu:
+
+| Menu option | Description | CLI flag |
+|---|---|---|
+| 1 | Claude memory with Anthropic Console API key | `--provider anthropic_console --api-key <key>` |
+| 2 | Claude memory with Claude Code OAuth token | `--provider oauth_token` |
+| 3 | Claude memory with host Claude OAuth | `--provider oauth` |
+| 4 | MiniMax API | `--provider minimax --api-key <key>` |
+| 5 | DeepSeek API | `--provider deepseek --api-key <key>` |
+| 6 | Ark API | `--provider ark --api-key <key>` |
+| 7 | Xcode-best Claude-compatible API | `--provider xcode-best --api-key <key> [--model <name>]` |
+| 8 | Gemini OAuth primary memory | `--memory-tool gemini` |
+| 9 | Codex OAuth primary memory | `--memory-tool codex [--memory-model <model>]` |
+| custom | Custom Claude-compatible endpoint | `--provider custom_api --base-url <url> --api-key <key> [--model <name>]` |
+
+The parser-owned list lives in `scripts/install/lib/provider.sh::select_provider()`;
+prefer those mode names over older aliases such as `anthropic`, `claude_code`,
+`gemini_oauth`, `codex_oauth`, or `custom`.
+
 Security note: `--api-key` is visible in `ps` output and shell history. Prefer:
 
 ```bash
@@ -308,6 +338,23 @@ bash scripts/install.sh --provider custom_api
 ```
 
 Use `--base-url + --api-key` only for CI / agent automation / no-env / no-tty cases.
+
+### Debugging Pane Content (tmux)
+
+When a pane was just launched, `tmux capture-pane -t <session> -p` may return
+empty output because the visible buffer has not filled yet. Capture recent
+scroll history instead:
+
+```bash
+# Recommended: capture last 50 lines including scroll history
+tmux capture-pane -t <session>:<window>.<pane> -p -S -50
+
+# Capture the entire scrollback buffer
+tmux capture-pane -t <session> -p -S - -E -
+```
+
+This is especially important when checking whether Claude Code shows a
+"Trust folder" or "Quick safety check" prompt after first launch.
 
 What `install.sh` does in order:
 
@@ -330,7 +377,7 @@ What `install.sh` does in order:
    `DASHSCOPE_API_KEY`; `ARK_API_KEY`; host OAuth. Explicit `--base-url
    --api-key`, `--provider <mode>`, and `--provider <n>` override the detected
    default. If no candidate is usable in a non-tty run, install exits with
-   `INTERACTIVE_REQUIRED`.
+   `NON_TTY_NO_PROVIDER`.
 7. Write the selected memory provider env under
    `~/.agents/tasks/<project>/memory-provider.env`.
 8. Render the bootstrap brief under
@@ -371,7 +418,9 @@ MISSING_PYTHON311: no supported Python >= 3.11 found
 INVALID_PYTHON_BIN: PYTHON_BIN was set but is missing or too old
 PREFLIGHT_FAILED: bootstrap preflight returned HARD_BLOCKED or failed
 ENV_SCAN_INCOMPLETE: expected ~/.agents/memory/machine/*.json missing
-INTERACTIVE_REQUIRED: provider selection needs a tty when auto-detection is insufficient
+NON_TTY_NO_TEMPLATE: project/template prompt needs a tty; pass --project and --template
+NON_TTY_NO_PROVIDER: provider selection needs a tty; pass --provider or API flags
+INTERACTIVE_REQUIRED: legacy provider prompt tty requirement
 PROVIDER_NOT_FOUND: requested provider mode/candidate was not detected
 ITERM_DRIVER_FAILED: iTerm pane driver timed out or exited non-zero
 ITERM_LAYOUT_FAILED: iTerm pane driver returned a non-ok layout payload
@@ -622,7 +671,8 @@ Common install-script failures:
 | `MISSING_PYTHON311` / `INVALID_PYTHON_BIN` | Python is absent, too old, or `PYTHON_BIN` points at an unsupported executable. | Install/use Python 3.11+ and rerun Step 2. |
 | `PREFLIGHT_FAILED` | bootstrap preflight found a hard block. | Apply the printed fix command, then rerun Step 2. |
 | `ENV_SCAN_INCOMPLETE` | a required `~/.agents/memory/machine/*.json` scan artifact is missing. | Rerun Step 2; inspect `scan_environment.py` output if repeatable. |
-| `INTERACTIVE_REQUIRED` | provider selection needs input but stdin is not a tty. | Pass `--provider <n|mode>` or `--base-url --api-key`. |
+| `NON_TTY_NO_TEMPLATE` | project/template selection needs input but stdin/stdout is not a tty. | Pass `--project <name> --template <name>`. |
+| `NON_TTY_NO_PROVIDER` / `INTERACTIVE_REQUIRED` | provider selection needs input but stdin/stdout is not a tty. | Pass `--provider <n|mode>` or `--base-url --api-key`. |
 | `PROVIDER_NOT_FOUND` / `INVALID_PROVIDER_CHOICE` | the requested provider mode or candidate number is not usable on this host. | Re-run without the override, pick a detected candidate, or supply explicit API flags. |
 | `ITERM2_PYTHON_MISSING` / `ITERM_DRIVER_FAILED` / `ITERM_LAYOUT_FAILED` | iTerm2 pane creation failed or returned a bad layout payload. | Verify iTerm2 automation and Python SDK access, then rerun Step 2. |
 | `TMUX_SESSION_CREATE_FAILED` / `TMUX_SESSION_DIED_AFTER_LAUNCH` | a seat tmux session failed during launch. | Inspect tmux stderr and the seat workspace, then restart the affected seat. |
@@ -639,9 +689,9 @@ Full install-script error-code inventory from `scripts/install.sh` and
 | | `KICKOFF_CHMOD_FAILED`, `KICKOFF_DIR_FAILED`, `KICKOFF_WRITE_FAILED`, `PROJECTS_REGISTRY_MISSING` |
 | | `PROJECT_BOOTSTRAP_FAILED`, `PROJECT_LOCAL_CHMOD_FAILED`, `PROJECT_LOCAL_DIR_FAILED` |
 | | `PROJECT_PROFILE_BACKUP_FAILED`, `PROJECT_PROFILE_MIGRATE_FAILED`, `QA_ENGINEER_CREATE_FAILED` |
-| | `TEMPLATE_CHMOD_FAILED`, `TEMPLATE_DIR_CREATE_FAILED`, `TEMPLATE_MISSING`, `TEMPLATE_ROOT_CREATE_FAILED` |
+| | `NON_TTY_NO_TEMPLATE`, `TEMPLATE_CHMOD_FAILED`, `TEMPLATE_DIR_CREATE_FAILED`, `TEMPLATE_MISSING`, `TEMPLATE_ROOT_CREATE_FAILED` |
 | | `WAIT_SCRIPT_MISSING` |
-| `lib/provider.sh` | `INTERACTIVE_REQUIRED`, `INVALID_PROVIDER_CHOICE`, `PROVIDER_ENV_CHMOD_FAILED`, `PROVIDER_ENV_DIR_FAILED` |
+| `lib/provider.sh` | `INTERACTIVE_REQUIRED`, `INVALID_PROVIDER_CHOICE`, `NON_TTY_NO_PROVIDER`, `PROVIDER_ENV_CHMOD_FAILED`, `PROVIDER_ENV_DIR_FAILED` |
 | | `PROVIDER_ENV_WRITE_FAILED`, `PROVIDER_INPUT_MISSING`, `PROVIDER_MODE_UNKNOWN`, `PROVIDER_NOT_FOUND` |
 | `lib/secrets.sh` | `DEEPSEEK_SECRET_CHMOD_FAILED`, `DEEPSEEK_SECRET_DIR_FAILED`, `DEEPSEEK_SECRET_WRITE_FAILED` |
 | | `PRIVACY_KB_CHMOD_FAILED`, `PRIVACY_KB_DIR_FAILED`, `PRIVACY_KB_WRITE_FAILED`, `PROJECT_SECRET_CHMOD_FAILED` |

@@ -77,36 +77,30 @@ def test_dry_run_prints_project_header(tmp_path: Path) -> None:
 
 
 def test_dry_run_default_project_is_install(tmp_path: Path) -> None:
-    """--dry-run with no --project flag should show 'Project: install' (default)."""
+    """Non-TTY dry-run without project/template flags fails before the menu."""
     result = _run_install(
         tmp_path,
         extra_args=["--dry-run"],
     )
-    assert result.returncode == 0, (
-        f"install.sh --dry-run failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-    )
+    assert result.returncode == 2
     combined = result.stdout + result.stderr
-    assert "Project: install" in combined, (
-        f"'Project: install' not found in output.\nCombined:\n{combined}"
-    )
+    assert "NON_TTY_NO_TEMPLATE" in combined
+    assert "--template" in combined
 
 
 def test_interactive_menu_renders_model_and_project(tmp_path: Path) -> None:
-    """Non-dry-run with a detected minimax candidate must show (model: ...) and Project:.
+    """Detected candidates still render Project/model before non-TTY guard stops.
 
     The fake scan script (from _fake_install_root) emits a MINIMAX_API_KEY so
-    detect_provider() finds a minimax candidate, triggering the interactive menu.
-    We feed '1\\n' on stdin so install.sh auto-selects without hanging.
+    detect_provider() finds a minimax candidate. Z2 then rejects scripted stdin
+    and requires --provider in non-TTY runs.
     """
     result = _run_install(
         tmp_path,
-        # No --dry-run so the interactive menu is shown, then '1' selects candidate 1.
         extra_args=["--project", "menutest"],
         stdin_input="1\n",
     )
-    assert result.returncode == 0, (
-        f"install.sh failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-    )
+    assert result.returncode == 2
     combined = result.stdout + result.stderr
     assert "Project: menutest" in combined, (
         f"'Project: menutest' not found in menu output.\nCombined:\n{combined}"
@@ -114,10 +108,11 @@ def test_interactive_menu_renders_model_and_project(tmp_path: Path) -> None:
     assert "model:" in combined, (
         f"'model:' annotation not found in menu output.\nCombined:\n{combined}"
     )
+    assert "NON_TTY_NO_PROVIDER" in combined
 
 
 def test_interactive_menu_model_value_is_correct_for_minimax(tmp_path: Path) -> None:
-    """The minimax model shown in the menu must match provider_default_model()."""
+    """The minimax model shown before the non-TTY stop matches provider_default_model()."""
     import sys as _sys
     _sys.path.insert(0, str(_REPO / "core" / "scripts"))
     from agent_admin_config import provider_default_model  # noqa: PLC0415
@@ -130,10 +125,9 @@ def test_interactive_menu_model_value_is_correct_for_minimax(tmp_path: Path) -> 
         extra_args=["--project", "modelcheck"],
         stdin_input="1\n",
     )
-    assert result.returncode == 0, (
-        f"install.sh failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-    )
+    assert result.returncode == 2
     combined = result.stdout + result.stderr
     assert f"model: {expected_model}" in combined, (
         f"Expected 'model: {expected_model}' in output but not found.\nCombined:\n{combined}"
     )
+    assert "NON_TTY_NO_PROVIDER" in combined

@@ -119,6 +119,18 @@ ensure_tmux_session_alive() {
   die 31 TMUX_SESSION_DIED_AFTER_LAUNCH "tmux session vanished before display configuration: $session"
 }
 
+post_spawn_trust_folder_auto_enter() {
+  local session_name="$1" tool="$2" delay="" content=""
+  [[ "$tool" == "claude" ]] || return 0
+  delay="${CLAWSEAT_TRUST_PROMPT_SLEEP_SECONDS:-3}"
+  sleep "$delay"
+  content="$(tmux capture-pane -t "=$session_name" -p -S -50 2>/dev/null || true)"
+  if printf '%s\n' "$content" | grep -qE "Trust folder|Quick safety check|trust the files"; then
+    tmux send-keys -t "=$session_name" "" Enter
+    note "Auto-confirmed Trust folder prompt for ${session_name}"
+  fi
+}
+
 launch_seat() {
   local session="$1" cwd="${2:-$REPO_ROOT}" brief_path="${3:-}" seat_id="${4:-}" auth_mode="" custom_env_file="" launcher_tool="" actual_session=""
   local launcher_model=""
@@ -159,6 +171,7 @@ launch_seat() {
   fi
   ensure_tmux_session_alive "$actual_session"
   configure_tmux_session_display "$actual_session"
+  post_spawn_trust_folder_auto_enter "$actual_session" "$launcher_tool"
 }
 
 check_iterm_window_exists() {

@@ -27,8 +27,11 @@ _fake_install_root = _HELPERS._fake_install_root
 
 
 def _run_install(root, home, launcher_log, tmux_log, py_stubs, extra_args):
+    args = list(extra_args)
+    if "--provider" not in args and "--base-url" not in args:
+        args.extend(["--provider", "1"])
     result = subprocess.run(
-        ["bash", str(root / "scripts" / "install.sh")] + extra_args,
+        ["bash", str(root / "scripts" / "install.sh")] + args,
         input="\n",
         capture_output=True,
         text=True,
@@ -42,6 +45,7 @@ def _run_install(root, home, launcher_log, tmux_log, py_stubs, extra_args):
             "PYTHON_BIN": sys.executable,
             "LOG_FILE": str(launcher_log),
             "TMUX_LOG_FILE": str(tmux_log),
+            "CLAWSEAT_TRUST_PROMPT_SLEEP_SECONDS": "0",
         },
         check=False,
     )
