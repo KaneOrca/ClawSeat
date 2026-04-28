@@ -43,6 +43,7 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     (root / "core" / "shell-scripts").mkdir(parents=True, exist_ok=True)
     (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
     shutil.copytree(_REPO / "templates", root / "templates", dirs_exist_ok=True)
+    shutil.copytree(_REPO / "scripts" / "install", root / "scripts" / "install", dirs_exist_ok=True)
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
     shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
@@ -405,7 +406,10 @@ printf 'Darwin\\n'
 
 
 def test_install_script_no_direct_tmux_new_session() -> None:
-    text = _INSTALL.read_text(encoding="utf-8")
+    text = _INSTALL.read_text(encoding="utf-8") + "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((_REPO / "scripts" / "install" / "lib").glob("*.sh"))
+    )
     assert "tmux new-session" not in text
     assert "agent-launcher.sh" in text
     assert "launch_seat()" in text

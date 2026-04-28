@@ -5,10 +5,11 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
+_SELF_UPDATE_LIB = _REPO / "scripts" / "install" / "lib" / "self_update.sh"
 
 
 def _install_text() -> str:
-    return _INSTALL.read_text(encoding="utf-8")
+    return _INSTALL.read_text(encoding="utf-8") + _SELF_UPDATE_LIB.read_text(encoding="utf-8")
 
 
 def test_self_update_detects_stale_workspace_sha() -> None:

@@ -7,6 +7,7 @@ _REPO = Path(__file__).resolve().parents[1]
 _SCRIPT = _REPO / "scripts" / "memory-brief-mtime-check.sh"
 _SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
 _INSTALL = _REPO / "scripts" / "install.sh"
+_PROJECT_LIB = _REPO / "scripts" / "install" / "lib" / "project.sh"
 
 
 def test_drift_check_script_exists_and_is_executable() -> None:
@@ -16,7 +17,7 @@ def test_drift_check_script_exists_and_is_executable() -> None:
 
 def test_skill_and_install_guide_document_brief_drift_handling() -> None:
     skill_text = _SKILL.read_text(encoding="utf-8")
-    install_text = _INSTALL.read_text(encoding="utf-8")
+    install_text = _INSTALL.read_text(encoding="utf-8") + _PROJECT_LIB.read_text(encoding="utf-8")
 
     assert "Brief drift 自检" in skill_text
     assert "bash ${CLAWSEAT_ROOT}/scripts/memory-brief-mtime-check.sh" in skill_text
