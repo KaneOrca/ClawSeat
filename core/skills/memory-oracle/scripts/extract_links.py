@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -35,12 +36,27 @@ from _memory_paths import MEMORY_ROOT  # noqa: E402
 
 # ── Edge-type regex patterns (deterministic, project-aware but generic) ────
 
-PATTERNS: list[tuple[str, str, re.Pattern]] = [
+DEFAULT_COMPONENT_SUFFIXES = ["Phasic", "Physics", "View", "Engine", "Layer", "Component"]
+COMPONENT_CONFIG_TEXT = """[component_patterns]
+# Default: arena/pretext-flow legacy suffixes.
+# Override per-project in ~/.agents/memory/projects/<project>/component-patterns.toml
+suffixes = ["Phasic", "Physics", "View", "Engine", "Layer", "Component"]
+"""
+
+BASE_PATTERNS: list[tuple[str, str, re.Pattern]] = [
     # (edge_type, entity_namespace, compiled regex)
-    ("references-task", "taskid", re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")),
-    ("references-commit", "commit", re.compile(r"\bcommit\s+([a-f0-9]{7,40})\b", re.IGNORECASE)),
-    ("references-commit", "commit", re.compile(r"\b([a-f0-9]{7,40})\b(?=\s+[A-Z]|$|\s*[—–])")),
-    ("references-component", "component", re.compile(r"\b([A-Z][a-zA-Z0-9]+(?:Phasic|Physic|View|Engine|Layer|Component))\b")),
+    ("references-task", "taskid", re.compile(
+        r"\b([A-Z][A-Z0-9]+-\d+)\b"
+        r"|\b(GH#\d+)\b"
+        r"|(?<![\w/])(#\d+)\b"
+    )),
+    ("references-commit", "commit", re.compile(
+        r"(?:^|(?<=\s))commit\s+([a-f0-9]{7,40})\b"
+        r"|\(([a-f0-9]{7,40})\)(?=\s|$)"
+        r"|\bmerged?\s+([a-f0-9]{7,40})\b"
+        r"|\bcherry.pick(?:ed)?\s+([a-f0-9]{7,40})\b",
+        re.IGNORECASE,
+    )),
     ("references-file", "file", re.compile(r"\b([a-zA-Z][\w./-]*\.(?:tsx|ts|py|md|toml|sh|json|yaml|yml|sql|js))\b")),
     ("references-url", "url", re.compile(r"(https?://[^\s)\]\"<>]+)")),
     ("references-key", "key", re.compile(r"\[KEY:\s*([^\]]+)\]")),
@@ -80,6 +96,74 @@ def _read_text(path: Path) -> str:
         return ""
 
 
+def _safe_component_suffixes(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    suffixes: list[str] = []
+    for item in raw:
+        if isinstance(item, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", item):
+            suffixes.append(item)
+    return suffixes
+
+
+def _load_component_suffixes(project: str | None = None) -> list[str]:
+    """Load component suffixes from project config, user config, or bundled defaults."""
+    paths: list[Path] = []
+    home = Path.home()
+    if project:
+        paths.append(home / ".agents" / "memory" / "projects" / project / "component-patterns.toml")
+    user_config = home / ".agents" / "memory" / "config" / "component-patterns.toml"
+    paths.append(user_config)
+
+    for path in paths:
+        if not path.exists():
+            continue
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        suffixes = _safe_component_suffixes(
+            data.get("component_patterns", {}).get("suffixes", [])
+        )
+        if suffixes:
+            return suffixes
+
+    # Seed the user-level config as an editable documented default. Failure is
+    # non-fatal because link extraction must not block memory writes.
+    try:
+        user_config.parent.mkdir(parents=True, exist_ok=True)
+        if not user_config.exists():
+            user_config.write_text(COMPONENT_CONFIG_TEXT, encoding="utf-8")
+            os.chmod(user_config, 0o600)
+    except OSError:
+        pass
+    return list(DEFAULT_COMPONENT_SUFFIXES)
+
+
+def _component_pattern(project: str | None = None) -> tuple[str, str, re.Pattern]:
+    suffixes = _load_component_suffixes(project=project)
+    suffix_pattern = "|".join(re.escape(suffix) for suffix in suffixes)
+    return (
+        "references-component",
+        "component",
+        re.compile(rf"\b([A-Z][a-zA-Z0-9]+(?:{suffix_pattern}))\b"),
+    )
+
+
+def _strip_code_blocks(text: str) -> str:
+    """Remove fenced code block contents to avoid false-positive links."""
+    out: list[str] = []
+    in_block = False
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            in_block = not in_block
+            continue
+        if not in_block:
+            out.append(line)
+    return "\n".join(out)
+
+
 def _snippet(text: str, start: int, end: int) -> str:
     """Return ~120 char window around match, single-line, no leading/trailing ws."""
     s = max(0, start - _SNIPPET_RADIUS)
@@ -88,22 +172,72 @@ def _snippet(text: str, start: int, end: int) -> str:
     return re.sub(r"\s+", " ", window)
 
 
-def extract_edges(text: str) -> list[dict]:
-    """Run all regex patterns over text. Returns deduped edges with snippets."""
-    seen: dict[tuple[str, str], dict] = {}
-    for edge_type, namespace, pattern in PATTERNS:
-        for match in pattern.finditer(text):
-            value = match.group(1)
+def _match_value(match: re.Match) -> str:
+    for value in match.groups():
+        if value:
+            return value
+    return match.group(0)
+
+
+def _dedup_edges(edges: list[dict]) -> list[dict]:
+    seen: set[tuple[object, object, object]] = set()
+    out: list[dict] = []
+    for edge in edges:
+        key = (
+            edge.get("source") or edge.get("from"),
+            edge.get("target") or edge.get("to"),
+            edge.get("edge_type") or edge.get("type"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(edge)
+    return out
+
+
+def _project_from_source(source: str | None) -> str | None:
+    if not source:
+        return None
+    parts = source.split("/")
+    if len(parts) >= 2 and parts[0] == "projects":
+        return parts[1]
+    return None
+
+
+def extract_edges(*args: str, project: str | None = None) -> list[dict]:
+    """Run all regex patterns over text. Returns deduped edges with snippets.
+
+    Backward compatible forms:
+      extract_edges(text)
+      extract_edges(source, text, project="...")
+    """
+    if len(args) == 1:
+        source = None
+        text = args[0]
+    elif len(args) == 2:
+        source = args[0]
+        text = args[1]
+    else:
+        raise TypeError("extract_edges() expects text or source, text")
+
+    project = project or _project_from_source(source)
+    clean_text = _strip_code_blocks(text)
+    edges: list[dict] = []
+    for edge_type, namespace, pattern in [*BASE_PATTERNS, _component_pattern(project=project)]:
+        for match in pattern.finditer(clean_text):
+            value = _match_value(match)
             target = f"entity:{namespace}:{value}"
-            key = (edge_type, target)
-            if key in seen:
-                continue
-            seen[key] = {
+            edge = {
                 "to": target,
+                "target": target,
                 "type": edge_type,
-                "snippet": _snippet(text, match.start(), match.end()),
+                "edge_type": edge_type,
+                "snippet": _snippet(clean_text, match.start(), match.end()),
             }
-    return list(seen.values())
+            if source:
+                edge["source"] = source
+            edges.append(edge)
+    return _dedup_edges(edges)
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -239,7 +373,7 @@ def main() -> int:
         return 2
 
     text = _read_text(file_path)
-    edges = extract_edges(text) if text else []
+    edges = extract_edges(source, text) if text else []
     summary = update_indexes(source, edges, memory_root)
 
     if not args.quiet:

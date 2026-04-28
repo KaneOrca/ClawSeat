@@ -63,15 +63,20 @@ referring source page.
 
 | `type` | What it captures | Regex (in `extract_links.py`) |
 |---|---|---|
-| `references-task` | Jira-style task IDs like `ARENA-228` / `T-001` | `\b([A-Z][A-Z0-9]+-\d+)\b` |
-| `references-commit` | git SHAs in commit context | `\bcommit\s+([a-f0-9]{7,40})\b` (or trailing `<sha>`) |
-| `references-component` | React / physics components by suffix | `[A-Z][a-zA-Z0-9]+(Phasic\|Physic\|View\|Engine\|Layer\|Component)` |
+| `references-task` | Jira/GitHub-style task IDs like `ARENA-228` / `T-001` / `GH#123` / `#123` | configured in `BASE_PATTERNS` |
+| `references-commit` | git SHAs in explicit commit context | `commit <sha>`, `merged <sha>`, `cherry-picked <sha>`, or `(<sha>)` |
+| `references-component` | React / physics components by configured suffix | default suffixes: `Phasic`, `Physics`, `View`, `Engine`, `Layer`, `Component` |
 | `references-file` | source paths with known extensions | `\b[a-zA-Z][\w./-]*\.(tsx\|ts\|py\|md\|toml\|sh\|json\|yaml\|yml\|sql\|js)\b` |
 | `references-url` | http(s) URLs | `https?://\S+` |
 | `references-key` | arena-style decryption keys | `\[KEY:\s*([^\]]+)\]` |
 | `references-project` | cross-project memory references | `~/\.agents/memory/projects/([\w-]+)\b` |
 
-Add a new edge type → add one tuple to `PATTERNS` in `extract_links.py`.
+Component suffixes are config-loadable from
+`~/.agents/memory/projects/<project>/component-patterns.toml` or
+`~/.agents/memory/config/component-patterns.toml`.
+
+Add a new non-component edge type → add one tuple to `BASE_PATTERNS` in
+`extract_links.py`.
 
 ## Idempotency contract
 

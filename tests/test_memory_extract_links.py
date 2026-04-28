@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,10 @@ import pytest
 _REPO = Path(__file__).resolve().parents[1]
 _EXTRACT = _REPO / "core" / "skills" / "memory-oracle" / "scripts" / "extract_links.py"
 _QUERY = _REPO / "core" / "skills" / "memory-oracle" / "scripts" / "query_memory.py"
+_SPEC = importlib.util.spec_from_file_location("extract_links_under_test", _EXTRACT)
+assert _SPEC is not None and _SPEC.loader is not None
+extract_links = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(extract_links)
 
 
 def _run(*args: str) -> tuple[int, str, str]:
@@ -41,7 +46,7 @@ def test_extract_basic_entities(tmp_path: Path) -> None:
             "Looking at ARENA-228 we landed commit 318de65bb in "
             "src/views/Home/v3/HomeViewV3.tsx — see [KEY: 边界]. "
             "Also https://github.com/KaneOrca/ClawSeat for context. "
-            "BitmaskPhysic and PretextLayer are involved."
+            "BitmaskPhysics and PretextLayer are involved."
         ),
     )
     rc, out, _err = _run(str(_EXTRACT), "--file", str(page), "--memory-dir", str(tmp_path))
@@ -54,7 +59,7 @@ def test_extract_basic_entities(tmp_path: Path) -> None:
     assert "entity:file:src/views/Home/v3/HomeViewV3.tsx" in targets
     assert "entity:key:边界" in targets
     assert "entity:url:https://github.com/KaneOrca/ClawSeat" in targets
-    assert "entity:component:BitmaskPhysic" in targets
+    assert "entity:component:BitmaskPhysics" in targets
     assert "entity:component:PretextLayer" in targets
 
 
@@ -134,7 +139,7 @@ def test_query_graph_bfs_depth_2(tmp_path: Path) -> None:
         project="arena",
         kind="decision",
         name="g1",
-        body="ARENA-228 + commit 318de65 + BitmaskPhysic",
+        body="ARENA-228 + commit 318de65 + BitmaskPhysics",
     )
     _run(str(_EXTRACT), "--file", str(page), "--memory-dir", str(tmp_path), "--quiet")
 
@@ -156,7 +161,7 @@ def test_query_graph_bfs_depth_2(tmp_path: Path) -> None:
     assert "projects/arena/decision/g1" in nodes
     assert "entity:taskid:ARENA-228" in nodes
     assert "entity:commit:318de65" in nodes
-    assert "entity:component:BitmaskPhysic" in nodes
+    assert "entity:component:BitmaskPhysics" in nodes
 
 
 def test_slug_normalization_accepts_md_extension(tmp_path: Path) -> None:
@@ -199,3 +204,57 @@ def test_outside_memory_root_returns_error(tmp_path: Path) -> None:
     )
     assert rc == 2
     assert "memory root" in err
+
+
+def test_naked_hash_not_misidentified_as_commit() -> None:
+    text = "abc1234 API key starts with hex and abc1234ef is another"
+    edges = extract_links.extract_edges("test.md", text)
+    commit_edges = [e for e in edges if e["edge_type"] == "references-commit"]
+    assert not commit_edges, f"FP: naked hex hash identified as commit: {commit_edges}"
+
+
+def test_component_pattern_config_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per-project component-patterns.toml overrides default suffixes."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    project_config_dir = tmp_path / ".agents" / "memory" / "projects" / "test-proj"
+    project_config_dir.mkdir(parents=True)
+    (project_config_dir / "component-patterns.toml").write_text(
+        '[component_patterns]\nsuffixes = ["WidgetSeat"]\n',
+        encoding="utf-8",
+    )
+
+    suffixes = extract_links._load_component_suffixes(project="test-proj")
+    assert suffixes == ["WidgetSeat"]
+    edges = extract_links.extract_edges(
+        "projects/test-proj/decision/page",
+        "MyWidgetSeat is initialized here",
+        project="test-proj",
+    )
+    comp_edges = [e for e in edges if e["edge_type"] == "references-component"]
+    assert any(e["target"] == "entity:component:MyWidgetSeat" for e in comp_edges)
+
+
+def test_code_blocks_skipped() -> None:
+    """File paths inside code blocks are not extracted as edges."""
+    text = (
+        "Normal text here.\n"
+        "```python\n"
+        "from foo.bar.baz import thing\n"
+        "import os.path\n"
+        "```\n"
+        "More text."
+    )
+    edges = extract_links.extract_edges("page.md", text)
+    file_edges = [e for e in edges if e["edge_type"] == "references-file"]
+    targets = [e.get("target", "") for e in file_edges]
+    assert not any("foo.bar" in t or "os.path" in t for t in targets), (
+        f"FP: code block contents extracted as file edges: {targets}"
+    )
+
+
+def test_edge_dedup_per_source_target() -> None:
+    """Multiple mentions of same target produce only one edge."""
+    text = "TASK-123 mentioned here. Also TASK-123 again. And TASK-123 once more."
+    edges = extract_links.extract_edges("page.md", text)
+    task_edges = [e for e in edges if "TASK-123" in str(e.get("target", ""))]
+    assert len(task_edges) == 1, f"Expected 1 edge, got {len(task_edges)}: {task_edges}"
