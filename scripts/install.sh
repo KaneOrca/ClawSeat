@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""
+DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""; FORCE_REPO_ROOT=""
 _PROJECT_EXPLICIT=0; _TEMPLATE_EXPLICIT=0  # set to 1 when flag is passed explicitly
 UNINSTALL_PROJECT=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -99,6 +99,41 @@ PYTHON_BIN_OVERRIDE="${PYTHON_BIN:-}"
 PYTHON_BIN_VERSION=""
 PYTHON_BIN_RESOLUTION=""
 
+refresh_clawseat_repo_paths() {
+  CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
+  SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+  ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
+  MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
+  MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/qa-patrol.plist.in"
+  MIGRATE_ANCESTOR_PATHS_SCRIPT="$REPO_ROOT/core/scripts/migrate_ancestor_paths.py"
+  RECONCILE_SEAT_STATES_SCRIPT="$REPO_ROOT/core/scripts/reconcile_seat_states.py"
+  LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
+  AGENT_ADMIN_SCRIPT="$REPO_ROOT/core/scripts/agent_admin.py"
+  PROJECTS_REGISTRY_SCRIPT="$REPO_ROOT/core/scripts/projects_registry.py"
+  CLAWSEAT_CLI_SCRIPT="$REPO_ROOT/core/scripts/clawseat-cli.sh"
+  SEND_AND_VERIFY_SCRIPT="$REPO_ROOT/core/shell-scripts/send-and-verify.sh"
+  WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
+  CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py"
+  PATROL_HOOK_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_hook.py"
+  PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_cron.py"
+  QA_HOOK_INSTALLER="$PATROL_HOOK_INSTALLER"
+  QA_PATROL_CRON_INSTALLER="$PATROL_CRON_INSTALLER"
+  export REPO_ROOT CLAWSEAT_ROOT
+}
+
+configure_clawseat_repo_root() {
+  local selected_root=""
+  if [[ -n "$FORCE_REPO_ROOT" ]]; then
+    [[ -d "$FORCE_REPO_ROOT" ]] || die 2 INVALID_REPO_ROOT "--force-repo-root must be an existing directory: $FORCE_REPO_ROOT"
+    REPO_ROOT="$(cd "$FORCE_REPO_ROOT" && pwd)"
+    printf 'info: REPO_ROOT forced to %s (--force-repo-root)\n' "$REPO_ROOT" >&2
+  else
+    selected_root="$(_select_fresh_clawseat_root "$REPO_ROOT")"
+    [[ -n "$selected_root" ]] && REPO_ROOT="$selected_root"
+  fi
+  refresh_clawseat_repo_paths
+}
+
 run() {
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] '
@@ -136,6 +171,7 @@ parse_args() {
       --dry-run) DRY_RUN=1; shift ;;
       --project) PROJECT="$2"; _PROJECT_EXPLICIT=1; shift 2 ;;
       --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
+      --force-repo-root) FORCE_REPO_ROOT="$2"; shift 2 ;;
       --provider) FORCE_PROVIDER="$2"; shift 2 ;;
       --all-api-provider) FORCE_ALL_API_PROVIDER="$2"; shift 2 ;;
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
@@ -169,7 +205,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--template clawseat-creative|clawseat-engineering] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -197,6 +233,10 @@ PY
   if [[ -n "$REPO_ROOT_OVERRIDE" ]]; then
     [[ -d "$REPO_ROOT_OVERRIDE" ]] || die 2 INVALID_REPO_ROOT "--repo-root must be an existing directory: $REPO_ROOT_OVERRIDE"
   fi
+  if [[ -n "$FORCE_REPO_ROOT" ]]; then
+    [[ -d "$FORCE_REPO_ROOT" ]] || die 2 INVALID_REPO_ROOT "--force-repo-root must be an existing directory: $FORCE_REPO_ROOT"
+  fi
+  configure_clawseat_repo_root
   PROJECT_REPO_ROOT="${REPO_ROOT_OVERRIDE:-$REPO_ROOT}"
   if [[ -n "$FORCE_BASE_URL" ]]; then
     [[ -n "$FORCE_API_KEY" ]] || die 2 INVALID_FLAGS "--base-url 必须和 --api-key 成对"
@@ -242,8 +282,8 @@ compute_project_paths() {
 }
 
 main() {
-  self_update_check "$@"
   parse_args "$@"
+  self_update_check "$@"
   if [[ -n "$UNINSTALL_PROJECT" ]]; then
     uninstall_project_registry_entry "$UNINSTALL_PROJECT"
     exit 0

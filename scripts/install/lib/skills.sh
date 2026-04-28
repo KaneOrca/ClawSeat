@@ -15,8 +15,35 @@ symlink_skills() {
       warn "skill symlink skipped; missing skill directory: $target"
       continue
     fi
+    [[ -L "$link" ]] && rm -f "$link"
     ln -sfn "$target" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $target"
   done
+}
+
+mirror_agents_skills_to_home() {
+  local agents_skills_home="$1" skills_home="$2"
+  local source link skill
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] mkdir -p %q\n' "$skills_home"
+    printf '[dry-run] mirror %q/* into %q\n' "$agents_skills_home" "$skills_home"
+    return 0
+  fi
+
+  mkdir -p "$skills_home" || die 31 SKILL_SYMLINK_DIR_FAILED "unable to create $skills_home"
+  [[ -d "$agents_skills_home" ]] || return 0
+
+  shopt -s nullglob
+  for source in "$agents_skills_home"/*; do
+    skill="$(basename "$source")"
+    link="$skills_home/$skill"
+    if [[ -e "$link" && ! -L "$link" ]]; then
+      warn "skill mirror skipped; unmanaged path exists: $link"
+      continue
+    fi
+    rm -f "$link"
+    ln -s "$source" "$link" || die 31 SKILL_SYMLINK_FAILED "unable to link $link -> $source"
+  done
+  shopt -u nullglob
 }
 
 remove_skill_symlinks() {
@@ -37,6 +64,12 @@ remove_skill_symlinks() {
 
 install_skill_tier_for_home() {
   local tool="$1" skills_home="$2"; shift 2
+  local agents_skills_home="$HOME/.agents/skills"
+  if [[ "$skills_home" != "$agents_skills_home" ]]; then
+    mirror_agents_skills_to_home "$agents_skills_home" "$skills_home"
+    return 0
+  fi
+
   local -a core_skills=(clawseat-memory clawseat-decision-escalation)
   local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting)
   local -a selected_skills=("${core_skills[@]}")
@@ -67,14 +100,10 @@ install_skill_tier_for_home() {
 
 install_skills_by_tier() {
   note "Step 5.8: install ClawSeat skill symlinks"
-  local effective_memory_tool
-  effective_memory_tool="$(primary_effective_tool)"
   install_skill_tier_for_home claude "$HOME/.agents/skills"
+  install_skill_tier_for_home claude "$HOME/.claude/skills"
   install_skill_tier_for_home gemini "$HOME/.gemini/skills"
   install_skill_tier_for_home codex "$HOME/.codex/skills"
-  if [[ "$LOAD_ALL_SKILLS" != "1" && "$effective_memory_tool" != "claude" ]]; then
-    note "Extended skills skipped for $effective_memory_tool (context budget); use --load-all-skills to override"
-  fi
 }
 
 install_privacy_pre_commit_hook() {

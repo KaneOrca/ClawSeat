@@ -93,6 +93,126 @@ resolve_supported_python_bin() {
     "No supported Python >= 3.11 found for ClawSeat install before preflight import. Detected: $attempted_summary. Install/use python3.11+ or run: PYTHON_BIN=/opt/homebrew/bin/python3.12 bash scripts/install.sh --provider 1"
 }
 
+_clawseat_main_ref_for_root() {
+  local root="$1"
+  if git -C "$root" rev-parse --verify --quiet clawseat/main >/dev/null 2>&1; then
+    printf '%s\n' "clawseat/main"
+    return 0
+  fi
+  if git -C "$root" rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+    printf '%s\n' "origin/main"
+    return 0
+  fi
+  printf '\n'
+}
+
+_clawseat_commit_ts() {
+  local root="$1"
+  git -C "$root" log -1 --format=%ct HEAD 2>/dev/null || printf '0\n'
+}
+
+_clawseat_branch_has_upstream() {
+  local root="$1"
+  git -C "$root" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1
+}
+
+_clawseat_behind_main_count() {
+  local root="$1" main_ref="$2"
+  [[ -n "$main_ref" ]] || { printf '0\n'; return 0; }
+  git -C "$root" rev-list --count "HEAD..$main_ref" 2>/dev/null || printf '0\n'
+}
+
+_select_fresh_clawseat_root() {
+  local candidate_root="$1"
+  local worktree_list=""
+  worktree_list="$(git -C "$candidate_root" worktree list --porcelain 2>/dev/null)" || {
+    printf '%s\n' "$candidate_root"
+    return 0
+  }
+
+  local main_ref=""
+  main_ref="$(_clawseat_main_ref_for_root "$candidate_root")"
+
+  local current_path="" current_head="" current_branch="" current_detached=0
+  local best_path="" best_score=-1 best_branch="" best_head=""
+  local worktree_count=0
+  local -a skipped=()
+
+  _consider_clawseat_worktree() {
+    [[ -n "$current_path" ]] || return 0
+    worktree_count=$((worktree_count + 1))
+
+    local short_head="${current_head:0:12}"
+    local branch_short="${current_branch#refs/heads/}"
+    local behind=0 ts=0 score=0 reason=""
+    behind="$(_clawseat_behind_main_count "$current_path" "$main_ref")"
+    [[ "$behind" =~ ^[0-9]+$ ]] || behind=0
+
+    if [[ "$current_detached" == "1" || -z "$current_branch" ]]; then
+      reason="detached at ${short_head:-unknown} (${behind} commits behind main)"
+      skipped+=("$current_path|$reason")
+      return 0
+    fi
+
+    if [[ "$branch_short" != "main" && "$behind" -gt 0 ]]; then
+      reason="branch $branch_short is ${behind} commits behind main"
+      skipped+=("$current_path|$reason")
+      return 0
+    fi
+
+    ts="$(_clawseat_commit_ts "$current_path")"
+    [[ "$ts" =~ ^[0-9]+$ ]] || ts=0
+    if [[ "$branch_short" == "main" ]]; then
+      score=$((3000000000 + ts))
+    elif _clawseat_branch_has_upstream "$current_path"; then
+      score=$((2000000000 + ts))
+    else
+      score=$((1000000000 + ts))
+    fi
+
+    if [[ -z "$best_path" || "$score" -gt "$best_score" ]]; then
+      best_path="$current_path"
+      best_score="$score"
+      best_branch="$branch_short"
+      best_head="$short_head"
+    fi
+  }
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ -z "$line" ]]; then
+      _consider_clawseat_worktree
+      current_path=""; current_head=""; current_branch=""; current_detached=0
+      continue
+    fi
+    case "$line" in
+      worktree\ *) current_path="${line#worktree }" ;;
+      HEAD\ *) current_head="${line#HEAD }" ;;
+      branch\ *) current_branch="${line#branch }" ;;
+      detached) current_detached=1 ;;
+    esac
+  done <<<"$worktree_list"
+  _consider_clawseat_worktree
+
+  if [[ "$worktree_count" -le 1 || -z "$best_path" ]]; then
+    printf '%s\n' "$candidate_root"
+    return 0
+  fi
+
+  local selected_label="${best_branch:-DETACHED}: ${best_head:-unknown}"
+  local item="" skip_path="" skip_reason=""
+  if ((${#skipped[@]} > 0)); then
+    for item in "${skipped[@]}"; do
+      skip_path="${item%%|*}"
+      skip_reason="${item#*|}"
+      warn "ClawSeat REPO_ROOT=$skip_path is $skip_reason."
+      warn "      Skipping in favor of $best_path ($selected_label)."
+      warn "      Override: --force-repo-root <path>"
+    done
+  fi
+
+  printf '%s\n' "$best_path"
+}
+
 
 ensure_host_deps() {
   note "Step 1: preflight"
