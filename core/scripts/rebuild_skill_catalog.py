@@ -152,11 +152,27 @@ def _scan_source(source: str, root: Path) -> list[dict[str, str]]:
     return skills
 
 
+def _dedupe_skills(skills: Iterable[dict[str, str]]) -> list[dict[str, str]]:
+    deduped: dict[tuple[str, str], dict[str, str]] = {}
+    for skill in skills:
+        key = (skill["name"], skill["source"])
+        existing = deduped.get(key)
+        if existing is None or _dedupe_rank(skill) < _dedupe_rank(existing):
+            deduped[key] = skill
+    return sorted(deduped.values(), key=lambda item: (item["source"], item["name"], item["path"]))
+
+
+def _dedupe_rank(skill: dict[str, str]) -> tuple[int, str]:
+    path = Path(skill["path"])
+    preferred_doc = 0 if path.name == "SKILL.md" else 1
+    return (preferred_doc, str(path.resolve()))
+
+
 def rebuild_catalog() -> dict:
     skills: list[dict[str, str]] = []
     for source, root in source_roots().items():
         skills.extend(_scan_source(source, root))
-    skills.sort(key=lambda item: (item["source"], item["name"], item["path"]))
+    skills = _dedupe_skills(skills)
     return {
         "version": VERSION,
         "built_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
