@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
+_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
 
 
 def test_ancestor_skill_flags_cli_guess_and_legacy_api_as_arch_violation() -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_ANCESTOR_SKILL = _REPO / "core" / "skills" / "clawseat-ancestor" / "SKILL.md"
+_ANCESTOR_SKILL = _REPO / "core" / "references" / "memory-operations-policy.md"
 _ANCESTOR_PLIST = _REPO / "core" / "templates" / "qa-patrol.plist.in"
 
 
