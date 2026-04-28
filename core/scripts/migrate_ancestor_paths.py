@@ -11,6 +11,12 @@ from datetime import datetime
 from pathlib import Path
 
 
+# qa -> patrol rename (6-month alias period, T6 2026-04-28)
+SEAT_ROLE_MIGRATIONS = [
+    {"old": "qa", "new": "patrol", "alias_until": "2026-10-28", "type": "seat_role"},
+]
+
+
 def real_home() -> Path:
     override = os.environ.get("CLAWSEAT_REAL_HOME", "").strip()
     if override:
@@ -140,7 +146,7 @@ def _backup_profile(path: Path) -> Path:
 
 
 def _normalize_install_profile_seats(values: list[str]) -> list[str]:
-    renamed = {"builder-1": "builder", "reviewer-1": "reviewer"}
+    renamed = {"builder-1": "builder", "reviewer-1": "reviewer", "qa": "patrol", "qa-1": "patrol-1"}
     out: list[str] = []
     for value in values:
         if value == "koder":
@@ -204,6 +210,45 @@ def migrate_install_profile_seats(profile_path: Path) -> bool:
     return True
 
 
+def migrate_toml_seat_roles(path: Path) -> bool:
+    if not path.exists():
+        return False
+    original = path.read_text(encoding="utf-8")
+    changed = False
+    output: list[str] = []
+
+    for line in original.splitlines(keepends=True):
+        newline = ""
+        body = line
+        if body.endswith("\n"):
+            newline = "\n"
+            body = body[:-1]
+
+        table_updated = re.sub(r"^\[seat_overrides\.qa\]$", "[seat_overrides.patrol]", body)
+        if table_updated != body:
+            changed = True
+            output.append(table_updated + newline)
+            continue
+
+        match = _PROFILE_LIST_RE.match(body)
+        if match and match.group("key") in {"engineers", "monitor_engineers", "seat_order"}:
+            values = _PROFILE_STRING_RE.findall(match.group("body"))
+            normalized = _normalize_install_profile_seats(values)
+            rendered = f"{match.group('prefix')}{_render_toml_list(normalized)}{match.group('suffix')}"
+            if rendered != body:
+                changed = True
+            output.append(rendered + newline)
+            continue
+
+        output.append(line)
+
+    if not changed:
+        return False
+    _backup_profile(path)
+    path.write_text("".join(output), encoding="utf-8")
+    return True
+
+
 def migrate_project(home: Path, project: str) -> list[str]:
     changed: list[str] = []
     tasks_root = home / ".agents" / "tasks" / project
@@ -221,6 +266,9 @@ def migrate_project(home: Path, project: str) -> list[str]:
 
     profiles = home / ".agents" / "profiles"
     patch_profile(profiles / f"{project}-profile-dynamic.toml", changed)
+    project_toml = home / ".agents" / "projects" / project / "project.toml"
+    if migrate_toml_seat_roles(project_toml):
+        changed.append(f"patch seat role aliases {project_toml}")
     return changed
 
 

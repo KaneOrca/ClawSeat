@@ -10,7 +10,7 @@ auto-act on a strict structured envelope:
 ```text
 [OC_DELEGATION_REPORT_V1]
 project=<project>
-lane=<planning|builder|reviewer|qa|designer|frontstage>
+lane=<planning|builder|reviewer|patrol|designer|frontstage>
 task_id=<TASK_ID>
 dispatch_nonce=<nonce>
 report_status=<in_progress|done|needs_decision|blocked>

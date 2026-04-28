@@ -119,15 +119,15 @@ def test_create_session_record_persists_default_codex_launch_args(tmp_path):
 def test_switch_harness_rewrites_launch_args_for_new_tool(tmp_path):
     handlers = _switch_handlers(tmp_path)
     old_session = SimpleNamespace(
-        engineer_id="qa-1",
+        engineer_id="patrol-1",
         project="install",
         tool="claude",
         auth_mode="api",
         provider="minimax",
-        identity="claude.api.minimax.install.qa-1",
-        workspace=str(tmp_path / "workspaces" / "install" / "qa-1"),
+        identity="claude.api.minimax.install.patrol-1",
+        workspace=str(tmp_path / "workspaces" / "install" / "patrol-1"),
         runtime_dir=str(tmp_path / "runtime" / "claude"),
-        session="install-qa-1-claude",
+        session="install-patrol-1-claude",
         bin_path=TOOL_BINARIES["claude"],
         monitor=True,
         legacy_sessions=[],

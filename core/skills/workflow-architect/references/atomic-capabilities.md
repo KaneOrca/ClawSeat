@@ -16,7 +16,7 @@ Capabilities:
 Role: 任务规划与跨席位编排
 Capabilities:
 - 分解用户需求为子任务
-- 向 builder / reviewer / qa 等席位 dispatch 任务
+- 向 builder / reviewer / patrol 等席位 dispatch 任务
 - 验收子任务返回结果，决定下一步路由
 - 调用 workflow-architect 设计可执行工作流
 

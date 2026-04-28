@@ -72,7 +72,7 @@ def _make_engineer(role: str, role_details: list | None = None, aliases: list | 
         escalation_authority=False,
         remind_active_loop_owner=False,
         review_authority=(role == "reviewer"),
-        qa_authority=(role == "qa"),
+        qa_authority=(role == "patrol"),
         design_authority=(role == "designer"),
     )
     return e
@@ -159,7 +159,7 @@ def test_planner_agents_md_within_100_lines(tmp_path):
 @pytest.mark.parametrize("role,engineer_id", [
     ("builder", "builder-1"),
     ("reviewer", "reviewer-1"),
-    ("qa", "qa-1"),
+    ("patrol", "patrol-1"),
     ("designer", "designer-1"),
 ])
 def test_specialist_agents_md_within_25_lines(tmp_path, role, engineer_id):
@@ -246,9 +246,9 @@ def test_specialist_render_idempotent(tmp_path):
 # ── Test 8: specialist AGENTS.md references TOOLS/protocol.md ────────────────
 
 def test_specialist_agents_md_references_protocol():
-    session = _make_session("qa-1")
+    session = _make_session("patrol-1")
     project = _make_project()
-    engineer = _make_engineer("qa")
+    engineer = _make_engineer("patrol")
     lines = _assemble_lines(session, project, engineer)
     combined = "\n".join(lines)
     assert "TOOLS/protocol.md" in combined, "Specialist AGENTS.md must reference TOOLS/protocol.md"

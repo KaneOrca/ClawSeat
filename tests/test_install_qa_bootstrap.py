@@ -39,42 +39,42 @@ def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.Complet
     )
 
 
-def test_install_profile_includes_qa() -> None:
+def test_install_profile_includes_patrol() -> None:
     creative = _CREATIVE_TEMPLATE.read_text(encoding="utf-8")
     engineering = _ENGINEERING_TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'id = "qa"' in creative
-    assert 'role = "qa"' in creative
-    assert 'right_seats = ["builder", "qa", "designer"]' in creative
+    assert 'id = "patrol"' in creative
+    assert 'role = "patrol"' in creative
+    assert 'right_seats = ["builder", "patrol", "designer"]' in creative
     assert "monitor_max_panes = 5" in creative
     assert "monitor_max_panes = 6" in engineering
 
 
-def test_install_sh_invokes_install_qa_hook(tmp_path: Path) -> None:
+def test_install_sh_invokes_install_patrol_hook(tmp_path: Path) -> None:
     result = _run_dry(tmp_path)
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, combined
-    assert "PENDING_SEATS=(planner builder qa designer)" in combined
-    assert "Step 7.6: install qa hook + qa patrol cron" in combined
-    assert "engineer create qa qa-bootstrap --no-monitor" in combined
-    assert "install_qa_hook.py --workspace" in combined
-    assert "/.agents/workspaces/qa-bootstrap/qa" in combined
+    assert "PENDING_SEATS=(planner builder patrol designer)" in combined
+    assert "Step 7.6: install patrol hook + patrol cron" in combined
+    assert "engineer create patrol qa-bootstrap --no-monitor" in combined
+    assert "install_patrol_hook.py --workspace" in combined
+    assert "/.agents/workspaces/qa-bootstrap/patrol" in combined
 
 
-def test_install_sh_qa_cron_optin_yes(tmp_path: Path) -> None:
+def test_install_sh_patrol_cron_optin_yes(tmp_path: Path) -> None:
     result = _run_dry(tmp_path, opt_in="y")
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, combined
-    assert "install_qa_patrol_cron.py install" in combined
-    assert "QA Patrol Cron installed" in combined
+    assert "install_patrol_cron.py install" in combined
+    assert "Patrol Cron installed" in combined
 
 
-def test_install_sh_qa_cron_optin_no(tmp_path: Path) -> None:
+def test_install_sh_patrol_cron_optin_no(tmp_path: Path) -> None:
     result = _run_dry(tmp_path, opt_in="n")
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, combined
-    assert "install_qa_patrol_cron.py install" not in combined
-    assert "QA Patrol Cron skipped" in combined
+    assert "install_patrol_cron.py install" not in combined
+    assert "Patrol Cron skipped" in combined

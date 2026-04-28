@@ -29,9 +29,9 @@ not the sole store of project knowledge.
 ├── builder/<ts>-<slug>.md               ← Builder domain KB
 ├── planner/<ts>-<slug>.md               ← Planner domain KB
 ├── reviewer/<ts>-<slug>.md              ← Reviewer domain KB
-├── qa/doc-code-alignment/<ts>-<slug>.md
-├── qa/test-results/<ts>-<slug>.md
-├── qa/task-commit-gaps/<ts>-<slug>.md
+├── patrol/doc-code-alignment/<ts>-<slug>.md
+├── patrol/test-results/<ts>-<slug>.md
+├── patrol/task-commit-gaps/<ts>-<slug>.md
 └── _index/                              ← scan_index.py derivative output
 ```
 
@@ -44,9 +44,9 @@ Seat KBs live under the Memory project tree:
 ├── builder/<ts>-<slug>.md
 ├── planner/<ts>-<slug>.md
 ├── reviewer/<ts>-<slug>.md
-├── qa/doc-code-alignment/<ts>-<slug>.md
-├── qa/test-results/<ts>-<slug>.md
-├── qa/task-commit-gaps/<ts>-<slug>.md
+├── patrol/doc-code-alignment/<ts>-<slug>.md
+├── patrol/test-results/<ts>-<slug>.md
+├── patrol/task-commit-gaps/<ts>-<slug>.md
 └── decision/<ts>-<slug>.md
 ```
 
@@ -55,9 +55,9 @@ Concrete paths:
 - `~/.agents/memory/projects/<project>/builder/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/reviewer/<ts>-<slug>.md`
-- `~/.agents/memory/projects/<project>/qa/doc-code-alignment/<ts>-<slug>.md`
-- `~/.agents/memory/projects/<project>/qa/test-results/<ts>-<slug>.md`
-- `~/.agents/memory/projects/<project>/qa/task-commit-gaps/<ts>-<slug>.md`
+- `~/.agents/memory/projects/<project>/patrol/doc-code-alignment/<ts>-<slug>.md`
+- `~/.agents/memory/projects/<project>/patrol/test-results/<ts>-<slug>.md`
+- `~/.agents/memory/projects/<project>/patrol/task-commit-gaps/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/decision/<ts>-<slug>.md`
 
 Project identity and repo location come from `~/.clawseat/projects.json`. When a
@@ -75,7 +75,7 @@ issue_id: uuid
 ts: 2026-04-27T18:30:00Z
 task_id: task-id
 project: install
-seat: builder|planner|reviewer|qa|memory
+seat: builder|planner|reviewer|patrol|memory
 kind: decision|finding|alignment|test_result|observation
 title: "Short title"
 status: open|resolved|completed|superseded

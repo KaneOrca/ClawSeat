@@ -14,19 +14,19 @@ Message body.
 _via Memory @ 2026-04-27T19:00:00Z | project=install | session=install-memory_
 ```
 
-QA includes the mode in the prefix:
+Patrol includes the mode in the prefix:
 
 ```markdown
-[QA scope=patrol]
+[PATROL scope=patrol]
 Message body.
 
 ---
-_via QA @ 2026-04-27T19:00:00Z | project=install | session=install-qa_
+_via Patrol @ 2026-04-27T19:00:00Z | project=install | session=install-patrol_
 ```
 
 ## Fields
 
-- Prefix: `[Memory]`, `[QA scope=patrol]`, or `[QA scope=test]`.
+- Prefix: `[Memory]`, `[PATROL scope=patrol]`, or `[PATROL scope=test]`.
 - Seat: source seat name in the footer.
 - Timestamp: UTC ISO8601, generated at send time.
 - Project: from `CLAWSEAT_PROJECT`, `AGENTS_PROJECT`, payload metadata, or
@@ -38,11 +38,11 @@ _via QA @ 2026-04-27T19:00:00Z | project=install | session=install-qa_
 Recommended regex:
 
 ```text
-^\[(?P<seat>Memory|QA)(?: scope=(?P<scope>patrol|test))?\]
+^\[(?P<seat>Memory|PATROL)(?: scope=(?P<scope>patrol|test))?\]
 ^_via (?P=seat) @ (?P<ts>[^|]+) \| project=(?P<project>[^|]+) \| session=(?P<session>[^_]+)_$
 ```
 
-Koder should require prefix and footer to agree on seat. For QA, the prefix
+Koder should require prefix and footer to agree on seat. For patrol, the prefix
 scope is authoritative. If the footer is missing or malformed, Koder may still
 display the message but should not use it for automatic routing.
 

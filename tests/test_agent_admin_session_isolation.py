@@ -129,10 +129,10 @@ def test_launcher_auth_mapping_matrix(
             "claude",
             "api",
             "minimax",
-            "qa-1",
+            "patrol-1",
             "ANTHROPIC_AUTH_TOKEN=minimax-token\n",
             "minimax",
-            ".agent-runtime/identities/claude/api/minimax-install-qa-1-claude",
+            ".agent-runtime/identities/claude/api/minimax-install-patrol-1-claude",
             False,
         ),
         (

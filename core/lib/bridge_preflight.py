@@ -56,7 +56,7 @@ class PreflightResult:
 
 
 # Seat roles that participate in the Feishu bridge. Other seats
-# (builder/reviewer/qa) use tmux notify and do not need the preflight.
+# (builder/reviewer/patrol) use tmux notify and do not need the preflight.
 _BRIDGE_ROLES = frozenset({
     "planner-dispatcher",
     "frontstage-supervisor",

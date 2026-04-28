@@ -11,7 +11,7 @@ prompt_kind_first_flow() {
 
   printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
   printf '\n选择项目类型 / Choose project mode:\n' >&2
-  printf '  1) 创作项目 (5 seat: memory + planner + builder + qa + designer)  [default]\n' >&2
+  printf '  1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]\n' >&2
   printf '  2) 工程项目 (6 seat: + reviewer 独立审查)\n' >&2
 
   local _kind=""
@@ -341,9 +341,18 @@ path = Path(sys.argv[1])
 template_path = Path(sys.argv[2])
 data = tomllib.loads(path.read_text(encoding="utf-8"))
 template = tomllib.loads(template_path.read_text(encoding="utf-8"))
-engineers = [str(item) for item in data.get("engineers", [])]
-monitor_engineers = [str(item) for item in data.get("monitor_engineers", [])]
-overrides = data.get("seat_overrides") or {}
+raw_engineers = [str(item) for item in data.get("engineers", [])]
+raw_monitor_engineers = [str(item) for item in data.get("monitor_engineers", [])]
+raw_overrides = data.get("seat_overrides") or {}
+if "qa" in raw_engineers or "qa" in raw_monitor_engineers or "qa" in raw_overrides:
+    raise SystemExit(0)
+def normalize_seat(value: object) -> str:
+    text = str(value)
+    return "patrol" if text == "qa" else text
+
+engineers = [normalize_seat(item) for item in data.get("engineers", [])]
+monitor_engineers = [normalize_seat(item) for item in data.get("monitor_engineers", [])]
+overrides = {normalize_seat(key): value for key, value in (data.get("seat_overrides") or {}).items()}
 needs = False
 for spec in template.get("engineers", []):
     seat = str(spec.get("id", ""))
@@ -377,17 +386,17 @@ migrate_project_profile_to_v2() {
     return 0
   fi
 
-  local answer="${CLAWSEAT_QA_PROFILE_MIGRATE:-}"
+  local answer="${CLAWSEAT_PATROL_PROFILE_MIGRATE:-${CLAWSEAT_QA_PROFILE_MIGRATE:-}}"
   if [[ -z "$answer" ]]; then
     if [[ -t 0 && -t 1 ]]; then
-      printf '[install] 检测到 project.toml 缺 qa engineer，是否升级? (Y/n) '
+      printf '[install] 检测到 project.toml 缺 patrol engineer，是否升级? (Y/n) '
       read -r answer
     else
       answer="y"
     fi
   fi
   if [[ "$answer" =~ ^[Nn]$ ]]; then
-    warn "project.toml qa engineer migration skipped by operator"
+    warn "project.toml patrol engineer migration skipped by operator"
     return 0
   fi
 
@@ -415,6 +424,7 @@ except ModuleNotFoundError:
 path = Path(sys.argv[1])
 template_path = Path(sys.argv[2])
 text = path.read_text(encoding="utf-8")
+text = re.sub(r"^\[seat_overrides\.qa\]\s*$", "[seat_overrides.patrol]", text, flags=re.MULTILINE)
 data = tomllib.loads(text)
 template = tomllib.loads(template_path.read_text(encoding="utf-8"))
 template_defaults = template.get("defaults") or {}
@@ -424,7 +434,12 @@ template_engineers = [
 ]
 
 def unique_extend(values: object, items: list[str]) -> list[str]:
-    out = [str(v) for v in values] if isinstance(values, list) else []
+    out = []
+    if isinstance(values, list):
+        for value in values:
+            item = "patrol" if str(value) == "qa" else str(value)
+            if item not in out:
+                out.append(item)
     for item in items:
         if item not in out:
             out.append(item)
@@ -500,36 +515,37 @@ PY
 }
 
 ensure_qa_engineer_record() {
-  local qa_session="$HOME/.agents/sessions/$PROJECT/qa/session.toml"
+  local patrol_session="$HOME/.agents/sessions/$PROJECT/patrol/session.toml"
+  local legacy_qa_session="$HOME/.agents/sessions/$PROJECT/qa/session.toml"
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] %q %q engineer create qa %q --no-monitor\n' \
+    printf '[dry-run] %q %q engineer create patrol %q --no-monitor\n' \
       "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" "$PROJECT"
     return 0
   fi
-  if [[ -f "$qa_session" ]]; then
-    note "[install] qa engineer session already registered"
+  if [[ -f "$patrol_session" || -f "$legacy_qa_session" ]]; then
+    note "[install] patrol engineer session already registered"
     return 0
   fi
   if [[ ! -f "$AGENT_ADMIN_SCRIPT" ]]; then
-    warn "qa engineer create skipped; missing agent_admin helper: $AGENT_ADMIN_SCRIPT"
+    warn "patrol engineer create skipped; missing agent_admin helper: $AGENT_ADMIN_SCRIPT"
     return 0
   fi
-  "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" engineer create qa "$PROJECT" --no-monitor \
-    || die 31 QA_ENGINEER_CREATE_FAILED "unable to create qa engineer session for $PROJECT"
+  "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" engineer create patrol "$PROJECT" --no-monitor \
+    || die 31 QA_ENGINEER_CREATE_FAILED "unable to create patrol engineer session for $PROJECT"
 }
 
 install_qa_bootstrap() {
-  note "Step 7.6: install qa hook + qa patrol cron"
-  local qa_workspace="$HOME/.agents/workspaces/$PROJECT/qa"
+  note "Step 7.6: install patrol hook + patrol cron"
+  local patrol_workspace="$HOME/.agents/workspaces/$PROJECT/patrol"
   ensure_qa_engineer_record
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] mkdir -p %q\n' "$qa_workspace"
-    printf '[dry-run] %q %q --workspace %q\n' "$PYTHON_BIN" "$QA_HOOK_INSTALLER" "$qa_workspace"
-  elif [[ ! -f "$QA_HOOK_INSTALLER" ]]; then
-    warn "qa hook install skipped; missing helper: $QA_HOOK_INSTALLER"
+    printf '[dry-run] mkdir -p %q\n' "$patrol_workspace"
+    printf '[dry-run] %q %q --workspace %q\n' "$PYTHON_BIN" "$PATROL_HOOK_INSTALLER" "$patrol_workspace"
+  elif [[ ! -f "$PATROL_HOOK_INSTALLER" ]]; then
+    warn "patrol hook install skipped; missing helper: $PATROL_HOOK_INSTALLER"
   else
-    mkdir -p "$qa_workspace"
-    "$PYTHON_BIN" "$QA_HOOK_INSTALLER" --workspace "$qa_workspace"
+    mkdir -p "$patrol_workspace"
+    "$PYTHON_BIN" "$PATROL_HOOK_INSTALLER" --workspace "$patrol_workspace"
   fi
   prompt_qa_patrol_cron_optin
 }

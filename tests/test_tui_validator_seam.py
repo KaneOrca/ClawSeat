@@ -25,7 +25,7 @@ def test_write_validated_valid_v2_succeeds(tmp_path):
         "profile_name": "test",
         "project_name": "test",
         "openclaw_frontstage_agent": "yu",
-        "seats": ["ancestor", "planner", "builder", "reviewer", "qa", "designer"],
+        "seats": ["ancestor", "planner", "builder", "reviewer", "patrol", "designer"],
         "machine_services": ["memory"],
     }
     written = write_validated(payload, path)

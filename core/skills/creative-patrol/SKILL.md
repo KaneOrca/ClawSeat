@@ -1,5 +1,5 @@
 ---
-name: creative-qa
+name: creative-patrol
 description: "[DEPRECATED] Superseded by creative-designer (which now handles creative review + scoring). Use creative-designer skill instead. This file is kept for reference only."
 deprecated: true
 superseded_by: creative-designer
@@ -8,9 +8,9 @@ superseded_by: creative-designer
 > **⚠ DEPRECATED**: This skill has been superseded by `creative-designer`, which now handles both creative review and quality assessment. Do not use in new projects.
 >
 
-# Creative QA
+# Creative Patrol
 
-`creative-qa` 是 ClawSeat creative chain 中**被动评审 (passive scoring)** 类 specialist，负责对创作交付物进行质量评分并可选地推送飞书通知。不主动发起工作，不修改内容。
+`creative-patrol` 是 ClawSeat creative chain 中**被动评审 (passive scoring)** 类 specialist，负责对创作交付物进行质量评分并可选地推送飞书通知。不主动发起工作，不修改内容。
 
 ## 1. 身份约束
 
@@ -22,7 +22,7 @@ superseded_by: creative-designer
 
 ## 共享目录
 
-qa 在项目共享目录的以下路径工作：
+patrol 在项目共享目录的以下路径工作：
 
 - **读取**：`$PROJECT_REPO_ROOT/creative/content/<unit_id>.md`（被评内容）
 - **读取**：`$PROJECT_REPO_ROOT/creative/brief.md`（对齐评估）
@@ -46,7 +46,7 @@ planner 在 dispatch 时会通过 TODO objective 传递绝对路径（`deliverab
 
 ## 3. 工作模式
 
-典型 creative-qa lane：
+典型 creative-patrol lane：
 
 1. 读 TODO 中的 `delivery_ref`（指向 planner 或 designer 的 DELIVERY.md）
 2. 按 rubric 逐条打分，记录具体依据（引用原文段落）
@@ -74,8 +74,8 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/send_delegation_repor
 
 ```bash
 python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" \
-  --profile "$CREATIVE_QA_PROFILE" \
-  --source qa \
+  --profile "$CREATIVE_PATROL_PROFILE" \
+  --source patrol \
   --target planner \
   --task-id <task_id> \
   --title "<title>" \

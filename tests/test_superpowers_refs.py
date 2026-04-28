@@ -26,7 +26,7 @@ _SEATS = (
     "planner",
     "builder",
     "reviewer",
-    "qa",
+    "patrol",
     "designer",
 )
 

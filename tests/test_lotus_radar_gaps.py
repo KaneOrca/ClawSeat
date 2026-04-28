@@ -49,7 +49,7 @@ def test_project_create_generates_complete_project_toml(tmp_path: Path) -> None:
     assert data["template_name"] == "clawseat-creative"
     assert data["window_mode"] == "split-2"
     assert data["monitor_max_panes"] == 5
-    assert data["engineers"] == ["memory", "planner", "builder", "qa", "designer"]
+    assert data["engineers"] == ["memory", "planner", "builder", "patrol", "designer"]
     assert data["monitor_engineers"] == data["engineers"]
     assert set(data["seat_overrides"]) == set(data["engineers"])
 
@@ -78,11 +78,11 @@ def test_role_skill_uses_clawseat_root(tmp_path: Path) -> None:
     result = _run_agent_admin(home, "engineer", "create", "qa", "foo", "--no-monitor")
 
     assert result.returncode == 0, result.stderr
-    claude_md = home / ".agents" / "workspaces" / "foo" / "qa" / "CLAUDE.md"
+    claude_md = home / ".agents" / "workspaces" / "foo" / "patrol" / "CLAUDE.md"
     text = claude_md.read_text(encoding="utf-8")
     assert "Primary repo root: `" + str(repo) + "`" in text
     assert "## Role SKILL (canonical)" in text
-    assert "# QA" in text
+    assert "# Patrol" in text
 
 
 def test_workspace_memory_template_has_absolute_send_verify_path() -> None:

@@ -1,5 +1,5 @@
 """Regression: preflight's gstack check is HARD_BLOCKED when the active
-profile declares a specialist role (builder / reviewer / qa / designer),
+profile declares a specialist role (builder / reviewer / patrol / designer),
 and WARNING otherwise.
 
 Before the UX-audit fix, preflight always returned WARNING for missing
@@ -107,8 +107,8 @@ def test_gstack_missing_warns_when_profile_unreadable(monkeypatch, tmp_path):
 
 
 def test_gstack_all_specialist_roles_trigger_hardblock(monkeypatch, tmp_path):
-    """Each of {builder, reviewer, qa, designer} independently must trip HARD_BLOCKED."""
-    for role in ("builder", "reviewer", "qa", "designer"):
+    """Each of {builder, reviewer, patrol, designer} independently must trip HARD_BLOCKED."""
+    for role in ("builder", "reviewer", "patrol", "designer"):
         profile = _write_profile(tmp_path, f"t-{role}", {"koder": "frontstage-supervisor", f"{role}-1": role})
         monkeypatch.setenv("GSTACK_SKILLS_ROOT", str(tmp_path / "nope"))
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)

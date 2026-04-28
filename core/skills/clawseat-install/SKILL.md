@@ -59,7 +59,7 @@ not manually recreate the memory launch sequence.
 
 - **Project memory layer**: `<project>-memory` is the primary frontstage and orchestration hub.
 - **Project workers window**: worker seats are template-driven from `project.toml`.
-  `clawseat-creative` uses planner / builder / qa / designer; engineering adds reviewer.
+  `clawseat-creative` uses planner / builder / patrol / designer; engineering adds reviewer.
 - **Tenant layer (Feishu optional)**: `koder` — optional OpenClaw-side
   Feishu reverse channel adapter / async notification sink, not a tmux
   seat and not the primary frontstage.

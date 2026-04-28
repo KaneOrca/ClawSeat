@@ -74,7 +74,7 @@ def _resolve_effective_home() -> Path:
 
 DELEGATION_REPORT_HEADER = "OC_DELEGATION_REPORT_V1"
 VALID_DELEGATION_LANES = {
-    "planning", "builder", "reviewer", "qa", "designer", "frontstage",
+    "planning", "builder", "reviewer", "patrol", "designer", "frontstage",
 }
 VALID_DELEGATION_REPORT_STATUSES = {
     "in_progress", "done", "needs_decision", "blocked",

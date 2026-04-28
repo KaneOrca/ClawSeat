@@ -23,7 +23,7 @@ import sys
 import tomllib
 
 project = sys.argv[1]
-fallback = ["memory", "planner", "builder", "reviewer", "qa", "designer"]
+fallback = ["memory", "planner", "builder", "reviewer", "patrol", "designer"]
 project_toml = Path.home() / ".agents" / "projects" / project / "project.toml"
 try:
     with project_toml.open("rb") as fh:
@@ -47,7 +47,7 @@ while IFS= read -r seat; do
   [[ -n "$seat" ]] && SEATS+=("$seat")
 done < <(read_project_seats)
 if [[ "${#SEATS[@]}" -eq 0 ]]; then
-  SEATS=(memory planner builder reviewer qa designer)
+  SEATS=(memory planner builder reviewer patrol designer)
 fi
 PRIMARY_SEAT_ID="${SEATS[0]}"
 SEATS_CSV="$(IFS=,; printf '%s' "${SEATS[*]}")"

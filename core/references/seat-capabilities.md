@@ -36,7 +36,7 @@ Does Not:
 Boundary:
 
 - Memory can ask planner to run a chain, but the handoff to builder, reviewer,
-  qa, patrol, or designer is planner work.
+  patrol or designer is planner work.
 - Memory owns `verdict` authority only when planner requests a final decision or
   a user-facing judgment.
 

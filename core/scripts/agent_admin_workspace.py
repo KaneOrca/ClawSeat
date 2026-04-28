@@ -27,7 +27,7 @@ SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
 TOOLS_SHARED_ROOT = REPO_ROOT / "core" / "templates" / "shared" / "TOOLS"
 
-_SPECIALIST_ROLES = frozenset({"builder", "reviewer", "qa", "designer"})
+_SPECIALIST_ROLES = frozenset({"builder", "reviewer", "patrol", "designer"})
 
 # Ensure `core/` is importable so bare `from resolve import ...` resolves
 # regardless of how this module is invoked (direct script vs import).
@@ -193,8 +193,8 @@ def render_role_scope_summary(engineer: Any) -> str:
         return "implementation and code changes"
     if role == "reviewer":
         return "code review and canonical verdicts"
-    if role == "qa":
-        return "QA verification, repro, and regression checks"
+    if role == "patrol":
+        return "patrol verification, repro, and regression checks"
     if role == "designer":
         return "design review, visual direction, and prototype guidance"
     return "assigned seat responsibilities"
@@ -202,6 +202,8 @@ def render_role_scope_summary(engineer: Any) -> str:
 
 def role_matches(role: str, expected: str) -> bool:
     normalized = role.strip()
+    if normalized == "qa":
+        normalized = "patrol"
     if expected == "planner":
         return normalized in {"planner", "planner-dispatcher"}
     return normalized == expected
@@ -230,7 +232,7 @@ def preferred_seat_for_role(
         "planner": "planner",
         "builder": "builder-1",
         "reviewer": "reviewer-1",
-        "qa": "qa-1",
+        "patrol": "patrol-1",
         "designer": "designer-1",
     }.get(expected_role)
     if preferred in candidates:
@@ -300,9 +302,9 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
                 "- in that bridge flow, keep `main` mention-gated and keep the project-facing `koder` account non-mention-gated by default; optional system seats such as `warden` only become non-mention-gated when they are explicitly deployed",
                 "- planner should treat the bound group as the user-visible bridge for `OC_DELEGATION_REPORT_V1` closeouts; keep legacy auto-broadcast disabled by default; opt-in requires CLAWSEAT_ENABLE_LEGACY_FEISHU_BROADCAST=1",
                 f"- once group ID and project binding are both confirmed, immediately hand the Feishu smoke test to `{planner_seat}`, tell the user “收到测试消息即可回复希望完成什么任务”, and bring up `reviewer-1` in parallel when that seat exists",
-                "- if the current chain is verification-heavy, bring up `qa-1` in parallel with or immediately after `reviewer-1`; do not treat QA as a first-launch seat",
+                "- if the current chain is verification-heavy, bring up `patrol-1` in parallel with or immediately after `reviewer-1`; do not treat patrol as a first-launch seat",
                 f"- remind `{planner_seat}` when drift appears; do not silently reroute specialists yourself",
-                "- do not absorb builder, reviewer, QA, or designer specialist work",
+                "- do not absorb builder, reviewer, patrol, or designer specialist work",
             ]
         )
     elif engineer.role == "planner-dispatcher":

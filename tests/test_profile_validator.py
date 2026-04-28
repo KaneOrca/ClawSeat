@@ -37,7 +37,7 @@ def _minimal_v2_profile(*, frontstage_agent: str = "yu", seats: list | None = No
         "profile_name": "install",
         "project_name": "install",
         "openclaw_frontstage_agent": frontstage_agent,
-        "seats": seats if seats is not None else ["memory", "planner", "builder", "reviewer", "qa", "designer"],
+        "seats": seats if seats is not None else ["memory", "planner", "builder", "reviewer", "patrol", "designer"],
         "machine_services": ["memory"],
     }
 
@@ -331,7 +331,7 @@ def test_binding_tenant_mismatch_rejected(tmp_path, monkeypatch):
 def test_valid_v2_profile_ok(tmp_path):
     path = tmp_path / "profile.toml"
     _write_toml(path, (
-        'version = 2\nseats = ["ancestor", "planner", "builder", "reviewer", "qa", "designer"]\n'
+        'version = 2\nseats = ["ancestor", "planner", "builder", "reviewer", "patrol", "designer"]\n'
         'openclaw_frontstage_agent = "yu"\n'
         'profile_name = "install"\nproject_name = "install"\n'
     ))

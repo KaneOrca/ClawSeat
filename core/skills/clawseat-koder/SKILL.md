@@ -136,7 +136,7 @@ Legacy `SOUL.md`, `AGENTS.md`, and `TOOLS/*` files are obsolete for Koder v2.
 - answering business questions directly instead of routing to Memory
 - saving durable decision state in the Koder workspace
 - showing internal file paths or RFC references to Feishu users
-- dispatching builder/planner/qa directly
+- dispatching builder/planner/patrol directly
 - broadcasting before the privacy gate
 - guessing project routing when the five-step ladder cannot resolve
 

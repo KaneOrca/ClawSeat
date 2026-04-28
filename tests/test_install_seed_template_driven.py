@@ -63,17 +63,17 @@ def test_seed_template_driven_copies_deepseek_planner_secret(tmp_path: Path) -> 
     assert "deepseek-v4-pro" in planner_secret.read_text(encoding="utf-8")
 
 
-def test_seed_template_driven_copies_minimax_qa_secret(tmp_path: Path) -> None:
+def test_seed_template_driven_copies_minimax_patrol_secret(tmp_path: Path) -> None:
     result, home = _run_install(tmp_path)
     assert result.returncode == 0, result.stderr
-    qa_secret = home / ".agents" / "secrets" / "claude" / "minimax" / "qa.env"
-    assert qa_secret.is_file()
-    assert "minimax-token" in qa_secret.read_text(encoding="utf-8")
+    patrol_secret = home / ".agents" / "secrets" / "claude" / "minimax" / "patrol.env"
+    assert patrol_secret.is_file()
+    assert "minimax-token" in patrol_secret.read_text(encoding="utf-8")
 
 
 def test_seed_all_api_provider_overrides_api_workers(tmp_path: Path) -> None:
     result, home = _run_install(tmp_path, "--all-api-provider", "deepseek")
     assert result.returncode == 0, result.stderr
-    qa_secret = home / ".agents" / "secrets" / "claude" / "deepseek" / "qa.env"
-    assert qa_secret.is_file()
-    assert not (home / ".agents" / "secrets" / "claude" / "minimax" / "qa.env").exists()
+    patrol_secret = home / ".agents" / "secrets" / "claude" / "deepseek" / "patrol.env"
+    assert patrol_secret.is_file()
+    assert not (home / ".agents" / "secrets" / "claude" / "minimax" / "patrol.env").exists()

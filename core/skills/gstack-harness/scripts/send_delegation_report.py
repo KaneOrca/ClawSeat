@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
         "--lane",
         required=False,
         default="planning",
-        help="Delegation lane: planning | builder | reviewer | qa | designer | frontstage.",
+        help="Delegation lane: planning | builder | reviewer | patrol | designer | frontstage.",
     )
     parser.add_argument("--task-id", required=False, help="Task id.")
     parser.add_argument(

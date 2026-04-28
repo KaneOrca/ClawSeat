@@ -2,7 +2,7 @@
 
 Gate: required skills with roles not in active_roles are downgraded to optional,
 so starter.toml profiles (roles={frontstage-supervisor}) are not HARD_BLOCKED
-by builder/reviewer/qa/designer skills they don't need.
+by builder/reviewer/patrol/designer skills they don't need.
 """
 from __future__ import annotations
 

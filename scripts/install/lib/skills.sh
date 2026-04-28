@@ -130,10 +130,10 @@ install_privacy_pre_commit_hook() {
 }
 
 prompt_qa_patrol_cron_optin() {
-  local answer="${CLAWSEAT_QA_PATROL_CRON_OPT_IN:-}"
+  local answer="${CLAWSEAT_PATROL_CRON_OPT_IN:-${CLAWSEAT_QA_PATROL_CRON_OPT_IN:-}}"
   if [[ -z "$answer" ]]; then
     if [[ -t 0 && -t 1 ]]; then
-      printf '[install] QA Patrol Cron 是否启用每日扫描？(y/N) '
+      printf '[install] Patrol Cron 是否启用每日扫描？(y/N) '
       read -r answer
     else
       answer="n"
@@ -142,15 +142,15 @@ prompt_qa_patrol_cron_optin() {
 
   if [[ "$answer" =~ ^[Yy]$ ]]; then
     if [[ "$DRY_RUN" == "1" ]]; then
-      printf '[dry-run] %q %q install\n' "$PYTHON_BIN" "$QA_PATROL_CRON_INSTALLER"
-    elif [[ ! -f "$QA_PATROL_CRON_INSTALLER" ]]; then
-      warn "qa patrol cron skipped; missing helper: $QA_PATROL_CRON_INSTALLER"
+      printf '[dry-run] %q %q install\n' "$PYTHON_BIN" "$PATROL_CRON_INSTALLER"
+    elif [[ ! -f "$PATROL_CRON_INSTALLER" ]]; then
+      warn "patrol cron skipped; missing helper: $PATROL_CRON_INSTALLER"
       return 0
     else
-      "$PYTHON_BIN" "$QA_PATROL_CRON_INSTALLER" install
+      "$PYTHON_BIN" "$PATROL_CRON_INSTALLER" install
     fi
-    note "[install] QA Patrol Cron installed"
+    note "[install] Patrol Cron installed"
   else
-    note "[install] QA Patrol Cron skipped"
+    note "[install] Patrol Cron skipped"
   fi
 }

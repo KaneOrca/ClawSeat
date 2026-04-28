@@ -86,7 +86,7 @@ def _run_fake_install(
     return result, project_toml, agent_admin_log
 
 
-def test_migrate_project_profile_adds_qa(tmp_path: Path) -> None:
+def test_migrate_project_profile_adds_patrol(tmp_path: Path) -> None:
     result, project_toml, agent_admin_log = _run_fake_install(
         tmp_path,
         project_toml_text="\n".join(
@@ -106,30 +106,30 @@ def test_migrate_project_profile_adds_qa(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     migrated = tomllib.loads(project_toml.read_text(encoding="utf-8"))
-    assert migrated["engineers"] == ["memory", "planner", "builder", "designer", "qa"]
-    assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "memory", "qa"]
+    assert migrated["engineers"] == ["memory", "planner", "builder", "designer", "patrol"]
+    assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "memory", "patrol"]
     assert migrated["monitor_max_panes"] == 5
     assert migrated["seat_overrides"]["builder"]["provider"] == "openai"
-    assert migrated["seat_overrides"]["qa"]["auth_mode"] == "api"
-    assert migrated["seat_overrides"]["qa"]["provider"] == "minimax"
-    assert migrated["seat_overrides"]["qa"]["model"] == "MiniMax-M2.7-highspeed"
-    assert migrated["seat_overrides"]["qa"]["base_url"] == "https://api.minimaxi.com/anthropic"
+    assert migrated["seat_overrides"]["patrol"]["auth_mode"] == "api"
+    assert migrated["seat_overrides"]["patrol"]["provider"] == "minimax"
+    assert migrated["seat_overrides"]["patrol"]["model"] == "MiniMax-M2.7-highspeed"
+    assert migrated["seat_overrides"]["patrol"]["base_url"] == "https://api.minimaxi.com/anthropic"
     assert list(project_toml.parent.glob("project.toml.bak.*"))
     calls = [
         json.loads(line)["argv"]
         for line in agent_admin_log.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    assert ["engineer", "create", "qa", "qa-gaps", "--no-monitor"] in calls
+    assert ["engineer", "create", "patrol", "qa-gaps", "--no-monitor"] in calls
 
 
-def test_migrate_project_profile_skips_if_qa_present(tmp_path: Path) -> None:
+def test_migrate_project_profile_skips_if_patrol_present(tmp_path: Path) -> None:
     original = "\n".join(
         [
             'name = "qa-gaps"',
             'template_name = "clawseat-creative"',
-            'engineers = ["memory", "planner", "builder", "designer", "qa"]',
-            'monitor_engineers = ["memory", "planner", "builder", "designer", "qa"]',
+            'engineers = ["memory", "planner", "builder", "designer", "patrol"]',
+            'monitor_engineers = ["memory", "planner", "builder", "designer", "patrol"]',
             "monitor_max_panes = 5",
             "",
             "[seat_overrides.memory]",
@@ -148,7 +148,7 @@ def test_migrate_project_profile_skips_if_qa_present(tmp_path: Path) -> None:
             'auth_mode = "oauth"',
             'provider = "openai"',
             "",
-            "[seat_overrides.qa]",
+            "[seat_overrides.patrol]",
             'tool = "claude"',
             'auth_mode = "api"',
             'provider = "minimax"',
@@ -178,21 +178,21 @@ def test_install_dry_run_registers_memory_tmux_with_tool_suffix(tmp_path: Path) 
     assert "--tmux-name qa-gaps-memory-codex" in combined
 
 
-def test_gstack_harness_template_has_qa(tmp_path: Path) -> None:
+def test_gstack_harness_template_has_patrol(tmp_path: Path) -> None:
     template = tomllib.loads(_TEMPLATE.read_text(encoding="utf-8"))
-    qa_specs = [eng for eng in template["engineers"] if eng.get("id") == "qa"]
+    patrol_specs = [eng for eng in template["engineers"] if eng.get("id") == "patrol"]
 
-    assert len(qa_specs) == 1
-    assert qa_specs[0]["role"] == "qa"
-    assert qa_specs[0]["qa_authority"] is True
-    assert qa_specs[0]["auth_mode"] == "api"
-    assert qa_specs[0]["provider"] == "minimax"
-    assert qa_specs[0]["model"] == "MiniMax-M2.7-highspeed"
-    assert qa_specs[0]["base_url"] == "https://api.minimaxi.com/anthropic"
+    assert len(patrol_specs) == 1
+    assert patrol_specs[0]["role"] == "patrol"
+    assert patrol_specs[0]["qa_authority"] is True
+    assert patrol_specs[0]["auth_mode"] == "api"
+    assert patrol_specs[0]["provider"] == "minimax"
+    assert patrol_specs[0]["model"] == "MiniMax-M2.7-highspeed"
+    assert patrol_specs[0]["base_url"] == "https://api.minimaxi.com/anthropic"
 
     profile = tmp_path / "profile.toml"
     workspace_root = tmp_path / "workspaces"
-    (workspace_root / "qa").mkdir(parents=True)
+    (workspace_root / "patrol").mkdir(parents=True)
     profile.write_text(
         "\n".join(
             [
@@ -211,7 +211,7 @@ def test_gstack_harness_template_has_qa(tmp_path: Path) -> None:
             "--profile",
             str(profile),
             "--seat",
-            "qa",
+            "patrol",
             "--force",
         ],
         capture_output=True,
@@ -221,7 +221,7 @@ def test_gstack_harness_template_has_qa(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert (workspace_root / "qa" / "IDENTITY.md").exists()
+    assert (workspace_root / "patrol" / "IDENTITY.md").exists()
 
 
 def test_agent_launcher_session_has_tool_suffix(tmp_path: Path) -> None:
@@ -261,7 +261,7 @@ def test_open_grid_rebuild_flag_accepted(monkeypatch: pytest.MonkeyPatch) -> Non
         (),
         {
             "name": "qa-gaps",
-            "engineers": ["memory", "planner", "builder", "qa"],
+            "engineers": ["memory", "planner", "builder", "patrol"],
             "template_name": "clawseat-creative",
         },
     )()
@@ -294,17 +294,17 @@ def test_workers_recipe_4_is_balanced() -> None:
 def test_workers_recipe_4_pane_labels() -> None:
     project = SimpleNamespace(
         name="qa-gaps",
-        engineers=["memory", "planner", "builder", "designer", "qa"],
+        engineers=["memory", "planner", "builder", "designer", "patrol"],
         template_name="clawseat-creative",
     )
 
     payload = agent_admin_window.build_workers_payload(project)
 
     assert payload["recipe"] == [[0, True], [0, False], [1, False]]
-    assert [pane["label"] for pane in payload["panes"]] == ["planner", "builder", "designer", "qa"]
+    assert [pane["label"] for pane in payload["panes"]] == ["planner", "builder", "designer", "patrol"]
 
 
-def test_agent_admin_engineer_create_defaults_qa_to_minimax() -> None:
+def test_agent_admin_engineer_create_aliases_qa_to_patrol_minimax() -> None:
     from agent_admin_crud import CrudHandlers
 
     created_sessions: list[dict[str, object]] = []
@@ -315,7 +315,7 @@ def test_agent_admin_engineer_create_defaults_qa_to_minimax() -> None:
         template_name="clawseat-creative",
     )
     session = SimpleNamespace(
-        engineer_id="qa",
+        engineer_id="patrol",
         project="qa-gaps",
         tool="claude",
         auth_mode="api",
@@ -330,7 +330,7 @@ def test_agent_admin_engineer_create_defaults_qa_to_minimax() -> None:
         load_template=lambda _name: {
             "engineers": [
                 {
-                    "id": "qa",
+                    "id": "patrol",
                     "tool": "claude",
                     "auth_mode": "api",
                     "provider": "minimax",
@@ -356,6 +356,7 @@ def test_agent_admin_engineer_create_defaults_qa_to_minimax() -> None:
     )
 
     assert rc == 0
+    assert created_sessions[0]["engineer_id"] == "patrol"
     assert created_sessions[0]["tool"] == "claude"
     assert created_sessions[0]["auth_mode"] == "api"
     assert created_sessions[0]["provider"] == "minimax"

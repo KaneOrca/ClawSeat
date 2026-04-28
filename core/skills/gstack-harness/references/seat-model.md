@@ -101,11 +101,11 @@ Recommended split:
    - frontstage / planner records the selected tool/auth/provider and the
      operator supplies required secret material
 2. configuration verification
-   - planner uses reviewer/qa lanes as needed to prove the seat can actually
+   - planner uses reviewer/patrol lanes as needed to prove the seat can actually
      connect and behave correctly
 
-`qa-1` is the preferred verification seat when the change affects connectivity,
-bridges, or provider reachability, but `qa-1` should validate behavior without
+`patrol-1` is the preferred verification seat when the change affects connectivity,
+bridges, or provider reachability, but `patrol-1` should validate behavior without
 becoming the seat that owns plaintext secrets long term.
 
 This is how frontstage ensures the seat remembers its role, seat boundary, and
@@ -168,7 +168,7 @@ Why this matters:
 - `planner-dispatcher`
 - `builder`
 - `reviewer`
-- `qa`
+- `patrol`
 - `designer`
 
 ## Operating rule
@@ -191,7 +191,7 @@ Why this matters:
 - `engineer-b` -> `planner-dispatcher`
 - `engineer-a` -> `builder`
 - `engineer-c` -> `reviewer`
-- `engineer-d` -> `qa`
+- `engineer-d` -> `patrol`
 - `engineer-e` -> `designer`
 
 This mapping is kept only for legacy projects that still run the historic
@@ -204,7 +204,7 @@ runtime artifacts.
 - `planner` -> `planner-dispatcher`
 - `builder-1` -> `builder`
 - `reviewer-1` -> `reviewer`
-- `qa-1` -> `qa`
+- `patrol-1` -> `patrol`
 - `designer-1` -> `designer`
 
 Prefer these ids for all new profiles, examples, and starter templates.

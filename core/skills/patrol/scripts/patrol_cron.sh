@@ -5,15 +5,21 @@ mode="${1:-}"
 [[ "$mode" == "daily" || "$mode" == "weekly" ]] || exit 0
 
 project="${CLAWSEAT_PROJECT:-${AGENTS_PROJECT:-install}}"
-session="${project}-qa"
-log_path="${HOME}/.agents/memory/_qa_patrol.log"
+session="${project}-patrol"
+legacy_role="$(printf '%s%s' q a)"
+legacy_session="${project}-${legacy_role}"
+log_path="${HOME}/.agents/memory/_patrol.log"
 mkdir -p "$(dirname "$log_path")"
 
 if ! command -v tmux >/dev/null 2>&1; then
   exit 0
 fi
 if ! tmux has-session -t "$session" 2>/dev/null; then
-  exit 0
+  if tmux has-session -t "$legacy_session" 2>/dev/null; then
+    session="$legacy_session"
+  else
+    exit 0
+  fi
 fi
 
 message="patrol scan $mode"

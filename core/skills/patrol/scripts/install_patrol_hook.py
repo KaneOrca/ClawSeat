@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the QA Stop hook into a Claude workspace settings.json."""
+"""Install the patrol Stop hook into a Claude workspace settings.json."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_HOOK = SCRIPT_DIR / "hooks" / "qa-stop-hook.sh"
+DEFAULT_HOOK = SCRIPT_DIR / "hooks" / "patrol-stop-hook.sh"
 
 
 def _load(path: Path) -> dict:
@@ -18,7 +18,7 @@ def _load(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def install_qa_hook_at(settings_path: Path, hook_script: Path = DEFAULT_HOOK) -> tuple[dict, bool]:
+def install_patrol_hook_at(settings_path: Path, hook_script: Path = DEFAULT_HOOK) -> tuple[dict, bool]:
     settings = _load(settings_path)
     hooks = settings.get("hooks") if isinstance(settings.get("hooks"), dict) else {}
     stop = hooks.get("Stop") if isinstance(hooks.get("Stop"), list) else []
@@ -48,7 +48,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     settings_path = Path(args.settings_path).expanduser() if args.settings_path else Path(args.workspace) / ".claude" / "settings.json"
-    settings, changed = install_qa_hook_at(settings_path, Path(args.hook_script).expanduser())
+    settings, changed = install_patrol_hook_at(settings_path, Path(args.hook_script).expanduser())
     rendered = json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
     if args.dry_run:
         print(rendered, end="")

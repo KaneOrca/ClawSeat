@@ -87,13 +87,13 @@ reviewer, and produce a failure-mode record to prevent recurrence.
 ```
 → Memory writes `shared/examples/failure-mode-<id>.json`
 
-### qa
+### patrol
 ```
 LEARNING REQUEST: Produce a methodology record: which real-exec steps in merged
 QA runs are safely skippable on re-runs (already validated by prior receipt),
 and which must always re-run. Tag by check category.
 ```
-→ Memory writes `shared/library_knowledge/qa-methodology-<id>.json`
+-> Memory writes `shared/library_knowledge/patrol-methodology-<id>.json`
 
 ### designer
 ```

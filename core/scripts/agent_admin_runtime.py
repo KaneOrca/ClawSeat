@@ -19,6 +19,7 @@ from agent_admin_config import (
     _resolve_effective_home,
     parse_codex_provider_config,
 )
+from patrol_alias import normalize_seat_role
 
 
 HOME = _resolve_effective_home()
@@ -221,4 +222,4 @@ def secret_file_for(tool: str, provider: str, engineer_id: str) -> Path:
 
 
 def session_name_for(project: str, engineer_id: str, tool: str) -> str:
-    return f"{project}-{engineer_id}-{tool}"
+    return f"{project}-{normalize_seat_role(engineer_id)}-{tool}"

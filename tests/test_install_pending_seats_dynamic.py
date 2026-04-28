@@ -69,7 +69,7 @@ def test_creative_template_seat_order_excludes_reviewer(tmp_path):
     assert local_toml.exists(), f"project-local.toml not written. stdout:\n{result.stdout}"
     content = local_toml.read_text(encoding="utf-8")
 
-    assert 'seat_order = ["memory", "planner", "builder", "qa", "designer"]' in content
+    assert 'seat_order = ["memory", "planner", "builder", "patrol", "designer"]' in content
     assert "reviewer" not in content, (
         f"reviewer should not appear in creative project-local.toml:\n{content}"
     )
@@ -160,13 +160,13 @@ def test_creative_codex_gemini_seats_have_no_model_override(tmp_path):
     )
 
 
-def test_engineering_qa_seat_gets_template_model(tmp_path):
-    """clawseat-engineering: qa (claude/api/minimax) override must carry model = MiniMax-M2.7-highspeed
+def test_engineering_patrol_seat_gets_template_model(tmp_path):
+    """clawseat-engineering: patrol (claude/api/minimax) override must carry model = MiniMax-M2.7-highspeed
     from the template TOML, not the ancestor's selected model."""
     root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
     _copy_templates(root)
 
-    # Use anthropic provider for ancestor — qa seat should still get its own model.
+    # Use anthropic provider for ancestor; patrol seat should still get its own model.
     result = _run_install(root, home, launcher_log, tmux_log, py_stubs,
                           ["--project", "engmodeltest", "--template", "clawseat-engineering"])
     assert result.returncode == 0, result.stderr
@@ -176,19 +176,19 @@ def test_engineering_qa_seat_gets_template_model(tmp_path):
     content = local_toml.read_text(encoding="utf-8")
 
     lines = content.splitlines()
-    in_qa = False
-    qa_lines: list[str] = []
+    in_patrol = False
+    patrol_lines: list[str] = []
     for line in lines:
         if "[[overrides]]" in line:
-            in_qa = False
-        if 'id = "qa"' in line:
-            in_qa = True
-        if in_qa:
-            qa_lines.append(line)
+            in_patrol = False
+        if 'id = "patrol"' in line:
+            in_patrol = True
+        if in_patrol:
+            patrol_lines.append(line)
 
-    qa_text = "\n".join(qa_lines)
-    assert "MiniMax-M2.7-highspeed" in qa_text, (
-        f"qa override must carry template-specified model MiniMax-M2.7-highspeed:\n{qa_text}"
+    patrol_text = "\n".join(patrol_lines)
+    assert "MiniMax-M2.7-highspeed" in patrol_text, (
+        f"patrol override must carry template-specified model MiniMax-M2.7-highspeed:\n{patrol_text}"
         f"\n\nFull TOML:\n{content}"
     )
 
@@ -206,4 +206,4 @@ def test_engineering_template_seat_order_includes_reviewer(tmp_path):
     assert local_toml.exists()
     content = local_toml.read_text(encoding="utf-8")
 
-    assert 'seat_order = ["memory", "planner", "builder", "reviewer", "qa", "designer"]' in content
+    assert 'seat_order = ["memory", "planner", "builder", "reviewer", "patrol", "designer"]' in content

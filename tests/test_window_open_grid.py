@@ -69,7 +69,7 @@ def test_build_grid_payload_uses_project_roster_and_wait_for_seat_commands() -> 
             "koder",
             "builder",
             "reviewer",
-            "qa",
+            "patrol",
             "designer",
         ]
     )
@@ -80,7 +80,7 @@ def test_build_grid_payload_uses_project_roster_and_wait_for_seat_commands() -> 
     commands = {pane["label"]: pane["command"] for pane in payload["panes"]}
     assert commands["ancestor"] == "tmux attach -t '=spawn49-ancestor'"
     assert "koder" not in commands
-    for seat in ("planner", "builder", "reviewer", "qa", "designer"):
+    for seat in ("planner", "builder", "reviewer", "patrol", "designer"):
         assert commands[seat] == f"bash {_REPO / 'scripts' / 'wait-for-seat.sh'} spawn49 {seat}"
 
 

@@ -62,7 +62,7 @@ bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>
   - `Row1-Col2 = planner`
   - `Row1-Col3 = builder`
   - `Row2-Col1 = reviewer`
-  - `Row2-Col2 = qa`
+  - `Row2-Col2 = patrol`
   - `Row2-Col3 = designer`
 - 如果某个 pane 内容异常，先核对 `user.seat_id` 和上面的固定位置，再决定是否 `window reseed-pane` 或 `window open-grid --recover`。
 
@@ -380,7 +380,7 @@ python3 ${CLAWSEAT_ROOT}/core/skills/gstack-harness/scripts/send_delegation_repo
 
 ### 跨 seat 文本通讯（canonical）
 
-如果在 B3.5 / B5 / B6 里需要临时给 planner / builder / reviewer / qa / designer 发短消息，统一用：
+如果在 B3.5 / B5 / B6 里需要临时给 planner / builder / reviewer / patrol / designer 发短消息，统一用：
 
 ```bash
 bash ${CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh \

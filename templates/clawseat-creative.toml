@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-creative"
-description = "Creative v2 roster: memory orchestrates planner, codex builder, qa, and gemini designer in split-2 workers layout"
+description = "Creative v2 roster: memory orchestrates planner, codex builder, patrol, and gemini designer in split-2 workers layout"
 
 [window_layout]
 shared_memories_window_title = "clawseat-memories"
@@ -9,7 +9,7 @@ workers_window_title = "clawseat-{PROJECT}-workers"
 [window_layout.workers_grid]
 left_main_seat = "planner"
 left_main_width = "50%"
-right_seats = ["builder", "qa", "designer"]
+right_seats = ["builder", "patrol", "designer"]
 right_fill_order = "col-major"
 
 [defaults]
@@ -81,7 +81,7 @@ skills = [
 ]
 role_details = [
   "creative planner: owns structure, task planning, and dispatch to creative workers",
-  "dispatches builder for classification, qa for verification, and designer for writing/scoring",
+  "dispatches builder for classification, patrol for verification, and designer for writing/scoring",
 ]
 
 [[engineers]]
@@ -116,9 +116,10 @@ role_details = [
 ]
 
 [[engineers]]
-id = "qa"
-display_name = "qa"
-role = "qa"
+# qa is a 6-month alias — both names accepted
+id = "patrol"
+display_name = "patrol"
+role = "patrol"
 window = "workers"
 window_pane = "middle-right"
 tool = "claude"
@@ -139,11 +140,11 @@ qa_authority = true
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/qa/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/patrol/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "test-execution and QA patrol seat; reports evidence without modifying code",
+  "test-execution and patrol seat; reports evidence without modifying code",
 ]
 
 [[engineers]]
