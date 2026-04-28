@@ -149,7 +149,33 @@ python3 query_memory.py --key credentials.keys.MINIMAX_API_KEY.value
 python3 scan_environment.py --output ~/.agents/memory/                 # 默认写 machine/ 5 文件
 python3 scan_project.py --project clawseat --repo ~/.clawseat --depth shallow --commit
 python3 memory_deliver.py --profile <profile> --task-id <id> --target <seat> --response-inline '{...}'
+
+# Typed-link graph (P1: deterministic regex extraction, no LLM, no embedding)
+python3 extract_links.py --file <path>                                  # auto-runs on memory_write
+python3 query_memory.py --backlinks "entity:taskid:ARENA-228"           # who linked here
+python3 query_memory.py --graph projects/arena/decision/foo --depth 2   # BFS reachable nodes
 ```
+
+## Typed-link graph (v0.9, P1)
+
+Every `memory_write.py` automatically refreshes a derivative graph index by
+running `extract_links.py` on the written page. Zero LLM calls; pure regex
+extraction over markdown content. See
+[`core/references/memory-link-graph.md`](../../references/memory-link-graph.md)
+for full schema + edge types.
+
+Indexes:
+
+```text
+~/.agents/memory/_links/<flat-source>.jsonl       # outgoing edges from a page
+~/.agents/memory/_backlinks/<flat-target>.jsonl   # incoming refs to a page or entity
+```
+
+Slug encoding: paths separated by `__`, namespace separator `:` becomes `++`.
+External entities use `entity:<namespace>:<value>` form; supported namespaces
+are `taskid` (e.g. `ARENA-228`), `commit`, `component`, `file`, `url`, `key`,
+`project`. The graph is **carry**, not vector — gbrain-style typed links
+deliver most of the recall lift without any embedding cost.
 
 ## Stop Hook（已落地，不是待实现）
 

@@ -579,6 +579,116 @@ def cmd_ask(question: str, *, profile_path: str | None, timeout: float) -> int:
     return 2
 
 
+# ── Link graph: typed-link / backlink queries (P1 memory graph) ──────────
+
+_FLAT_PATH_SEP = "__"
+_FLAT_NS_SEP = "++"
+
+
+def _flat_slug(slug: str) -> str:
+    return slug.replace("/", _FLAT_PATH_SEP).replace(":", _FLAT_NS_SEP)
+
+
+def _normalise_slug(slug: str, memory_dir: Path) -> str:
+    """Accept slug, slug.md, or absolute path; return MEMORY-relative slug w/o ext."""
+    s = slug.strip()
+    if s.startswith("entity:"):
+        return s
+    p = Path(s).expanduser()
+    if p.is_absolute():
+        try:
+            rel = p.resolve().relative_to(memory_dir.resolve())
+            return str(rel.with_suffix(""))
+        except ValueError:
+            pass
+    if s.endswith((".md", ".json")):
+        s = s.rsplit(".", 1)[0]
+    return s
+
+
+def _load_outgoing(memory_dir: Path, slug: str) -> list[dict]:
+    path = memory_dir / "_links" / f"{_flat_slug(slug)}.jsonl"
+    if not path.is_file():
+        return []
+    out: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def _load_incoming(memory_dir: Path, slug: str) -> list[dict]:
+    path = memory_dir / "_backlinks" / f"{_flat_slug(slug)}.jsonl"
+    if not path.is_file():
+        return []
+    out: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def cmd_backlinks(memory_dir: Path, slug: str) -> int:
+    """List all pages that link to this slug. JSON output."""
+    norm = _normalise_slug(slug, memory_dir)
+    incoming = _load_incoming(memory_dir, norm)
+    print(json.dumps({
+        "target": norm,
+        "incoming_count": len(incoming),
+        "incoming": incoming,
+    }, indent=2, ensure_ascii=False))
+    return 0 if incoming else 0  # zero is success even if no backlinks
+
+
+def cmd_graph(memory_dir: Path, slug: str, depth: int) -> int:
+    """BFS from slug up to depth N; output node + edge list. JSON output."""
+    norm = _normalise_slug(slug, memory_dir)
+    visited: set[str] = {norm}
+    edges: list[dict] = []
+    frontier: list[str] = [norm]
+
+    for level in range(depth):
+        next_frontier: list[str] = []
+        for node in frontier:
+            for edge in _load_outgoing(memory_dir, node):
+                target = edge.get("to")
+                if not target:
+                    continue
+                edges.append({
+                    "from": node,
+                    "to": target,
+                    "type": edge.get("type"),
+                    "snippet": edge.get("snippet"),
+                    "depth": level + 1,
+                })
+                if target not in visited:
+                    visited.add(target)
+                    next_frontier.append(target)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    print(json.dumps({
+        "root": norm,
+        "depth": depth,
+        "node_count": len(visited),
+        "edge_count": len(edges),
+        "nodes": sorted(visited),
+        "edges": edges,
+    }, indent=2, ensure_ascii=False))
+    return 0
+
+
 def verify_claims(response: dict, memory_dir: Path) -> dict:
     """Verify each claim's evidence against disk JSON files."""
     claims = response.get("claims")
@@ -688,11 +798,14 @@ Examples (v1 backward-compatible):
     group.add_argument("--search", help="Case-insensitive search across all files")
     group.add_argument("--ask", help="Deprecated compatibility flag; returns rc=2 and does not dispatch")
     group.add_argument("--status", action="store_true", help="Show memory DB status")
+    group.add_argument("--backlinks", help="List incoming links to <slug> (memory-relative path or entity:ns:val)")
+    group.add_argument("--graph", help="BFS from <slug> through typed-link graph (use --depth for hops)")
 
     p.add_argument("--section", help="With --file: dotted sub-path to extract")
     p.add_argument("--profile", help="Deprecated compatibility flag for --ask; ignored")
     p.add_argument("--timeout", type=float, default=60.0, help="Deprecated compatibility flag for --ask; ignored")
     p.add_argument("--files", help="With --search: comma-separated file names to restrict scope")
+    p.add_argument("--depth", type=int, default=1, help="With --graph: BFS depth (default 1)")
 
     # ── v3 new-layout filters (usable standalone or with --search) ─────────
     p.add_argument(
@@ -722,7 +835,15 @@ def main() -> int:
     # ── v3 new-layout list mode (project / kind / since) ───────────────────
     # Activated when any of the v3 filters is given AND no v1 exclusive mode.
     _v3_triggered = bool(args.project or args.kind or args.since)
-    _v1_mode = bool(args.key or args.file or args.search or args.ask or args.status)
+    _v1_mode = bool(
+        args.key
+        or args.file
+        or args.search
+        or args.ask
+        or args.status
+        or args.backlinks
+        or args.graph
+    )
 
     if _v3_triggered and not _v1_mode:
         return cmd_list(
@@ -742,6 +863,10 @@ def main() -> int:
     if args.search:
         files = args.files.split(",") if args.files else None
         return cmd_search(memory_dir, args.search, files=files)
+    if args.backlinks:
+        return cmd_backlinks(memory_dir, args.backlinks)
+    if args.graph:
+        return cmd_graph(memory_dir, args.graph, args.depth)
     if args.ask:
         return cmd_ask(args.ask, profile_path=args.profile, timeout=args.timeout)
 
@@ -749,8 +874,8 @@ def main() -> int:
     import argparse as _ap
     _ap.ArgumentParser(description=__doc__).print_help()
     print(
-        "\nerror: specify one of: --key, --file, --search, --ask, --status, "
-        "or --project/--kind/--since for v3 list mode",
+        "\nerror: specify one of: --key, --file, --search, --backlinks, "
+        "--graph, --ask, --status, or --project/--kind/--since for v3 list mode",
         file=sys.stderr,
     )
     return 2
