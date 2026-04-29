@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
-from agent_admin_crud_base import CrudHooks
+from agent_admin_crud_base import HOME, REPO_ROOT, CrudHooks, _render_dynamic_profile
 
 
 class BootstrapCrud:
     def __init__(self, hooks: CrudHooks) -> None:
         self.hooks = hooks
+
+    def _home(self) -> Path:
+        module = sys.modules.get("agent_admin_crud")
+        return getattr(module, "HOME", HOME) if module is not None else HOME
 
     def project_bootstrap(self, args: Any) -> int:
         template = self.hooks.load_template(args.template)
@@ -125,6 +130,28 @@ class BootstrapCrud:
             created_sessions.append(session)
 
         self.hooks.write_project(project)
+        profile_path = self._home() / ".agents" / "profiles" / f"{project.name}-profile-dynamic.toml"
+        if not profile_path.exists():
+            profile_template = (REPO_ROOT / "core" / "templates" / "profile-dynamic.template.toml").read_text(
+                encoding="utf-8"
+            )
+            seat_roles = {
+                self.hooks.normalize_name(str(item.get("id", ""))): str(item.get("role", "") or item.get("id", ""))
+                for item in merged["engineers"]
+                if str(item.get("id", "")).strip()
+            }
+            self.hooks.write_text(
+                profile_path,
+                _render_dynamic_profile(
+                    profile_template,
+                    project=project.name,
+                    repo_root=project.repo_root,
+                    profile_path=profile_path,
+                    seats=engineer_order,
+                    seat_roles=seat_roles,
+                ),
+                None,
+            )
         self.hooks.set_current_project(project.name)
 
         print(f"bootstrapped {project.name}")

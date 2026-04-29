@@ -150,11 +150,42 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 log_file = os.environ.get("AGENT_ADMIN_LOG")
 if log_file:
     with open(log_file, "a", encoding="utf-8") as handle:
         handle.write(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd()}) + "\\n")
+if sys.argv[1:3] == ["project", "bootstrap"]:
+    local_path = ""
+    for idx, arg in enumerate(sys.argv):
+        if arg == "--local" and idx + 1 < len(sys.argv):
+            local_path = sys.argv[idx + 1]
+            break
+    project = "smoketest"
+    repo_root = os.getcwd()
+    if local_path:
+        data = tomllib.loads(Path(local_path).read_text(encoding="utf-8"))
+        project = str(data.get("project_name") or project)
+        repo_root = str(data.get("repo_root") or repo_root)
+    home = Path(os.environ.get("CLAWSEAT_REAL_HOME") or os.environ["HOME"])
+    profile = home / ".agents" / "profiles" / f"{project}-profile-dynamic.toml"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text(
+        "\\n".join([
+            "version = 1",
+            f'profile_name = "{project}"',
+            f'project_name = "{project}"',
+            f'repo_root = "{repo_root}"',
+            'seats = ["memory", "planner", "builder", "patrol", "designer"]',
+            "",
+        ]),
+        encoding="utf-8",
+    )
 raise SystemExit(0)
 """,
     )

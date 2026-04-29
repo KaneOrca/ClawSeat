@@ -737,6 +737,37 @@ discover the same ClawSeat-visible skill set.
 
 ---
 
+## Troubleshooting
+
+### `dispatch_task.py`: profile not found
+
+Error:
+
+```text
+FileNotFoundError: ~/.agents/profiles/<project>-profile-dynamic.toml
+```
+
+Cause: the project bootstrap did not render the dynamic harness profile, so
+`dispatch_task.py` cannot load the project routing and handoff paths.
+
+Recovery:
+
+1. Prefer a reinstall of the affected project so bootstrap re-renders all
+   project state:
+
+   ```bash
+   bash ~/ClawSeat/scripts/install.sh --project <project> --reinstall
+   ```
+
+2. For diagnosis only, compare against
+   `core/templates/profile-dynamic.template.toml`; do not hand-write a
+   long-lived profile unless the operator explicitly chooses a manual override.
+
+3. After the profile exists, rerun the original `dispatch_task.py --profile
+   ~/.agents/profiles/<project>-profile-dynamic.toml ...` command.
+
+---
+
 ## Failure modes (consolidated)
 
 Common install-script failures:
@@ -746,6 +777,7 @@ Common install-script failures:
 | `MISSING_PYTHON311` / `INVALID_PYTHON_BIN` | Python is absent, too old, or `PYTHON_BIN` points at an unsupported executable. | Install/use Python 3.11+ and rerun Step 2. |
 | `PREFLIGHT_FAILED` | bootstrap preflight found a hard block. | Apply the printed fix command, then rerun Step 2. |
 | `ENV_SCAN_INCOMPLETE` | a required `~/.agents/memory/machine/*.json` scan artifact is missing. | Rerun Step 2; inspect `scan_environment.py` output if repeatable. |
+| `PROFILE_RENDER_MISSING` | `agent_admin project bootstrap` returned success but did not write `~/.agents/profiles/<project>-profile-dynamic.toml`. | Reinstall after updating ClawSeat, or inspect `agent_admin_crud_bootstrap.py` profile rendering. |
 | `NON_TTY_NO_TEMPLATE` | project/template selection needs input but stdin/stdout is not a tty. | Pass `--project <name> --template <name>`. |
 | `NON_TTY_NO_PROVIDER` / `INTERACTIVE_REQUIRED` | provider selection needs input but stdin/stdout is not a tty. | Pass `--provider <n|mode>` or `--base-url --api-key`. |
 | `PROVIDER_NOT_FOUND` / `INVALID_PROVIDER_CHOICE` | the requested provider mode or candidate number is not usable on this host. | Re-run without the override, pick a detected candidate, or supply explicit API flags. |
@@ -762,7 +794,7 @@ Full install-script error-code inventory from `scripts/install.sh` and
 | `lib/preflight.sh` | `ENV_SCAN_INCOMPLETE`, `INVALID_PYTHON_BIN`, `MISSING_PYTHON311`, `PREFLIGHT_FAILED` |
 | `lib/project.sh` | `AGENT_ADMIN_MISSING`, `BRIEF_CHMOD_FAILED`, `GUIDE_CHMOD_FAILED`, `GUIDE_DIR_FAILED`, `INVALID_PROJECT` |
 | | `KICKOFF_CHMOD_FAILED`, `KICKOFF_DIR_FAILED`, `KICKOFF_WRITE_FAILED`, `PROJECTS_JSON_ACTION_UNKNOWN`, `PROJECTS_REGISTRY_MISSING` |
-| | `PROJECT_BOOTSTRAP_FAILED`, `PROJECT_LOCAL_CHMOD_FAILED`, `PROJECT_LOCAL_DIR_FAILED` |
+| | `PROFILE_RENDER_MISSING`, `PROJECT_BOOTSTRAP_FAILED`, `PROJECT_LOCAL_CHMOD_FAILED`, `PROJECT_LOCAL_DIR_FAILED` |
 | | `PROJECT_PROFILE_BACKUP_FAILED`, `PROJECT_PROFILE_MIGRATE_FAILED`, `PATROL_ENGINEER_CREATE_FAILED`, `REINSTALL_BACKUP_FAILED` |
 | | `REINSTALL_PROJECT_MISSING` |
 | | `NON_TTY_NO_TEMPLATE`, `TEMPLATE_CHMOD_FAILED`, `TEMPLATE_DIR_CREATE_FAILED`, `TEMPLATE_MISSING`, `TEMPLATE_ROOT_CREATE_FAILED` |
