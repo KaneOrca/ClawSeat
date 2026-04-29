@@ -22,12 +22,14 @@ def test_install_help_lists_all_templates() -> None:
     output = result.stdout
     assert "Templates (--template)" in output
     assert "clawseat-creative" in output
-    assert "4-seat" in output
-    assert "clawseat-engineering" in output
     assert "5-seat" in output
+    assert "clawseat-engineering" in output
+    assert "6-seat" in output
     assert "clawseat-solo" in output
     assert "3-seat" in output
     assert "all OAuth" in output
+    assert "patrol" in output
+    assert "designer" in output
 
 
 def test_clawseat_solo_template_dry_run_is_valid(tmp_path: Path) -> None:

@@ -230,9 +230,9 @@ Provider modes (--provider, --all-api-provider):
 Non-TTY environments (agent-launcher sandbox, CI, detached agent sessions) must pass --provider <mode>; install cannot prompt interactively and exits with code 2.
 
 Templates (--template):
-  clawseat-creative      4-seat creative flow (memory + planner + builder + designer), OAuth + MiniMax mix
-  clawseat-engineering   5-seat engineering flow (memory + planner + builder + reviewer + patrol), OAuth-first
-  clawseat-solo          3-seat minimal creative flow (memory + builder + planner-gemini), all OAuth
+  clawseat-creative      5-seat creative flow (memory + planner + builder + patrol + designer), OAuth + API mix
+  clawseat-engineering   6-seat engineering flow (memory + planner + builder + reviewer + patrol + designer), OAuth + API mix
+  clawseat-solo          3-seat minimal flow (memory + builder + planner), all OAuth
 EOF
         exit 0
         ;;
