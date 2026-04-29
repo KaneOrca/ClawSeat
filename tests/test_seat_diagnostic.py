@@ -104,6 +104,7 @@ def _run(home: Path, bin_dir: Path, *, project: str = "demo", seat: str = "build
     env = os.environ.copy()
     env["AGENT_HOME"] = str(home)
     env["HOME"] = str(home)
+    env["AGENTS_ROOT"] = str(home / ".agents")
     env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
     return subprocess.run(
         ["bash", str(_SCRIPT), project, seat],

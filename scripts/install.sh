@@ -10,6 +10,7 @@ CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
 PYTHON_BIN_WAS_SET="${PYTHON_BIN+1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
+PROVISION_KEYS=0
 ENABLE_AUTO_PATROL=0
 LOAD_ALL_SKILLS=0
 DETECT_ONLY=0
@@ -181,6 +182,7 @@ parse_args() {
       --base-url) FORCE_BASE_URL="$2"; shift 2 ;;
       --api-key) FORCE_API_KEY="$2"; shift 2 ;;
       --model) FORCE_MODEL="$2"; shift 2 ;;
+      --provision-keys) PROVISION_KEYS=1; shift ;;
       --memory-tool) MEMORY_TOOL="$2"; MEMORY_TOOL_EXPLICIT=1; shift 2 ;;
       --memory-model) MEMORY_MODEL="$2"; MEMORY_MODEL_EXPLICIT=1; shift 2 ;;
       --reinstall|--force)
@@ -209,7 +211,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--detect-only prints one JSON environment summary and exits.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--detect-only prints one JSON environment summary and exits.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n--provision-keys prompts for missing template API keys and writes ~/.agents/.env.global.\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -302,7 +304,13 @@ main() {
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
     printf '[dry-run] PENDING_SEATS=(%s)\n' "${PENDING_SEATS[*]}" >&2
   fi
-  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider; render_brief
+  _check_api_keys_for_template || exit 0
+  if [[ "$FORCE_REINSTALL" == "1" ]]; then
+    _reinstall_project
+    trap '_reinstall_exit_trap $?' EXIT
+  fi
+  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider
+  render_brief
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
   bootstrap_project_profile
@@ -351,6 +359,8 @@ main() {
   touch_project_registry
   write_operator_guide
   print_operator_banner
+  _clear_reinstall_backups
+  trap - EXIT
 }
 
 

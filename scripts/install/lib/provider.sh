@@ -278,6 +278,157 @@ select_provider_candidate() {
   fi
 }
 
+_api_key_name_for_provider() {
+  case "$1" in
+    minimax) printf '%s\n' "MINIMAX_API_KEY" ;;
+    deepseek) printf '%s\n' "DEEPSEEK_API_KEY" ;;
+    ark) printf '%s\n' "ARK_API_KEY" ;;
+    xcode-best) printf '%s\n' "XCODE_BEST_API_KEY" ;;
+    anthropic|anthropic-console|anthropic_console) printf '%s\n' "ANTHROPIC_API_KEY" ;;
+    openai) printf '%s\n' "OPENAI_API_KEY" ;;
+    google|gemini) printf '%s\n' "GEMINI_API_KEY" ;;
+    *) printf '%s\n' "$(printf '%s_API_KEY' "$1" | tr '[:lower:]-' '[:upper:]_')" ;;
+  esac
+}
+
+_env_global_has_key() {
+  local key="$1" env_file="$HOME/.agents/.env.global"
+  [[ -n "${!key:-}" ]] && return 0
+  [[ -f "$env_file" ]] || return 1
+  grep -Eq "^[[:space:]]*(export[[:space:]]+)?${key}=" "$env_file"
+}
+
+_missing_api_keys_for_template() {
+  local template_file="$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml"
+  [[ -f "$template_file" ]] || return 0
+  "$PYTHON_BIN" - "$template_file" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+KEYS = {
+    "minimax": "MINIMAX_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "ark": "ARK_API_KEY",
+    "xcode-best": "XCODE_BEST_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "anthropic-console": "ANTHROPIC_API_KEY",
+    "anthropic_console": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "google": "GEMINI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+}
+
+with open(sys.argv[1], "rb") as handle:
+    data = tomllib.load(handle)
+
+seen: set[tuple[str, str]] = set()
+for spec in data.get("engineers", []):
+    if str(spec.get("auth_mode", "")).strip() != "api":
+        continue
+    provider = str(spec.get("provider", "")).strip()
+    if not provider:
+        continue
+    key = KEYS.get(provider, f"{provider.upper().replace('-', '_')}_API_KEY")
+    item = (provider, key)
+    if item in seen:
+        continue
+    seen.add(item)
+    print(f"{provider}\t{key}")
+PY
+}
+
+_collect_missing_api_keys() {
+  local line provider key
+  while IFS=$'\t' read -r provider key; do
+    [[ -n "$provider" && -n "$key" ]] || continue
+    _env_global_has_key "$key" || printf '%s\t%s\n' "$provider" "$key"
+  done < <(_missing_api_keys_for_template)
+}
+
+_append_env_global_key() {
+  local key="$1" value="$2" env_file="$HOME/.agents/.env.global"
+  mkdir -p "$(dirname "$env_file")" || die 22 PROVIDER_ENV_DIR_FAILED "unable to create ~/.agents"
+  touch "$env_file" || die 22 PROVIDER_ENV_WRITE_FAILED "unable to write $env_file"
+  chmod 600 "$env_file" || true
+  if grep -Eq "^[[:space:]]*(export[[:space:]]+)?${key}=" "$env_file"; then
+    "$PYTHON_BIN" - "$env_file" "$key" "$value" <<'PY'
+from __future__ import annotations
+
+import re
+import shlex
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+line = f"export {key}={shlex.quote(value)}"
+pattern = re.compile(rf"^(\s*export\s+)?{re.escape(key)}=.*$", re.MULTILINE)
+text = pattern.sub(line, path.read_text(encoding="utf-8"))
+path.write_text(text, encoding="utf-8")
+PY
+  else
+    printf 'export %s=%q\n' "$key" "$value" >>"$env_file" \
+      || die 22 PROVIDER_ENV_WRITE_FAILED "unable to write $env_file"
+  fi
+}
+
+_provision_missing_api_keys() {
+  local missing="$1" line provider key value
+  while IFS=$'\t' read -r -u 3 provider key; do
+    [[ -n "$provider" && -n "$key" ]] || continue
+    printf 'Enter %s for template provider %s: ' "$key" "$provider" >&2
+    if [[ -t 0 ]]; then
+      read -r value < /dev/tty
+    else
+      read -r value
+    fi
+    [[ -n "$value" ]] || die 22 PROVIDER_INPUT_MISSING "missing value for $key"
+    _append_env_global_key "$key" "$value"
+  done 3<<<"$missing"
+}
+
+_check_api_keys_for_template() {
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  local missing="" reply=""
+  missing="$(_collect_missing_api_keys)"
+  [[ -n "$missing" ]] || return 0
+
+  if [[ "$PROVISION_KEYS" == "1" ]]; then
+    _provision_missing_api_keys "$missing"
+    return 0
+  fi
+
+  if [[ "${CLAWSEAT_NON_INTERACTIVE:-0}" == "1" || ! -t 0 || ! -t 1 ]]; then
+    warn "missing API keys for template $CLAWSEAT_TEMPLATE_NAME; install skipped without changes:"
+    printf '%s\n' "$missing" | while IFS=$'\t' read -r provider key; do
+      [[ -n "$provider" && -n "$key" ]] && warn "  $provider requires $key"
+    done
+    warn "rerun with --provision-keys or add keys to ~/.agents/.env.global"
+    return 1
+  fi
+
+  printf 'Template %s needs API keys for worker seats:\n' "$CLAWSEAT_TEMPLATE_NAME" >&2
+  printf '%s\n' "$missing" | while IFS=$'\t' read -r provider key; do
+    [[ -n "$provider" && -n "$key" ]] && printf '  - %s: %s\n' "$provider" "$key" >&2
+  done
+  printf 'A) provision missing keys now\nB) continue without provisioning\nC) cancel\nChoose [A]: ' >&2
+  read -r reply
+  reply="${reply:-A}"
+  case "$reply" in
+    A|a) _provision_missing_api_keys "$missing" ;;
+    B|b) warn "continuing with missing template API keys" ;;
+    C|c) die 22 PROVIDER_INPUT_MISSING "operator cancelled missing API key provisioning" ;;
+    *) die 22 INVALID_PROVIDER_CHOICE "invalid choice: $reply" ;;
+  esac
+}
+
 select_provider() {
   note "Step 3: primary seat provider"
   local mode="" label="" key="" base="" reply="" primary_template_tool="" primary_template_auth="" primary_template_provider="" primary_template_model="" effective_memory_tool=""

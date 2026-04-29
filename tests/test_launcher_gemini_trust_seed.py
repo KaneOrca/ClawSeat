@@ -17,6 +17,8 @@ def _run_bash(real_home: Path, snippet: str, *, extra_env: dict[str, str] | None
         "HOME": str(real_home),
         "CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY": "1",
     }
+    for key in ("AGENTS_ROOT", "CLAWSEAT_PROJECT", "CLAWSEAT_SEAT", "CLAWSEAT_ENGINEER_ID"):
+        env.pop(key, None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
