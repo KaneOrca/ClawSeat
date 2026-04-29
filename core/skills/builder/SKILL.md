@@ -3,8 +3,7 @@ name: builder
 description: Implementation seat for ClawSeat workflow steps assigned by planner. Use when planner dispatches a brief, when you receive a [DISPATCH:] notification, or when fixing bugs, adding features, writing tests, refactoring code, or editing scripts and docs. Also use when implementing schema changes, templates, installers, or configuration from an in-flight workflow. Covers artifact authoring, local validation, and DELIVERY.md handoff with Docs Consulted (`N/A — <reason>` unless external SDK/API/CLI docs used). Do NOT use for code review, visual QA, scheduled patrol sweeps, operator intake, or memory authority decisions.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
-# Builder
-Engineering implementation seat; I change artifacts only from planner-assigned workflow steps.
+# Builder — Engineering implementation seat; I change artifacts only from planner-assigned workflow steps.
 ## Workflow Collaboration
 
 I execute steps assigned to me in workflow.md. planner is the author.
@@ -28,6 +27,7 @@ On failure (command error or `iter > max_iterations`):
 - Do NOT retry silently.
 - Notify `notify_on_blocked` roles.
 - Record stderr, command output, and other evidence under `artifacts/`.
+## Work Mode: **2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)**
 ## Context Management
 
 ### [CLEAR-REQUESTED]

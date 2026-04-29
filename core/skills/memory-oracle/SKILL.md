@@ -55,6 +55,64 @@ Memory dispatches a task via `dispatch_task.py` 时，SHOULD 调用
 当前 project 的 `~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
 Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Memory 的职责。
 
+## Dispatch Protocol & Absent-Planner Fallback
+
+Canonical task dispatch is the gstack harness helper:
+
+```bash
+python3 core/skills/gstack-harness/scripts/dispatch_task.py \
+  --profile ~/.agents/profiles/<project>-profile-dynamic.toml \
+  --source memory \
+  --target <seat> \
+  --task-id <id> \
+  --title "<title>" \
+  --objective "<objective>" \
+  --test-policy EXTEND \
+  --reply-to planner
+```
+
+The real CLI requires `--profile`, one of `--target` or `--target-role`,
+`--task-id`, `--title`, `--objective`, and `--test-policy
+{UPDATE,FREEZE,EXTEND,N/A}`. It writes the handoff record under
+`~/.agents/tasks/<project>/patrol/handoffs/<task_id>__<source>__<target>.json`
+and then notifies the target unless `--no-notify` is used. The profile path is
+not optional: missing `~/.agents/profiles/<project>-profile-dynamic.toml` will
+break dispatch before the task has durable context.
+
+`send-and-verify.sh` does not replace `dispatch_task.py`:
+
+- `send-and-verify.sh` is a wake-up transport for an existing seat. It sends
+  text and verifies the tmux input buffer did not strand it.
+- It does not create a handoff record, does not define `task_id`, and does not
+  tell the target where to deliver.
+- Use it when planner or patrol is already present and owns the actual
+  `dispatch_task.py` call.
+- Do not use it to send work directly from memory to builder when planner or
+  the dynamic profile is absent.
+
+Absent-planner fallback:
+
+1. Do not directly dispatch builder; memory is L3 knowledge and escalation,
+   not chain orchestration.
+2. Do not hand-write `TODO.md` as a replacement for the canonical handoff.
+3. Escalate to the operator with a concise blocked report: planner unavailable,
+   dispatch blocked, likely causes include missing profile-dynamic.toml,
+   planner crash, or missing tmux session.
+4. If the root cause is
+   `FileNotFoundError: <project>-profile-dynamic.toml`, fix the project profile
+   first, normally with `bash ~/ClawSeat/scripts/install.sh --project <project>
+   --reinstall`, then rerun the dispatch.
+
+Verify Ack 4-step after dispatch:
+
+1. `ls -lat ~/.agents/tasks/<project>/patrol/handoffs/`
+2. `tmux capture-pane -t $(agentctl session-name <seat> --project <project>) -p | tail -30`
+3. `cat ~/.agents/tasks/<project>/<seat>/DELIVERY.md`
+4. `git fetch <remote> <branch> && git log <remote>/<branch> --oneline -5`
+
+Treat missing handoff, silent target pane, absent delivery, or absent remote
+commit as an unacknowledged dispatch until proven otherwise.
+
 ## Startup Workspace Freshness Check
 
 启动 B0/B1 阶段应做一次 workspace stale 检测；这是提示，不是 hard block。若

@@ -766,6 +766,11 @@ bootstrap_project_profile() {
   ) || die 31 PROJECT_BOOTSTRAP_FAILED "unable to bootstrap project profile via agent_admin: $PROJECT"
   ensure_deepseek_secret_template
   seed_bootstrap_secrets
+
+  local profile_check_path="$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml"
+  if [[ ! -f "$profile_check_path" ]]; then
+    die 31 PROFILE_RENDER_MISSING "agent_admin project bootstrap finished but profile not rendered: $profile_check_path. This indicates a regression in agent_admin_crud_bootstrap.py; profile-dynamic.toml is required by dispatch_task.py / state.seed."
+  fi
 }
 
 _update_projects_json() {

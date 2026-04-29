@@ -534,6 +534,7 @@ bash scripts/install.sh --project myproject --force-repo-root /Users/you/coding/
 | `MISSING_PYTHON311` / `INVALID_PYTHON_BIN` | Python 缺失、版本过低，或 `PYTHON_BIN` 指向不支持的 executable。 | 安装/指定 Python 3.11+ 后重跑 Step 2。 |
 | `PREFLIGHT_FAILED` | bootstrap preflight 发现 hard block。 | 按输出的 fix command 修复后重跑 Step 2。 |
 | `ENV_SCAN_INCOMPLETE` | 缺少必需的 `~/.agents/memory/machine/*.json` scan artifact。 | 重跑 Step 2；若重复出现，检查 `scan_environment.py` output。 |
+| `PROFILE_RENDER_MISSING` | `agent_admin project bootstrap` 返回成功，但没有写 `~/.agents/profiles/<project>-profile-dynamic.toml`。 | 更新 ClawSeat 后 reinstall，或检查 `agent_admin_crud_bootstrap.py` 的 profile render。 |
 | `NON_TTY_NO_TEMPLATE` | project/template selection 需要输入，但 stdin/stdout 不是 TTY。 | 传 `--project <name> --template <name>`。 |
 | `NON_TTY_NO_PROVIDER` / `INTERACTIVE_REQUIRED` | provider selection 需要输入，但 stdin/stdout 不是 TTY。 | 传 `--provider <n|mode>` 或 `--base-url --api-key`。 |
 | `PROVIDER_NOT_FOUND` / `INVALID_PROVIDER_CHOICE` | 指定的 provider mode 或 candidate number 不可用。 | 取消 override 重新选择，或传显式 API flags。 |
@@ -550,7 +551,7 @@ Full install-script error-code inventory from `scripts/install.sh` and `scripts/
 | `lib/preflight.sh` | `ENV_SCAN_INCOMPLETE`, `INVALID_PYTHON_BIN`, `MISSING_PYTHON311`, `PREFLIGHT_FAILED` |
 | `lib/project.sh` | `AGENT_ADMIN_MISSING`, `BRIEF_CHMOD_FAILED`, `GUIDE_CHMOD_FAILED`, `GUIDE_DIR_FAILED`, `INVALID_PROJECT` |
 | | `KICKOFF_CHMOD_FAILED`, `KICKOFF_DIR_FAILED`, `KICKOFF_WRITE_FAILED`, `PROJECTS_JSON_ACTION_UNKNOWN`, `PROJECTS_REGISTRY_MISSING` |
-| | `PROJECT_BOOTSTRAP_FAILED`, `PROJECT_LOCAL_CHMOD_FAILED`, `PROJECT_LOCAL_DIR_FAILED` |
+| | `PROFILE_RENDER_MISSING`, `PROJECT_BOOTSTRAP_FAILED`, `PROJECT_LOCAL_CHMOD_FAILED`, `PROJECT_LOCAL_DIR_FAILED` |
 | | `PROJECT_PROFILE_BACKUP_FAILED`, `PROJECT_PROFILE_MIGRATE_FAILED`, `PATROL_ENGINEER_CREATE_FAILED`, `REINSTALL_BACKUP_FAILED` |
 | | `REINSTALL_PROJECT_MISSING` |
 | | `NON_TTY_NO_TEMPLATE`, `TEMPLATE_CHMOD_FAILED`, `TEMPLATE_DIR_CREATE_FAILED`, `TEMPLATE_MISSING`, `TEMPLATE_ROOT_CREATE_FAILED` |
@@ -589,7 +590,15 @@ Phase-A 和 optional overlay 的失败由 memory 或 helper scripts 发出，不
 8. **skill 在 Claude/Codex/Gemini 看不到**：确认 `~/.agents/skills/` 是 source of truth，
    且 `~/.claude/skills/`、`~/.gemini/skills/`、`~/.codex/skills/` 已镜像。
 9. **项目已 ready 直接退出**：传 `--reinstall` 或 `--force` 重建。
-10. **想完全重装**：谨慎使用 `./scripts/clean-slate.sh --yes`，它会清理安装状态。
+10. **`dispatch_task.py` 报 profile not found**：看到
+    `FileNotFoundError: ~/.agents/profiles/<project>-profile-dynamic.toml` 时，
+    说明 project bootstrap 没写出 dispatch 所需的 dynamic profile。优先运行：
+    `bash ~/ClawSeat/scripts/install.sh --project <project> --reinstall`，让 bootstrap
+    重新渲染完整 project state。诊断时可对照
+    `core/templates/profile-dynamic.template.toml`，但不要长期手写 profile，除非
+    operator 明确选择 manual override。profile 存在后，再重跑原始
+    `dispatch_task.py --profile ~/.agents/profiles/<project>-profile-dynamic.toml ...`。
+11. **想完全重装**：谨慎使用 `./scripts/clean-slate.sh --yes`，它会清理安装状态。
 
 ## Resume
 
