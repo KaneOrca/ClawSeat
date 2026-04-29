@@ -125,8 +125,7 @@ class LegacyHandlers:
                 human_facing=bool(data.get("human_facing", False)),
                 active_loop_owner=bool(data.get("active_loop_owner", False)),
                 dispatch_authority=bool(data.get("dispatch_authority", False)),
-                # legacy QA authority alias: T6 backward-compat, sunset 2026-10-28
-                patrol_authority=bool(data.get("patrol_authority", data.get("qa" "_authority", False))),
+                patrol_authority=bool(data.get("patrol_authority", False)),
                 unblock_authority=bool(data.get("unblock_authority", False)),
                 escalation_authority=bool(data.get("escalation_authority", False)),
                 remind_active_loop_owner=bool(data.get("remind_active_loop_owner", False)),

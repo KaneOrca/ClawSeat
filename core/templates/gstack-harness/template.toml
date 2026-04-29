@@ -218,7 +218,7 @@ role_details = [
 ]
 
 [[engineers]]
-# qa is a 6-month alias — both names accepted
+# patrol is the canonical verification seat
 id = "patrol"
 role = "patrol"
 tool = "claude"
@@ -253,7 +253,7 @@ role_details = [
 ]
 
 [[engineers]]
-# qa is a 6-month alias — both names accepted
+# patrol is the canonical verification seat
 id = "patrol-1"
 role = "patrol"
 tool = "claude"

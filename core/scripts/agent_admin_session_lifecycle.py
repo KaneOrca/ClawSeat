@@ -26,7 +26,7 @@ from agent_admin_session_base import (
     _real_home_for_tool_seeding,
     SessionStartError,
 )
-from patrol_alias import normalize_seat_role
+from seat_roles import normalize_seat_role
 
 
 class SessionStartLifecycle:
@@ -205,7 +205,6 @@ class SessionStartLifecycle:
                 ("reviewer", "reviewer"),
                 ("designer", "designer"),
                 ("patrol", "patrol"),
-                ("qa", "patrol"),
                 ("memory", "memory"),
                 ("koder", "koder"),
                 ("engineer", "builder"),

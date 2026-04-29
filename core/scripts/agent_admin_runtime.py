@@ -19,7 +19,7 @@ from agent_admin_config import (
     _resolve_effective_home,
     parse_codex_provider_config,
 )
-from patrol_alias import normalize_seat_role
+from seat_roles import normalize_seat_role
 
 
 HOME = _resolve_effective_home()

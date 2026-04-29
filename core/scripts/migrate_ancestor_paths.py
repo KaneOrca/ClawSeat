@@ -11,10 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-# qa -> patrol rename (6-month alias period, T6 2026-04-28)
-SEAT_ROLE_MIGRATIONS = [
-    {"old": "qa", "new": "patrol", "alias_until": "2026-10-28", "type": "seat_role"},
-]
+SEAT_ROLE_MIGRATIONS: list[dict[str, str]] = []
 
 # Ref doc moves keep old core/references/* symlinks for the same 6-month
 # compatibility window. Install-time project migrations can consult this table
@@ -140,7 +137,7 @@ def run_launchctl(args: list[str], changed: list[str]) -> None:
 def migrate_launch_agent(home: Path, project: str, changed: list[str]) -> None:
     launch_agents = home / "Library" / "LaunchAgents"
     old_label = f"com.clawseat.{project}.ancestor-patrol"
-    new_label = f"com.clawseat.{project}.qa-patrol"
+    new_label = f"com.clawseat.{project}.patrol"
     old_path = launch_agents / f"{old_label}.plist"
     new_path = launch_agents / f"{new_label}.plist"
 
@@ -200,7 +197,7 @@ def _backup_profile(path: Path) -> Path:
 
 
 def _normalize_install_profile_seats(values: list[str]) -> list[str]:
-    renamed = {"builder-1": "builder", "reviewer-1": "reviewer", "qa": "patrol", "qa-1": "patrol-1"}
+    renamed = {"builder-1": "builder", "reviewer-1": "reviewer"}
     out: list[str] = []
     for value in values:
         if value == "koder":
@@ -278,7 +275,7 @@ def migrate_toml_seat_roles(path: Path) -> bool:
             newline = "\n"
             body = body[:-1]
 
-        table_updated = re.sub(r"^\[seat_overrides\.qa\]$", "[seat_overrides.patrol]", body)
+        table_updated = body
         if table_updated != body:
             changed = True
             output.append(table_updated + newline)

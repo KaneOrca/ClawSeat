@@ -40,7 +40,7 @@ SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
 ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
 ITERM_DRIVER_TIMEOUT_SECONDS=30
 MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
-MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/qa-patrol.plist.in"
+MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/patrol.plist.in"
 MIGRATE_ANCESTOR_PATHS_SCRIPT="$REPO_ROOT/core/scripts/migrate_ancestor_paths.py"
 RECONCILE_SEAT_STATES_SCRIPT="$REPO_ROOT/core/scripts/reconcile_seat_states.py"
 LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
@@ -106,7 +106,7 @@ refresh_clawseat_repo_paths() {
   SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
   ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
   MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
-  MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/qa-patrol.plist.in"
+  MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/patrol.plist.in"
   MIGRATE_ANCESTOR_PATHS_SCRIPT="$REPO_ROOT/core/scripts/migrate_ancestor_paths.py"
   RECONCILE_SEAT_STATES_SCRIPT="$REPO_ROOT/core/scripts/reconcile_seat_states.py"
   LAUNCHER_SCRIPT="$REPO_ROOT/core/launchers/agent-launcher.sh"
@@ -277,7 +277,7 @@ compute_project_paths() {
   PROJECT_RECORD_PATH="$HOME/.agents/projects/$PROJECT/project.toml"
   GUIDE_FILE="$HOME/.agents/tasks/$PROJECT/OPERATOR-START-HERE.md"
   KICKOFF_FILE="$HOME/.agents/tasks/$PROJECT/patrol/handoffs/memory-kickoff.txt"
-  MEMORY_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.qa-patrol"
+  MEMORY_PATROL_PLIST_LABEL="com.clawseat.${PROJECT}.patrol"
   MEMORY_PATROL_PLIST_PATH="$HOME/Library/LaunchAgents/${MEMORY_PATROL_PLIST_LABEL}.plist"
   MEMORY_PATROL_LOG_DIR="$HOME/.agents/tasks/$PROJECT/patrol/logs"
   ANCESTOR_PATROL_PLIST_LABEL="$MEMORY_PATROL_PLIST_LABEL"
@@ -321,7 +321,7 @@ main() {
   register_project_registry
   install_clawseat_cli_symlink
   install_primary_patrol_plist
-  install_qa_bootstrap
+  install_patrol_bootstrap
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +
   # one shared memories window across all projects (rebuilt on each install).

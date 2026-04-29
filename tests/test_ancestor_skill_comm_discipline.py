@@ -6,7 +6,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _ANCESTOR_SKILL = _REPO / "core" / "skills" / "memory-oracle" / "references" / "memory-operations-policy.md"
-_ANCESTOR_PLIST = _REPO / "core" / "templates" / "qa-patrol.plist.in"
+_ANCESTOR_PLIST = _REPO / "core" / "templates" / "patrol.plist.in"
 
 
 def test_ancestor_skill_and_patrol_plist_use_send_and_verify_for_project_seat_messages() -> None:

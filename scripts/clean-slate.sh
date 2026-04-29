@@ -114,7 +114,7 @@ kill_tmux_sessions() {
     log "tmux:         no server running"
     return 0
   fi
-  local pattern='^(install-|hardening-|[a-z0-9_-]+-(memory|koder|planner|builder-[0-9]+|reviewer-[0-9]+|patrol-[0-9]+|qa-[0-9]+|designer-[0-9]+)-claude)'
+  local pattern='^(install-|hardening-|[a-z0-9_-]+-(memory|koder|planner|builder-[0-9]+|reviewer-[0-9]+|patrol-[0-9]+|designer-[0-9]+)-claude)'
   local sessions
   sessions=$(tmux ls -F '#{session_name}' 2>/dev/null | grep -E "$pattern" || true)
   if [[ -z "$sessions" ]]; then

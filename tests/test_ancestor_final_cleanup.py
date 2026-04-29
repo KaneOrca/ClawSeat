@@ -61,8 +61,8 @@ def test_memory_brief_drift_check_accepts_new_env_name() -> None:
 
 
 def test_qa_patrol_template_targets_memory_session() -> None:
-    text = _read("core/templates/qa-patrol.plist.in")
-    assert "com.clawseat.{PROJECT}.qa-patrol" in text
+    text = _read("core/templates/patrol.plist.in")
+    assert "com.clawseat.{PROJECT}.patrol" in text
     assert "session-name memory --project" in text
     assert "--project '{PROJECT}' memory" in text
     assert "ancestor-patrol" not in text

@@ -68,12 +68,12 @@ def _handlers(tmp_path: Path, profile_data: dict) -> StoreHandlers:
     return StoreHandlers(hooks)
 
 
-def test_qa_authority_alias_compat(tmp_path: Path) -> None:
-    """Old qa_authority profiles still load correctly; patrol_authority takes precedence."""
+def test_patrol_authority_ignores_removed_legacy_alias(tmp_path: Path) -> None:
+    """The removed legacy authority field no longer grants patrol authority."""
     common = {"id": "patrol", "display_name": "Patrol"}
 
     old_only = _handlers(tmp_path, {**common, "qa_authority": True}).load_engineer("patrol")
-    assert old_only.patrol_authority is True
+    assert old_only.patrol_authority is False
 
     new_profile = _handlers(tmp_path, {**common, "patrol_authority": True}).load_engineer("patrol")
     assert new_profile.patrol_authority is True

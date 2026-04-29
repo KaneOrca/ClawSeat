@@ -14,7 +14,7 @@ from agent_admin_crud_base import (
     _update_profile_seat,
     archive_session_artifacts,
 )
-from patrol_alias import normalize_seat_role, patrol_alias_candidates
+from seat_roles import normalize_seat_role
 
 
 class EngineerCrud:
@@ -37,7 +37,7 @@ class EngineerCrud:
                 continue
             for spec in template.get("engineers", []):
                 spec_id = normalize_seat_role(self.hooks.normalize_name(str(spec.get("id", ""))))
-                if spec_id in patrol_alias_candidates(engineer_id):
+                if spec_id == engineer_id:
                     return {
                         "tool": str(spec.get("tool", "") or ""),
                         "mode": str(spec.get("auth_mode", "") or ""),
@@ -49,6 +49,8 @@ class EngineerCrud:
         projects = self.hooks.load_projects()
         project = projects[args.project]
         engineer_id = normalize_seat_role(self.hooks.normalize_name(args.engineer))
+        if engineer_id == "qa" or engineer_id.startswith("qa-"):
+            raise self.hooks.error_cls("qa seat ids were removed 2026-04-29; use patrol")
         defaults = self._engineer_template_defaults(project, engineer_id)
         tool = getattr(args, "tool", None) or defaults.get("tool") or "claude"
         mode = getattr(args, "mode", None) or defaults.get("mode") or "oauth"

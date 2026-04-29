@@ -20,7 +20,7 @@ def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.Complet
         "PYTHON_BIN": sys.executable,
     }
     if opt_in is not None:
-        env["CLAWSEAT_QA_PATROL_CRON_OPT_IN"] = opt_in
+        env["CLAWSEAT_PATROL_CRON_OPT_IN"] = opt_in
     return subprocess.run(
         [
             "bash",

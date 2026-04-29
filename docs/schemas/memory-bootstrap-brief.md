@@ -179,7 +179,7 @@ Phase B is **manual-by-default** since Round-8. Triggers:
 2. **Optional external `launchd` plist** (opt-in via
    `scripts/install.sh --enable-auto-patrol --project <name>`; default
    install does NOT install the plist). When enabled, template at
-   `core/templates/qa-patrol.plist.in` renders a LaunchAgent that
+   `core/templates/patrol.plist.in` renders a LaunchAgent that
    every `checklist_phase_b_cadence_minutes` minutes resolves the
    canonical memory session via `agentctl.sh session-name memory
    --project <project>` and sends a bilingual natural-language Phase-B

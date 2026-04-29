@@ -14,14 +14,14 @@
     {LOG_DIR}          → directory for stdout/err logs (e.g. ~/.agents/tasks/<project>/patrol/logs)
 
   Install location:
-    ~/Library/LaunchAgents/com.clawseat.{PROJECT}.qa-patrol.plist
+    ~/Library/LaunchAgents/com.clawseat.{PROJECT}.patrol.plist
 
   Activation:
     launchctl bootstrap gui/$(id -u) <plist-path>
-    launchctl kickstart  gui/$(id -u)/com.clawseat.{PROJECT}.qa-patrol
+    launchctl kickstart  gui/$(id -u)/com.clawseat.{PROJECT}.patrol
 
   Deactivation (e.g. on `agent-admin project remove`):
-    launchctl bootout    gui/$(id -u)/com.clawseat.{PROJECT}.qa-patrol
+    launchctl bootout    gui/$(id -u)/com.clawseat.{PROJECT}.patrol
 
   Behavior: every CADENCE_SECONDS, this plist runs the one-liner below. The
   one-liner uses the canonical send-and-verify wrapper to send a **natural
@@ -38,7 +38,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.clawseat.{PROJECT}.qa-patrol</string>
+    <string>com.clawseat.{PROJECT}.patrol</string>
 
     <key>ProgramArguments</key>
     <array>

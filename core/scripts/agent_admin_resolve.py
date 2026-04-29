@@ -17,7 +17,6 @@ from core.lib.real_home import real_user_home
 from core.lib.runtime_home_links import ensure_runtime_home_links
 from project_binding import load_binding
 from project_tool_root import project_tool_root
-from patrol_alias import patrol_alias_candidates
 
 
 @dataclass
@@ -226,13 +225,8 @@ class ResolveHandlers:
         engineer_map = engineers or self.hooks.load_engineers()
         if name in engineer_map:
             return engineer_map[name]
-        for candidate in patrol_alias_candidates(name):
-            if candidate in engineer_map:
-                return engineer_map[candidate]
         for engineer in engineer_map.values():
             if name in engineer.aliases:
-                return engineer
-            if any(candidate in engineer.aliases for candidate in patrol_alias_candidates(name)):
                 return engineer
         raise self.hooks.error_cls(f"Unknown engineer: {name}")
 
@@ -249,23 +243,12 @@ class ResolveHandlers:
             key = (project_name, engineer.engineer_id)
             if key in session_map:
                 return session_map[key]
-            for candidate in patrol_alias_candidates(engineer.engineer_id):
-                key = (project_name, candidate)
-                if key in session_map:
-                    return session_map[key]
             raise self.hooks.error_cls(f"{engineer.engineer_id} has no session in project {project_name}")
 
         current_project = self.hooks.get_current_project_name(self.hooks.load_projects())
         if current_project and (current_project, engineer.engineer_id) in session_map:
             return session_map[(current_project, engineer.engineer_id)]
-        if current_project:
-            for candidate in patrol_alias_candidates(engineer.engineer_id):
-                key = (current_project, candidate)
-                if key in session_map:
-                    return session_map[key]
-
-        candidates = set(patrol_alias_candidates(engineer.engineer_id))
-        matches = [session for session in session_map.values() if session.engineer_id in candidates]
+        matches = [session for session in session_map.values() if session.engineer_id == engineer.engineer_id]
         if len(matches) == 1:
             return matches[0]
         if not matches:
@@ -309,15 +292,6 @@ class ResolveHandlers:
         for session in sessions.values():
             if name == session.session or name in session.legacy_sessions:
                 return session.session
-        session_aliases = [name]
-        if "-qa-" in name:
-            session_aliases.append(name.replace("-qa-", "-patrol-", 1))
-        if "-patrol-" in name:
-            session_aliases.append(name.replace("-patrol-", "-qa-", 1))
-        for alias in session_aliases[1:]:
-            for session in sessions.values():
-                if alias == session.session or alias in session.legacy_sessions:
-                    return session.session
         projects = self.hooks.load_projects()
         if name in projects:
             return projects[name].monitor_session

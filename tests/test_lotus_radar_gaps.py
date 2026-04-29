@@ -75,7 +75,7 @@ def test_role_skill_uses_clawseat_root(tmp_path: Path) -> None:
     repo = tmp_path / "not-clawseat"
     repo.mkdir()
     assert _run_agent_admin(home, "project", "create", "foo", str(repo)).returncode == 0
-    result = _run_agent_admin(home, "engineer", "create", "qa", "foo", "--no-monitor")
+    result = _run_agent_admin(home, "engineer", "create", "patrol", "foo", "--no-monitor")
 
     assert result.returncode == 0, result.stderr
     claude_md = home / ".agents" / "workspaces" / "foo" / "patrol" / "CLAUDE.md"
@@ -83,6 +83,17 @@ def test_role_skill_uses_clawseat_root(tmp_path: Path) -> None:
     assert "Primary repo root: `" + str(repo) + "`" in text
     assert "## Role SKILL (canonical)" in text
     assert "# Patrol" in text
+
+
+def test_removed_qa_engineer_alias_is_not_accepted(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    repo = tmp_path / "not-clawseat"
+    repo.mkdir()
+    assert _run_agent_admin(home, "project", "create", "foo", str(repo)).returncode == 0
+
+    result = _run_agent_admin(home, "engineer", "create", "qa", "foo", "--no-monitor")
+
+    assert result.returncode != 0
 
 
 def test_workspace_memory_template_has_absolute_send_verify_path() -> None:

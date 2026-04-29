@@ -38,6 +38,7 @@ class ParserHooks:
     cmd_session_batch_start_engineer: Callable[[Any], int]
     cmd_session_provision_heartbeat: Callable[[Any], int]
     cmd_session_stop_engineer: Callable[[Any], int]
+    cmd_session_rename: Callable[[Any], int]
     cmd_session_start_project: Callable[[Any], int]
     cmd_session_status: Callable[[Any], int]
     cmd_session_reconcile: Callable[[Any], int]
@@ -433,6 +434,15 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     session_stop_eng.add_argument("--project")
     session_stop_eng.add_argument("--keep-iterm-tab", action="store_true", help="Skip closing the iTerm pane before killing the tmux session. (Flag name kept for backward compatibility; closes the matching pane only, not the entire tab — see RCA 2026-04-25.)")
     session_stop_eng.set_defaults(func=hooks.cmd_session_stop_engineer)
+
+    session_rename = session_sub.add_parser(
+        "rename",
+        help="Rename one project-scoped seat session and restart it under the new seat id.",
+    )
+    session_rename.add_argument("--project", required=True)
+    session_rename.add_argument("--from", dest="from_seat", required=True)
+    session_rename.add_argument("--to", dest="to_seat", required=True)
+    session_rename.set_defaults(func=hooks.cmd_session_rename)
 
     session_start_project = session_sub.add_parser("start-project")
     session_start_project.add_argument("project", nargs="?")

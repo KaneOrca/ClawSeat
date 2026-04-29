@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+import shutil
+import subprocess
 import sys
 from typing import Any, Callable
 
@@ -23,6 +26,17 @@ class CommandHooks:
     open_project_tabs_window: Callable[[Any, dict[str, Any], dict[str, Any]], None]
     open_engineer_window: Callable[[Any, Any | None], None]
     load_engineers: Callable[[], dict[str, Any]]
+    write_project: Callable[[Any], None] | None = None
+    write_session: Callable[[Any], None] | None = None
+    session_path: Callable[[str, str], Path] | None = None
+    archive_if_exists: Callable[[Path, str], None] | None = None
+    identity_name: Callable[..., str] | None = None
+    runtime_dir_for_identity: Callable[..., Path] | None = None
+    secret_file_for: Callable[..., Path] | None = None
+    session_name_for: Callable[..., str] | None = None
+    workspaces_root: Path | None = None
+    ensure_dir: Callable[[Path], None] | None = None
+    ensure_secret_permissions: Callable[[Path], None] | None = None
 
 
 class CommandHandlers:
@@ -268,6 +282,141 @@ class CommandHandlers:
     def session_stop_engineer(self, args: Any) -> int:
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self.hooks.session_service.stop_engineer(session, close_iterm_pane=not getattr(args, "keep_iterm_tab", False))
+        return 0
+
+    def _require_rename_hooks(self) -> None:
+        missing = [
+            name
+            for name in (
+                "write_project",
+                "write_session",
+                "session_path",
+                "archive_if_exists",
+                "identity_name",
+                "runtime_dir_for_identity",
+                "secret_file_for",
+                "session_name_for",
+                "workspaces_root",
+                "ensure_dir",
+                "ensure_secret_permissions",
+            )
+            if getattr(self.hooks, name) is None
+        ]
+        if missing:
+            raise self.hooks.error_cls(
+                f"session rename unavailable; missing hooks: {', '.join(missing)}"
+            )
+
+    def _kill_project_scoped_sessions(self, project_name: str, seat_id: str) -> list[str]:
+        prefix = f"{project_name}-{seat_id}-"
+        try:
+            result = subprocess.run(
+                ["tmux", "list-sessions", "-F", "#{session_name}"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            return []
+        if result.returncode != 0:
+            return []
+        killed: list[str] = []
+        for session_name in [line.strip() for line in result.stdout.splitlines() if line.strip()]:
+            if not session_name.startswith(prefix):
+                continue
+            subprocess.run(
+                ["tmux", "kill-session", "-t", f"={session_name}"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            killed.append(session_name)
+        return killed
+
+    def session_rename(self, args: Any) -> int:
+        self._require_rename_hooks()
+        from_seat = str(getattr(args, "from_seat", "") or "").strip()
+        to_seat = str(getattr(args, "to_seat", "") or "").strip()
+        if not from_seat or not to_seat:
+            raise self.hooks.error_cls("session rename requires --from and --to")
+        if from_seat == to_seat:
+            print(f"{from_seat} unchanged")
+            return 0
+
+        project = self.hooks.load_project_or_current(getattr(args, "project", None))
+        project_sessions = self.hooks.load_project_sessions(project.name)
+        if from_seat not in project_sessions:
+            raise self.hooks.error_cls(f"{project.name}:{from_seat} session not found")
+        if to_seat in project_sessions:
+            raise self.hooks.error_cls(f"{project.name}:{to_seat} session already exists")
+        old_session = project_sessions[from_seat]
+
+        self._kill_project_scoped_sessions(project.name, from_seat)
+        try:
+            self.hooks.session_service.stop_engineer(old_session, close_iterm_pane=True)
+        except Exception as exc:
+            print(f"session rename: stop skipped for {old_session.session}: {exc}", file=sys.stderr)
+
+        new_identity = self.hooks.identity_name(
+            old_session.tool,
+            old_session.auth_mode,
+            old_session.provider,
+            to_seat,
+            old_session.project,
+        )
+        new_session = type(old_session)(
+            engineer_id=to_seat,
+            project=old_session.project,
+            tool=old_session.tool,
+            auth_mode=old_session.auth_mode,
+            provider=old_session.provider,
+            identity=new_identity,
+            workspace=str(self.hooks.workspaces_root / old_session.project / to_seat),
+            runtime_dir=str(self.hooks.runtime_dir_for_identity(old_session.tool, old_session.auth_mode, new_identity)),
+            session=self.hooks.session_name_for(old_session.project, to_seat, old_session.tool),
+            bin_path=old_session.bin_path,
+            monitor=old_session.monitor,
+            legacy_sessions=[*list(old_session.legacy_sessions), old_session.session],
+            launch_args=list(old_session.launch_args),
+            secret_file="",
+            wrapper=old_session.wrapper,
+        )
+        if old_session.secret_file:
+            new_session.secret_file = str(
+                self.hooks.secret_file_for(old_session.tool, old_session.provider, to_seat)
+            )
+
+        for old_path_raw, new_path_raw in (
+            (old_session.workspace, new_session.workspace),
+            (old_session.runtime_dir, new_session.runtime_dir),
+            (old_session.secret_file, new_session.secret_file),
+        ):
+            if not old_path_raw or not new_path_raw:
+                continue
+            old_path = Path(old_path_raw)
+            new_path = Path(new_path_raw)
+            if not old_path.exists():
+                continue
+            self.hooks.ensure_dir(new_path.parent)
+            if new_path.exists():
+                raise self.hooks.error_cls(f"session rename target already exists: {new_path}")
+            shutil.move(str(old_path), str(new_path))
+            if new_path == Path(new_session.secret_file):
+                self.hooks.ensure_secret_permissions(new_path)
+
+        self.hooks.write_session(new_session)
+        self.hooks.archive_if_exists(self.hooks.session_path(project.name, from_seat).parent, "sessions")
+        project.engineers = [to_seat if item == from_seat else item for item in project.engineers]
+        project.monitor_engineers = [
+            to_seat if item == from_seat else item for item in project.monitor_engineers
+        ]
+        if project.seat_overrides and from_seat in project.seat_overrides and to_seat not in project.seat_overrides:
+            project.seat_overrides[to_seat] = project.seat_overrides.pop(from_seat)
+        self.hooks.write_project(project)
+        self.hooks.session_service.start_engineer(new_session, reset=False)
+        print(new_session.session)
         return 0
 
     def session_start_project(self, args: Any) -> int:

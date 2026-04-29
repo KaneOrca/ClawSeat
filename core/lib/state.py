@@ -662,7 +662,6 @@ _ROLE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^builder"), "builder"),
     (re.compile(r"^reviewer"), "reviewer"),
     (re.compile(r"^patrol"), "patrol"),
-    (re.compile(r"^qa"), "patrol"),
     (re.compile(r"^planner"), "planner"),
     (re.compile(r"^designer"), "designer"),
     (re.compile(r"^memory$"), "memory-oracle"),

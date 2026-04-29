@@ -113,7 +113,7 @@ role_details = [
 ]
 
 [[engineers]]
-# qa is a 6-month alias — both names accepted
+# legacy patrol alias removed 2026-04-29
 id = "patrol"
 display_name = "patrol"
 role = "patrol"

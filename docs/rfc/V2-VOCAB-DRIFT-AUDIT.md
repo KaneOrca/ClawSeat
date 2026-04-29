@@ -16,7 +16,7 @@
 | B. [DONE] 单窗 6-pane 心智 | `六宫格`, `6-pane`, `six-pane` | v2 是 workers + memories 双窗 | 🟠 HIGH (心智混乱) |
 | C. [DONE] ancestor 命名 | `ancestor`（应为 `memory` seat） | v2 RFC §1 始祖 = memory seat | 🟠 HIGH (大量文档/skill 漂移) |
 | D. [DONE] v1 配置物件 | `PROJECT_BINDING.toml`, `WORKSPACE_CONTRACT.toml` | v2 用 `project.toml` + `project-local.toml` | 🟡 MEDIUM |
-| E. [DONE] 5-worker roster | `planner/builder/reviewer/qa/designer` | v2 minimal 是 template-driven | 🟠 HIGH (issue #1 已专项追) |
+| E. [DONE] verification roster | `planner/builder/reviewer/patrol/designer` | v2 minimal 是 template-driven；verification seat 统一为 `patrol` | 🟢 CLOSED |
 | F. [DONE] install-ancestor 硬编码 | `install-ancestor`, `install_ancestor` | v2 是 `install-memory` | 🟡 MEDIUM (issue #3/#12 部分覆盖) |
 
 ---
@@ -130,42 +130,22 @@
 
 ---
 
-## E. [DONE] 5-worker roster 漂移（issue #1 已追，本审计补全清单）
+## E. [DONE-fully] verification roster 漂移（HH 2026-04-29 清扫）
 
-**v2 决议**: minimal = 3-worker (planner+builder+designer)；engineering/creative 模板可以保留 5-worker 但要明确文档化。
+**v2 决议**: minimal = template-driven；engineering/creative 模板可以保留更多 specialist。verification seat 的唯一 canonical id 是 `patrol`；旧 verification-seat 别名于 2026-04-29 移除。
 
-**核心代码**（运行时检查 5-worker 默认）:
-- `core/preflight.py:787, 799` — `_GSTACK_NEEDED_ROLES = {"builder", "reviewer", "qa", "designer"}` 默认 4-specialist
-- `core/skill_registry.toml:11, 127` — roles list
-- `core/scripts/agent_admin_workspace.py:31` — `_SPECIALIST_ROLES = frozenset({"builder", "reviewer", "qa", "designer"})`
-- `core/scripts/agent_admin_config.py:146` — comment 说默认 6-pane
-- `core/lib/profile_validator.py:35` — LEGAL_SEATS 含 reviewer/qa
-- `core/lib/bridge_preflight.py:59` — comment
-- `core/tui/ancestor_brief.py:76, 230` — parallel_instances 仅 builder/reviewer/qa
+**2026-04-29 已落地**:
+- `core/scripts/patrol_alias.py` 删除；`agent_admin_resolve.py` 不再做 verification-seat alias resolve。
+- `core/lib/profile_validator.py` 删除旧 verification seat 与编号形式；fan-out 只允许 `builder/reviewer/patrol`。
+- `agent-admin session rename --project <project> --from <old> --to patrol` 提供一次性迁移入口。
+- `scripts/migrate-qa-to-patrol.sh` 覆盖 install/cartooner/arena/lotus-radar/koder 的 project/profile/secret 迁移。
+- install 侧 `patrol` LaunchAgent 模板与 label 已改为 `patrol.plist.in` / `com.clawseat.<project>.patrol`。
 
-**模板**:
-- `core/templates/memory-bootstrap.template.md:325` — 临时短消息接收方含 reviewer/qa
-- `core/templates/ancestor-engineer.toml:32` — 自我约束文案
-- `core/templates/gstack-harness/template.toml:3, 105` — gstack 模板
+**保留口径**:
+- `gstack-qa` / `gstack-qa-only` 是外部 skill 名与 QA testing 业务术语，不是 seat id。
+- 历史 RFC / changelog 可保留旧词作为历史记录。
 
-**skill**:
-- `core/skills/planner/SKILL.md:3, 49` — planner 派单清单含 reviewer/qa
-- `core/skills/clawseat-ancestor/SKILL.md:355` — role 词典
-- `core/skills/clawseat/SKILL.md:73`
-- `core/skills/gstack-harness/references/feishu-delegation-report.md:13`
-- `core/skills/gstack-harness/references/seat-model.md:104`
-- `core/skills/gstack-harness/references/dispatch-playbook.md:41`
-- `core/skills/gstack-harness/scripts/send_delegation_report.py:37`
-- `core/skills/gstack-harness/scripts/_feishu.py:77`
-
-**README**:
-- `README.md:20, 72, 80` — "6 seat roster" 顶层声明
-
-**清扫策略**:
-- 把所有 5-worker 默认改成 **template-driven**（读 project.toml `engineers`），不再硬编码
-- minimal/engineering/creative 三个模板各自声明 roster
-- planner SKILL 说 "我可以派的 seat 由 project.toml 决定"，不列死 reviewer/qa
-- 5-worker 提到 reviewer/qa 的地方改 "（仅在 engineering/creative 模板生效）"
+**验收 grep**: active runtime code may mention the removed literal only in explicit rejection messages and the migration script that rewrites legacy state to `patrol`.
 
 ---
 
@@ -181,7 +161,7 @@
 - `core/scripts/agent_admin_session.py:683` — comment
 - `scripts/install.sh:477, 1198` — `uninstall_ancestor_patrol_plist*` 函数名
 
-**清扫策略**: 跟 #3/#12/#13 同批；函数名 `*_ancestor_patrol_*` 保留（plist 名字不动 vs API 一致性矛盾，看 install team 决议）。
+**清扫策略**: 跟 #3/#12/#13 同批；函数名 `*_ancestor_patrol_*` 保留；plist 文件名/label 已在 HH 改为 patrol-only。
 
 ---
 

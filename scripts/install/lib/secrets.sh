@@ -83,6 +83,29 @@ write_bootstrap_secret_file() {
   chmod 600 "$path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $path"
 }
 
+_secret_file_has_real_token() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  grep -Eq 'sk-[A-Za-z0-9_-]{20,}' "$path"
+}
+
+_secret_file_has_placeholder_token() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  grep -Eiq '(<set-by-operator>|minimax-token|placeholder|dummy|example)' "$path"
+}
+
+_copy_secret_template_preserving_real_token() {
+  local src_path="$1" secret_path="$2" seat="$3"
+  if _secret_file_has_real_token "$secret_path" && _secret_file_has_placeholder_token "$src_path"; then
+    warn "seat secret preserved for $seat; placeholder template would overwrite real token: $secret_path"
+    chmod 600 "$secret_path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $secret_path"
+    return 0
+  fi
+  cp "$src_path" "$secret_path" || die 31 PROJECT_SECRET_WRITE_FAILED "unable to copy $src_path -> $secret_path"
+  chmod 600 "$secret_path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $secret_path"
+}
+
 seed_bootstrap_secrets() {
   note "Step 5.6: seed template-driven seat secrets"
   local seat secret_path src_path provider auth tool model
@@ -148,8 +171,7 @@ PY
       continue
     fi
     mkdir -p "$(dirname "$secret_path")" || die 31 PROJECT_SECRET_DIR_FAILED "unable to create $(dirname "$secret_path")"
-    cp "$src_path" "$secret_path" || die 31 PROJECT_SECRET_WRITE_FAILED "unable to copy $src_path -> $secret_path"
-    chmod 600 "$secret_path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $secret_path"
+    _copy_secret_template_preserving_real_token "$src_path" "$secret_path" "$seat"
   done
 }
 
