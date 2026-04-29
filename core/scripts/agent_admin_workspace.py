@@ -343,6 +343,15 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
         f"- prefer `{notify_script}` for ad hoc reminders or unblock notices instead of composing transport by hand",
         "- treat raw `tmux send-keys` as a protocol violation unless the transport script is unavailable",
         "- if a fallback is unavoidable, replicate the transport contract: send text, wait 1 second, send `Enter`, then verify the message did not remain stranded in the input buffer",
+        "",
+        "## Canonical Dispatch & Receipt (LL3 + OO)",
+        "- canonical dispatch: `dispatch_task.py --profile <profile> --target <seat> --task-id <id> --title <t> --objective <o> --test-policy <p>`",
+        "- canonical receipt (two required steps): `complete_handoff.py` writes the `.consumed` durable receipt, then `send-and-verify.sh` sends the wake-up",
+        "- send-and-verify does not substitute for complete_handoff.py; the former is wake-up only, the latter is required for chain audit",
+        "",
+        "## Fan-out Default (LL6)",
+        "- tasks with 2+ independent sub-goals (disjoint files / disjoint tests / disjoint research lanes / multi-part) must fan-out via parallel sub-agents",
+        "- see `core/skills/gstack-harness/references/sub-agent-fan-out.md`",
     ]
     if engineer.role == "frontstage-supervisor":
         lines.extend(
