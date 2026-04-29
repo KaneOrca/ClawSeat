@@ -307,7 +307,7 @@ Available templates:
 
 - `clawseat-creative`: 5-seat creative template (memory + planner + builder + patrol + designer).
 - `clawseat-engineering`: 6-seat engineering template (memory + planner + builder + reviewer + patrol + designer).
-- `clawseat-solo`: 3-seat creative template (memory + builder + designer), all OAuth, memory SWALLOWs planner.
+- `clawseat-solo`: 3-seat collaboration template (memory + builder + planner-gemini), all OAuth, standard brief -> workflow -> dispatch -> verdict cycle.
 
 ### Provider Selection — CLI Flag Mapping
 
@@ -366,7 +366,7 @@ What `install.sh` does in order:
 2. Resolve Python ≥3.11 before importing anything that needs `tomllib`.
 3. Resolve the project template and roster. `clawseat-creative` renders
    `memory, planner, builder, patrol, designer`; `clawseat-engineering` adds
-   `reviewer`; `clawseat-solo` renders only `memory, builder, designer`.
+   `reviewer`; `clawseat-solo` renders only `memory, builder, planner`.
 4. Run legacy path migration and seat liveness reconciliation.
 5. Verify host dependencies and run
    `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`

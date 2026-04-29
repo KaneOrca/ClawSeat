@@ -230,13 +230,13 @@ Recent structural changes:
 
 ### Project Templates
 
-Two built-in project templates in `templates/`:
+Three built-in project templates in `templates/`:
 
 | Template | Seats | Count | Use case |
 |----------|-------|-------|----------|
 | `clawseat-creative` | memory planner builder patrol designer | 5 | Default creative chain |
 | `clawseat-engineering` | memory planner builder reviewer patrol designer | 6 | Engineering chain with independent reviewer |
-| `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + designer (gemini oauth) | 3 | Creative-focused, memory SWALLOWs planner |
+| `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
 
 **Creative template seat responsibilities:**
 - `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure
