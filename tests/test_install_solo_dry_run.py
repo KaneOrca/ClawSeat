@@ -38,4 +38,4 @@ def test_solo_dry_run_passes(tmp_path: Path) -> None:
     assert result.returncode == 0, f"dry-run failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     output = result.stdout + result.stderr
     assert "CLAWSEAT_TEMPLATE_NAME=clawseat-solo" in output
-    assert "PENDING_SEATS=(builder designer)" in output
+    assert "PENDING_SEATS=(builder planner)" in output

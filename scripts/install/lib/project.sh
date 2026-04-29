@@ -34,7 +34,7 @@ prompt_kind_first_flow() {
   printf '\n选择项目类型 / Choose project mode:\n' >&2
   printf '  1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]\n' >&2
   printf '  2) 工程项目 (6 seat: + reviewer 独立审查)\n' >&2
-  printf '  3) 创作 minimal (3 seat: memory + builder + designer, all OAuth)\n' >&2
+  printf '  3) 极简协作 (3 seat: memory + builder + planner-gemini, all OAuth)\n' >&2
 
   local _kind=""
   while true; do

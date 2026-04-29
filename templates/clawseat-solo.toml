@@ -1,6 +1,6 @@
 version = 1
 template_name = "clawseat-solo"
-description = "Minimal 3-seat creation-focused template. Memory + builder + designer, all OAuth top models. Memory SWALLOWs planner orchestration. Creative atomic skills on tool homes, trigger on demand."
+description = "Memory + builder + planner, all OAuth top models. Standard brief → workflow → dispatch → verdict cycle."
 
 [window_layout]
 shared_memories_window_title = "clawseat-memories"
@@ -9,7 +9,7 @@ workers_window_title = "clawseat-{PROJECT}-workers"
 [window_layout.workers_grid]
 left_main_seat = "builder"
 left_main_width = "50%"
-right_seats = ["designer"]
+right_seats = ["planner"]
 right_fill_order = "col-major"
 
 [defaults]
@@ -30,8 +30,8 @@ auth_mode = "oauth"
 provider = "anthropic"
 monitor = true
 human_facing = true
-active_loop_owner = true
-dispatch_authority = true
+active_loop_owner = false
+dispatch_authority = false
 patrol_authority = true
 unblock_authority = true
 escalation_authority = true
@@ -53,9 +53,9 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "L3 hub + SWALLOW planner orchestration (no planner seat)",
-  "dispatch_authority + active_loop_owner + patrol_authority + escalation",
-  "skill management: can trigger find-skills + skill-creator for self/builder/designer",
+  "L3 hub + brief-handoff → planner. Skill management for self/builder/planner.",
+  "patrol_authority + escalation; dispatch and active loop delegated to planner",
+  "skill management: can trigger find-skills + skill-creator for self/builder/planner",
 ]
 
 [[engineers]]
@@ -83,25 +83,31 @@ role_details = [
 ]
 
 [[engineers]]
-id = "designer"
-display_name = "Designer"
-role = "designer"
+id = "planner"
+display_name = "Planner"
+role = "planner-dispatcher"
 window = "workers"
 tool = "gemini"
 auth_mode = "oauth"
 provider = "google"
 monitor = true
 human_facing = false
-design_authority = true
+active_loop_owner = true
+dispatch_authority = true
+patrol_authority = false
+unblock_authority = false
+escalation_authority = true
+remind_active_loop_owner = false
 review_authority = false
 qa_authority = false
-dispatch_authority = false
+design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/designer/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/planner/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
 ]
 role_details = [
-  "Visual + creative seat (gemini oauth). Multimodal: images, text, multimodal analysis.",
-  "21+ creative atomic skills (cartooner-* / storyboard-* / nano-banana / heygen / heyvideogen / minimax-speech / song-creator) available in tool homes on demand — not preloaded.",
+  "Workflow author + dispatch orchestrator (gemini oauth).",
+  "Receives memory briefs → workflow.md → assign_owner(builder) → verdict consumption.",
+  "No reviewer seat in solo; planner forwards verdict requests to memory.",
 ]

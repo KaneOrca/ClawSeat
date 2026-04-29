@@ -40,7 +40,7 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 |------|---------|------|
 | `clawseat-creative` | 5 | 创意类：memory + planner + builder + patrol + designer |
 | `clawseat-engineering` | 6 | 工程类：creative 基础上增加 reviewer 独立审查 |
-| `clawseat-solo` | 3 | 创作 minimal，全 OAuth：memory + builder + designer |
+| `clawseat-solo` | 3 | 极简协作，全 OAuth：memory + builder + planner-gemini |
 
 为什么使用 `install.sh`，而不是直接用 `agent_admin` 或 `agent-launcher.sh`：
 
@@ -311,7 +311,7 @@ tmux capture-pane -t <session> -p -S - -E -
 1. Parse flags，解析 real user HOME，必要时选择 freshest ClawSeat worktree，并加载 `scripts/install/lib/`。
 2. 在 import `tomllib` 之前解析 Python >= 3.11。
 3. 解析 project template 和 roster：`clawseat-creative` -> `memory, planner, builder, patrol, designer`；
-   `clawseat-engineering` 增加 `reviewer`；`clawseat-solo` 只有 `memory, builder, designer`。
+   `clawseat-engineering` 增加 `reviewer`；`clawseat-solo` 只有 `memory, builder, planner`。
 4. 运行 legacy path migration 和 seat liveness reconciliation。
 5. 验证 host deps 并运行 `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`，
    生成 `machine/{credentials,network,openclaw,github,current_context}.json`。
