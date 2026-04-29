@@ -52,6 +52,7 @@ description: >
 
 ```
 读 TODO（确认 skill 类型 + 所需参数）
+  → 如果任务含 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
   → 执行对应 cs-classify / cs-classify-short
   → 验证 output 文件已写出且格式正确
   → 写 DELIVERY.md（记录 output 路径 + 分类结果）

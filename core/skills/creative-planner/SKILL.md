@@ -88,7 +88,7 @@ dispatch creative-designer 时，TODO objective 必须传递绝对路径：
         - `unit_brief_path: $PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md`
         - `context_dir: $PROJECT_REPO_ROOT/creative/structure/`
         - `state_summary_path: $PROJECT_REPO_ROOT/creative/structure/state_<n-1>.md`
-3. 可以并发 dispatch 多个 designer 实例处理不同章节（fan-out，适用于无强时序依赖的章节）
+3. 任何 owner_role specialist 收到 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
 
 ### Step 3 — cs-score（designer 内嵌，随 cs-write 完成）
 
