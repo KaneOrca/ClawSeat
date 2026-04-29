@@ -576,6 +576,7 @@ exit 0
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "HOME": str(home),
             "CLAWSEAT_REAL_HOME": str(home),
+            "AGENTS_ROOT": str(home / ".agents"),
             "AGENTCTL_BIN": str(agentctl),
             "WAIT_FOR_SEAT_POLL_SECONDS": "0.01",
             "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "1",

@@ -16,6 +16,21 @@ Support `/en` and `/zh` at any prompt to switch language. Empty Enter accepts
 the recommended default. `详` gives a short explanation of roughly 150 words
 without external links.
 
+## Operator Goal Priority
+
+HARD CONSTRAINTS:
+
+- The operator's stated goal overrides detect-only inference. If detection says
+  "creative" but the operator asks for an engineering install, recommend
+  engineering.
+- If the operator names a project, template, memory tool, repo root, language, or
+  provider preference, preserve it unless it is invalid or conflicts with a hard
+  safety check.
+- Surface conflicts in Step 0 before asking for confirmation. Example: "You asked
+  for `clawseat-solo`, but this repo has existing `patrol` handoffs; continue
+  with solo or switch to creative?"
+- Never silently replace operator intent with a convenience default.
+
 ## Confirmation Pattern
 
 Every decision has one recommended default:

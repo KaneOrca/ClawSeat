@@ -14,6 +14,18 @@
 任意提示都支持 `/en` 和 `/zh` 中途切换语言。空回车接受推荐默认值。`详`
 给出约 150 字解释，不附外部链接。
 
+## Operator Goal Priority
+
+HARD CONSTRAINTS:
+
+- operator 明确说出的目标优先于 detect-only 推断。如果检测建议
+  "creative"，但 operator 要工程安装，就推荐工程安装。
+- 如果 operator 指定项目名、模板、memory tool、repo root、语言或 provider
+  偏好，除非无效或触发硬安全检查，否则必须保留。
+- 在 Step 0 就展示冲突再确认。例如："你要求 `clawseat-solo`，但仓库已有
+  `patrol` handoff；继续 solo 还是切到 creative?"
+- 不能为了方便默认值而静默替换 operator 意图。
+
 ## Confirmation Pattern
 
 每个决策点都必须给一个推荐默认值：

@@ -16,6 +16,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "core/shell-scripts/send-and-veri
 
 def _run(args: list[str], extra_env: dict | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    env.pop("CLAWSEAT_PROJECT", None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run([str(SCRIPT)] + args, capture_output=True, text=True, env=env)

@@ -107,6 +107,7 @@ machine.mkdir(parents=True, exist_ok=True)
     "keys": {
         "MINIMAX_API_KEY": {"value": "minimax-token"},
         "MINIMAX_BASE_URL": {"value": "https://api.minimaxi.com/anthropic"},
+        "DEEPSEEK_API_KEY": {"value": "deepseek-token"},
     },
     "oauth": {"has_any": False},
 }), encoding="utf-8")
@@ -401,7 +402,11 @@ printf 'Darwin\\n'
         ),
         encoding="utf-8",
     )
-    home.mkdir(parents=True, exist_ok=True)
+    (home / ".agents").mkdir(parents=True, exist_ok=True)
+    (home / ".agents" / ".env.global").write_text(
+        "export DEEPSEEK_API_KEY=deepseek-token\nexport MINIMAX_API_KEY=minimax-token\n",
+        encoding="utf-8",
+    )
     return root, home, launcher_log, tmux_log, py_stubs
 
 

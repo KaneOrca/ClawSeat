@@ -38,6 +38,7 @@ def _write_record(home: Path, project: str, relative: str, **fields: str) -> Pat
 
 def test_parse_frontmatter_valid(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     path = _write_record(tmp_path, "install", "decision/one.md", title="Valid title")
     scan_index = _load_scan_index()
 
@@ -49,6 +50,7 @@ def test_parse_frontmatter_valid(tmp_path, monkeypatch) -> None:
 
 def test_parse_frontmatter_no_frontmatter(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     path = tmp_path / "plain.md"
     path.write_text("# No frontmatter\n", encoding="utf-8")
     scan_index = _load_scan_index()
@@ -58,6 +60,7 @@ def test_parse_frontmatter_no_frontmatter(tmp_path, monkeypatch) -> None:
 
 def test_build_files_index_empty_project(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     scan_index = _load_scan_index()
 
     index = scan_index.build_files_index("install")
@@ -68,6 +71,7 @@ def test_build_files_index_empty_project(tmp_path, monkeypatch) -> None:
 
 def test_build_files_index_with_records(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     _write_record(tmp_path, "install", "decision/one.md", kind="decision", severity="high")
     _write_record(tmp_path, "install", "qa/two.md", kind="alignment", severity="low")
     scan_index = _load_scan_index()
@@ -79,6 +83,7 @@ def test_build_files_index_with_records(tmp_path, monkeypatch) -> None:
 
 def test_build_timeline_sorted_by_ts(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     scan_index = _load_scan_index()
     files = {
         "project": "install",
@@ -94,6 +99,7 @@ def test_build_timeline_sorted_by_ts(tmp_path, monkeypatch) -> None:
 
 def test_rebuild_command_writes_all_index_files(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
     _write_record(tmp_path, "install", "decision/one.md")
     scan_index = _load_scan_index()
 

@@ -3,6 +3,12 @@
 # Loaded by scripts/install.sh. Resolve this file with BASH_SOURCE so
 # callers may source install.sh from any current working directory.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REINSTALL_ROLLBACK_ARMED=0
+REINSTALL_BACKUP_SUFFIX=""
+REINSTALL_PROJECT_TOML_BACKUP=""
+REINSTALL_PROFILE_BACKUP=""
+REINSTALL_PROJECT_TOML_EXISTED=0
+REINSTALL_PROFILE_EXISTED=0
 
 _prompt_i18n_get() {
   local key="$1" fallback="${2:-$1}"
@@ -114,6 +120,156 @@ print(" ".join(seats))
 PY
   2>/dev/null)"
   [[ -n "$seats" ]] && read -ra PENDING_SEATS <<< "$seats"
+}
+
+_engineers_from_template() {
+  local template_file="${1:-$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml}"
+  [[ -f "$template_file" ]] || return 1
+  "$PYTHON_BIN" - "$template_file" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+with open(sys.argv[1], "rb") as handle:
+    data = tomllib.load(handle)
+
+ids: list[str] = []
+for item in data.get("engineers", []):
+    seat_id = str(item.get("id", "")).strip()
+    if not seat_id:
+        continue
+    if seat_id == "qa":
+        seat_id = "patrol"
+    if seat_id not in ids:
+        ids.append(seat_id)
+print(" ".join(ids))
+PY
+}
+
+_existing_project_repo_root() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  "$PYTHON_BIN" - "$path" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+with open(sys.argv[1], "rb") as handle:
+    data = tomllib.load(handle)
+repo_root = str(data.get("repo_root") or "").strip()
+if repo_root:
+    print(repo_root)
+PY
+}
+
+_backup_reinstall_file() {
+  local path="$1" existed_var="$2" backup_var="$3" backup_path=""
+  printf -v "$existed_var" '%s' 0
+  printf -v "$backup_var" '%s' ""
+  [[ -f "$path" ]] || return 0
+  backup_path="${path}.bak.${REINSTALL_BACKUP_SUFFIX}"
+  cp "$path" "$backup_path" \
+    || die 31 REINSTALL_BACKUP_FAILED "unable to backup $path"
+  printf -v "$existed_var" '%s' 1
+  printf -v "$backup_var" '%s' "$backup_path"
+}
+
+_restore_reinstall_file() {
+  local path="$1" existed="$2" backup="$3"
+  if [[ "$existed" == "1" && -n "$backup" && -f "$backup" ]]; then
+    mkdir -p "$(dirname "$path")"
+    cp "$backup" "$path" || true
+  elif [[ "$existed" == "0" ]]; then
+    rm -f "$path" || true
+  fi
+}
+
+_rollback_reinstall_project() {
+  [[ "$REINSTALL_ROLLBACK_ARMED" == "1" ]] || return 0
+  warn "reinstall failed; restoring project backups for $PROJECT"
+  _restore_reinstall_file "$PROJECT_RECORD_PATH" "$REINSTALL_PROJECT_TOML_EXISTED" "$REINSTALL_PROJECT_TOML_BACKUP"
+  _restore_reinstall_file "$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml" "$REINSTALL_PROFILE_EXISTED" "$REINSTALL_PROFILE_BACKUP"
+  REINSTALL_ROLLBACK_ARMED=0
+}
+
+_clear_reinstall_backups() {
+  REINSTALL_ROLLBACK_ARMED=0
+}
+
+_reinstall_exit_trap() {
+  local rc="$1"
+  if [[ "$rc" != "0" ]]; then
+    _rollback_reinstall_project
+  fi
+  exit "$rc"
+}
+
+_kill_existing_project_sessions() {
+  local project="${1:-$PROJECT}" session
+  if command -v tmux >/dev/null 2>&1; then
+    while IFS= read -r session; do
+      [[ -n "$session" ]] || continue
+      case "$session" in
+        "$project"-*) tmux kill-session -t "=$session" >/dev/null 2>&1 || true ;;
+      esac
+    done < <(tmux list-sessions -F '#S' 2>/dev/null || true)
+  fi
+
+  if command -v osascript >/dev/null 2>&1; then
+    osascript >/dev/null 2>&1 <<OSA || true
+tell application "iTerm2"
+  repeat with w in windows
+    try
+      if (name of w as text) contains "clawseat-${project}" then close w
+    end try
+  end repeat
+end tell
+OSA
+  fi
+}
+
+_reinstall_project() {
+  local existing_repo_root="" profile_path="$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] reinstall %s: backup project.toml/profile, kill old sessions/windows, re-bootstrap\n' "$PROJECT"
+    return 0
+  fi
+  if [[ ! -f "$PROJECT_RECORD_PATH" ]]; then
+    if [[ -f "$STATUS_FILE" ]]; then
+      warn "project.toml missing for $PROJECT; treating --reinstall as repair from existing task state"
+      _kill_existing_project_sessions "$PROJECT"
+      rm -rf "$HOME/.agents/sessions/$PROJECT"
+      return 0
+    fi
+    die 31 REINSTALL_PROJECT_MISSING "cannot reinstall missing project: $PROJECT_RECORD_PATH"
+  fi
+
+  if [[ -z "$FORCE_REPO_ROOT" ]]; then
+    existing_repo_root="$(_existing_project_repo_root "$PROJECT_RECORD_PATH" 2>/dev/null || true)"
+    if [[ -n "$existing_repo_root" ]]; then
+      PROJECT_REPO_ROOT="$existing_repo_root"
+    fi
+  fi
+
+  REINSTALL_BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S)"
+  _backup_reinstall_file "$PROJECT_RECORD_PATH" REINSTALL_PROJECT_TOML_EXISTED REINSTALL_PROJECT_TOML_BACKUP
+  _backup_reinstall_file "$profile_path" REINSTALL_PROFILE_EXISTED REINSTALL_PROFILE_BACKUP
+  REINSTALL_ROLLBACK_ARMED=1
+
+  _kill_existing_project_sessions "$PROJECT"
+  rm -f "$PROJECT_RECORD_PATH"
+  rm -rf "$HOME/.agents/sessions/$PROJECT"
+  note "[install] reinstall prepared for $PROJECT (backup suffix: $REINSTALL_BACKUP_SUFFIX)"
 }
 
 memory_primary_uses_codex() {
@@ -606,24 +762,8 @@ bootstrap_project_profile() {
   fi
 
   if [[ -f "$PROJECT_RECORD_PATH" ]]; then
-    if [[ "$FORCE_REINSTALL" == "1" ]]; then
-      # --reinstall must re-bootstrap so session.toml gets recreated.
-      # Bug fix: previously this branch would silently skip even when the
-      # operator explicitly asked for --reinstall, leaving stale state where
-      # project.toml exists but session.toml is missing — causing all
-      # downstream `agent_admin session-name` / `send-and-verify --project`
-      # calls, including operator-triggered kickoff dispatch, to fail with
-      # SESSION_NOT_FOUND.
-      printf 'Project %s exists at %s — --reinstall: wiping project record + sessions to force re-bootstrap.\n' \
-        "$PROJECT" "$PROJECT_RECORD_PATH"
-      rm -f "$PROJECT_RECORD_PATH"
-      rm -rf "$HOME/.agents/sessions/$PROJECT"
-      # Note: ~/.agents/tasks/$PROJECT (TASKS.md, STATUS.md, handoffs) is
-      # preserved — operator's history shouldn't be lost on --reinstall.
-    else
-      printf 'Project %s already exists at %s; skipping bootstrap.\n' "$PROJECT" "$PROJECT_RECORD_PATH"
-      return 0
-    fi
+    printf 'Project %s already exists at %s; skipping bootstrap.\n' "$PROJECT" "$PROJECT_RECORD_PATH"
+    return 0
   fi
 
   mkdir -p "$AGENTS_TEMPLATES_ROOT" || die 31 TEMPLATE_ROOT_CREATE_FAILED "unable to create $AGENTS_TEMPLATES_ROOT"
@@ -635,8 +775,23 @@ bootstrap_project_profile() {
   seed_bootstrap_secrets
 }
 
-register_project_registry() {
+_update_projects_json() {
+  local action="${1:-install}" project="${2:-$PROJECT}"
   local primary_tool="claude" primary_session_name
+  case "$action" in
+    install|reinstall|add|update) ;;
+    uninstall|remove)
+      if [[ "$DRY_RUN" == "1" ]]; then
+        printf '[dry-run] %q %q unregister %q\n' "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$project"
+        return 0
+      fi
+      [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || die 31 PROJECTS_REGISTRY_MISSING "missing projects registry helper: $PROJECTS_REGISTRY_SCRIPT"
+      "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" unregister "$project" || true
+      return 0
+      ;;
+    *) die 31 PROJECTS_JSON_ACTION_UNKNOWN "unknown projects.json action: $action" ;;
+  esac
+
   [[ "$PRIMARY_SEAT_ID" == "memory" ]] && primary_tool="$(primary_effective_tool)"
   primary_session_name="$(primary_tmux_name)"
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -657,14 +812,15 @@ register_project_registry() {
     || warn "projects.json register failed (non-fatal); see ~/.clawseat/projects.json"
 }
 
+register_project_registry() {
+  local action="install"
+  [[ "$FORCE_REINSTALL" == "1" ]] && action="reinstall"
+  _update_projects_json "$action" "$PROJECT"
+}
+
 uninstall_project_registry_entry() {
   local project="$1"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] %q %q unregister %q\n' "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" "$project"
-    return 0
-  fi
-  [[ -f "$PROJECTS_REGISTRY_SCRIPT" ]] || die 31 PROJECTS_REGISTRY_MISSING "missing projects registry helper: $PROJECTS_REGISTRY_SCRIPT"
-  "$PYTHON_BIN" "$PROJECTS_REGISTRY_SCRIPT" unregister "$project" || true
+  _update_projects_json uninstall "$project"
 }
 
 touch_project_registry() {
