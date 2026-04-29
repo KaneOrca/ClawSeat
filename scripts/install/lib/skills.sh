@@ -158,8 +158,8 @@ install_privacy_pre_commit_hook() {
   chmod +x "$hook_path" || die 31 PRIVACY_HOOK_CHMOD_FAILED "unable to chmod $hook_path"
 }
 
-prompt_qa_patrol_cron_optin() {
-  local answer="${CLAWSEAT_PATROL_CRON_OPT_IN:-${CLAWSEAT_QA_PATROL_CRON_OPT_IN:-}}"
+prompt_patrol_cron_optin() {
+  local answer="${CLAWSEAT_PATROL_CRON_OPT_IN:-}"
   if [[ -z "$answer" ]]; then
     if [[ -t 0 && -t 1 ]]; then
       printf '[install] Patrol Cron 是否启用每日扫描？(y/N) '

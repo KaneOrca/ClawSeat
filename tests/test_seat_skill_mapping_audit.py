@@ -13,7 +13,7 @@ def test_seat_skill_map_canonical_roles() -> None:
     assert SEAT_SKILL_MAP['builder'] == 'builder'
     assert SEAT_SKILL_MAP['reviewer'] == 'reviewer'
     assert SEAT_SKILL_MAP['patrol'] == 'patrol'
-    assert SEAT_SKILL_MAP['qa'] == 'patrol'
+    assert 'qa' not in SEAT_SKILL_MAP
     assert SEAT_SKILL_MAP['designer'] == 'designer'
     assert SEAT_SKILL_MAP['ancestor'] == 'clawseat-ancestor'
     assert SEAT_SKILL_MAP['planner'] == 'planner'
@@ -23,6 +23,5 @@ def test_role_skill_for_seat_with_suffix() -> None:
     assert role_skill_for_seat('builder-1') == 'builder'
     assert role_skill_for_seat('reviewer-abc') == 'reviewer'
     assert role_skill_for_seat('patrol-42') == 'patrol'
-    assert role_skill_for_seat('qa-42') == 'patrol'
     assert role_skill_for_seat('designer-main') == 'designer'
     assert role_skill_for_seat('unknown-role') == 'clawseat'

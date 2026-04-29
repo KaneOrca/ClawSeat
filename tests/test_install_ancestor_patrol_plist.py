@@ -47,11 +47,11 @@ def test_install_writes_and_bootstraps_ancestor_patrol_plist(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
 
-    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol50.qa-patrol.plist"
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol50.patrol.plist"
     assert plist_path.is_file()
     plist_text = plist_path.read_text(encoding="utf-8")
 
-    assert "com.clawseat.patrol50.qa-patrol" in plist_text
+    assert "com.clawseat.patrol50.patrol" in plist_text
     assert "session-name memory --project 'patrol50'" in plist_text
     assert str(root / "core" / "shell-scripts" / "send-and-verify.sh") in plist_text
     assert "{PROJECT}" not in plist_text
@@ -63,7 +63,7 @@ def test_install_writes_and_bootstraps_ancestor_patrol_plist(tmp_path: Path) -> 
     assert (home / ".agents" / "tasks" / "patrol50" / "patrol" / "logs").is_dir()
 
     launchctl_lines = launchctl_log.read_text(encoding="utf-8").splitlines()
-    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol50.qa-patrol" in launchctl_lines
+    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol50.patrol" in launchctl_lines
     assert f"bootstrap gui/{os.getuid()} {plist_path}" in launchctl_lines
 
     plutil_lines = plutil_log.read_text(encoding="utf-8").splitlines()
@@ -95,10 +95,10 @@ def test_install_dry_run_reports_ancestor_patrol_launchagent(tmp_path: Path) -> 
     )
 
     combined = result.stdout + result.stderr
-    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol51.qa-patrol.plist"
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol51.patrol.plist"
 
     assert result.returncode == 0, result.stderr
-    assert f"[dry-run] render {root / 'core' / 'templates' / 'qa-patrol.plist.in'} -> {plist_path}" in combined
+    assert f"[dry-run] render {root / 'core' / 'templates' / 'patrol.plist.in'} -> {plist_path}" in combined
     assert f"[dry-run] launchctl bootstrap gui/{os.getuid()} {plist_path}" in combined
 
 
@@ -135,15 +135,15 @@ def test_install_default_skips_ancestor_patrol_plist(tmp_path: Path) -> None:
     assert "Step 6: auto-patrol disabled" in combined
     assert "--enable-auto-patrol" in combined  # skip note references the flag
 
-    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol52.qa-patrol.plist"
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol52.patrol.plist"
     assert not plist_path.exists(), "default install must NOT render patrol plist"
 
     # No launchctl bootstrap for THIS project (other tests may have left their own entries).
     if launchctl_log.exists():
         launchctl_text = launchctl_log.read_text(encoding="utf-8")
         assert f"bootstrap gui/{os.getuid()} {plist_path}" not in launchctl_text
-        assert f"com.clawseat.patrol52.qa-patrol" not in launchctl_text or \
-            "bootstrap" not in launchctl_text.split("com.clawseat.patrol52.qa-patrol", 1)[0]
+        assert f"com.clawseat.patrol52.patrol" not in launchctl_text or \
+            "bootstrap" not in launchctl_text.split("com.clawseat.patrol52.patrol", 1)[0]
 
 
 def test_install_default_removes_stale_patrol_plist(tmp_path: Path) -> None:
@@ -155,11 +155,11 @@ def test_install_default_removes_stale_patrol_plist(tmp_path: Path) -> None:
     plutil_log = tmp_path / "plutil.log"
 
     # Seed a stale plist as if a previous `--enable-auto-patrol` install ran.
-    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol53.qa-patrol.plist"
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol53.patrol.plist"
     plist_path.parent.mkdir(parents=True, exist_ok=True)
     plist_path.write_text(
         "<?xml version=\"1.0\"?><plist><dict><key>Label</key>"
-        "<string>com.clawseat.patrol53.qa-patrol</string>"
+        "<string>com.clawseat.patrol53.patrol</string>"
         "</dict></plist>\n",
         encoding="utf-8",
     )
@@ -196,7 +196,7 @@ def test_install_default_removes_stale_patrol_plist(tmp_path: Path) -> None:
 
     # launchctl bootout was called for this label.
     launchctl_text = launchctl_log.read_text(encoding="utf-8") if launchctl_log.exists() else ""
-    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol53.qa-patrol" in launchctl_text
+    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol53.patrol" in launchctl_text
 
 
 def test_install_ready_project_rerun_removes_stale_patrol_plist(tmp_path: Path) -> None:
@@ -216,11 +216,11 @@ def test_install_ready_project_rerun_removes_stale_patrol_plist(tmp_path: Path) 
     (status_dir / "STATUS.md").write_text("phase=ready\n", encoding="utf-8")
 
     # Seed stale plist as if a prior `--enable-auto-patrol` install ran.
-    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol55.qa-patrol.plist"
+    plist_path = home / "Library" / "LaunchAgents" / "com.clawseat.patrol55.patrol.plist"
     plist_path.parent.mkdir(parents=True, exist_ok=True)
     plist_path.write_text(
         "<?xml version=\"1.0\"?><plist><dict><key>Label</key>"
-        "<string>com.clawseat.patrol55.qa-patrol</string>"
+        "<string>com.clawseat.patrol55.patrol</string>"
         "</dict></plist>\n",
         encoding="utf-8",
     )
@@ -264,4 +264,4 @@ def test_install_ready_project_rerun_removes_stale_patrol_plist(tmp_path: Path) 
 
     # launchctl bootout was issued.
     launchctl_text = launchctl_log.read_text(encoding="utf-8") if launchctl_log.exists() else ""
-    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol55.qa-patrol" in launchctl_text
+    assert f"bootout gui/{os.getuid()}/com.clawseat.patrol55.patrol" in launchctl_text

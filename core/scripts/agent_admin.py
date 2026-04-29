@@ -869,6 +869,10 @@ def cmd_session_stop_engineer(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_stop_engineer(args)
 
 
+def cmd_session_rename(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.session_rename(args)
+
+
 def cmd_session_start_project(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_start_project(args)
 
@@ -1004,6 +1008,17 @@ COMMAND_HANDLERS = CommandHandlers(
         open_project_tabs_window=open_project_tabs_window,
         open_engineer_window=open_engineer_window,
         load_engineers=load_engineers,
+        write_project=write_project,
+        write_session=write_session,
+        session_path=session_path,
+        archive_if_exists=archive_if_exists,
+        identity_name=identity_name,
+        runtime_dir_for_identity=runtime_dir_for_identity,
+        secret_file_for=secret_file_for,
+        session_name_for=session_name_for,
+        workspaces_root=WORKSPACES_ROOT,
+        ensure_dir=ensure_dir,
+        ensure_secret_permissions=ensure_secret_permissions,
     )
 )
 
@@ -1220,6 +1235,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_session_batch_start_engineer=cmd_session_batch_start_engineer,
     cmd_session_provision_heartbeat=cmd_session_provision_heartbeat,
     cmd_session_stop_engineer=cmd_session_stop_engineer,
+    cmd_session_rename=cmd_session_rename,
     cmd_session_start_project=cmd_session_start_project,
     cmd_session_status=cmd_session_status,
     cmd_session_reconcile=cmd_session_reconcile,

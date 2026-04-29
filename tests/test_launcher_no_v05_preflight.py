@@ -24,7 +24,7 @@ def test_launcher_source_no_longer_contains_v05_ancestor_preflight():
     for needle in (
         "profile-dynamic.toml",
         "migrate_profile_to_v2.py",
-        "qa-patrol.plist.in",
+        "patrol.plist.in",
         "_preflight_project",
         "--skip-ancestor-preflight",
         "--clone-from",

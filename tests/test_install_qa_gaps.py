@@ -304,7 +304,7 @@ def test_workers_recipe_4_pane_labels() -> None:
     assert [pane["label"] for pane in payload["panes"]] == ["planner", "builder", "designer", "patrol"]
 
 
-def test_agent_admin_engineer_create_aliases_qa_to_patrol_minimax() -> None:
+def test_agent_admin_engineer_create_uses_patrol_minimax_defaults() -> None:
     from agent_admin_crud import CrudHandlers
 
     created_sessions: list[dict[str, object]] = []
@@ -352,7 +352,7 @@ def test_agent_admin_engineer_create_aliases_qa_to_patrol_minimax() -> None:
     )
 
     rc = CrudHandlers(hooks).engineer_create(
-        SimpleNamespace(engineer="qa", project="qa-gaps", tool=None, mode=None, provider=None, no_monitor=True)
+        SimpleNamespace(engineer="patrol", project="qa-gaps", tool=None, mode=None, provider=None, no_monitor=True)
     )
 
     assert rc == 0

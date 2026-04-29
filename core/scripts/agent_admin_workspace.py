@@ -200,8 +200,6 @@ def render_role_scope_summary(engineer: Any) -> str:
 
 def role_matches(role: str, expected: str) -> bool:
     normalized = role.strip()
-    if normalized == "qa":
-        normalized = "patrol"
     if expected == "planner":
         return normalized in {"planner", "planner-dispatcher"}
     return normalized == expected

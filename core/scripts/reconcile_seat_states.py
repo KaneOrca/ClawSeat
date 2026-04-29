@@ -87,7 +87,6 @@ def _normalise_role(role: str, seat_id: str) -> str:
         ("reviewer", "reviewer"),
         ("designer", "designer"),
         ("patrol", "patrol"),
-        ("qa", "patrol"),
         ("memory", "memory"),
         ("koder", "koder"),
         ("engineer", "builder"),

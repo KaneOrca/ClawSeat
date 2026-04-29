@@ -80,8 +80,8 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     )
     (root / "core" / "shell-scripts" / "send-and-verify.sh").chmod(0o755)
     shutil.copy2(
-        _REPO / "core" / "templates" / "qa-patrol.plist.in",
-        root / "core" / "templates" / "qa-patrol.plist.in",
+        _REPO / "core" / "templates" / "patrol.plist.in",
+        root / "core" / "templates" / "patrol.plist.in",
     )
 
     _write_executable(

@@ -16,7 +16,6 @@ SEAT_SKILL_MAP: Final[dict[str, str]] = {
     "builder": "builder",
     "reviewer": "reviewer",
     "patrol": "patrol",
-    "qa": "patrol",
     "designer": "designer",
 }
 

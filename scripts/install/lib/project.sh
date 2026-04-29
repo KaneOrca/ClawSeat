@@ -143,8 +143,6 @@ for item in data.get("engineers", []):
     seat_id = str(item.get("id", "")).strip()
     if not seat_id:
         continue
-    if seat_id == "qa":
-        seat_id = "patrol"
     if seat_id not in ids:
         ids.append(seat_id)
 print(" ".join(ids))
@@ -526,11 +524,8 @@ template = tomllib.loads(template_path.read_text(encoding="utf-8"))
 raw_engineers = [str(item) for item in data.get("engineers", [])]
 raw_monitor_engineers = [str(item) for item in data.get("monitor_engineers", [])]
 raw_overrides = data.get("seat_overrides") or {}
-if "qa" in raw_engineers or "qa" in raw_monitor_engineers or "qa" in raw_overrides:
-    raise SystemExit(0)
 def normalize_seat(value: object) -> str:
-    text = str(value)
-    return "patrol" if text == "qa" else text
+    return str(value)
 
 engineers = [normalize_seat(item) for item in data.get("engineers", [])]
 monitor_engineers = [normalize_seat(item) for item in data.get("monitor_engineers", [])]
@@ -606,7 +601,6 @@ except ModuleNotFoundError:
 path = Path(sys.argv[1])
 template_path = Path(sys.argv[2])
 text = path.read_text(encoding="utf-8")
-text = re.sub(r"^\[seat_overrides\.qa\]\s*$", "[seat_overrides.patrol]", text, flags=re.MULTILINE)
 data = tomllib.loads(text)
 template = tomllib.loads(template_path.read_text(encoding="utf-8"))
 template_defaults = template.get("defaults") or {}
@@ -619,7 +613,7 @@ def unique_extend(values: object, items: list[str]) -> list[str]:
     out = []
     if isinstance(values, list):
         for value in values:
-            item = "patrol" if str(value) == "qa" else str(value)
+            item = str(value)
             if item not in out:
                 out.append(item)
     for item in items:
@@ -696,15 +690,14 @@ PY
   note "[install] project.toml template migration complete (backup: $backup_path)"
 }
 
-ensure_qa_engineer_record() {
+ensure_patrol_engineer_record() {
   local patrol_session="$HOME/.agents/sessions/$PROJECT/patrol/session.toml"
-  local legacy_qa_session="$HOME/.agents/sessions/$PROJECT/qa/session.toml"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] %q %q engineer create patrol %q --no-monitor\n' \
       "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" "$PROJECT"
     return 0
   fi
-  if [[ -f "$patrol_session" || -f "$legacy_qa_session" ]]; then
+  if [[ -f "$patrol_session" ]]; then
     note "[install] patrol engineer session already registered"
     return 0
   fi
@@ -713,7 +706,7 @@ ensure_qa_engineer_record() {
     return 0
   fi
   "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" engineer create patrol "$PROJECT" --no-monitor \
-    || die 31 QA_ENGINEER_CREATE_FAILED "unable to create patrol engineer session for $PROJECT"
+    || die 31 PATROL_ENGINEER_CREATE_FAILED "unable to create patrol engineer session for $PROJECT"
 }
 
 template_has_seat() {
@@ -725,14 +718,14 @@ template_has_seat() {
   return 1
 }
 
-install_qa_bootstrap() {
+install_patrol_bootstrap() {
   if ! template_has_seat "patrol"; then
     note "Step 7.6: patrol bootstrap skipped (template has no patrol seat)"
     return 0
   fi
   note "Step 7.6: install patrol hook + patrol cron"
   local patrol_workspace="$HOME/.agents/workspaces/$PROJECT/patrol"
-  ensure_qa_engineer_record
+  ensure_patrol_engineer_record
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] mkdir -p %q\n' "$patrol_workspace"
     printf '[dry-run] %q %q --workspace %q\n' "$PYTHON_BIN" "$PATROL_HOOK_INSTALLER" "$patrol_workspace"
@@ -742,7 +735,7 @@ install_qa_bootstrap() {
     mkdir -p "$patrol_workspace"
     "$PYTHON_BIN" "$PATROL_HOOK_INSTALLER" --workspace "$patrol_workspace"
   fi
-  prompt_qa_patrol_cron_optin
+  prompt_patrol_cron_optin
 }
 
 bootstrap_project_profile() {

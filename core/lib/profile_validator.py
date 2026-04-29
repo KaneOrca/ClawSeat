@@ -33,19 +33,19 @@ PROFILE_SCHEMA_VERSION = 2
 
 # §7: legal seat names. `ancestor` stays as a v1 primary-seat alias for
 # migration compatibility; v2 templates use `memory` as the primary seat.
-LEGAL_SEATS = frozenset({"ancestor", "memory", "planner", "builder", "reviewer", "patrol", "qa", "designer"})
+LEGAL_SEATS = frozenset({"ancestor", "memory", "planner", "builder", "reviewer", "patrol", "designer"})
 # §7 rule 3: minimum required. A profile must declare planner plus either
 # memory (v2 canonical) or ancestor (v1 compatibility).
 REQUIRED_PLANNER = frozenset({"planner"})
 REQUIRED_PRIMARY = frozenset({"ancestor", "memory"})
 # §7 rule 10: only these may have parallel_instances > 1.
-PARALLEL_ALLOWED = frozenset({"builder", "reviewer", "patrol", "qa"})
+PARALLEL_ALLOWED = frozenset({"builder", "reviewer", "patrol"})
 # §7 rule 8: deprecated fields rejected in v2 profiles.
 DEPRECATED_FIELDS = frozenset({"heartbeat_transport", "heartbeat_owner", "heartbeat_receipt", "heartbeat_seats",
                                 "feishu_group_id", "runtime_seats", "materialized_seats"})
 # Seat names rejected in v2 profiles (rule 8 extended).
-# qa-\d+ is T6 backward-compat alias; sunset 2026-10-28 (per patrol_alias.py).
-_NUMBERED_SEAT_RE = re.compile(r"^(koder|builder-\d+|reviewer-\d+|patrol-\d+|qa-\d+)$")
+# Legacy patrol alias removed 2026-04-29.
+_NUMBERED_SEAT_RE = re.compile(r"^(koder|builder-\d+|reviewer-\d+|patrol-\d+)$")
 
 
 class ProfileValidationError(ValueError):
@@ -103,8 +103,16 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
             v = dynamic.get(sub, [])
             if isinstance(v, list):
                 all_seat_names.extend(str(s) for s in v)
+    legacy_parallel = raw.get("parallel_instances", {}) or {}
+    if isinstance(legacy_parallel, dict):
+        all_seat_names.extend(str(k) for k in legacy_parallel.keys())
 
     for sname in all_seat_names:
+        if sname not in LEGAL_SEATS and not _NUMBERED_SEAT_RE.match(sname):
+            errors.append(
+                f"illegal seat name {sname!r} in profile seat metadata. "
+                f"Allowed: {sorted(LEGAL_SEATS)}."
+            )
         if _NUMBERED_SEAT_RE.match(sname):
             errors.append(
                 f"seat name {sname!r} is not allowed in v2 profiles. "

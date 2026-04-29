@@ -77,3 +77,52 @@ def test_seed_all_api_provider_overrides_api_workers(tmp_path: Path) -> None:
     patrol_secret = home / ".agents" / "secrets" / "claude" / "deepseek" / "patrol.env"
     assert patrol_secret.is_file()
     assert not (home / ".agents" / "secrets" / "claude" / "minimax" / "patrol.env").exists()
+
+
+def test_seed_template_does_not_overwrite_existing_real_token(tmp_path: Path) -> None:
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    minimax_template = home / ".agent-runtime" / "secrets" / "claude" / "minimax.env"
+    minimax_template.parent.mkdir(parents=True, exist_ok=True)
+    minimax_template.write_text(
+        "ANTHROPIC_AUTH_TOKEN=minimax-token\nANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic\n",
+        encoding="utf-8",
+    )
+    patrol_secret = home / ".agents" / "secrets" / "claude" / "minimax" / "patrol.env"
+    patrol_secret.parent.mkdir(parents=True, exist_ok=True)
+    real_token = "sk-" + "A" * 24
+    patrol_secret.write_text(
+        f"ANTHROPIC_AUTH_TOKEN={real_token}\nANTHROPIC_BASE_URL=https://live.example/anthropic\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "seedcase",
+            "--template",
+            "clawseat-creative",
+            "--provider",
+            "minimax",
+        ],
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert patrol_secret.read_text(encoding="utf-8").startswith(f"ANTHROPIC_AUTH_TOKEN={real_token}")
+    assert "placeholder template would overwrite real token" in result.stderr

@@ -161,8 +161,8 @@ Why this matters:
 - `review_authority`
 - `design_authority`
 
-Legacy `qa` + `_authority` is accepted only as a T6 backward-compat read alias
-for `patrol_authority` until 2026-10-28. Writers must emit `patrol_authority`.
+Legacy verification-seat aliases were removed on 2026-04-29. Writers and
+readers must use `patrol` / `patrol_authority`.
 
 ## Canonical roles
 
