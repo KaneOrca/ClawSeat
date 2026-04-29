@@ -38,6 +38,14 @@ class StoreHooks:
     session_name_for: Callable[..., str]
 
 
+# alias: qa_authority (T6 backward-compat, sunset 2026-10-28)
+_LEGACY_QA_AUTHORITY_KEY = "qa_authority"
+
+
+def _patrol_authority_from(data: dict[str, Any], default: bool = False) -> bool:
+    return bool(data.get("patrol_authority", data.get(_LEGACY_QA_AUTHORITY_KEY, default)))
+
+
 class StoreHandlers:
     def __init__(self, hooks: StoreHooks) -> None:
         self.hooks = hooks
@@ -143,12 +151,11 @@ class StoreHandlers:
             human_facing=bool(data.get("human_facing", False)),
             active_loop_owner=bool(data.get("active_loop_owner", False)),
             dispatch_authority=bool(data.get("dispatch_authority", False)),
-            patrol_authority=bool(data.get("patrol_authority", False)),
+            patrol_authority=_patrol_authority_from(data),
             unblock_authority=bool(data.get("unblock_authority", False)),
             escalation_authority=bool(data.get("escalation_authority", False)),
             remind_active_loop_owner=bool(data.get("remind_active_loop_owner", False)),
             review_authority=bool(data.get("review_authority", False)),
-            qa_authority=bool(data.get("qa_authority", False)),
             design_authority=bool(data.get("design_authority", False)),
             default_tool=data.get("default_tool", data.get("tool", "")),
             default_auth_mode=data.get("default_auth_mode", data.get("auth_mode", "")),
@@ -406,7 +413,6 @@ class StoreHandlers:
                 f"escalation_authority = {'true' if engineer.escalation_authority else 'false'}",
                 f"remind_active_loop_owner = {'true' if engineer.remind_active_loop_owner else 'false'}",
                 f"review_authority = {'true' if engineer.review_authority else 'false'}",
-                f"qa_authority = {'true' if engineer.qa_authority else 'false'}",
                 f"design_authority = {'true' if engineer.design_authority else 'false'}",
                 f"default_tool = {self.hooks.q(engineer.default_tool)}",
                 f"default_auth_mode = {self.hooks.q(engineer.default_auth_mode)}",
@@ -467,7 +473,6 @@ class StoreHandlers:
         escalation_authority: bool = False,
         remind_active_loop_owner: bool = False,
         review_authority: bool = False,
-        qa_authority: bool = False,
         design_authority: bool = False,
     ) -> Any:
         engineer_id = normalize_seat_role(self.hooks.normalize_name(engineer_id))
@@ -490,7 +495,6 @@ class StoreHandlers:
             escalation_authority=escalation_authority,
             remind_active_loop_owner=remind_active_loop_owner,
             review_authority=review_authority,
-            qa_authority=qa_authority,
             design_authority=design_authority,
             default_tool=tool,
             default_auth_mode=auth_mode,
@@ -522,14 +526,13 @@ class StoreHandlers:
             human_facing=bool(engineer_spec.get("human_facing", profile.human_facing)),
             active_loop_owner=bool(engineer_spec.get("active_loop_owner", profile.active_loop_owner)),
             dispatch_authority=bool(engineer_spec.get("dispatch_authority", profile.dispatch_authority)),
-            patrol_authority=bool(engineer_spec.get("patrol_authority", profile.patrol_authority)),
+            patrol_authority=_patrol_authority_from(engineer_spec, profile.patrol_authority),
             unblock_authority=bool(engineer_spec.get("unblock_authority", profile.unblock_authority)),
             escalation_authority=bool(engineer_spec.get("escalation_authority", profile.escalation_authority)),
             remind_active_loop_owner=bool(
                 engineer_spec.get("remind_active_loop_owner", profile.remind_active_loop_owner)
             ),
             review_authority=bool(engineer_spec.get("review_authority", profile.review_authority)),
-            qa_authority=bool(engineer_spec.get("qa_authority", profile.qa_authority)),
             design_authority=bool(engineer_spec.get("design_authority", profile.design_authority)),
             default_tool=default_tool,
             default_auth_mode=default_auth_mode,
@@ -640,12 +643,11 @@ class StoreHandlers:
                     human_facing=bool(engineer_spec.get("human_facing", False)),
                     active_loop_owner=bool(engineer_spec.get("active_loop_owner", False)),
                     dispatch_authority=bool(engineer_spec.get("dispatch_authority", False)),
-                    patrol_authority=bool(engineer_spec.get("patrol_authority", False)),
+                    patrol_authority=_patrol_authority_from(engineer_spec),
                     unblock_authority=bool(engineer_spec.get("unblock_authority", False)),
                     escalation_authority=bool(engineer_spec.get("escalation_authority", False)),
                     remind_active_loop_owner=bool(engineer_spec.get("remind_active_loop_owner", False)),
                     review_authority=bool(engineer_spec.get("review_authority", False)),
-                    qa_authority=bool(engineer_spec.get("qa_authority", False)),
                     design_authority=bool(engineer_spec.get("design_authority", False)),
                 )
             template_profiles[engineer_id] = self.merge_engineer_profile_with_template(

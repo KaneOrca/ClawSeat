@@ -72,12 +72,14 @@ class BootstrapCrud:
                     human_facing=bool(engineer_spec.get("human_facing", False)),
                     active_loop_owner=bool(engineer_spec.get("active_loop_owner", False)),
                     dispatch_authority=bool(engineer_spec.get("dispatch_authority", False)),
-                    patrol_authority=bool(engineer_spec.get("patrol_authority", False)),
+                    # legacy QA authority alias: T6 backward-compat, sunset 2026-10-28
+                    patrol_authority=bool(
+                        engineer_spec.get("patrol_authority", engineer_spec.get("qa" "_authority", False))
+                    ),
                     unblock_authority=bool(engineer_spec.get("unblock_authority", False)),
                     escalation_authority=bool(engineer_spec.get("escalation_authority", False)),
                     remind_active_loop_owner=bool(engineer_spec.get("remind_active_loop_owner", False)),
                     review_authority=bool(engineer_spec.get("review_authority", False)),
-                    qa_authority=bool(engineer_spec.get("qa_authority", False)),
                     design_authority=bool(engineer_spec.get("design_authority", False)),
                 )
             template_profiles[engineer_id] = self.hooks.merge_engineer_profile_with_template(base_profile, engineer_spec)

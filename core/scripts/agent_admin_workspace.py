@@ -90,8 +90,6 @@ def render_authority_lines(engineer: Any) -> list[str]:
         capabilities.append("may remind the active loop owner when patrol finds drift")
     if getattr(engineer, "review_authority", False):
         capabilities.append("review verdict authority")
-    if getattr(engineer, "qa_authority", False):
-        capabilities.append("QA verdict authority")
     if getattr(engineer, "design_authority", False):
         capabilities.append("design review / prototype authority")
     if not capabilities:

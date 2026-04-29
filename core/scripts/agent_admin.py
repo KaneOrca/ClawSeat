@@ -129,7 +129,6 @@ class Engineer:
     escalation_authority: bool = False
     remind_active_loop_owner: bool = False
     review_authority: bool = False
-    qa_authority: bool = False
     design_authority: bool = False
     default_tool: str = ""
     default_auth_mode: str = ""
@@ -594,7 +593,6 @@ def create_engineer_profile(
     escalation_authority: bool = False,
     remind_active_loop_owner: bool = False,
     review_authority: bool = False,
-    qa_authority: bool = False,
     design_authority: bool = False,
 ) -> Engineer:
     return STORE_HANDLERS.create_engineer_profile(
@@ -615,7 +613,6 @@ def create_engineer_profile(
         escalation_authority=escalation_authority,
         remind_active_loop_owner=remind_active_loop_owner,
         review_authority=review_authority,
-        qa_authority=qa_authority,
         design_authority=design_authority,
     )
 

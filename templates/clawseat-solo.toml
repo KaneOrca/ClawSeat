@@ -37,7 +37,6 @@ unblock_authority = true
 escalation_authority = true
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/clawseat-memory/SKILL.md",
@@ -70,7 +69,6 @@ provider = "openai"
 monitor = true
 human_facing = false
 review_authority = false
-qa_authority = false
 design_authority = false
 dispatch_authority = false
 skills = [
@@ -99,7 +97,6 @@ unblock_authority = false
 escalation_authority = true
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",

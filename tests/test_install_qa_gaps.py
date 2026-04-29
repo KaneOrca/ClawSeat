@@ -184,7 +184,7 @@ def test_gstack_harness_template_has_patrol(tmp_path: Path) -> None:
 
     assert len(patrol_specs) == 1
     assert patrol_specs[0]["role"] == "patrol"
-    assert patrol_specs[0]["qa_authority"] is True
+    assert patrol_specs[0]["patrol_authority"] is True
     assert patrol_specs[0]["auth_mode"] == "api"
     assert patrol_specs[0]["provider"] == "minimax"
     assert patrol_specs[0]["model"] == "MiniMax-M2.7-highspeed"

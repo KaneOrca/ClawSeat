@@ -44,6 +44,7 @@ PARALLEL_ALLOWED = frozenset({"builder", "reviewer", "patrol", "qa"})
 DEPRECATED_FIELDS = frozenset({"heartbeat_transport", "heartbeat_owner", "heartbeat_receipt", "heartbeat_seats",
                                 "feishu_group_id", "runtime_seats", "materialized_seats"})
 # Seat names rejected in v2 profiles (rule 8 extended).
+# qa-\d+ is T6 backward-compat alias; sunset 2026-10-28 (per patrol_alias.py).
 _NUMBERED_SEAT_RE = re.compile(r"^(koder|builder-\d+|reviewer-\d+|patrol-\d+|qa-\d+)$")
 
 

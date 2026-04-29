@@ -238,6 +238,20 @@ Three built-in project templates in `templates/`:
 | `clawseat-engineering` | memory planner builder reviewer patrol designer | 6 | Engineering chain with independent reviewer |
 | `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
 
+### Solo Template (Minimal 3-Seat)
+
+`clawseat-solo` is a 3-seat alternative for minimal OAuth-only collaboration:
+
+| Seat | Tool | Role |
+|------|------|------|
+| memory | claude oauth | L3 hub, brief authoring, verdict |
+| builder | codex oauth | Implementation |
+| planner | gemini oauth | Workflow orchestration, dispatch |
+
+No reviewer, patrol, or designer seats. Memory delegates orchestration to planner;
+builder self-reviews; memory issues final verdict. All seats use OAuth - no API
+keys required.
+
 **Creative template seat responsibilities:**
 - `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure
 - `builder` (codex/oauth): workflow classification — cs-classify / cs-classify-short; delivers classification to designer
