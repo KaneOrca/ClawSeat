@@ -17,6 +17,50 @@ from agent_admin_crud_base import (
 from seat_roles import normalize_seat_role
 
 
+_OPERATOR_CUSTOM_START = "<!-- OPERATOR-CUSTOM-START -->"
+_OPERATOR_CUSTOM_END = "<!-- OPERATOR-CUSTOM-END -->"
+
+
+def _extract_operator_custom_block(text: str) -> tuple[str, int] | None:
+    start = text.find(_OPERATOR_CUSTOM_START)
+    if start < 0:
+        return None
+    end = text.find(_OPERATOR_CUSTOM_END, start + len(_OPERATOR_CUSTOM_START))
+    if end < 0:
+        return None
+    end += len(_OPERATOR_CUSTOM_END)
+    return text[start:end], text[:start].count("\n")
+
+
+def _strip_operator_custom_block(text: str) -> str:
+    block = _extract_operator_custom_block(text)
+    if block is None:
+        return text
+    custom_text, _line_no = block
+    return text.replace(custom_text, "", 1)
+
+
+def _inject_operator_custom_block(rendered: str, block: str, line_no: int) -> str:
+    cleaned = _strip_operator_custom_block(rendered)
+    lines = cleaned.splitlines(keepends=True)
+    index = min(max(line_no, 0), len(lines))
+    custom_block = block
+    if custom_block and not custom_block.endswith("\n"):
+        custom_block += "\n"
+    if index > 0 and lines and not lines[index - 1].endswith("\n"):
+        custom_block = "\n" + custom_block
+    lines.insert(index, custom_block)
+    return "".join(lines)
+
+
+def preserve_operator_custom_block(existing: str, rendered: str) -> tuple[str, bool]:
+    block = _extract_operator_custom_block(existing)
+    if block is None:
+        return rendered, False
+    custom_text, line_no = block
+    return _inject_operator_custom_block(rendered, custom_text, line_no), True
+
+
 class EngineerCrud:
     def __init__(self, hooks: CrudHooks) -> None:
         self.hooks = hooks
@@ -342,20 +386,31 @@ class EngineerCrud:
             for relpath, content in rendered.items()
             if relpath in {"AGENTS.md", "CLAUDE.md", "GEMINI.md"}
         }
+        final_workspace_docs: dict[str, str] = {}
+        preserved_docs: list[Path] = []
+        fully_rendered_docs: list[Path] = []
         changed_docs: list[Path] = []
         for relpath, content in workspace_docs.items():
             path = workspace / relpath
             if not path.exists():
+                final_workspace_docs[relpath] = content
                 continue
             existing = path.read_text(encoding="utf-8")
-            if self._workspace_doc_hash(existing) != self._workspace_doc_hash(content):
+            final_content, preserved = preserve_operator_custom_block(existing, content)
+            final_workspace_docs[relpath] = final_content
+            if preserved:
+                preserved_docs.append(path)
+            else:
+                fully_rendered_docs.append(path)
+            if self._workspace_doc_hash(existing) != self._workspace_doc_hash(final_content):
                 changed_docs.append(path)
         if changed_docs and not assume_yes:
             for path in changed_docs:
                 if not self._confirm_overwrite(path):
                     raise self.hooks.error_cls(f"workspace regenerate aborted by operator: {path}")
 
-        backup_dir = workspace / f".backup-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        backup_dir = workspace / f".backup-{timestamp}"
         backed_up = False
         for relpath in workspace_docs:
             path = workspace / relpath
@@ -364,10 +419,19 @@ class EngineerCrud:
             target = backup_dir / relpath
             self.hooks.ensure_dir(target.parent)
             shutil.copy2(path, target)
+            shutil.copy2(path, path.with_name(f"{path.name}.bak.{timestamp}"))
             backed_up = True
         self.hooks.apply_template(session, project)
+        for relpath, content in final_workspace_docs.items():
+            path = workspace / relpath
+            if path.exists():
+                path.write_text(content, encoding="utf-8")
         backup_note = f"\tbackup={backup_dir}" if backed_up else ""
         print(f"regenerated\t{session.engineer_id}\t{session.session}\t{session.workspace}{backup_note}")
+        for path in preserved_docs:
+            print(f"preserved-operator-custom\t{path}")
+        for path in fully_rendered_docs:
+            print(f"hint\t{path}\tno OPERATOR-CUSTOM markers found, fully re-rendered")
 
     def engineer_regenerate_workspace(self, args: Any) -> int:
         project = self.hooks.load_project(args.project)
