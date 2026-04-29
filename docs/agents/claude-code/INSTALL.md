@@ -16,10 +16,13 @@ Use Claude Code tools in this order:
 1. **Read** `docs/INSTALL.md`, `docs/INSTALL_AGENT_PROMPT.md`, and the relevant
    install scripts before changing behavior.
 2. **Bash** Step 0 detection with `bash scripts/install.sh --detect-only`.
-3. **Bash run_in_background** for the long `install.sh` run so narration and
+3. **AskUserQuestion** for each confirmation. Use the rich UI instead of plain
+   markdown when asking language, template, project name, summary, run, or
+   failure-choice questions.
+4. **Bash run_in_background** for the long `install.sh` run so narration and
    monitoring can continue.
-4. **Monitor** the background command and summarize each state transition.
-5. **TaskCreate** the 11-step progress checklist before the run starts.
+5. **Monitor** the background command and summarize each state transition.
+6. **TaskCreate** the 11-step progress checklist before the run starts.
 
 Confirmation lines keep this shape:
 
@@ -27,6 +30,20 @@ Confirmation lines keep this shape:
 Recommended★: <choice>
 Reason: <one sentence>
 Confirm: [Enter=default / change / 详 / cancel]
+```
+
+AskUserQuestion reference JSON:
+
+```json
+{
+  "question": "Choose the ClawSeat template.",
+  "header": "Template",
+  "options": [
+    {"label": "Creative (Recommended)", "description": "Best first install default."},
+    {"label": "Engineering", "description": "Adds reviewer for code review lanes."},
+    {"label": "Solo", "description": "Minimal 3-seat all-OAuth setup."}
+  ]
+}
 ```
 
 ## Failure Pattern

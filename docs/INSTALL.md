@@ -56,7 +56,7 @@ empty Enter accepts the default, and `详` gives a short explanation of roughly
 
 ```json
 {
-  "oauth": {"claude": "ok|missing", "codex": "ok|missing", "gemini": "ok|missing"},
+  "oauth": {"claude": "oauth|api_key|missing", "codex": "oauth|api_key|missing", "gemini": "oauth|api_key|missing"},
   "pty": {"used": 0, "total": 256, "warn": false},
   "branch": {"branch": "main", "warn": false},
   "existing_projects": [],
@@ -82,13 +82,13 @@ empty Enter accepts the default, and `详` gives a short explanation of roughly
 
 ### Step 2 — Project Name Decision
 
-**WHAT**: propose a lowercase `^[a-z0-9-]+$` project name from the repo directory, existing projects, or the operator's stated goal.
+**WHAT**: propose a lowercase `^[a-z0-9-]+$` project name. Treat `existing_projects` from `detect_all` as an **AVOID list**, never as a source of recommended names. Recommendation priority is: operator goal first, repo directory name second, generated unique name with timestamp third. Always check collisions against `existing_projects` before confirming.
 
-**WHY default**: Recommended★: use the detected repo or requested project name. Reason: it keeps task paths, tmux sessions, and registry entries predictable.
+**WHY default**: Recommended★: use the operator goal when provided, otherwise the repo directory name if it is not in `existing_projects`, otherwise a generated unique name like `<repo>-20260429-1251`. Reason: it prevents reusing `install` or another existing project by accident.
 
 **CONFIRM**: `[回车=默认 / 输入新项目名 / 详 / 取消]`
 
-**ON-FAIL**: if the name is invalid or already exists, offer a normalized slug, `--reinstall <project>`, or a new unique suffix.
+**ON-FAIL**: if the name is invalid or already exists, offer a normalized slug, `--reinstall <project>` only when the operator explicitly wants to replace that project, or a generated unique suffix with timestamp.
 
 ### Step 3 — Summary, Run, And Progress
 

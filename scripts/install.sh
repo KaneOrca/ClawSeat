@@ -165,7 +165,7 @@ unset _install_lib_module _INSTALL_LIB_MODULES
 
 resolve_supported_python_bin
 if [[ "$PYTHON_BIN_RESOLUTION" == "auto" ]]; then
-  note "Using Python $PYTHON_BIN_VERSION at $PYTHON_BIN"
+  printf '==> Using Python %s at %s\n' "$PYTHON_BIN_VERSION" "$PYTHON_BIN" >&2
 fi
 
 parse_args() {

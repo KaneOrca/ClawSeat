@@ -14,9 +14,11 @@ Claude Code 工具使用顺序：
 
 1. **Read** `docs/INSTALL.zh-CN.md`、`docs/INSTALL_AGENT_PROMPT.zh-CN.md` 和相关安装脚本。
 2. **Bash** 运行 Step 0：`bash scripts/install.sh --detect-only`。
-3. **Bash run_in_background** 执行长时间的 `install.sh`，方便继续叙述和监控。
-4. **Monitor** 后台命令，并总结每个状态变化。
-5. **TaskCreate** 在执行前建立 11 步 progress checklist。
+3. **AskUserQuestion** 处理每次确认。语言、模板、项目名、摘要、执行、
+   失败修复选择都使用 rich UI，不要只用普通 markdown。
+4. **Bash run_in_background** 执行长时间的 `install.sh`，方便继续叙述和监控。
+5. **Monitor** 后台命令，并总结每个状态变化。
+6. **TaskCreate** 在执行前建立 11 步 progress checklist。
 
 确认行保持：
 
@@ -24,6 +26,20 @@ Claude Code 工具使用顺序：
 推荐★：<choice>
 理由：<一句话>
 确认：[回车=默认 / 修改 / 详 / 取消]
+```
+
+AskUserQuestion reference JSON：
+
+```json
+{
+  "question": "请选择 ClawSeat template。",
+  "header": "Template",
+  "options": [
+    {"label": "Creative (Recommended)", "description": "首次安装默认推荐。"},
+    {"label": "Engineering", "description": "增加 reviewer，用于代码审查 lane。"},
+    {"label": "Solo", "description": "极简 3-seat 全 OAuth 配置。"}
+  ]
+}
 ```
 
 ## Failure Pattern

@@ -16,6 +16,12 @@ def _run_detect(command: str, home: Path) -> subprocess.CompletedProcess[str]:
         **os.environ,
         "HOME": str(home),
         "CLAWSEAT_ROOT": str(REPO),
+        "CLAWSEAT_TEST_OSTYPE": "linux-gnu",
+        "ANTHROPIC_API_KEY": "",
+        "CLAUDE_API_KEY": "",
+        "OPENAI_API_KEY": "",
+        "GEMINI_API_KEY": "",
+        "GOOGLE_API_KEY": "",
     }
     return subprocess.run(
         ["bash", "-c", f"source {shlex.quote(str(DETECT))}; {command}"],
@@ -51,7 +57,7 @@ def test_detect_oauth_states_reports_missing_then_ok(tmp_path: Path) -> None:
     detected = _run_detect("detect_oauth_states", home)
     assert detected.returncode == 0, detected.stderr
     assert json.loads(detected.stdout) == {
-        "claude": "ok",
-        "codex": "ok",
-        "gemini": "ok",
+        "claude": "oauth",
+        "codex": "oauth",
+        "gemini": "oauth",
     }

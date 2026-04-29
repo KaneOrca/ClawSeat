@@ -61,7 +61,7 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 
 ```json
 {
-  "oauth": {"claude": "ok|missing", "codex": "ok|missing", "gemini": "ok|missing"},
+  "oauth": {"claude": "oauth|api_key|missing", "codex": "oauth|api_key|missing", "gemini": "oauth|api_key|missing"},
   "pty": {"used": 0, "total": 256, "warn": false},
   "branch": {"branch": "main", "warn": false},
   "existing_projects": [],
@@ -87,13 +87,13 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 
 ### 步骤 2 — Project Name Decision
 
-**WHAT**：从 repo 目录、已有 projects 或 operator 目标中推荐一个符合 `^[a-z0-9-]+$` 的小写项目名。
+**WHAT**：推荐一个符合 `^[a-z0-9-]+$` 的小写项目名。`detect_all` 里的 `existing_projects` 是 **AVOID list**，只能用于避开已有项目，不能作为推荐名来源。推荐优先级是：operator goal > repo 目录名 > 带 timestamp 的 generated unique name。确认前必须和 `existing_projects` 做碰撞检查。
 
-**WHY default**：推荐★：使用检测到的 repo 或 operator 指定项目名；理由：task 路径、tmux session 和 registry entry 更可预测。
+**WHY default**：推荐★：优先使用 operator goal；没有 goal 时使用不在 `existing_projects` 中的 repo 目录名；再不行生成 `<repo>-20260429-1251` 这类唯一名。理由：避免误把 `install` 或其他已有项目当成新项目名。
 
 **CONFIRM**：`[回车=默认 / 输入新项目名 / 详 / 取消]`
 
-**ON-FAIL**：项目名非法或已存在时，提供 normalized slug、`--reinstall <project>` 或唯一后缀。
+**ON-FAIL**：项目名非法或已存在时，提供 normalized slug；只有 operator 明确要替换该项目时才提供 `--reinstall <project>`；否则提供带 timestamp 的唯一后缀。
 
 ### 步骤 3 — Summary, Run, And Progress
 
