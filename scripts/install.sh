@@ -211,7 +211,31 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--detect-only prints one JSON environment summary and exits.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n--provision-keys prompts for missing template API keys and writes ~/.agents/.env.global.\n'; exit 0 ;;
+      --help|-h) cat <<'EOF'
+Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]
+--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.
+--detect-only prints one JSON environment summary and exits.
+--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.
+--provision-keys prompts for missing template API keys and writes ~/.agents/.env.global.
+
+Provider modes (--provider, --all-api-provider):
+  oauth              option 3, Anthropic Pro / Claude Pro OAuth (host login, no API key)
+  anthropic_console  option 4, Anthropic Console API key mode (ANTHROPIC_API_KEY)
+  minimax            option 5, MiniMax API key mode
+  deepseek           option 6, DeepSeek API key mode
+  ark                option 7, Volcano ARK API key mode
+  xcode-best         option 8, Xcode Best API key mode
+  custom_api         custom endpoint; requires --base-url --api-key
+
+Non-TTY environments (agent-launcher sandbox, CI, detached agent sessions) must pass --provider <mode>; install cannot prompt interactively and exits with code 2.
+
+Templates (--template):
+  clawseat-creative      4-seat creative flow (memory + planner + builder + designer), OAuth + MiniMax mix
+  clawseat-engineering   5-seat engineering flow (memory + planner + builder + reviewer + patrol), OAuth-first
+  clawseat-solo          3-seat minimal creative flow (memory + builder + planner-gemini), all OAuth
+EOF
+        exit 0
+        ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done

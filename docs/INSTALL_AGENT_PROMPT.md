@@ -60,6 +60,19 @@ Confirm: [Enter=default fix / choose 1-3 / cancel]
 
 If PTY pressure is high, stop and escalate instead of killing sessions.
 
+## Startup Trust/Auth Prompts
+
+During first launch, CLI tools may show startup trust or authorization prompts.
+Treat these as normal when they appear immediately after a seat starts:
+
+- workspace trust prompts such as `Yes, I trust this folder`
+- permission prompts such as `Bypass Permissions` or `Allow this skill to read...`
+- browser/OAuth continuation prompts
+
+Confirm the prompt directly, usually Enter, `1`, or Yes. Escalate only when
+there is a process crash, traceback, API 401/secret missing error, missing tmux
+session, or a window that never opens.
+
 ## detect_all JSON Reference
 
 `detect_all` returns:

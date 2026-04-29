@@ -54,6 +54,18 @@ HARD CONSTRAINTS:
 
 如果 PTY 压力过高，停止并升级，不要 kill session。
 
+## 启动期 Trust/Auth Prompt
+
+首次启动时，CLI 工具可能显示 trust 或授权确认。只要这些 prompt 在 seat
+启动后立刻出现，就按正常流程处理：
+
+- workspace trust，例如 `Yes, I trust this folder`
+- 权限确认，例如 `Bypass Permissions` 或 `Allow this skill to read...`
+- 浏览器/OAuth 继续确认
+
+直接确认即可，通常是 Enter、`1` 或 Yes。只有进程崩溃、traceback、API
+401/secret missing、tmux session 不存在，或窗口始终没拉起时才升级为异常。
+
 ## detect_all JSON Reference
 
 `detect_all` 返回：
