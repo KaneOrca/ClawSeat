@@ -42,6 +42,78 @@ That is the one canonical command. Everything else is internal plumbing.
 > [docs/ARCHITECTURE.md §3z](ARCHITECTURE.md#seat-lifecycle-entry-points-v07-pyramid)
 > for the full layering.
 
+## AI-Native Install Decision Tree
+
+This section is the agent-facing install dialogue contract. Run Step 0
+detection once, then make only five planned decisions: language, template,
+project name, summary, and run. At any prompt, `/en` and `/zh` switch language,
+empty Enter accepts the default, and `详` gives a short explanation of roughly
+150 words without external links.
+
+### Step 0 — Language, Detection, And Start Gate
+
+**WHAT**: silently run `bash scripts/install.sh --detect-only --force-repo-root <CLAWSEAT_ROOT>` and summarize the `detect_all` JSON before asking any setup question.
+
+```json
+{
+  "oauth": {"claude": "ok|missing", "codex": "ok|missing", "gemini": "ok|missing"},
+  "pty": {"used": 0, "total": 256, "warn": false},
+  "branch": {"branch": "main", "warn": false},
+  "existing_projects": [],
+  "timestamp": "2026-04-29T00:00:00Z"
+}
+```
+
+**WHY default**: Recommended★: continue in the operator's current language. Reason: it avoids one extra question while still allowing `/en` or `/zh` at any time.
+
+**CONFIRM**: `可以开始吗? [回车=继续 / 详 / 取消]`
+
+**ON-FAIL**: show the failing detector, then offer 2-3 fixes such as `--force-repo-root <path>`, re-login to the missing tool, or stop and escalate for PTY exhaustion. Do not kill sessions.
+
+### Step 1 — Template Decision
+
+**WHAT**: choose `clawseat-creative`, `clawseat-engineering`, or `clawseat-solo`. Use `detect_template_from_name <project>` once the project intent is known; otherwise default to creative.
+
+**WHY default**: Recommended★: `clawseat-creative`. Reason: it gives planner, builder, patrol, and designer coverage without requiring reviewer overhead.
+
+**CONFIRM**: `[回车=默认 / 1 creative / 2 engineering / 3 solo / 详 / 取消]`
+
+**ON-FAIL**: if the operator is unsure, give two examples per template and keep the default; if the template file is missing, offer `git status`, `git pull`, or `--force-repo-root <path>`.
+
+### Step 2 — Project Name Decision
+
+**WHAT**: propose a lowercase `^[a-z0-9-]+$` project name from the repo directory, existing projects, or the operator's stated goal.
+
+**WHY default**: Recommended★: use the detected repo or requested project name. Reason: it keeps task paths, tmux sessions, and registry entries predictable.
+
+**CONFIRM**: `[回车=默认 / 输入新项目名 / 详 / 取消]`
+
+**ON-FAIL**: if the name is invalid or already exists, offer a normalized slug, `--reinstall <project>`, or a new unique suffix.
+
+### Step 3 — Summary, Run, And Progress
+
+**WHAT**: show one summary with language, template, project name, repo root, branch warning, OAuth warnings, and the exact command. Then ask for the run confirmation.
+
+**WHY default**: Recommended★: run the generated command. Reason: all detection has already completed and the operator has seen the mutable choices.
+
+**CONFIRM**: `[回车=运行 / 修改摘要 / 详 / 取消]`
+
+**ON-FAIL**: classify the failure and present specific fix options. Use `⚠️` for recoverable prompts, `❌` for failed commands, and `⏭️` for skipped optional steps; do not dump raw stderr alone.
+
+Narrate the run as exactly 11 progress steps:
+
+1. 🟢 Parse flags and resolve ClawSeat root.
+2. 🟢 Run preflight and environment scan.
+3. 🟢 Select template.
+4. 🟢 Confirm project name and paths.
+5. 🟢 Select provider or OAuth mode.
+6. 🟢 Render memory bootstrap brief.
+7. 🟢 Launch primary memory seat.
+8. 🟢 Write project registry and local config.
+9. 🟢 Open workers or solo window layout.
+10. 🟢 Write operator guide and kickoff.
+11. 🟢 Verify Phase-A handoff; mark optional skips with ⏭️, warnings with ⚠️, failures with ❌.
+
 ## 0. Agent kickoff prompt
 
 Paste the prompt below into a fresh Claude Code / Codex / Gemini session to
@@ -300,6 +372,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--enable-auto-patrol` | Install optional daily/weekly patrol cron entries. Without it, stale patrol LaunchAgents are removed during preflight. |
 | `--load-all-skills` | Install all bundled ClawSeat skills for non-Claude tools too. Claude always receives the full set. |
 | `--dry-run` | Print planned actions without mutating host state where supported. |
+| `--detect-only` | Print one `detect_all` JSON environment summary and exit before install side effects. |
 | `--reset-harness-memory` | Delete remembered per-seat harness choices and exit. |
 | `--help` / `-h` | Print the parser-owned usage line. |
 
