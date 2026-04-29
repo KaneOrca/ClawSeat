@@ -48,7 +48,7 @@
 
 ```json
 {
-  "oauth": {"claude": "ok", "codex": "missing", "gemini": "ok"},
+  "oauth": {"claude": "oauth", "codex": "missing", "gemini": "api_key"},
   "pty": {"used": 12, "total": 256, "warn": false},
   "branch": {"branch": "main", "warn": false},
   "existing_projects": ["install"],
