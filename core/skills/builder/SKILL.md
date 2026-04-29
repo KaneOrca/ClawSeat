@@ -27,6 +27,7 @@ On failure (command error or `iter > max_iterations`):
 - Do NOT retry silently.
 - Notify `notify_on_blocked` roles.
 - Record stderr, command output, and other evidence under `artifacts/`.
+## Handoff Receipt: 完成必须两步,不可二选一: 1. call `complete_handoff.py` 写 durable `.consumed` receipt; 2. then `send-and-verify.sh` wake reply_to. send-and-verify cannot substitute; complete_handoff.py 失败要 escalate 给 reply_to + memory.
 ## Work Mode: **2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)**
 ## Context Management
 
@@ -51,8 +52,7 @@ Stop hook will trigger `/compact` on this marker.
 
 If both markers could apply, finish durable writes first, then emit exactly one
 marker as the final line.
-## Failure mode: PTY exhaustion
-If PTY resources are exhausted during a sweep or task:
+## Failure mode: PTY exhaustion — If PTY resources are exhausted during a sweep or task:
 - **Stop immediately** — do NOT mitigate by stopping tmux or iTerm sessions
 - Stopping non-current-project sessions is a RFC-002 §3 violation
 - Send `[BLOCKED:reason=pty-exhaustion]` as the last output line

@@ -374,7 +374,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
     else:
         lines.extend(
             [
-                f"- when you complete assigned work, update `DELIVERY.md`, then notify `{planner_seat}` with `send-and-verify.sh --project {project_name} {planner_seat} ...` or the `complete_handoff.py` helper",
+                f"- when you complete assigned work, update `DELIVERY.md`, call `complete_handoff.py` to write the durable receipt, then wake `{planner_seat}` with `send-and-verify.sh --project {project_name} {planner_seat} ...`; send-and-verify is wake-up only and cannot substitute",
                 "- if you are reviewing work, include a canonical `Verdict:` field in `DELIVERY.md`",
             ]
         )
