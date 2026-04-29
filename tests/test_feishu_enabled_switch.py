@@ -41,6 +41,7 @@ def test_send_delegation_report_skips_when_feishu_disabled(tmp_path):
 def test_send_delegation_report_runs_normally_when_feishu_enabled(tmp_path):
     """Without CLAWSEAT_FEISHU_ENABLED=0, dry-run proceeds normally."""
     env = {k: v for k, v in os.environ.items() if k != "CLAWSEAT_FEISHU_ENABLED"}
+    env["CLAWSEAT_FEISHU_GROUP_ID"] = "oc_1234567890abcdef"
     result = subprocess.run(
         [sys.executable, str(SEND_REPORT), "--project", "install", "--dry-run"],
         capture_output=True, text=True, env=env, check=False,
