@@ -22,6 +22,8 @@ _fake_install_root = _HELPERS._fake_install_root
 def test_install_modules_keep_expected_exports() -> None:
     lib_dir = _REPO / "scripts" / "install" / "lib"
     assert {path.name for path in lib_dir.glob("*.sh")} == {
+        "detect.sh",
+        "i18n.sh",
         "preflight.sh",
         "provider.sh",
         "project.sh",
@@ -32,6 +34,8 @@ def test_install_modules_keep_expected_exports() -> None:
     }
 
     expected_exports = {
+        "detect.sh": ["detect_oauth_states", "detect_pty_resource", "detect_all"],
+        "i18n.sh": ["i18n_set", "i18n_get"],
         "preflight.sh": ["ensure_host_deps", "scan_machine"],
         "provider.sh": ["detect_provider", "select_provider", "write_provider_env"],
         "project.sh": ["bootstrap_project_profile", "migrate_project_profile_to_v2", "write_project_local_toml"],
@@ -58,6 +62,7 @@ def test_install_modules_keep_expected_exports() -> None:
         "--enable-auto-patrol",
         "--load-all-skills",
         "--dry-run",
+        "--detect-only",
         "--reset-harness-memory",
         "--base-url",
         "--api-key",

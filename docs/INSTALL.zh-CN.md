@@ -49,6 +49,76 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 - 单 seat 进程由系统内部调用 `agent-launcher.sh`，用户不要直接调用。
 - 分层说明见 [docs/ARCHITECTURE.md §3z](ARCHITECTURE.md#seat-lifecycle-entry-points-v07-pyramid)。
 
+## AI-Native Install Decision Tree
+
+本节是 agent 面向 operator 的安装对话协议。Step 0 只运行一次检测，然后只做
+五个计划内决策：语言、模板、项目名、摘要、执行。任意提示都支持 `/en` 和
+`/zh` 切换语言；空回车接受默认值；`详` 给出约 150 字解释，不附外部链接。
+
+### 步骤 0 — Language, Detection, And Start Gate
+
+**WHAT**：静默运行 `bash scripts/install.sh --detect-only --force-repo-root <CLAWSEAT_ROOT>`，先总结 `detect_all` JSON，再问任何设置问题。
+
+```json
+{
+  "oauth": {"claude": "ok|missing", "codex": "ok|missing", "gemini": "ok|missing"},
+  "pty": {"used": 0, "total": 256, "warn": false},
+  "branch": {"branch": "main", "warn": false},
+  "existing_projects": [],
+  "timestamp": "2026-04-29T00:00:00Z"
+}
+```
+
+**WHY default**：推荐★：沿用 operator 当前语言；理由：少问一个问题，同时仍可随时用 `/en` 或 `/zh` 切换。
+
+**CONFIRM**：`可以开始吗? [回车=继续 / 详 / 取消]`
+
+**ON-FAIL**：说明失败的 detector，然后给 2-3 个修复选项，例如 `--force-repo-root <path>`、重新登录缺失工具，或 PTY 耗尽时停止并升级。不要 kill session。
+
+### 步骤 1 — Template Decision
+
+**WHAT**：选择 `clawseat-creative`、`clawseat-engineering` 或 `clawseat-solo`。知道项目意图后用 `detect_template_from_name <project>`；否则默认 creative。
+
+**WHY default**：推荐★：`clawseat-creative`；理由：包含 planner、builder、patrol、designer，不引入 reviewer 额外开销。
+
+**CONFIRM**：`[回车=默认 / 1 creative / 2 engineering / 3 solo / 详 / 取消]`
+
+**ON-FAIL**：operator 不确定时，每个模板给两个例子并保留默认；模板文件缺失时，提供 `git status`、`git pull` 或 `--force-repo-root <path>`。
+
+### 步骤 2 — Project Name Decision
+
+**WHAT**：从 repo 目录、已有 projects 或 operator 目标中推荐一个符合 `^[a-z0-9-]+$` 的小写项目名。
+
+**WHY default**：推荐★：使用检测到的 repo 或 operator 指定项目名；理由：task 路径、tmux session 和 registry entry 更可预测。
+
+**CONFIRM**：`[回车=默认 / 输入新项目名 / 详 / 取消]`
+
+**ON-FAIL**：项目名非法或已存在时，提供 normalized slug、`--reinstall <project>` 或唯一后缀。
+
+### 步骤 3 — Summary, Run, And Progress
+
+**WHAT**：展示一次摘要：语言、模板、项目名、repo root、branch warning、OAuth warning 和确切命令。然后询问执行确认。
+
+**WHY default**：推荐★：运行生成的命令；理由：所有检测已完成，operator 已看过会改变结果的选择。
+
+**CONFIRM**：`[回车=运行 / 修改摘要 / 详 / 取消]`
+
+**ON-FAIL**：先分类失败，再给具体修复选项。可恢复提示用 `⚠️`，命令失败用 `❌`，可选跳过用 `⏭️`；不要只粘贴 raw stderr。
+
+执行时严格按 11 步叙述：
+
+1. 🟢 解析 flags 并确认 ClawSeat root。
+2. 🟢 运行 preflight 和 environment scan。
+3. 🟢 选择模板。
+4. 🟢 确认项目名和路径。
+5. 🟢 选择 provider 或 OAuth mode。
+6. 🟢 渲染 memory bootstrap brief。
+7. 🟢 启动 primary memory seat。
+8. 🟢 写入 project registry 和 local config。
+9. 🟢 打开 workers 或 solo window layout。
+10. 🟢 写入 operator guide 和 kickoff。
+11. 🟢 验证 Phase-A handoff；可选跳过标 `⏭️`，警告标 `⚠️`，失败标 `❌`。
+
 ## 0. Agent kickoff prompt（启动提示）
 
 把下面提示贴给一个新的 Claude Code / Codex / Gemini session，让它安装 ClawSeat。
@@ -219,6 +289,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--enable-auto-patrol` | 安装可选 daily/weekly patrol cron。未传时 preflight 会移除 stale patrol LaunchAgent。 |
 | `--load-all-skills` | 为非 Claude tool 也安装所有 bundled ClawSeat skills。Claude 总是获得完整集合。 |
 | `--dry-run` | 打印计划动作，尽可能不修改 host state。 |
+| `--detect-only` | 打印一次 `detect_all` JSON 环境摘要，并在产生安装副作用前退出。 |
 | `--reset-harness-memory` | 删除 remembered per-seat harness choices 并退出。 |
 | `--help` / `-h` | 打印 parser-owned usage line。 |
 

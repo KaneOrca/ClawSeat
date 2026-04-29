@@ -4,6 +4,15 @@
 # callers may source install.sh from any current working directory.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+_prompt_i18n_get() {
+  local key="$1" fallback="${2:-$1}"
+  if declare -F i18n_get >/dev/null 2>&1; then
+    i18n_get "$key"
+  else
+    printf '%s\n' "$fallback"
+  fi
+}
+
 prompt_template_for_choice() {
   case "${1:-1}" in
     ""|1) printf '%s\n' "clawseat-creative" ;;
@@ -30,20 +39,21 @@ prompt_kind_first_flow() {
       "non-TTY environment detected; use --template <name>. Run: bash scripts/install.sh --help"
   fi
 
-  printf '\nClawSeat — 新项目配置 / New project setup\n' >&2
-  printf '\n选择项目类型 / Choose project mode:\n' >&2
-  printf '  1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]\n' >&2
-  printf '  2) 工程项目 (6 seat: + reviewer 独立审查)\n' >&2
-  printf '  3) 极简协作 (3 seat: memory + builder + planner-gemini, all OAuth)\n' >&2
+  printf '\n%s\n' "$(_prompt_i18n_get kind_first_title 'ClawSeat — 新项目配置 / New project setup')" >&2
+  printf '\n%s\n' "$(_prompt_i18n_get kind_first_prompt '选择项目类型 / Choose project mode:')" >&2
+  printf '  %s\n' "$(_prompt_i18n_get kind_first_creative '1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]')" >&2
+  printf '  %s\n' "$(_prompt_i18n_get kind_first_engineering '2) 工程项目 (6 seat: + reviewer 独立审查)')" >&2
+  printf '  %s\n' "$(_prompt_i18n_get kind_first_solo '3) 极简协作 (3 seat: memory + builder + planner-gemini, all OAuth)')" >&2
+  printf '%s\n' "$(_prompt_i18n_get kind_first_recommend '推荐★：创作项目；理由：覆盖 planner/builder/patrol/designer，最适合首次安装。')" >&2
 
   local _kind=""
   while true; do
-    printf '选择 [1-3, Enter=1]: ' >&2
+    printf '%s' "$(_prompt_i18n_get kind_first_choice '选择 [1-3, Enter=1]: ')" >&2
     read -r _kind < /dev/tty
     if CLAWSEAT_TEMPLATE_NAME="$(prompt_template_for_choice "$_kind")"; then
       break
     fi
-    printf '请输入 1、2 或 3 (回车 = 1 创作项目)\n' >&2
+    printf '%s\n' "$(_prompt_i18n_get kind_first_invalid '请输入 1、2 或 3 (回车 = 1 创作项目)')" >&2
   done
 
   local _placeholder
@@ -52,14 +62,14 @@ prompt_kind_first_flow() {
   local _name="" _attempt=0
   while [[ $_attempt -lt 3 ]]; do
     _attempt=$((_attempt + 1))
-    printf '\n项目名 (%s): ' "$_placeholder" >&2
+    printf '\n%s (%s): ' "$(_prompt_i18n_get project_name_prompt '项目名')" "$_placeholder" >&2
     read -r _name < /dev/tty
     if [[ "$_name" =~ ^[a-z0-9-]+$ ]]; then
       PROJECT="$_name"
       compute_project_paths
       return 0
     fi
-    printf '无效：项目名必须匹配 ^[a-z0-9-]+$\n' >&2
+    printf '%s\n' "$(_prompt_i18n_get invalid_project_name '无效：项目名必须匹配 ^[a-z0-9-]+$')" >&2
   done
   die 2 INVALID_PROJECT "项目名 3 次输入均无效，请用 --project 传入合法名称"
 }

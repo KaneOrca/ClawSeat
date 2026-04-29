@@ -12,6 +12,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
 ENABLE_AUTO_PATROL=0
 LOAD_ALL_SKILLS=0
+DETECT_ONLY=0
 CALLER_HOME="${HOME:-}"
 
 # HOME is intentionally rebound once for the whole script: keep CALLER_HOME only
@@ -148,6 +149,8 @@ INSTALL_LIB_DIR="$SCRIPT_DIR/install/lib"
 _INSTALL_LIB_MODULES=(
   self_update.sh
   preflight.sh
+  detect.sh
+  i18n.sh
   provider.sh
   project.sh
   secrets.sh
@@ -169,6 +172,7 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --dry-run) DRY_RUN=1; shift ;;
+      --detect-only) DETECT_ONLY=1; shift ;;
       --project) PROJECT="$2"; _PROJECT_EXPLICIT=1; shift 2 ;;
       --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
       --force-repo-root) FORCE_REPO_ROOT="$2"; shift 2 ;;
@@ -205,7 +209,7 @@ else:
 PY
         exit 0
         ;;
-      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
+      --help|-h) printf 'Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]\n--repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.\n--detect-only prints one JSON environment summary and exits.\n--provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.\n'; exit 0 ;;
       *) die 2 UNKNOWN_FLAG "unknown flag: $1" ;;
     esac
   done
@@ -283,6 +287,10 @@ compute_project_paths() {
 
 main() {
   parse_args "$@"
+  if [[ "$DETECT_ONLY" == "1" ]]; then
+    detect_all
+    exit 0
+  fi
   self_update_check "$@"
   if [[ -n "$UNINSTALL_PROJECT" ]]; then
     uninstall_project_registry_entry "$UNINSTALL_PROJECT"
