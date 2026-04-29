@@ -2,6 +2,14 @@
 # shellcheck shell=bash
 # Loaded by scripts/install.sh. Resolve this file with BASH_SOURCE so
 # callers may source install.sh from any current working directory.
+#
+# Claude API secrets are deliberately dual-path:
+# - ~/.agent-runtime/secrets/claude/<provider>.env is the launcher-visible
+#   shared provider file.
+# - ~/.agents/secrets/claude/<provider>/<seat>.env is the agent-admin
+#   seat-specific file written into session.toml.
+# Template-driven seeding must preserve real tokens in both locations when an
+# operator's scan/template only provides a placeholder such as minimax-token.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 seat_secret_file_for() {
@@ -17,12 +25,31 @@ seat_secret_file_for() {
 
 seat_secret_file_for_provider() {
   local seat="$1" provider="$2"
-  printf '%s\n' "$HOME/.agents/secrets/claude/$provider/$seat.env"
+  local index=0 path=""
+  while IFS= read -r path; do
+    if [[ "$index" -eq 1 ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+    index=$((index + 1))
+  done < <(_claude_secret_paths "$provider" "$seat")
 }
 
 global_claude_secret_template_for_provider() {
   local provider="$1"
+  local path=""
+  while IFS= read -r path; do
+    printf '%s\n' "$path"
+    return 0
+  done < <(_claude_secret_paths "$provider")
+}
+
+_claude_secret_paths() {
+  local provider="$1" seat="${2:-}"
   printf '%s\n' "$HOME/.agent-runtime/secrets/claude/$provider.env"
+  if [[ -n "$seat" ]]; then
+    printf '%s\n' "$HOME/.agents/secrets/claude/$provider/$seat.env"
+  fi
 }
 
 write_bootstrap_secret_file() {
@@ -95,6 +122,23 @@ _secret_file_has_placeholder_token() {
   grep -Eiq '(<set-by-operator>|minimax-token|placeholder|dummy|example)' "$path"
 }
 
+_secret_value_is_placeholder_token() {
+  local value="$1"
+  printf '%s\n' "$value" | grep -Eiq '(<set-by-operator>|minimax-token|dry-run-placeholder|placeholder|dummy|example)'
+}
+
+_write_runtime_secret_env() {
+  local provider="$1" runtime_path="$2" seat="${3:-}"
+  [[ "$provider" == "$PROVIDER_MODE" ]] || return 1
+  [[ -n "$PROVIDER_KEY" ]] || return 1
+  if _secret_file_has_real_token "$runtime_path" && _secret_value_is_placeholder_token "$PROVIDER_KEY"; then
+    warn "runtime secret preserved for provider $provider; placeholder input would overwrite real token: $runtime_path"
+    chmod 600 "$runtime_path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $runtime_path"
+    return 0
+  fi
+  write_bootstrap_secret_file "$runtime_path"
+}
+
 _copy_secret_template_preserving_real_token() {
   local src_path="$1" secret_path="$2" seat="$3"
   if _secret_file_has_real_token "$secret_path" && _secret_file_has_placeholder_token "$src_path"; then
@@ -108,7 +152,7 @@ _copy_secret_template_preserving_real_token() {
 
 seed_bootstrap_secrets() {
   note "Step 5.6: seed template-driven seat secrets"
-  local seat secret_path src_path provider auth tool model
+  local seat secret_path src_path provider auth tool model path_index path
   if [[ "$DRY_RUN" == "1" ]]; then
     for seat in "${PENDING_SEATS[@]}"; do
       read -r tool auth provider model < <(template_seat_config "$seat" 2>/dev/null || true)
@@ -116,8 +160,17 @@ seed_bootstrap_secrets() {
         provider="$(seat_provider_for_explicit_provider "$FORCE_ALL_API_PROVIDER")"
       fi
       [[ "$auth" == "api" && "$tool" == "claude" ]] || continue
-      src_path="$(global_claude_secret_template_for_provider "$provider")"
-      secret_path="$(seat_secret_file_for_provider "$seat" "$provider")"
+      path_index=0
+      src_path=""
+      secret_path=""
+      while IFS= read -r path; do
+        if [[ "$path_index" -eq 0 ]]; then
+          src_path="$path"
+        else
+          secret_path="$path"
+        fi
+        path_index=$((path_index + 1))
+      done < <(_claude_secret_paths "$provider" "$seat")
       printf '[dry-run] copy %s -> %s\n' "$src_path" "$secret_path"
     done
     return 0
@@ -164,8 +217,18 @@ PY
   while IFS=$'\t' read -r seat tool auth provider model; do
     [[ -n "$seat" ]] || continue
     [[ "$tool" == "claude" && "$auth" == "api" ]] || continue
-    src_path="$(global_claude_secret_template_for_provider "$provider")"
-    secret_path="$(seat_secret_file_for_provider "$seat" "$provider")"
+    path_index=0
+    src_path=""
+    secret_path=""
+    while IFS= read -r path; do
+      if [[ "$path_index" -eq 0 ]]; then
+        src_path="$path"
+      else
+        secret_path="$path"
+      fi
+      path_index=$((path_index + 1))
+    done < <(_claude_secret_paths "$provider" "$seat")
+    _write_runtime_secret_env "$provider" "$src_path" "$seat" || true
     if [[ ! -f "$src_path" ]]; then
       warn "seat secret skipped for $seat; missing shared template: $src_path"
       continue

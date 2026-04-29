@@ -178,6 +178,21 @@ giving per-seat credential / config isolation. Direct `tmux new-session bash`
 from a script bypasses this contract — never do it for a seat that runs
 `claude` / `codex` / `gemini`.
 
+### Claude API Secrets Dual-Path
+
+Claude API provider secrets are intentionally written in two locations:
+
+- `~/.agent-runtime/secrets/claude/<provider>.env` is the launcher-visible
+  shared provider file.
+- `~/.agents/secrets/claude/<provider>/<seat>.env` is the seat-specific file
+  referenced from `session.toml` and consumed by `agent-admin`.
+
+Install keeps these paths in sync during template-driven seeding, but a real
+`sk-...` token in either path must not be overwritten by a placeholder such as
+`minimax-token` or `<set-by-operator>`. Missing shared provider files may be
+created from the selected provider key, then copied into each matching seat
+secret.
+
 ### When to call which `init_*.py`
 
 These are NOT user-facing entry points. They are called from L1 / L2 / Phase-A:
