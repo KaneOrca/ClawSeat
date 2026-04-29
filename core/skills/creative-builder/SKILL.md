@@ -61,6 +61,10 @@ description: >
 
 ## 3. Deliver
 
+## Handoff Receipt (两步走,不可二选一)
+
+specialist 完成 task 必须: 1. call `complete_handoff.py` 写 durable `.consumed` receipt; 2. then call `send-and-verify.sh` wake reply_to seat. send-and-verify is wake-up only and cannot substitute. complete_handoff.py 失败要 escalate 给 reply_to + memory,不能静默 send-and-verify only.
+
 标准收口（移交 designer 执行写作）：
 
 ```bash
