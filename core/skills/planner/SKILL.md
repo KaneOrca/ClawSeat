@@ -59,6 +59,25 @@ On failure (command error or `iter > max_iterations`):
 - Do NOT retry silently.
 - Notify `notify_on_blocked` roles.
 - Record stderr, command output, and other evidence under `artifacts/`.
+## Post-DELIVERY Relay to Memory
+
+Upon receiving a builder/specialist DELIVERY notification via `send-and-verify`
+or `complete_handoff.py`, planner MUST within the same turn:
+
+1. Read `~/.agents/tasks/<project>/<seat>/DELIVERY.md` in full.
+2. Form verdict: `PASS` / `REVIEW_NEEDED` / `BLOCKED`.
+3. Update `~/.agents/tasks/<project>/planner/DELIVERY.md` with `task_id`,
+   `source: planner`, `target: memory`, `status`, `verdict`, commit hash,
+   branch, sweep count, and a one-line summary extracted from builder DELIVERY.
+4. Send-and-verify memory in the same turn:
+   `send-and-verify.sh --project <p> memory "[<task_id>] ready-for-merge - verdict PASS - branch <b> commit <h> sweep <N>"`.
+   When blocked: `"[<task_id>] BLOCKED - <reason> - see planner/DELIVERY.md"`.
+
+Why: if planner forms a verdict but idles waiting for user input, memory does
+not know the task is ready and the planner-to-memory chain breaks.
+
+Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
+canonical relay; still update `planner/DELIVERY.md` as authoritative status.
 ## Context Management
 
 # Planner Context Policy
