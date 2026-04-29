@@ -47,6 +47,22 @@ AskUserQuestion reference JSON：
 Bash 或 Monitor 失败时，先分类失败，再给 2-3 个具体修复选项。不要 kill
 无关 tmux 或 iTerm session。PTY 资源耗尽时，停止并按项目协议升级。
 
+## 启动期 Trust / Permission Prompt
+
+Claude Code v2.1+ 在新 seat 首次连接时可能出现正常的 trust 或 permission
+确认界面。直接确认即可，不要把它当作 `install.sh` bug 上报。
+
+常见正常 prompt：
+
+1. `Yes, I trust this folder` workspace trust prompt -> 选择 `1` 或按 Enter。
+2. `Bypass Permissions` 权限分级 prompt，显示 default/strict/bypass 选项
+   -> 选择 bypass，通常是 `1` 或 Enter。
+3. `Allow this skill to read...` skill 首次授权 prompt -> 选择 Yes 或 `1`。
+
+判断规则：启动期出现，并且文案包含 `trust`、`permission`、`bypass` 或
+`allow`，就是正常 Claude Code 授权，直接确认。真异常是进程崩溃、Python
+traceback、API 401/secret missing、tmux session 不存在，或窗口始终没拉起。
+
 ## detect_all JSON Reference
 
 把 Step 0 输出按 JSON 读取，并保留给后续决策：OAuth 状态、PTY 状态、branch
