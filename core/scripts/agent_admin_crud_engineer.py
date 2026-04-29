@@ -171,7 +171,6 @@ class EngineerCrud:
             escalation_authority=old.escalation_authority,
             remind_active_loop_owner=old.remind_active_loop_owner,
             review_authority=old.review_authority,
-            qa_authority=old.qa_authority,
             design_authority=old.design_authority,
             default_tool=old.default_tool,
             default_auth_mode=old.default_auth_mode,

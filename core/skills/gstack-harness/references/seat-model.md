@@ -159,8 +159,10 @@ Why this matters:
 - `escalation_authority`
 - `remind_active_loop_owner`
 - `review_authority`
-- `qa_authority`
 - `design_authority`
+
+Legacy `qa` + `_authority` is accepted only as a T6 backward-compat read alias
+for `patrol_authority` until 2026-10-28. Writers must emit `patrol_authority`.
 
 ## Canonical roles
 

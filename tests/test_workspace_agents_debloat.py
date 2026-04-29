@@ -67,12 +67,11 @@ def _make_engineer(role: str, role_details: list | None = None, aliases: list | 
         human_facing=False,
         active_loop_owner=False,
         dispatch_authority=False,
-        patrol_authority=False,
+        patrol_authority=(role == "patrol"),
         unblock_authority=False,
         escalation_authority=False,
         remind_active_loop_owner=False,
         review_authority=(role == "reviewer"),
-        qa_authority=(role == "patrol"),
         design_authority=(role == "designer"),
     )
     return e

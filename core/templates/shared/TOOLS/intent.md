@@ -12,7 +12,7 @@ Without `--intent`, the target seat runs on default AI behaviour — the gstack 
 |---|---|---|
 | `builder-1` | Implementation, ship a PR | `ship`, `land`, `investigate`, `freeze`, `unfreeze` |
 | `reviewer-1` | Pre-landing PR review | `code-review` |
-| `patrol-1` | Test / bug-hunt a web app | `qa-test`, `qa-only` |
+| `patrol-1` | Test / bug-hunt a web app | `gstack-qa`, `gstack-qa-only`, `gstack-browse` |
 | `designer-1` | Design audit / finalize UI | `design-critique`, `design-html`, `design-shotgun` |
 
 For plan-phase intents (planner's own skills):

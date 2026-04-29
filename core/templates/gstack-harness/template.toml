@@ -26,7 +26,6 @@ unblock_authority = true
 escalation_authority = true
 remind_active_loop_owner = true
 review_authority = false
-qa_authority = false
 design_authority = false
 tool = "claude"
 auth_mode = "oauth"
@@ -76,7 +75,6 @@ unblock_authority = false
 escalation_authority = true
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -122,7 +120,6 @@ unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -163,7 +160,6 @@ unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -204,7 +200,6 @@ unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = true
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -236,12 +231,11 @@ monitor = true
 human_facing = false
 active_loop_owner = false
 dispatch_authority = false
-patrol_authority = false
+patrol_authority = true
 unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = true
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -271,12 +265,11 @@ monitor = true
 human_facing = false
 active_loop_owner = false
 dispatch_authority = false
-patrol_authority = false
+patrol_authority = true
 unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = true
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -315,7 +308,6 @@ unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = true
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
@@ -352,7 +344,6 @@ unblock_authority = false
 escalation_authority = false
 remind_active_loop_owner = false
 review_authority = false
-qa_authority = false
 design_authority = false
 skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
