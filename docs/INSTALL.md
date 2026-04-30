@@ -385,24 +385,27 @@ Available templates:
 ### Provider Selection — CLI Flag Mapping
 
 When running in non-interactive environments (agent-launcher, CI, scripts),
-use explicit flags to skip the interactive provider menu:
+use explicit flags to skip the interactive provider menu. Numeric menu
+choices are detected dynamically from local credentials; only the mode names
+below are stable CLI contracts:
 
-| Menu option | Description | CLI flag |
+| Stable mode | Description | CLI flag |
 |---|---|---|
-| 1 | Claude memory with Anthropic Console API key | `--provider anthropic_console --api-key <key>` |
-| 2 | Claude memory with Claude Code OAuth token | `--provider oauth_token` |
-| 3 | Claude memory with host Claude OAuth | `--provider oauth` |
-| 4 | MiniMax API | `--provider minimax --api-key <key>` |
-| 5 | DeepSeek API | `--provider deepseek --api-key <key>` |
-| 6 | Ark API | `--provider ark --api-key <key>` |
-| 7 | Xcode-best Claude-compatible API | `--provider xcode-best --api-key <key> [--model <name>]` |
-| 8 | Gemini OAuth primary memory | `--memory-tool gemini` |
-| 9 | Codex OAuth primary memory | `--memory-tool codex [--memory-model <model>]` |
-| custom | Custom Claude-compatible endpoint | `--provider custom_api --base-url <url> --api-key <key> [--model <name>]` |
+| `anthropic_console` | Claude memory with Anthropic Console API key | `--provider anthropic_console --api-key <key>` |
+| `oauth_token` | Claude memory with Claude Code OAuth token | `--provider oauth_token` |
+| `oauth` | Claude memory with host Claude OAuth | `--provider oauth` |
+| `minimax` | MiniMax API | `--provider minimax --api-key <key>` |
+| `deepseek` | DeepSeek API | `--provider deepseek --api-key <key>` |
+| `ark` | Ark API | `--provider ark --api-key <key>` |
+| `xcode-best` | Xcode-best Claude-compatible API | `--provider xcode-best --api-key <key> [--model <name>]` |
+| `custom_api` | Custom Claude-compatible endpoint | `--provider custom_api --base-url <url> --api-key <key> [--model <name>]` |
+| `gemini` memory tool | Gemini OAuth primary memory | `--memory-tool gemini` |
+| `codex` memory tool | Codex OAuth primary memory | `--memory-tool codex [--memory-model <model>]` |
 
-The parser-owned list lives in `scripts/install/lib/provider.sh::select_provider()`;
-prefer those mode names over older aliases such as `anthropic`, `claude_code`,
-`gemini_oauth`, `codex_oauth`, or `custom`.
+The parser-owned provider behavior lives in
+`scripts/install/lib/provider.sh::select_provider()`; prefer those mode names
+over older aliases such as `anthropic`, `claude_code`, `gemini_oauth`,
+`codex_oauth`, or `custom`.
 
 Security note: `--api-key` is visible in `ps` output and shell history. Prefer:
 
