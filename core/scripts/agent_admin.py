@@ -80,6 +80,7 @@ from agent_admin_session import SessionHooks, SessionService, SessionStartError
 from agent_admin_store import StoreHandlers, StoreHooks
 from agent_admin_switch import SwitchHandlers, SwitchHooks
 from agent_admin_task import TaskCommandError
+from agent_admin_task import auto_supersede as task_auto_supersede
 from agent_admin_task import create_task as task_create
 from agent_admin_task import list_pending as task_list_pending
 from agent_admin_task import update_status as task_update_status
@@ -1177,6 +1178,10 @@ def cmd_task_create(args: argparse.Namespace) -> int:
     return task_create(args)
 
 
+def cmd_task_auto_supersede(args: argparse.Namespace) -> int:
+    return task_auto_supersede(args)
+
+
 def cmd_task_list_pending(args: argparse.Namespace) -> int:
     return task_list_pending(args)
 
@@ -1259,6 +1264,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_engineer_regenerate_workspace=cmd_engineer_regenerate_workspace,
     cmd_engineer_secret_set=cmd_engineer_secret_set,
     cmd_task_create=cmd_task_create,
+    cmd_task_auto_supersede=cmd_task_auto_supersede,
     cmd_task_list_pending=cmd_task_list_pending,
     cmd_task_update_status=cmd_task_update_status,
     cmd_tui=cmd_tui,

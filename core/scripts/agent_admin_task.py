@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,17 @@ class WorkflowStep:
     start: int = 0
     end: int = 0
     status_line: int = -1
+
+
+@dataclass
+class TodoEntry:
+    path: Path
+    status: str
+    heading_task_id: str
+    task_id: str
+    dispatched_at: datetime | None
+    start_line: int
+    heading_line: str
 
 
 class TaskCommandError(RuntimeError):
@@ -164,6 +176,116 @@ def list_pending(args: Any) -> int:
         task_id = workflow.parent.name
         for step in _ready_steps(workflow, owner_role):
             print(f"{task_id}\t{step.name}")
+    return 0
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    raw = value.strip().strip("\"'")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _parse_todo_entries(path: Path) -> list[TodoEntry]:
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    entries: list[TodoEntry] = []
+    starts: list[tuple[int, re.Match[str]]] = []
+    for index, line in enumerate(lines):
+        match = re.match(r"^(##\s+\[([^\]]+)\]\s+(.+?))(\s*)$", line.rstrip("\n"))
+        if match:
+            starts.append((index, match))
+
+    for offset, (start, match) in enumerate(starts):
+        end = starts[offset + 1][0] if offset + 1 < len(starts) else len(lines)
+        fields: dict[str, str] = {}
+        for line in lines[start + 1 : end]:
+            field_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*?)\s*$", line)
+            if field_match:
+                fields[field_match.group(1)] = field_match.group(2)
+        heading_task_id = match.group(3).strip()
+        task_id = fields.get("task_id", heading_task_id).strip()
+        entries.append(
+            TodoEntry(
+                path=path,
+                status=match.group(2).strip(),
+                heading_task_id=heading_task_id,
+                task_id=task_id,
+                dispatched_at=_parse_iso_datetime(fields.get("dispatched_at", "")),
+                start_line=start,
+                heading_line=lines[start],
+            )
+        )
+    return entries
+
+
+def _delivery_mentions_task(delivery: Path, task_id: str) -> bool:
+    if not delivery.exists():
+        return False
+    try:
+        text = delivery.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return f"task_id: {task_id}" in text or task_id in text
+
+
+def _delivery_is_recent_for_task(delivery: Path, task_id: str, dispatched_at: datetime, cutoff: datetime) -> bool:
+    if not delivery.exists() or not _delivery_mentions_task(delivery, task_id):
+        return False
+    try:
+        delivery_mtime = datetime.fromtimestamp(delivery.stat().st_mtime, timezone.utc)
+    except OSError:
+        return False
+    return delivery_mtime > dispatched_at and delivery_mtime > cutoff
+
+
+def _supersede_todo_entries(todo_path: Path, entries: list[TodoEntry]) -> int:
+    if not entries:
+        return 0
+    lines = todo_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    for entry in entries:
+        newline = "\n" if lines[entry.start_line].endswith("\n") else ""
+        lines[entry.start_line] = f"## [superseded] {entry.heading_task_id}{newline}"
+    _atomic_write(todo_path, "".join(lines))
+    return len(entries)
+
+
+def auto_supersede(args: Any) -> int:
+    project = str(args.project)
+    age_days = int(getattr(args, "age_days", 3))
+    now = datetime.now(timezone.utc)
+    cutoff = now.timestamp() - age_days * 86400
+    cutoff_dt = datetime.fromtimestamp(cutoff, timezone.utc)
+    root = project_tasks_dir(project)
+    if not root.exists():
+        print(f"AUTO_SUPERSEDE project={project} count=0")
+        return 0
+
+    total = 0
+    for todo_path in sorted(root.glob("*/TODO.md")):
+        owner_dir = todo_path.parent
+        delivery = owner_dir / "DELIVERY.md"
+        stale_entries: list[TodoEntry] = []
+        for entry in _parse_todo_entries(todo_path):
+            if entry.status != "pending" or entry.dispatched_at is None:
+                continue
+            if entry.dispatched_at.timestamp() >= cutoff:
+                continue
+            if _delivery_is_recent_for_task(delivery, entry.task_id, entry.dispatched_at, cutoff_dt):
+                continue
+            stale_entries.append(entry)
+        changed = _supersede_todo_entries(todo_path, stale_entries)
+        total += changed
+        for entry in stale_entries:
+            print(f"superseded\t{owner_dir.name}\t{entry.task_id}")
+
+    print(f"AUTO_SUPERSEDE project={project} count={total}")
     return 0
 
 
