@@ -14,6 +14,16 @@ Message body.
 _via Memory @ 2026-04-27T19:00:00Z | project=install | session=install-memory_
 ```
 
+Memory task-result pushes include task metadata:
+
+```markdown
+[Memory]
+Message body.
+
+---
+_via Memory @ 2026-04-30T16:00:00Z | project=install | session=install-memory | task_id=demo-task | verdict=PASS_
+```
+
 Patrol includes the mode in the prefix:
 
 ```markdown
@@ -32,6 +42,9 @@ _via Patrol @ 2026-04-27T19:00:00Z | project=install | session=install-patrol_
 - Project: from `CLAWSEAT_PROJECT`, `AGENTS_PROJECT`, payload metadata, or
   `unknown`.
 - Session: from `tmux display-message -p '#S'`, or `unknown`.
+- Task ID: optional for generic status, required for Memory task-result pushes.
+- Verdict: optional for generic status, required for Memory task-result pushes;
+  one of `PASS`, `FAIL`, or `BLOCKED`.
 
 ## Parsing Rules
 
@@ -40,6 +53,12 @@ Recommended regex:
 ```text
 ^\[(?P<seat>Memory|PATROL)(?: scope=(?P<scope>patrol|test))?\]
 ^_via (?P=seat) @ (?P<ts>[^|]+) \| project=(?P<project>[^|]+) \| session=(?P<session>[^_]+)_$
+```
+
+Memory task-result footer regex:
+
+```text
+^_via Memory @ (?P<ts>[^|]+) \| project=(?P<project>[^|]+) \| session=(?P<session>[^|]+) \| task_id=(?P<task_id>[^|]+) \| verdict=(?P<verdict>PASS|FAIL|BLOCKED)_$
 ```
 
 Koder should require prefix and footer to agree on seat. For patrol, the prefix

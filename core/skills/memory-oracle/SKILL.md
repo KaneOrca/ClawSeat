@@ -317,7 +317,7 @@ Memory seat 的 Claude Code Stop-hook 是：
 所有飞书推送遵循统一格式（详见 `core/references/feishu-message-marker.md`）：
 
 - 前缀：`[Memory]`
-- 附录：`_via Memory @ <ts> | project=<p> | session=<s>_`
+- 附录：`_via Memory @ <ts> | project=<p> | session=<s> | task_id=<id> | verdict=<PASS|FAIL|BLOCKED>_`
 
 格式由 stop hook 自动添加；seat 输出不需主动包含。Koder（OpenClaw 侧）
 按此前缀和附录解析，把用户回复路由到正确 session。

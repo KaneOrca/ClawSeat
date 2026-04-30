@@ -21,11 +21,18 @@ symlink_skills() {
 }
 
 mirror_agents_skills_to_home() {
-  local agents_skills_home="$1" skills_home="$2"
+  local agents_skills_home="$1" skills_home="$2"; shift 2
   local source link skill
+  local -a whitelist=("$@")
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] mkdir -p %q\n' "$skills_home"
-    printf '[dry-run] mirror %q/* into %q\n' "$agents_skills_home" "$skills_home"
+    if [[ ${#whitelist[@]} -gt 0 ]]; then
+      for skill in "${whitelist[@]}"; do
+        printf '[dry-run] mirror %q into %q\n' "$agents_skills_home/$skill" "$skills_home/$skill"
+      done
+    else
+      printf '[dry-run] mirror %q/* into %q\n' "$agents_skills_home" "$skills_home"
+    fi
     return 0
   fi
 
@@ -35,6 +42,13 @@ mirror_agents_skills_to_home() {
   shopt -s nullglob
   for source in "$agents_skills_home"/*; do
     skill="$(basename "$source")"
+    if [[ ${#whitelist[@]} -gt 0 ]]; then
+      local allowed=0 item
+      for item in "${whitelist[@]}"; do
+        [[ "$skill" == "$item" ]] && { allowed=1; break; }
+      done
+      [[ "$allowed" == "1" ]] || continue
+    fi
     link="$skills_home/$skill"
     if [[ -e "$link" && ! -L "$link" ]]; then
       warn "skill mirror skipped; unmanaged path exists: $link"
@@ -64,6 +78,7 @@ remove_skill_symlinks() {
 
 install_skill_tier_for_home() {
   local tool="$1" skills_home="$2"; shift 2
+  local -a whitelist=("$@")
   # AC: skip Gemini — Gemini CLI has a built-in ~/.agents/skills/ alias.
   # Mirroring those same skills into ~/.gemini/skills/ makes Gemini double-scan
   # the same SKILL.md files and emit conflict warnings on startup.
@@ -73,12 +88,16 @@ install_skill_tier_for_home() {
 
   local agents_skills_home="$HOME/.agents/skills"
   if [[ "$skills_home" != "$agents_skills_home" ]]; then
-    mirror_agents_skills_to_home "$agents_skills_home" "$skills_home"
+    if [[ ${#whitelist[@]} -gt 0 ]]; then
+      mirror_agents_skills_to_home "$agents_skills_home" "$skills_home" "${whitelist[@]}"
+    else
+      mirror_agents_skills_to_home "$agents_skills_home" "$skills_home"
+    fi
     return 0
   fi
 
   local -a core_skills=(clawseat-memory clawseat-decision-escalation)
-  local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting)
+  local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting socratic-requirements)
   local -a selected_skills=("${core_skills[@]}")
 
   if [[ "$tool" == "claude" || "$LOAD_ALL_SKILLS" == "1" ]]; then
@@ -132,6 +151,10 @@ install_skills_by_tier() {
   install_skill_tier_for_home gemini "$HOME/.gemini/skills"
   cleanup_legacy_gemini_skill_symlinks
   install_skill_tier_for_home codex "$HOME/.codex/skills"
+  if [[ -d "$HOME/.openclaw" ]]; then
+    install_skill_tier_for_home openclaw "$HOME/.openclaw/skills" \
+      "socratic-requirements" "clawseat-koder"
+  fi
 }
 
 install_privacy_pre_commit_hook() {
