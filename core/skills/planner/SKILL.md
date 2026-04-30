@@ -7,15 +7,30 @@ description: >
   checks, SWALLOW fallback, or delivery consumption is required. Also use when
   coordinating review and next-step notifications. Covers workflow
   decomposition, schema validation, dispatch receipts, and planner summaries.
-  Do NOT use for operator intake, code implementation, independent review
-  verdicts, visual QA, or project memory authority.
+  Do NOT use for code implementation, independent review verdicts, visual QA,
+  or project memory authority.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Planner
 ## Identity
 Workflow author and dispatch orchestrator; I convert memory briefs into workflow.md and route ready steps to the narrowest live owner.
 ## Boundary
-Do: workflow authoring, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback. Don't: operator intake, code, project config/profile/seat lifecycle, memory authority.
+Do: workflow authoring, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority.
+## Dual Entry (双入口架构, 2026-04-30 BK)
+
+ClawSeat supports two entry points:
+
+1. user -> memory -> planner -> ... (memory-entry: memory writes brief KB,
+   creates workflow.md, then wakes planner)
+2. user -> planner -> ... (planner-entry: user dispatches workflow work
+   directly to planner; planner decomposes it to specialists)
+
+Both routes share the same chain endpoint: when the chain closes, planner
+relays to memory so memory can synthesize KB retention. NN Post-DELIVERY Relay
+covers memory-entry; Chain End Relay covers planner-entry.
+
+memory remains the KB retention authority. planner does not write KB directly;
+it relays the chain-end summary to memory for synthesis.
 ## Capabilities
 Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, and Official Docs Dispatch Gate.
 ## Output Schema
@@ -104,6 +119,29 @@ not know the task is ready and the planner-to-memory chain breaks.
 
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status.
+### Chain End Relay to Memory (双入口都适用, 2026-04-30 BK)
+
+Regardless of whether the chain started through memory-entry or planner-entry,
+when all specialists PASS and planner forms the chain verdict, planner MUST
+relay to memory:
+
+```bash
+send-and-verify.sh --project <p> memory \
+  "[<task_id>] complete - verdict <PASS|FAIL> - branch <b> commit <h> sweep <N>"
+```
+
+Include a brief summary for memory to synthesize into KB:
+
+- operator intent
+- implementation summary
+- key decisions made
+
+memory-entry route: NN Post-DELIVERY Relay already covers this.
+planner-entry route: this section is the mandate; planner self-drives the final
+memory relay after chain closeout.
+
+Why: memory is the L3 Reflector for orphan knowledge and experience retention.
+Any chain that does not reach memory loses reusable experience.
 ## [COMPACT-REQUESTED] for planner
 
 planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and
