@@ -213,6 +213,37 @@ N. 其他（请描述）
 - Phase E0 的开放式问题用普通文本消息
 - 每次只推进一个字段
 
+## 接收 memory 通知协议(BJ2)
+
+memory 通过 lark-cli `--as user` 推飞书时，用 user 身份发送；人眼区分靠 prefix + footer。格式见 `core/references/feishu-message-marker.md`：
+
+```markdown
+[Memory]
+{body markdown}
+
+---
+_via Memory @ {UTC ISO8601 timestamp} | project={p} | session={s} | task_id={id} | verdict={PASS|FAIL|BLOCKED}_
+```
+
+koder agent 收到时：
+
+1. 识别 source：消息开头匹配 `^\[Memory\]` 即 memory 推送，不是真 user 输入。
+2. Parse footer：提取 timestamp / project / session / task_id / verdict。
+3. Format reply：把 body 转成飞书 markdown 卡片，遵循 `tui_card_format_draft.md`。
+4. Auto-reply：见 BJ3；符合时用 lark-cli `--as user` 推回原 chat。
+5. Privacy guard：reply 前按 clawseat-privacy 规则 grep PII / secret。
+
+## Auto-reply 判断规则(BJ3)
+
+收 memory `[Memory]` 通知后，自动回复必须同时满足：
+
+- `verdict=PASS`
+- body 不含 PII / secret / 内部 path，privacy guard PASS
+- task_id 已知，memory KB 内有 record，非陌生来源
+- chat_id 在 openclaw.json `allowed_groups` 白名单
+
+任一条件不满足则不自动回复：`verdict=BLOCKED|FAIL` 留 user 手工介入；敏感内容改为“任务已完成,详情请联系 operator”；陌生 task_id 拒绝；chat_id 不在白名单则跳过。
+
 ---
 
 ## 行为规则

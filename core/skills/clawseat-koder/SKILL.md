@@ -28,6 +28,16 @@ Koder is the OpenClaw-side bridge between Feishu users and ClawSeat Memory. It
 is not a ClawSeat tmux seat and does not replace Memory, Planner, or any
 specialist.
 
+## 0. Routing Quick Reference
+
+| Condition | Action |
+|-----------|--------|
+| User message contains known project name from `~/.agents/projects/*` or `machine.toml` `allowed_projects` | Route to memory: resolve project and send `TEXT_REPLY text=<原文>` to `<project>-memory` |
+| User message contains `ClawSeat`, `走 chain`, `查 memory KB`, or `派工` | Route to memory even without project name |
+| Neither condition | Koder handles with its own OpenClaw skills |
+
+Known project name means project-related business questions go to Memory; generic user questions without a project name stay in Koder.
+
 ## 1. Identity
 
 - One Koder instance serves one Feishu group and may route to multiple projects.
@@ -141,7 +151,7 @@ Legacy `SOUL.md`, `AGENTS.md`, and `TOOLS/*` files are obsolete for Koder v2.
 
 ## 11. Anti-Patterns
 
-- answering business questions directly instead of routing to Memory
+- answering project-related business questions directly instead of routing to Memory
 - saving durable decision state in the Koder workspace
 - showing internal file paths or RFC references to Feishu users
 - dispatching builder/planner/patrol directly

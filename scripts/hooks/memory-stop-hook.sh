@@ -45,6 +45,9 @@ except json.JSONDecodeError:
 
 transcript_path = str(payload.get("transcript_path", "") or "").strip()
 last_assistant_message = str(payload.get("last_assistant_message", "") or "")
+memory_footer_re = re.compile(
+    r"_via Memory @ [^|]+ \| project=([^|]+) \| session=([^|]+) \| task_id=([^|]+) \| verdict=([A-Z]+)_"
+)
 
 transcript_text = ""
 if transcript_path:
@@ -125,6 +128,18 @@ response = {
     "confidence": "medium",
 }
 
+memory_lines = last_assistant_message.splitlines()
+memory_push_text = ""
+memory_push_project = ""
+memory_push_missing_footer = "0"
+if memory_lines and re.match(r"^\[Memory\]", memory_lines[0]):
+    footer_match = memory_footer_re.search(last_assistant_message)
+    if footer_match:
+        memory_push_text = last_assistant_message.strip()
+        memory_push_project = footer_match.group(1).strip()
+    else:
+        memory_push_missing_footer = "1"
+
 emit("TRANSCRIPT_PATH", transcript_path)
 emit("CLEAR_REQUESTED", "1" if "[CLEAR-REQUESTED]" in combined else "0")
 emit("DELIVER_TARGET", target)
@@ -132,6 +147,9 @@ emit("DELIVER_TASK_ID", task_id)
 emit("DELIVER_PROJECT", project)
 emit("DELIVER_PROFILE", profile_path)
 emit("DELIVER_RESPONSE_JSON", json.dumps(response, ensure_ascii=False))
+emit("FEISHU_PUSH_TEXT", memory_push_text)
+emit("FEISHU_PUSH_PROJECT", memory_push_project)
+emit("FEISHU_PUSH_MISSING_FOOTER", memory_push_missing_footer)
 PY
 }
 
@@ -178,6 +196,36 @@ deliver_response() {
   return 0
 }
 
+read_group_id() {
+  local binding_path="$1"
+  "$PYTHON_BIN" - "$binding_path" <<'PY'
+import sys
+import tomllib
+
+try:
+    with open(sys.argv[1], "rb") as fh:
+        data = tomllib.load(fh)
+except Exception:
+    raise SystemExit(0)
+group_id = str(data.get("feishu_group_id") or "").strip()
+print(group_id)
+PY
+}
+
+push_memory_feishu() {
+  local project="$1" text="$2"
+  local binding_path="$HOME/.agents/tasks/$project/PROJECT_BINDING.toml"
+  local group_id=""
+
+  [[ -n "$project" ]] || { echo "[memory-hook] [Memory] message missing project, skip" >&2; return 0; }
+  [[ -f "$binding_path" ]] || { echo "[memory-hook] no PROJECT_BINDING.toml for $project; skip" >&2; return 0; }
+  group_id="$(read_group_id "$binding_path")"
+  [[ -n "$group_id" ]] || { echo "[memory-hook] no group_id for $project; skip" >&2; return 0; }
+  command -v lark-cli >/dev/null 2>&1 || { echo "[memory-hook] lark-cli not installed; skip" >&2; return 0; }
+
+  lark-cli --as user im +messages-send --chat-id "$group_id" --text "$text" 2>&1 | logger -t memory-feishu-push
+}
+
 main() {
   local payload_json="" parsed="" hook_project="" hook_session="" hook_ts=""
   payload_json="$(cat || true)"
@@ -197,6 +245,7 @@ main() {
       HOOK_PROJECT="$hook_project" \
       HOOK_SESSION="$hook_session" \
       HOOK_TS="$hook_ts" \
+      HOOK_TASK_ID="${DELIVER_TASK_ID:-unknown}" \
       "$PYTHON_BIN" - <<'PY'
 import json, os
 payload = json.loads(os.environ["RESPONSE_JSON"])
@@ -204,7 +253,8 @@ answer = str(payload.get("answer", ""))
 payload["answer"] = (
     f"[Memory]\n{answer}\n\n---\n"
     f"_via Memory @ {os.environ['HOOK_TS']} | "
-    f"project={os.environ['HOOK_PROJECT']} | session={os.environ['HOOK_SESSION']}_"
+    f"project={os.environ['HOOK_PROJECT']} | session={os.environ['HOOK_SESSION']} | "
+    f"task_id={os.environ['HOOK_TASK_ID']} | verdict=PASS_"
 )
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -221,6 +271,12 @@ PY
       "${DELIVER_TASK_ID:-}" \
       "${DELIVER_PROFILE:-}" \
       "${DELIVER_RESPONSE_JSON:-}" || true
+  fi
+
+  if [[ "${FEISHU_PUSH_MISSING_FOOTER:-0}" == "1" ]]; then
+    echo "[memory-hook] [Memory] message missing footer, skip" >&2
+  elif [[ -n "${FEISHU_PUSH_TEXT:-}" ]]; then
+    push_memory_feishu "${FEISHU_PUSH_PROJECT:-}" "${FEISHU_PUSH_TEXT:-}" || true
   fi
 }
 
