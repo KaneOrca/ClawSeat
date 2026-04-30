@@ -113,6 +113,35 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
+## Canonical Workflow Entry (memory dispatch 必走步)
+
+Before notifying planner of a new task, memory MUST create canonical workflow
+state first:
+
+```bash
+# 1. Create workflow.md as the chain state file.
+python3 core/scripts/agent_admin.py task create \
+  --project <p> \
+  --workflow-template brief-driven \
+  <task_id>
+
+# 2. Edit workflow.md so brief modules become steps.
+# Required per step: owner_role, mode, status, and notify_on_done: [memory].
+# Reference: core/skills/planner/references/workflow-doc-schema.md
+
+# 3. Then wake planner.
+send-and-verify.sh --project <p> planner \
+  "[<task_id>] workflow.md ready, brief: <path>"
+```
+
+Why: `workflow.md` is the chain canonical state file. It enables patrol step
+monitoring, `notify_on_done: [memory]` routing, planner SWALLOW fallback
+decisions, and cross-seat dependency tracking.
+
+**禁止短路**: `send-and-verify.sh --project <p> planner "<inline brief>"`
+before workflow.md exists skips canonical state. Use send-and-verify only as
+the wake-up transport after workflow.md is ready.
+
 ## Post-Spawn Chain Rehearsal (必做)
 
 memory MUST initiate a chain rehearsal brief in these situations:
