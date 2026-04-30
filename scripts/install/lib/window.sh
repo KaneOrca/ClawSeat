@@ -337,13 +337,18 @@ print(json.dumps({"title": f"clawseat-{project}", "panes": panes}, ensure_ascii=
 PY
 }
 
-# v2 workers_payload: template-defined main worker left 50% + N-1 workers right grid (max 2 rows, col-major fill)
-# Recipe per RFC-001 §3:
+# v2 workers_payload: template-defined main worker left 50% + N-1 workers right side.
+# Recipe per template window_layout.workers_grid.right_fill_order:
+#
+# right_fill_order=col-major (default): single right column, top-to-bottom fill
 #   N_workers=1 (main only): []
-#   N_workers=2 (main+1):    [(0,True)]
-#   N_workers=3 (main+2):    [(0,True), (1,False)]                            ← v2 minimal
-#   N_workers=4 (main+3):    [(0,True), (1,True), (1,False)]
-#   N_workers=5 (main+4):    [(0,True), (1,True), (1,False), (2,False)]
+#   N_workers=2 (main+1):    [[0, True]]
+#   N_workers=3 (main+2):    [[0, True], [1, False]]
+#   N_workers=4 (main+3):    [[0, True], [1, False], [2, False]]
+#
+# right_fill_order=grid-2-rows (legacy RFC-001 §3.1): max 2 rows, expand cols
+#   N_workers=4 (main+3):    [[0, True], [1, True], [1, False]]
+#   N_workers=5 (main+4):    [[0, True], [1, True], [1, False], [2, False]]
 
 workers_payload() {
   "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml" "${PENDING_SEATS[@]}" <<'PY'
@@ -375,15 +380,22 @@ if main_seat not in seats:
 configured_right = [str(seat) for seat in layout.get("right_seats", []) if str(seat) in seats and str(seat) != main_seat]
 remaining = [seat for seat in seats if seat != main_seat and seat not in configured_right]
 right_seats = configured_right + remaining
+fill_order = str(layout.get("right_fill_order", "col-major"))
 
-# Build right-side recipe with max-2-rows, col-major fill
-def right_recipe(n_right: int) -> list[list]:
+# Build right-side recipe from template fill order.
+def right_recipe(n_right: int, fill_order: str) -> list[list]:
     """Returns split steps relative to pane indices in the COMBINED layout
     (main worker is pane 0; right starts as pane 1 after first vertical split)."""
+    if fill_order not in {"col-major", "grid-2-rows"}:
+        raise SystemExit(f"unknown right_fill_order: {fill_order!r}")
     if n_right == 0: return []
     if n_right == 1: return []  # right side is single pane (after the main-vs-right split)
-    if n_right == 2: return [[1, False]]  # split right horizontally
-    # n_right >= 3: build top row of right, then horizontal splits per col
+
+    if fill_order == "col-major":
+        return [[idx, False] for idx in range(1, n_right)]
+
+    # grid-2-rows: legacy max-2-rows formula. Build top row of right, then
+    # horizontal splits per col.
     cols = (n_right + 1) // 2
     splits: list[list[int]] = []
     # Build top row of right area: split pane 1 vertically (cols-1) times
@@ -396,7 +408,7 @@ def right_recipe(n_right: int) -> list[list]:
         splits.append([col + 1, False])  # +1 because pane 0 is main
     return splits
 
-recipe = [[0, True]] + right_recipe(len(right_seats))  # First: main | right split
+recipe = ([[0, True]] + right_recipe(len(right_seats), fill_order)) if right_seats else []
 
 # Pane order for payload (matches recipe creation order):
 #   pane[0] = main worker (left)
@@ -418,32 +430,39 @@ panes = [
         + shlex.quote(main_seat),
     },
 ]
-# Compute right-side fill order matching recipe pane creation
-n_right = len(right_seats)
-if n_right > 0:
+def right_order(n_right: int, fill_order: str) -> list[int]:
+    if fill_order not in {"col-major", "grid-2-rows"}:
+        raise SystemExit(f"unknown right_fill_order: {fill_order!r}")
+    if fill_order == "col-major":
+        return list(range(n_right))
+
     cols = max(1, (n_right + 1) // 2 if n_right >= 3 else 1)
     # For n_right=1: just first right_seat
     # For n_right=2: top + bottom (1 col)
     # For n_right>=3: row-major in driver order = top row left-to-right + bottom row left-to-right
     if n_right == 1:
-        ordering = [0]
-    elif n_right == 2:
-        ordering = [0, 1]  # top, bottom
-    else:
-        # User intent (col-major): user_idx 0=col0_top, 1=col0_bot, 2=col1_top, 3=col1_bot, ...
-        # Driver order: top row first (col0_top, col1_top, col2_top, ...), then bottom row
-        # Map: driver_pane_idx -> user_idx
-        ordering = []
-        # top row first
-        for col in range(cols):
-            user_idx = col * 2  # top of col c is user_idx 2c
-            if user_idx < n_right:
-                ordering.append(user_idx)
-        # bottom row
-        for col in range(cols):
-            user_idx = col * 2 + 1  # bottom of col c is user_idx 2c+1
-            if user_idx < n_right:
-                ordering.append(user_idx)
+        return [0]
+    if n_right == 2:
+        return [0, 1]  # top, bottom
+
+    # User intent (grid-2-rows): user_idx 0=col0_top, 1=col0_bot,
+    # 2=col1_top, 3=col1_bot, ...
+    # Driver order: top row first (col0_top, col1_top, col2_top, ...), then bottom row.
+    ordering = []
+    for col in range(cols):
+        user_idx = col * 2
+        if user_idx < n_right:
+            ordering.append(user_idx)
+    for col in range(cols):
+        user_idx = col * 2 + 1
+        if user_idx < n_right:
+            ordering.append(user_idx)
+    return ordering
+
+# Compute right-side fill order matching recipe pane creation.
+n_right = len(right_seats)
+if n_right > 0:
+    ordering = right_order(n_right, fill_order)
     for driver_idx, user_idx in enumerate(ordering):
         seat = right_seats[user_idx]
         panes.append(

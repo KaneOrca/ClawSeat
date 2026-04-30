@@ -73,7 +73,7 @@ ClawSeat v2 架构 (RFC-001) 已设计 + 部分实施完成。**install-memory +
 ### iTerm 窗口拓扑
 
 - **`clawseat-memories`** (全局共享): N 项目 memory 都在这；M1.5 任务: 改 tabs (每 tab = 1 项目)；当前还是 split panes
-- **`clawseat-<project>-workers`** (per-project): planner main 左 50% + 右侧 grid (max 2 rows, expand cols, col-major fill)
+- **`clawseat-<project>-workers`** (per-project): planner main 左 50% + 右侧按 template `right_fill_order` 填充；默认 `col-major` 单列 stack，`grid-2-rows` 保留历史 max-2-rows 行为
 
 总窗口数 = N+1 (N 项目 = 1 memories + N workers)
 
