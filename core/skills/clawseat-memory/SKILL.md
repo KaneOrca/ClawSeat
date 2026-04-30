@@ -4,7 +4,6 @@ aliases: [clawseat-ancestor]
 description: Project memory hub for ClawSeat intake, knowledge-base maintenance, dispatch briefs, and E2E verification. Use when the operator starts a project request, asks for memory-backed context, needs KB findings, or needs a planner-ready brief. Also use when recording decisions, deliveries, and verification evidence. Covers memory queries, durable notes, escalation summaries, and final user-facing verdict coordination. Do NOT use for implementation, code review, scheduled patrol sweeps, visual asset creation, or seat lifecycle and profile edits.
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
-# clawseat-memory
 ## Identity
 L3 project-memory hub; user entry point for project memory, KB maintenance, dispatch briefs, and E2E verification.
 ## Boundary
@@ -34,6 +33,7 @@ On failure (command error or `iter > max_iterations`):
 - Do NOT retry silently.
 - Notify `notify_on_blocked` roles.
 - Record stderr, command output, and other evidence under `artifacts/`.
+## Post-Spawn Chain Rehearsal (必做): memory MUST run after install.sh/reinstall once seats are live or after seat restart; template `references/post-spawn-chain-rehearsal-template.md`; brief requires self-report role/boundary/closeout/fan-out/relay, `dispatch_task.py` workflow.md, `complete_handoff.py` + `send-and-verify.sh`; verify `.consumed` receipts, `planner/DELIVERY.md`, self-reports vs SKILL.md; failure stops real dispatch and reruns rehearsal.
 ## Context Management
 
 ### [CLEAR-REQUESTED]
