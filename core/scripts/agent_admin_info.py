@@ -99,6 +99,8 @@ class InfoHandlers:
 
     def list_engineers(self, args: Any) -> int:
         for engineer in self.hooks.load_engineers().values():
+            if engineer.engineer_id == "ancestor":
+                continue
             print(
                 f"{self.hooks.display_label(engineer, engineer.engineer_id)}\t"
                 f"{engineer.default_tool or '-'}\t{engineer.default_auth_mode or '-'}\t"
