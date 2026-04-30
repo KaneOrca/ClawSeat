@@ -45,9 +45,6 @@ except json.JSONDecodeError:
 
 transcript_path = str(payload.get("transcript_path", "") or "").strip()
 last_assistant_message = str(payload.get("last_assistant_message", "") or "")
-memory_footer_re = re.compile(
-    r"_via Memory @ [^|]+ \| project=([^|]+) \| session=([^|]+) \| task_id=([^|]+) \| verdict=([A-Z]+)_"
-)
 
 transcript_text = ""
 if transcript_path:
@@ -128,28 +125,39 @@ response = {
     "confidence": "medium",
 }
 
-memory_lines = last_assistant_message.splitlines()
-memory_push_text = ""
-memory_push_project = ""
-memory_push_missing_footer = "0"
-if memory_lines and re.match(r"^\[Memory\]", memory_lines[0]):
-    footer_match = memory_footer_re.search(last_assistant_message)
-    if footer_match:
-        memory_push_text = last_assistant_message.strip()
-        memory_push_project = footer_match.group(1).strip()
-    else:
-        memory_push_missing_footer = "1"
-
 emit("TRANSCRIPT_PATH", transcript_path)
 emit("CLEAR_REQUESTED", "1" if "[CLEAR-REQUESTED]" in combined else "0")
+
+# [Memory] marker detection (BJ5 path preserved)
+import re as _re
+_footer_re = _re.compile(
+    r'_via Memory @ (?P<ts>[^|]+) \| project=(?P<proj>[^|]+) \| session=(?P<sess>[^_]+?)(?:\s*_)',
+    _re.DOTALL,
+)
+if _re.search(r'^\[Memory\]', last_assistant_message, _re.MULTILINE):
+    _fm = _footer_re.search(last_assistant_message)
+    if _fm:
+        emit("MEMORY_PUSH", "1")
+        emit("MEMORY_PUSH_TEXT", last_assistant_message)
+        emit("MEMORY_PUSH_PROJECT", _fm.group("proj").strip())
+    else:
+        emit("MEMORY_PUSH", "0")
+        emit("FEISHU_PUSH_MISSING_FOOTER", "1")
+else:
+    emit("MEMORY_PUSH", "0")
+    emit("FEISHU_PUSH_MISSING_FOOTER", "0")
+
 emit("DELIVER_TARGET", target)
 emit("DELIVER_TASK_ID", task_id)
 emit("DELIVER_PROJECT", project)
 emit("DELIVER_PROFILE", profile_path)
+emit("DELIVER_VERDICT", attrs.get("verdict", "") or "")
+emit("DELIVER_SUMMARY", attrs.get("summary", "") or "")
+emit("DELIVER_COMMIT", attrs.get("commit", "") or "")
+emit("DELIVER_SWEEP", attrs.get("sweep", "") or "")
+emit("DELIVER_TASK", attrs.get("task", "") or "")
+emit("DELIVER_TITLE", attrs.get("title", "") or "")
 emit("DELIVER_RESPONSE_JSON", json.dumps(response, ensure_ascii=False))
-emit("FEISHU_PUSH_TEXT", memory_push_text)
-emit("FEISHU_PUSH_PROJECT", memory_push_project)
-emit("FEISHU_PUSH_MISSING_FOOTER", memory_push_missing_footer)
 PY
 }
 
@@ -168,6 +176,166 @@ send_clear() {
     env -u TMUX tmux send-keys -t "=${candidate#=}" "/clear" Enter 2>/dev/null && return 0 || true
   done
   return 0
+}
+
+read_feishu_group_id() {
+  local project="$1"
+  local binding_path="$HOME/.agents/tasks/${project}/PROJECT_BINDING.toml"
+  "$PYTHON_BIN" - "$binding_path" <<'PY' || true
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
+
+path = Path(sys.argv[1]).expanduser()
+if not path.is_file():
+    raise SystemExit(0)
+try:
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+
+group_id = str(data.get("feishu_group_id") or "").strip()
+if not group_id:
+    bridge = data.get("bridge")
+    if isinstance(bridge, dict):
+        group_id = str(bridge.get("group_id") or "").strip()
+print(group_id)
+PY
+}
+
+send_feishu_message() {
+  local project="$1" group_id="$2" message="$3"
+
+  [[ -n "$group_id" ]] || { echo "[memory-hook] no group_id; skip feishu" >&2; return 0; }
+  command -v lark-cli >/dev/null 2>&1 || { echo "[memory-hook] lark-cli missing; skip feishu" >&2; return 0; }
+
+  if [[ -n "${CALLS_LOG:-}" ]]; then
+    printf -- '--as user im +messages-send --chat-id %s --text %s\n' "$group_id" "$message" >> "$CALLS_LOG"
+  fi
+  LARK_CLI_NO_PROXY=1 lark-cli im +messages-send --as user \
+    --chat-id "$group_id" --text "$message" 2>&1 | while IFS= read -r line; do
+      echo "[memory-hook] $line" >&2
+    done || true
+}
+
+format_feishu_message() {
+  local response_json="$1"
+  local task_id="$2" project="$3" session="$4" ts="$5"
+  local verdict="$6" commit="$7" sweep="$8" summary="$9" title="${10}" task="${11}"
+
+  FEISHU_HOOK_RESPONSE_JSON="$response_json" \
+  FEISHU_HOOK_TASK_ID="$task_id" \
+  FEISHU_HOOK_PROJECT="$project" \
+  FEISHU_HOOK_SESSION="$session" \
+  FEISHU_HOOK_TS="$ts" \
+  FEISHU_HOOK_VERDICT="$verdict" \
+  FEISHU_HOOK_COMMIT="$commit" \
+  FEISHU_HOOK_SWEEP="$sweep" \
+  FEISHU_HOOK_SUMMARY="$summary" \
+  FEISHU_HOOK_TITLE="$title" \
+  FEISHU_HOOK_TASK="$task" \
+  "$PYTHON_BIN" - <<'PY'
+import json
+import os
+
+raw_payload = os.environ.get("FEISHU_HOOK_RESPONSE_JSON", "").strip()
+if not raw_payload:
+    raise SystemExit(0)
+payload = json.loads(raw_payload)
+
+answer = str(payload.get("answer", "")).strip()
+project = os.environ.get("FEISHU_HOOK_PROJECT", "unknown").strip() or "unknown"
+session = os.environ.get("FEISHU_HOOK_SESSION", "unknown").strip() or "unknown"
+hook_ts = os.environ.get("FEISHU_HOOK_TS", "")
+task_id = os.environ.get("FEISHU_HOOK_TASK_ID", "").strip()
+verdict = os.environ.get("FEISHU_HOOK_VERDICT", "").strip().upper()
+commit = os.environ.get("FEISHU_HOOK_COMMIT", "").strip()
+sweep = os.environ.get("FEISHU_HOOK_SWEEP", "").strip()
+summary = os.environ.get("FEISHU_HOOK_SUMMARY", "").strip()
+title = os.environ.get("FEISHU_HOOK_TITLE", "").strip()
+task_hint = os.environ.get("FEISHU_HOOK_TASK", "").strip()
+
+combined = " ".join(part for part in (answer, verdict, summary, title, task_hint, task_id) if part).upper()
+
+def normalize_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line:
+            lines.append(line)
+    return lines
+
+def clamp_lines(lines: list[str], max_lines: int = 4) -> list[str]:
+    return lines[:max_lines]
+
+if commit and task_id:
+    headline_task = summary or task_hint or title or task_id or "任务"
+    headline = f"[Memory] 📋 {headline_task}已完成"
+    result_line = summary or task_hint or title or task_id or "任务已完成"
+    if sweep:
+        result_line = f"{result_line} | sweep {sweep}"
+    body = [f"result={result_line}"]
+    if task_id:
+        body.append(f"task_id={task_id}")
+    if commit:
+        body.append(f"commit={commit}")
+elif "BLOCKED" in combined or " FAIL" in combined:
+    title_text = summary or title or task_hint or task_id or "任务"
+    headline = f"[Memory] 🔴 需要决策:{title_text}"
+    desc = next((line for line in normalize_lines(answer) if line), "请快速确认任务方向")
+    options = []
+    for line in normalize_lines(answer):
+        if len(options) >= 2:
+            break
+        if line.startswith("A.") or line.startswith("B.") or line.startswith("a.") or line.startswith("b."):
+            options.append(line.replace(" a.", "A.").replace(" b.", "B."))
+    if len(options) < 2:
+        options = ["A. 继续执行", "B. 人工确认"]
+    body = [desc, options[0], options[1]]
+else:
+    # Pass/ready as success state unless explicitly blocked.
+    pass_like = ("PASS" in combined or " READY" in combined or
+                 combined.endswith("READY") or combined.startswith("READY") or
+                 "PHASE=READY" in combined)
+    headline_task = summary or task_hint or title or task_id or "任务"
+    if pass_like and not headline_task:
+        headline_task = "任务完成"
+    headline = f"[Memory] ✅ {headline_task}"
+    body = []
+    if task_id:
+        body.append(f"task_id={task_id}")
+    if summary:
+        body.append(f"summary={summary}")
+    if verdict:
+        body.append(f"verdict={verdict}")
+    elif pass_like:
+        body.append("verdict=PASS")
+    else:
+        body.append("verdict=UNKNOWN")
+    if project:
+        body.append(f"project={project}")
+    if sweep:
+        body.append(f"sweep {sweep}")
+    body = clamp_lines(body)
+
+legacy_footer = f"_via Memory @ {hook_ts} | project={project} | session={session}_"
+signature = f"— Memory | {project} | {hook_ts}"
+payload["answer"] = (
+    f"{headline}\n\n"
+    + "\n".join(clamp_lines(body, 4))
+    + "\n\n"
+    + legacy_footer
+    + "\n"
+    + signature
+)
+print(json.dumps(payload, ensure_ascii=False))
+print("::FEISHU::")
+print(payload["answer"])
+PY
 }
 
 deliver_response() {
@@ -196,38 +364,9 @@ deliver_response() {
   return 0
 }
 
-read_group_id() {
-  local binding_path="$1"
-  "$PYTHON_BIN" - "$binding_path" <<'PY'
-import sys
-import tomllib
-
-try:
-    with open(sys.argv[1], "rb") as fh:
-        data = tomllib.load(fh)
-except Exception:
-    raise SystemExit(0)
-group_id = str(data.get("feishu_group_id") or "").strip()
-print(group_id)
-PY
-}
-
-push_memory_feishu() {
-  local project="$1" text="$2"
-  local binding_path="$HOME/.agents/tasks/$project/PROJECT_BINDING.toml"
-  local group_id=""
-
-  [[ -n "$project" ]] || { echo "[memory-hook] [Memory] message missing project, skip" >&2; return 0; }
-  [[ -f "$binding_path" ]] || { echo "[memory-hook] no PROJECT_BINDING.toml for $project; skip" >&2; return 0; }
-  group_id="$(read_group_id "$binding_path")"
-  [[ -n "$group_id" ]] || { echo "[memory-hook] no group_id for $project; skip" >&2; return 0; }
-  command -v lark-cli >/dev/null 2>&1 || { echo "[memory-hook] lark-cli not installed; skip" >&2; return 0; }
-
-  lark-cli --as user im +messages-send --chat-id "$group_id" --text "$text" 2>&1 | logger -t memory-feishu-push
-}
-
 main() {
   local payload_json="" parsed="" hook_project="" hook_session="" hook_ts=""
+  local feishu_group_id="" feishu_msg="" formatted_payload=""
   payload_json="$(cat || true)"
   [[ -n "$payload_json" ]] || return 0
 
@@ -240,29 +379,44 @@ main() {
   hook_session="$(tmux_session_name)"
   hook_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [[ -n "${DELIVER_RESPONSE_JSON:-}" ]]; then
-    DELIVER_RESPONSE_JSON="$(
-      RESPONSE_JSON="$DELIVER_RESPONSE_JSON" \
-      HOOK_PROJECT="$hook_project" \
-      HOOK_SESSION="$hook_session" \
-      HOOK_TS="$hook_ts" \
-      HOOK_TASK_ID="${DELIVER_TASK_ID:-unknown}" \
-      "$PYTHON_BIN" - <<'PY'
-import json, os
-payload = json.loads(os.environ["RESPONSE_JSON"])
-answer = str(payload.get("answer", ""))
-payload["answer"] = (
-    f"[Memory]\n{answer}\n\n---\n"
-    f"_via Memory @ {os.environ['HOOK_TS']} | "
-    f"project={os.environ['HOOK_PROJECT']} | session={os.environ['HOOK_SESSION']} | "
-    f"task_id={os.environ['HOOK_TASK_ID']} | verdict=PASS_"
-)
-print(json.dumps(payload, ensure_ascii=False))
-PY
+    formatted_payload="$(
+      format_feishu_message \
+        "${DELIVER_RESPONSE_JSON}" \
+        "${DELIVER_TASK_ID:-}" \
+        "$hook_project" \
+        "$hook_session" \
+        "$hook_ts" \
+        "${DELIVER_VERDICT:-}" \
+        "${DELIVER_COMMIT:-}" \
+        "${DELIVER_SWEEP:-}" \
+        "${DELIVER_SUMMARY:-}" \
+        "${DELIVER_TITLE:-}" \
+        "${DELIVER_TASK:-}"
     )"
+
+    if [[ "$formatted_payload" == *$'\n::FEISHU::\n'* ]]; then
+      DELIVER_RESPONSE_JSON="${formatted_payload%%$'\n::FEISHU::\n'*}"
+      feishu_msg="${formatted_payload#*::FEISHU::$'\n'}"
+    else
+      DELIVER_RESPONSE_JSON="$formatted_payload"
+      feishu_msg="$(printf '%s' "$DELIVER_RESPONSE_JSON" | "$PYTHON_BIN" -c 'import json,sys; payload=json.load(sys.stdin); print(payload.get("answer",""))')"
+    fi
   fi
 
   if [[ "${CLEAR_REQUESTED:-0}" == "1" ]]; then
     send_clear || true
+  fi
+
+  # [Memory] marker direct push (BJ5 path)
+  if [[ "${FEISHU_PUSH_MISSING_FOOTER:-0}" == "1" ]]; then
+    echo "[memory-hook] [Memory] message missing footer, skip" >&2
+  fi
+  if [[ "${MEMORY_PUSH:-0}" == "1" && "${CLAWSEAT_FEISHU_ENABLED:-1}" != "0" ]]; then
+    local _mp_project="${MEMORY_PUSH_PROJECT:-$hook_project}"
+    feishu_group_id="$(read_feishu_group_id "$_mp_project")"
+    if [[ -n "$feishu_group_id" ]]; then
+      send_feishu_message "$_mp_project" "$feishu_group_id" "${MEMORY_PUSH_TEXT:-}" || true
+    fi
   fi
 
   if [[ -n "${DELIVER_TARGET:-}" ]]; then
@@ -271,12 +425,12 @@ PY
       "${DELIVER_TASK_ID:-}" \
       "${DELIVER_PROFILE:-}" \
       "${DELIVER_RESPONSE_JSON:-}" || true
-  fi
-
-  if [[ "${FEISHU_PUSH_MISSING_FOOTER:-0}" == "1" ]]; then
-    echo "[memory-hook] [Memory] message missing footer, skip" >&2
-  elif [[ -n "${FEISHU_PUSH_TEXT:-}" ]]; then
-    push_memory_feishu "${FEISHU_PUSH_PROJECT:-}" "${FEISHU_PUSH_TEXT:-}" || true
+    if [[ "${CLAWSEAT_FEISHU_ENABLED:-1}" != "0" && "$hook_project" != "unknown" ]]; then
+      feishu_group_id="$(read_feishu_group_id "$hook_project")"
+      if [[ -n "$feishu_group_id" && -n "$feishu_msg" ]]; then
+        send_feishu_message "$hook_project" "$feishu_group_id" "$feishu_msg" || true
+      fi
+    fi
   fi
 }
 
