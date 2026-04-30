@@ -295,22 +295,23 @@ bash scripts/install.sh --reset-harness-memory
 
 ### Provider 选项 ↔ CLI Flag 映射（Z3）
 
-Non-TTY 环境（agent-launcher、CI、scripts）必须用显式 flag 跳过交互 provider menu：
+Non-TTY 环境（agent-launcher、CI、scripts）必须用显式 flag 跳过交互 provider menu。
+数字 menu choice 由本机 credential 动态检测生成；稳定 CLI contract 是下面这些 mode name：
 
-| 选项 | 描述 | CLI flag |
+| 稳定 mode | 描述 | CLI flag |
 |------|------|----------|
-| 1 | Claude memory + Anthropic Console API key | `--provider anthropic_console --api-key <key>` |
-| 2 | Claude memory + Claude Code OAuth token | `--provider oauth_token` |
-| 3 | Claude memory + host Claude OAuth | `--provider oauth` |
-| 4 | MiniMax API | `--provider minimax --api-key <key>` |
-| 5 | DeepSeek API | `--provider deepseek --api-key <key>` |
-| 6 | Ark API | `--provider ark --api-key <key>` |
-| 7 | Xcode-best Claude-compatible API | `--provider xcode-best --api-key <key> [--model <name>]` |
-| 8 | Gemini OAuth primary memory | `--memory-tool gemini` |
-| 9 | Codex OAuth primary memory | `--memory-tool codex [--memory-model <model>]` |
-| custom | 自定义 Claude-compatible endpoint | `--provider custom_api --base-url <url> --api-key <key> [--model <name>]` |
+| `anthropic_console` | Claude memory + Anthropic Console API key | `--provider anthropic_console --api-key <key>` |
+| `oauth_token` | Claude memory + Claude Code OAuth token | `--provider oauth_token` |
+| `oauth` | Claude memory + host Claude OAuth | `--provider oauth` |
+| `minimax` | MiniMax API | `--provider minimax --api-key <key>` |
+| `deepseek` | DeepSeek API | `--provider deepseek --api-key <key>` |
+| `ark` | Ark API | `--provider ark --api-key <key>` |
+| `xcode-best` | Xcode-best Claude-compatible API | `--provider xcode-best --api-key <key> [--model <name>]` |
+| `custom_api` | 自定义 Claude-compatible endpoint | `--provider custom_api --base-url <url> --api-key <key> [--model <name>]` |
+| `gemini` memory tool | Gemini OAuth primary memory | `--memory-tool gemini` |
+| `codex` memory tool | Codex OAuth primary memory | `--memory-tool codex [--memory-model <model>]` |
 
-当前 parser-owned mode 见 `scripts/install/lib/provider.sh::select_provider()`。
+当前 parser-owned provider 行为见 `scripts/install/lib/provider.sh::select_provider()`。
 不要使用旧别名 `--provider anthropic`、`--provider claude_code`、
 `--provider gemini_oauth`、`--provider codex_oauth`、`--provider custom`；
 它们保留在旧计划文本里，但不是当前可运行接口。

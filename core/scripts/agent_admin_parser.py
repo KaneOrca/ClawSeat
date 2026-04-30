@@ -73,72 +73,73 @@ class ParserHooks:
 def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-admin")
     sub = parser.add_subparsers(dest="command", required=True)
+    template_help = "Template name/path. Built-ins: clawseat-creative, clawseat-engineering, clawseat-solo."
 
-    migrate = sub.add_parser("migrate-legacy")
+    migrate = sub.add_parser("migrate-legacy", help="Migrate legacy engineer/profile state.")
     migrate.add_argument("--force", action="store_true")
     migrate.set_defaults(func=hooks.migrate_legacy)
 
-    list_projects = sub.add_parser("list-projects")
+    list_projects = sub.add_parser("list-projects", help="List configured projects.")
     list_projects.set_defaults(func=hooks.cmd_list_projects)
 
-    list_engineers = sub.add_parser("list-engineers")
+    list_engineers = sub.add_parser("list-engineers", help="List configured engineers/seats.")
     list_engineers.set_defaults(func=hooks.cmd_list_engineers)
 
-    list_identities = sub.add_parser("list-identities")
+    list_identities = sub.add_parser("list-identities", help="List configured tool identities.")
     list_identities.set_defaults(func=hooks.cmd_list_identities)
 
-    show_project = sub.add_parser("show-project")
+    show_project = sub.add_parser("show-project", help="Show one project record.")
     show_project.add_argument("project")
     show_project.set_defaults(func=hooks.cmd_show_project)
 
-    show_engineer = sub.add_parser("show-engineer")
+    show_engineer = sub.add_parser("show-engineer", help="Show one engineer/seat record.")
     show_engineer.add_argument("engineer")
     show_engineer.add_argument("--project")
     show_engineer.set_defaults(func=hooks.cmd_show_engineer)
 
-    show = sub.add_parser("show")
+    show = sub.add_parser("show", help="Show one engineer/seat record.")
     show.add_argument("engineer")
     show.add_argument("--project")
     show.set_defaults(func=hooks.cmd_show)
 
-    resolve = sub.add_parser("resolve")
+    resolve = sub.add_parser("resolve", help="Resolve an engineer launch identity for a tool.")
     resolve.add_argument("engineer")
     resolve.add_argument("tool", choices=["codex", "claude", "gemini"])
     resolve.add_argument("--project")
     resolve.set_defaults(func=hooks.cmd_resolve)
 
-    show_identity = sub.add_parser("show-identity")
+    show_identity = sub.add_parser("show-identity", help="Show one tool identity.")
     show_identity.add_argument("identity")
     show_identity.set_defaults(func=hooks.cmd_show_identity)
 
-    run_engineer = sub.add_parser("run-engineer")
+    run_engineer = sub.add_parser("run-engineer", help="Run a command as an engineer identity.")
     run_engineer.add_argument("engineer")
     run_engineer.add_argument("--project")
     run_engineer.add_argument("cmd", nargs=argparse.REMAINDER)
     run_engineer.set_defaults(func=hooks.cmd_run_engineer)
 
-    start = sub.add_parser("start")
+    start = sub.add_parser("start", help="Start a tool command for an engineer identity.")
     start.add_argument("engineer")
     start.add_argument("tool", choices=["codex", "claude", "gemini"])
     start.add_argument("--project")
     start.add_argument("cmd", nargs=argparse.REMAINDER)
     start.set_defaults(func=hooks.cmd_start)
 
-    start_identity = sub.add_parser("start-identity")
+    start_identity = sub.add_parser("start-identity", help="Start a command for a raw identity.")
     start_identity.add_argument("identity")
     start_identity.add_argument("cmd", nargs=argparse.REMAINDER)
     start_identity.set_defaults(func=hooks.cmd_start_identity)
 
-    session_name = sub.add_parser("session-name")
+    session_name = sub.add_parser("session-name", help="Print the canonical tmux session name.")
     session_name.add_argument("target")
     session_name.add_argument("--project")
     session_name.set_defaults(func=hooks.cmd_session_name)
 
-    project_open = sub.add_parser("project-open")
+    project_open = sub.add_parser("project-open", help="Open a project workspace/window.")
     project_open.add_argument("project")
     project_open.set_defaults(func=hooks.cmd_project_open)
 
-    project = sub.add_parser("project")
+    project = sub.add_parser("project", help="Project registry, bootstrap, binding, and validation operations.")
     project_sub = project.add_subparsers(dest="project_command", required=True)
 
     project_list_nested = project_sub.add_parser("list")
@@ -165,14 +166,20 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_create_nested.add_argument(
         "--template",
         default="clawseat-creative",
-        help="Project roster template to use (default: clawseat-creative; also: clawseat-engineering, clawseat-solo)",
+        metavar="TEMPLATE",
+        help=f"Project roster template to use (default: clawseat-creative). {template_help}",
     )
     project_create_nested.add_argument("--window-mode", choices=["tabs-1up", "tabs-2up", "split-2"], default=None)
     project_create_nested.add_argument("--open-detail-windows", action="store_true")
     project_create_nested.set_defaults(func=hooks.cmd_project_create)
 
     project_bootstrap_nested = project_sub.add_parser("bootstrap")
-    project_bootstrap_nested.add_argument("--template", required=True, help="Template name (clawseat-creative | clawseat-engineering | clawseat-solo)")
+    project_bootstrap_nested.add_argument(
+        "--template",
+        required=True,
+        metavar="TEMPLATE",
+        help=template_help,
+    )
     project_bootstrap_nested.add_argument(
         "--local",
         required=True,
@@ -367,7 +374,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     machine_memory_show.set_defaults(func=hooks.cmd_machine_memory_show)
 
-    session = sub.add_parser("session")
+    session = sub.add_parser("session", help="Project-scoped tmux session lifecycle operations.")
     session_sub = session.add_subparsers(dest="session_command", required=True)
 
     session_start_eng = session_sub.add_parser("start-engineer")
@@ -490,7 +497,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     switch_auth.add_argument("--provider", required=True)
     switch_auth.set_defaults(func=hooks.cmd_session_switch_auth)
 
-    window = sub.add_parser("window")
+    window = sub.add_parser("window", help="iTerm/tmux project window operations.")
     window_sub = window.add_subparsers(dest="window_command", required=True)
 
     open_monitor = window_sub.add_parser("open-monitor")
@@ -525,7 +532,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     config_monitor.add_argument("engineers")
     config_monitor.set_defaults(func=hooks.cmd_window_config_monitor)
 
-    engineer = sub.add_parser("engineer")
+    engineer = sub.add_parser("engineer", help="Engineer/seat CRUD and workspace operations.")
     engineer_sub = engineer.add_subparsers(dest="engineer_command", required=True)
 
     engineer_list_nested = engineer_sub.add_parser("list")
@@ -602,7 +609,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     secret.add_argument("value")
     secret.set_defaults(func=hooks.cmd_engineer_secret_set)
 
-    task = sub.add_parser("task")
+    task = sub.add_parser("task", help="Project task TODO/workflow status operations.")
     task_sub = task.add_subparsers(dest="task_command", required=True)
 
     task_create = task_sub.add_parser("create")
@@ -623,7 +630,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     task_update_status.add_argument("--project", required=True)
     task_update_status.set_defaults(func=hooks.cmd_task_update_status)
 
-    identity = sub.add_parser("identity")
+    identity = sub.add_parser("identity", help="Tool identity list/show operations.")
     identity_sub = identity.add_subparsers(dest="identity_command", required=True)
 
     identity_list_nested = identity_sub.add_parser("list")
@@ -633,7 +640,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     identity_show_nested.add_argument("identity")
     identity_show_nested.set_defaults(func=hooks.cmd_show_identity)
 
-    tui = sub.add_parser("tui")
+    tui = sub.add_parser("tui", help="Launch the legacy interactive admin UI.")
     tui.set_defaults(func=hooks.cmd_tui)
 
     return parser

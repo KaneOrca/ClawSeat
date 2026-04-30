@@ -69,7 +69,10 @@ def _parse_value(value: str) -> Any:
     if value == "false":
         return False
     if value.startswith('"') and value.endswith('"'):
-        return json.loads(value)
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value[1:-1]
     return value
 
 

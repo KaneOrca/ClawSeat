@@ -58,6 +58,21 @@ def test_parse_frontmatter_no_frontmatter(tmp_path, monkeypatch) -> None:
     assert scan_index.parse_frontmatter(path) is None
 
 
+def test_parse_frontmatter_tolerates_shell_backslash_in_quoted_value(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("AGENT_HOME", raising=False)
+    path = tmp_path / "record.md"
+    path.write_text(
+        '---\nevidence: "cron.sh: [[ \\"\\$mode\\" == \\"daily\\" ]]"\n---\n\nBody\n',
+        encoding="utf-8",
+    )
+    scan_index = _load_scan_index()
+
+    parsed = scan_index.parse_frontmatter(path)
+    assert parsed is not None
+    assert parsed["evidence"] == 'cron.sh: [[ \\"\\$mode\\" == \\"daily\\" ]]'
+
+
 def test_build_files_index_empty_project(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("AGENT_HOME", raising=False)

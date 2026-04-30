@@ -45,11 +45,18 @@ bash scripts/install.sh
 ```
 
 For non-default cases, follow the playbook and pass only the flags it
-documents, for example `--project`, `--repo-root` (FR-7: point memory to a
-different business repo), `--template` (select project roster:
-`clawseat-creative` | `clawseat-engineering`), `--provider`, `--base-url`,
-`--api-key`, `--model`, `--reinstall`, or `--reset-harness-memory` (FR-1: clear
-saved per-seat harness choices).
+documents, for example:
+
+- Project and repo selection: `--project`, `--repo-root` (target project repo),
+  `--force-repo-root` (override the ClawSeat install code root).
+- Template selection: `--template` with `clawseat-creative`,
+  `clawseat-engineering`, or `clawseat-solo`.
+- Memory/provider selection: `--memory-tool`, `--memory-model`, `--provider`,
+  `--all-api-provider`, `--base-url`, `--api-key`, `--model`, and
+  `--provision-keys`.
+- Lifecycle and diagnostics: `--reinstall` / `--force`, `--uninstall`,
+  `--enable-auto-patrol`, `--load-all-skills`, `--detect-only`, `--dry-run`,
+  and `--reset-harness-memory` (FR-1: clear saved per-seat harness choices).
 
 Important:
 - `scripts/install.sh` is the L1 user-facing entrypoint. Do not replace it

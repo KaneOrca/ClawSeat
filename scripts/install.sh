@@ -37,6 +37,7 @@ if [[ -z "$REAL_HOME" ]]; then
 fi
 export HOME="$REAL_HOME"
 SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+SCAN_INDEX_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_index.py"
 ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
 ITERM_DRIVER_TIMEOUT_SECONDS=30
 MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
@@ -105,6 +106,7 @@ PYTHON_BIN_RESOLUTION=""
 refresh_clawseat_repo_paths() {
   CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
   SCAN_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_environment.py"
+  SCAN_INDEX_SCRIPT="$REPO_ROOT/core/skills/memory-oracle/scripts/scan_index.py"
   ITERM_DRIVER="$REPO_ROOT/core/scripts/iterm_panes_driver.py"
   MEMORY_BRIEF_TEMPLATE="$REPO_ROOT/core/templates/memory-bootstrap.template.md"
   MEMORY_PATROL_TEMPLATE="$REPO_ROOT/core/templates/patrol.plist.in"
@@ -146,6 +148,19 @@ run() {
     return 0
   fi
   "$@" || die 99 COMMAND_FAILED "command failed: $*"
+}
+
+refresh_memory_kb_index() {
+  local project_memory_dir="$HOME/.agents/memory/projects/$PROJECT"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] refresh KB index for %s via %q rebuild --project %q\n' "$PROJECT" "$SCAN_INDEX_SCRIPT" "$PROJECT" >&2
+    return 0
+  fi
+  if [[ ! -f "$SCAN_INDEX_SCRIPT" || ! -d "$project_memory_dir" ]]; then
+    return 0
+  fi
+  "$PYTHON_BIN" "$SCAN_INDEX_SCRIPT" rebuild --project "$PROJECT" >/dev/null \
+    || warn "memory KB index refresh failed for $PROJECT; continuing install"
 }
 
 INSTALL_LIB_DIR="$SCRIPT_DIR/install/lib"
@@ -384,6 +399,7 @@ main() {
   note "Step 9.5: persist Phase-A kickoff prompt to memory-kickoff.txt"
   persist_phase_a_kickoff_prompt
   touch_project_registry
+  refresh_memory_kb_index
   write_operator_guide
   print_operator_banner
   _clear_reinstall_backups
