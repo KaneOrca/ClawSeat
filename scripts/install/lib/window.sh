@@ -100,6 +100,24 @@ install_primary_patrol_plist() {
   fi
 }
 
+install_seat_clear_watchdog() {
+  note "Step 6.5: install universal clear/compact watchdog"
+  if [[ ! -f "$SEAT_CLEAR_WATCHDOG_INSTALLER" && "$DRY_RUN" != "1" ]]; then
+    warn "seat clear/compact watchdog skipped; missing installer: $SEAT_CLEAR_WATCHDOG_INSTALLER"
+    return 0
+  fi
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] %q %q --clawseat-root %q --home %q --python-bin %q\n' \
+      "$PYTHON_BIN" "$SEAT_CLEAR_WATCHDOG_INSTALLER" "$CLAWSEAT_ROOT" "$HOME" "$PYTHON_BIN"
+    return 0
+  fi
+  "$PYTHON_BIN" "$SEAT_CLEAR_WATCHDOG_INSTALLER" \
+    --clawseat-root "$CLAWSEAT_ROOT" \
+    --home "$HOME" \
+    --python-bin "$PYTHON_BIN" \
+    || warn "seat clear/compact watchdog install failed; continue without scheduled watchdog"
+}
+
 configure_tmux_session_display() {
   local session="$1"
   # tmux accepts `=name` for exact matching in has-session, but set-option
