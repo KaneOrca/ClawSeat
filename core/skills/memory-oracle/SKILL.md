@@ -113,6 +113,37 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
+## Post-Spawn Chain Rehearsal (必做)
+
+memory MUST initiate a chain rehearsal brief in these situations:
+
+1. After install.sh / reinstall, once Phase-A kickoff is received and the
+   project seats are confirmed live.
+2. When a seat is restarted and a new instance joins the chain.
+
+**Template**: see `references/post-spawn-chain-rehearsal-template.md`
+
+**Core requirements for rehearsal brief**:
+
+- Each participating seat self-reports: role / boundary / closeout two-step /
+  fan-out trigger / relay chain.
+- planner dispatches via `dispatch_task.py` with `workflow.md`, one step per
+  participating seat, `notify_on_done: [planner]`.
+- Each participating seat calls `complete_handoff.py` (`.consumed`) +
+  `send-and-verify.sh` wake planner.
+- planner fans in all self-reports, updates `planner/DELIVERY.md`
+  `verdict=PASS`, and relays to memory:
+  `[chain-rehearsal-<ts>] all-seats-online — verdict PASS`.
+
+**memory verifies on receipt**:
+
+- `handoffs/` has `.consumed` receipt for every seat (OO rule in effect).
+- `planner/DELIVERY.md` updated (NN rule in effect).
+- Each seat self-report matches SKILL.md role/boundary/closeout.
+
+**On rehearsal failure**: do NOT proceed to real task dispatch. Fix the
+protocol gap for the failing seat; re-run rehearsal until chain passes.
+
 ## Startup Workspace Freshness Check
 
 启动 B0/B1 阶段应做一次 workspace stale 检测；这是提示，不是 hard block。若
