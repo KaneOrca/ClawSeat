@@ -30,8 +30,8 @@ On failure (command error or `iter > max_iterations`):
 ## Handoff Receipt: 完成必须两步,不可二选一: 1. call `complete_handoff.py` 写 durable `.consumed` receipt; 2. then `send-and-verify.sh` wake reply_to. send-and-verify cannot substitute; complete_handoff.py 失败要 escalate 给 reply_to + memory.
 ## Work Mode: **2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)**
 ## TODO Queue Priority
-On wake/start, read TODO.md from TOP: 先看队首 / queue head, not tail. Skip `[superseded]` or KB ✅ MERGED; if head age > 3 days with no matching DELIVERY.md update, mark `[superseded]`; otherwise process head then next `[pending]`.
-Why: `dispatch_task.py` appends to tail; tail-first leaves head zombie tasks permanently unprocessed.
+On wake/start, read TODO.md from TOP: 先看队首 / queue head, not tail. Skip `[superseded]` or KB ✅ MERGED; if head age > 3 days with no matching DELIVERY.md update, mark `[superseded]`; otherwise process head then next `[pending]`. Why: dispatch_task.py appends to tail; tail-first leaves zombie tasks permanently unprocessed.
+## Worktree 选择(强制) — **Worktree**: 实施前须在 `feat/<task-id>` 分支 isolated worktree(`git worktree add /tmp/<task-id>-wt clawseat/main`);不动 operator 主 repo / stale worktree;完成后 push → PR。
 ## Context Management
 
 ### [CLEAR-REQUESTED]

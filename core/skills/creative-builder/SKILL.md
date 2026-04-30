@@ -106,3 +106,11 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/complete_handoff.py" 
 
 - **[cs-classify](../cs-classify/SKILL.md)** — 创作任务分类（主要能力）
 - **[cs-classify-short](../cs-classify-short/SKILL.md)** — 短文角度结构
+
+## Worktree 選擇(強制)
+
+实施派工前确认在正確 worktree:
+1. `git rev-parse --abbrev-ref HEAD` — 非 `feat/<task-id>` 分支 → 必先:
+   `git worktree add /tmp/<task-id>-wt clawseat/main`
+2. 在 isolated worktree 实施,不动 operator 主 repo / 历史 stale worktree(clawseat-v2 等)
+3. 实施完后 push feature branch → PR
