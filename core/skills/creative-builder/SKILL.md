@@ -59,6 +59,18 @@ description: >
   → complete_handoff --target designer（交 designer 执行写作和评分）
 ```
 
+## TODO Queue Priority (process queue head first, skip zombie)
+
+On receiving a wake-up or starting a new task:
+
+1. Check TODO.md from the TOP: 先看队首 / queue head, not the latest tail entry.
+2. If the head entry task_id is already `[superseded]` or marked ✅ MERGED in memory KB, skip it.
+3. If the head entry age > 3 days with no matching DELIVERY.md update, mark `[superseded]` and skip.
+4. Otherwise process the head entry.
+5. When the head is done, move to the next `[pending]` entry.
+
+**Why**: `dispatch_task.py` appends to tail. Picking tail-first leaves head zombie tasks permanently unprocessed.
+
 ## 3. Deliver
 
 ## Handoff Receipt (两步走,不可二选一)

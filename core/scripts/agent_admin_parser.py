@@ -60,6 +60,7 @@ class ParserHooks:
     cmd_engineer_regenerate_workspace: Callable[[Any], int]
     cmd_engineer_secret_set: Callable[[Any], int]
     cmd_task_create: Callable[[Any], int]
+    cmd_task_auto_supersede: Callable[[Any], int]
     cmd_task_list_pending: Callable[[Any], int]
     cmd_task_update_status: Callable[[Any], int]
     cmd_tui: Callable[[Any], int]
@@ -617,6 +618,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     task_create.add_argument("--project", required=True)
     task_create.add_argument("--workflow-template", default="")
     task_create.set_defaults(func=hooks.cmd_task_create)
+
+    task_auto_supersede = task_sub.add_parser("auto-supersede")
+    task_auto_supersede.add_argument("--project", required=True)
+    task_auto_supersede.add_argument("--age-days", type=int, default=3)
+    task_auto_supersede.set_defaults(func=hooks.cmd_task_auto_supersede)
 
     task_list_pending = task_sub.add_parser("list-pending")
     task_list_pending.add_argument("--project", required=True)
