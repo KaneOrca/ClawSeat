@@ -64,6 +64,13 @@ remove_skill_symlinks() {
 
 install_skill_tier_for_home() {
   local tool="$1" skills_home="$2"; shift 2
+  # AC: skip Gemini — Gemini CLI has a built-in ~/.agents/skills/ alias.
+  # Mirroring those same skills into ~/.gemini/skills/ makes Gemini double-scan
+  # the same SKILL.md files and emit conflict warnings on startup.
+  if [[ "$tool" == "gemini" ]]; then
+    return 0
+  fi
+
   local agents_skills_home="$HOME/.agents/skills"
   if [[ "$skills_home" != "$agents_skills_home" ]]; then
     mirror_agents_skills_to_home "$agents_skills_home" "$skills_home"
@@ -98,11 +105,32 @@ install_skill_tier_for_home() {
   fi
 }
 
+cleanup_legacy_gemini_skill_symlinks() {
+  local gemini_skills="$HOME/.gemini/skills"
+  [[ -d "$gemini_skills" ]] || return 0
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] cleanup legacy gemini skill symlinks in %q\n' "$gemini_skills"
+    return 0
+  fi
+
+  local entry target
+  for entry in "$gemini_skills"/*; do
+    [[ -L "$entry" ]] || continue
+    target="$(readlink "$entry" || true)"
+    if [[ "$target" == */.agents/skills/* ]]; then
+      rm -f "$entry" || die 31 SKILL_SYMLINK_FAILED "unable to remove legacy gemini skill link $entry"
+      note "removed legacy gemini skill symlink: $(basename "$entry")"
+    fi
+  done
+}
+
 install_skills_by_tier() {
   note "Step 5.8: install ClawSeat skill symlinks"
   install_skill_tier_for_home claude "$HOME/.agents/skills"
   install_skill_tier_for_home claude "$HOME/.claude/skills"
   install_skill_tier_for_home gemini "$HOME/.gemini/skills"
+  cleanup_legacy_gemini_skill_symlinks
   install_skill_tier_for_home codex "$HOME/.codex/skills"
 }
 

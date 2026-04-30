@@ -24,6 +24,8 @@ def test_clawseat_skills_visible_to_all_tool_homes(tmp_path: Path) -> None:
     agents_names = {path.name for path in agents_skills.iterdir()}
 
     assert agents_names
-    for tool in ("claude", "gemini", "codex"):
+    for tool in ("claude", "codex"):
         tool_names = {path.name for path in (home / f".{tool}" / "skills").iterdir()}
         assert tool_names >= agents_names
+    gemini_skills = home / ".gemini" / "skills"
+    assert not gemini_skills.exists() or not ({path.name for path in gemini_skills.iterdir()} & agents_names)

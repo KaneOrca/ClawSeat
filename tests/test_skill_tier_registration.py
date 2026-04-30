@@ -68,12 +68,13 @@ def test_claude_tier_registration_core_and_extended(tmp_path: Path) -> None:
     assert "Extended skills skipped" not in result.stdout
 
 
-def test_gemini_tier_registration_mirrors_agents_ssot(tmp_path: Path) -> None:
+def test_gemini_tier_registration_uses_agents_alias_without_mirror(tmp_path: Path) -> None:
     root, home, py_stubs = _prepare_h3_fake_root(tmp_path)
     result = _run_install(root, home, py_stubs, project="t3gemini", memory_tool="gemini")
     assert result.returncode == 0, result.stderr
 
     _assert_skill_links(root, home / ".agents" / "skills", (*_CORE_SKILLS, *_EXTENDED_SKILLS))
     skills_home = home / ".gemini" / "skills"
-    _assert_tool_mirror_links(home, skills_home, (*_CORE_SKILLS, *_EXTENDED_SKILLS))
+    for skill in (*_CORE_SKILLS, *_EXTENDED_SKILLS):
+        assert not (skills_home / skill).exists()
     assert "Extended skills skipped" not in result.stdout
