@@ -52,6 +52,7 @@ WAIT_FOR_SEAT_SCRIPT="$REPO_ROOT/scripts/wait-for-seat.sh"
 CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py"
 PATROL_HOOK_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_hook.py"
 PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_cron.py"
+SEAT_CLEAR_WATCHDOG_INSTALLER="$REPO_ROOT/core/skills/clawseat-install/scripts/install_seat_clear_watchdog.py"
 # Backward-compatible variable exports for callers that source install.sh.
 QA_HOOK_INSTALLER="$PATROL_HOOK_INSTALLER"
 QA_PATROL_CRON_INSTALLER="$PATROL_CRON_INSTALLER"
@@ -118,6 +119,7 @@ refresh_clawseat_repo_paths() {
   CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py"
   PATROL_HOOK_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_hook.py"
   PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_cron.py"
+  SEAT_CLEAR_WATCHDOG_INSTALLER="$REPO_ROOT/core/skills/clawseat-install/scripts/install_seat_clear_watchdog.py"
   QA_HOOK_INSTALLER="$PATROL_HOOK_INSTALLER"
   QA_PATROL_CRON_INSTALLER="$PATROL_CRON_INSTALLER"
   export REPO_ROOT CLAWSEAT_ROOT
@@ -345,6 +347,7 @@ main() {
   register_project_registry
   install_clawseat_cli_symlink
   install_primary_patrol_plist
+  install_seat_clear_watchdog
   install_patrol_bootstrap
 
   # v2 split window topology (per RFC-001 §3): one workers window per project +

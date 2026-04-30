@@ -78,6 +78,19 @@ not know the task is ready and the planner-to-memory chain breaks.
 
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status.
+## [COMPACT-REQUESTED] for planner
+
+planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and
+cross-step decisions can be lost. planner SHOULD emit `[COMPACT-REQUESTED]`
+as the final line of a turn when:
+
+- `iter > 5` within a workflow step.
+- Context feels heavy after multiple fan-out/fan-in steps.
+
+QQ watchdog detects the marker and injects `/compact`, preserving the workflow
+summary while removing redundant turn history. Gemini context accumulates
+linearly, so compact keeps planner latency bounded without losing workflow
+state.
 ## Context Management
 
 # Planner Context Policy
