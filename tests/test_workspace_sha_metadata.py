@@ -27,6 +27,7 @@ def _render(tool: str) -> dict[str, str]:
         project_template_context=lambda project: None,
         q=lambda value: value,
         render_authority_lines=lambda engineer: [],
+        render_protocol_reminder_lines=lambda engineer, role: [],
         render_read_first_lines=lambda session, project, engineer: ["## Read First", "", "1. TODO.md"],
         render_harness_runtime_lines=lambda engineer: [],
         render_project_seat_map_lines=lambda *args, **kwargs: [],
