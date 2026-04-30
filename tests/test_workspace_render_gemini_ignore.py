@@ -25,6 +25,7 @@ def _handlers(engineer: SimpleNamespace) -> TemplateHandlers:
         project_template_context=lambda _project: None,
         q=lambda value: value,
         render_authority_lines=lambda _engineer: [],
+        render_protocol_reminder_lines=lambda _engineer, _role: [],
         render_read_first_lines=lambda _session, _project, _engineer: [],
         render_harness_runtime_lines=lambda _engineer: [],
         render_project_seat_map_lines=lambda *args, **kwargs: [],

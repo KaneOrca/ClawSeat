@@ -69,6 +69,17 @@ def _render_geminiignore() -> str:
     )
 
 
+def _insert_after_first_metadata_block(text: str, lines: list[str]) -> str:
+    if not lines:
+        return text
+    insert = "\n".join(lines).rstrip() + "\n\n"
+    marker = "\n\n## "
+    if marker in text:
+        head, tail = text.split(marker, 1)
+        return head.rstrip() + "\n\n" + insert + "## " + tail
+    return text.rstrip() + "\n\n" + insert
+
+
 def _load_role_skill_content(
     repo_root: Path,
     seat_id: str,
@@ -154,6 +165,7 @@ class TemplateHooks:
     project_template_context: Callable[[Any], tuple[dict[str, Any], list[str], list[dict[str, object]]] | None]
     q: Callable[[str], str]
     render_authority_lines: Callable[[Any], list[str]]
+    render_protocol_reminder_lines: Callable[[Any, str], list[str]]
     render_read_first_lines: Callable[[Any, Any, Any], list[str]]
     render_harness_runtime_lines: Callable[[Any], list[str]]
     render_project_seat_map_lines: Callable[..., list[str]]
@@ -299,6 +311,7 @@ class TemplateHandlers:
         role_line = self.hooks.render_role_line(engineer, True)
         if role_line:
             codex_lines.append(role_line)
+        codex_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role)])
         if engineer.role_details:
             codex_lines.extend(["", *self.hooks.render_role_details_lines(engineer)])
         if engineer.aliases:
@@ -342,6 +355,7 @@ class TemplateHandlers:
         role_text_line = self.hooks.render_role_line(engineer, False)
         if role_text_line:
             claude_lines.append(role_text_line)
+        claude_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role)])
         if engineer.role_details:
             claude_lines.extend(["", *self.hooks.render_role_details_lines(engineer)])
         if engineer.aliases:
@@ -372,6 +386,7 @@ class TemplateHandlers:
         ]
         if role_text_line:
             gemini_lines.append(role_text_line)
+        gemini_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role)])
         if engineer.role_details:
             gemini_lines.extend(["", *self.hooks.render_role_details_lines(engineer)])
         if engineer.aliases:
@@ -469,18 +484,21 @@ class TemplateHandlers:
             template_map.setdefault(tool, {})["HEARTBEAT_MANIFEST.toml"] = heartbeat_manifest_text
         rendered = template_map.get(tool, {})
         if session.engineer_id == "memory":
+            memory_reminder_lines = self.hooks.render_protocol_reminder_lines(engineer, engineer.role)
             claude_memory = self._render_workspace_memory_template(
                 "claude",
                 session=session,
                 project=project,
                 profile_display=profile_display,
             )
+            claude_memory = _insert_after_first_metadata_block(claude_memory, memory_reminder_lines)
             gemini_memory = self._render_workspace_memory_template(
                 "gemini",
                 session=session,
                 project=project,
                 profile_display=profile_display,
             )
+            gemini_memory = _insert_after_first_metadata_block(gemini_memory, memory_reminder_lines)
             role_skill = "\n".join(
                 _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None)
             )

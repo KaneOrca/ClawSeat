@@ -99,6 +99,37 @@ def render_authority_lines(engineer: Any) -> list[str]:
     return lines
 
 
+def render_protocol_reminder_lines(engineer: Any, role: str) -> list[str]:
+    lines = ["## ⚠ Protocol Reminder (每轮先读)", ""]
+    normalized = (role or getattr(engineer, "role", "") or "").strip()
+    if normalized in {"project-memory", "memory-oracle"}:
+        lines.extend([
+            "1. **Dispatch**: `agent_admin task create` -> workflow.md -> `dispatch_task.py` -> send-and-verify",
+            "2. **Verify Ack**: every dispatch -> 4-step check (handoffs .consumed / pane / DELIVERY / git fetch)",
+            "3. **Chain end**: accept planner relay -> write KB summary (experience retention)",
+            "4. **Privacy**: network queries -> clawseat-privacy check first; no PII/secret/token in KB",
+            "5. **Don't**: dispatch specialist directly (use planner); no code / config / seat lifecycle",
+        ])
+    elif normalized in {"planner", "planner-dispatcher", "creative-planner"}:
+        lines.extend([
+            "1. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",
+            "2. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
+            "3. **Post-DELIVERY relay memory**: same turn -> read DELIVERY -> verdict -> planner/DELIVERY.md -> send-and-verify memory",
+            "4. **Fan-out**: 2+ disjoint sub-goals -> workflow.md mode: parallel_subagents",
+            "5. **Compact not Clear**: emit [COMPACT-REQUESTED] to preserve workflow.md state",
+        ])
+    else:
+        lines.extend([
+            "1. **Closeout MANDATORY two-step**: complete_handoff.py (.consumed receipt) + send-and-verify.sh (wakeup) — NOT optional",
+            "2. **Fan-out trigger**: 2+ disjoint sub-goals (files / tests / research lanes) -> MUST fan-out",
+            "3. **DELIVERY.md**: include task_id / source / reply_to / files list / Tests / Verdict",
+            "4. **Failure escalate**: complete_handoff --status blocked --target planner; do NOT silent retry",
+            "5. **Don't**: dispatch other specialists; touch seat lifecycle / config / secrets",
+        ])
+    lines.append("")
+    return lines
+
+
 def _resolve_tasks_root(project: Any) -> str:
     """Resolve the actual tasks root for a project.
 
