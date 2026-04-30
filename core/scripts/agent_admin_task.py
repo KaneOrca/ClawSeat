@@ -13,6 +13,11 @@ ALLOWED_TRANSITIONS = {
     "pending": {"in_progress"},
     "in_progress": {"done", "blocked"},
 }
+DISPATCH_LOG_HEADER = "## dispatch log (append-only, last 20)"
+DISPATCH_LOG_COMMENT = (
+    "<!-- dispatch_task.py / complete_handoff.py append entries here. "
+    "Do not delete this section. -->"
+)
 
 
 @dataclass
@@ -60,6 +65,25 @@ def _workflow_template(task_id: str, template: str) -> str:
     )
 
 
+def _status_template(task_id: str) -> str:
+    return (
+        f"# Status: {task_id}\n\n"
+        "status: pending\n\n"
+        f"{DISPATCH_LOG_HEADER}\n\n"
+        f"{DISPATCH_LOG_COMMENT}\n"
+    )
+
+
+def _ensure_status_dispatch_log_section(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    if DISPATCH_LOG_HEADER in text:
+        return
+    path.write_text(
+        text.rstrip() + f"\n\n{DISPATCH_LOG_HEADER}\n\n{DISPATCH_LOG_COMMENT}\n",
+        encoding="utf-8",
+    )
+
+
 def create_task(args: Any) -> int:
     task_id = str(args.task_id)
     project = str(args.project)
@@ -72,7 +96,9 @@ def create_task(args: Any) -> int:
     if not workflow.exists():
         workflow.write_text(_workflow_template(task_id, str(getattr(args, "workflow_template", "") or "")), encoding="utf-8")
     if not status.exists():
-        status.write_text(f"# Status: {task_id}\n\nstatus: pending\n", encoding="utf-8")
+        status.write_text(_status_template(task_id), encoding="utf-8")
+    else:
+        _ensure_status_dispatch_log_section(status)
     print(root)
     return 0
 
