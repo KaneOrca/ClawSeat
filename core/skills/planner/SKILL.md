@@ -111,8 +111,14 @@ or `complete_handoff.py`, planner MUST within the same turn:
    `source: planner`, `target: memory`, `status`, `verdict`, commit hash,
    branch, sweep count, and a one-line summary extracted from builder DELIVERY.
 4. Send-and-verify memory in the same turn:
-   `send-and-verify.sh --project <p> memory "[<task_id>] ready-for-merge - verdict PASS - branch <b> commit <h> sweep <N>"`.
+   `send-and-verify.sh --project <p> memory "[<task_id>] ready-for-merge - verdict PASS - branch <b> commit <h> sweep <N> - compaction_hint=<yes|no>(<reason>)"`.
    When blocked: `"[<task_id>] BLOCKED - <reason> - see planner/DELIVERY.md"`.
+
+   Include in `~/.agents/tasks/<project>/planner/DELIVERY.md`:
+   - `compaction_hint: <yes|no>`
+   - `compaction_reason: <reason>`
+   - For `yes`: `"已处理 N 步,context 估计 >70%"` or `"本 task 含大量 file read / sweep output"`.
+   - For `no`: `"单步小改,context 占用低"`.
 
 Why: if planner forms a verdict but idles waiting for user input, memory does
 not know the task is ready and the planner-to-memory chain breaks.
