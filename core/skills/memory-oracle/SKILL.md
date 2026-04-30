@@ -113,6 +113,15 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
+## Planner Context 主动压缩
+
+When planner relay reports `compaction_hint=yes`, memory MUST proactively compact planner context：
+
+1. Verify planner is idle (`tmux capture-pane -t $(agentctl session-name planner --project <p>) -p` 不应出现 working/thinking 输出)。
+2. `send-and-verify.sh --project <p> planner "/compact"`。
+3. Wait 3 秒后确认 planner 会话仍存活。
+4. 记录到 `~/.agents/tasks/<project>/STATUS.md`：`[compacted planner @ <ts>]`。
+
 ## Canonical Workflow Entry (memory dispatch 必走步)
 
 Before notifying planner of a new task, memory MUST create canonical workflow
