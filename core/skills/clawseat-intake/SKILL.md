@@ -1,14 +1,12 @@
 ---
-name: socratic-requirements
+name: clawseat-intake
 description: >
-  Koder（Feishu 新手通道）与 Memory（tmux 熟手通道）共享的 intake
-  clarification skill。在读代码或提方案之前，先判定用户意图类型，再用对应方法论
-  完成需求澄清。
-  两条路径：
-  - 创作类（视频/图片/音频/文案/设计）→ capability-catalog 匹配 + 收敛式选项提问
-  - 工程/产品类（功能/架构/重构/想法/brainstorm）→ 诊断式深度提问 + 前提挑战 + 方案对比
-  触发条件不变：模糊意图、多种解读、跨层影响、用户要求"先想清楚"时立即激活。
-  工程类任务如果用户说"我有个想法""brainstorm""值不值得做"，则激活 gstack-office-hours。
+  ClawSeat memory seat's intake clarification skill for tmux operator sessions.
+  Use when an operator request is ambiguous, has multiple interpretations, spans
+  multiple layers, or carries high cost or irreversible consequences. Ask one
+  Socratic question per turn with 2-4 concrete options before executing. Also use
+  when creative type, engineering scope, or required resources are unclear. Do NOT
+  use for clear direct commands, quick diagnostics, or when the operator says "just do it".
 ---
 
 # Socratic Requirements

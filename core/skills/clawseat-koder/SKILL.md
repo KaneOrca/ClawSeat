@@ -18,7 +18,7 @@ spec_documents:
   - docs/rfc/RFC-002-architecture-v2.1.md
 related_skills:
   - clawseat-decision-escalation
-  - socratic-requirements
+  - clawseat-intake
   - clawseat-privacy
 ---
 

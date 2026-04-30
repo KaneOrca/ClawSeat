@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SCRIPT = _REPO / "core" / "skills" / "socratic-requirements" / "scripts" / "reporting.py"
+_SCRIPT = _REPO / "core" / "skills" / "clawseat-intake" / "scripts" / "reporting.py"
 
 
 def _load_reporting():

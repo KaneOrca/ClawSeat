@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-SKILL = Path("core/skills/socratic-requirements/SKILL.md")
+SKILL = Path("core/skills/clawseat-intake/SKILL.md")
 
 
 def test_socratic_skill_documents_memory_notification_protocol() -> None:

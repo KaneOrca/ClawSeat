@@ -137,7 +137,7 @@ def test_profile_dynamic_template_excludes_koder_bootstrap() -> None:
 
 
 def test_socratic_references_split_to_memory_report_mode() -> None:
-    socratic_refs = {path.name for path in (REPO / "core" / "skills" / "socratic-requirements" / "references").iterdir()}
+    socratic_refs = {path.name for path in (REPO / "core" / "skills" / "clawseat-intake" / "references").iterdir()}
     report_refs = {path.name for path in (REPO / "core" / "skills" / "memory-report-mode" / "references").iterdir()}
     assert {"shared-tone.md", "glossary-global.toml", "i18n.md", "capability-catalog.yaml"} <= socratic_refs
     assert {"drift-signals.md", "report-mode.md", "tui-card-format.md", "north-star-schema.toml"} <= report_refs
@@ -145,7 +145,7 @@ def test_socratic_references_split_to_memory_report_mode() -> None:
 
 def test_memory_oracle_declares_dual_skill_loading() -> None:
     text = (REPO / "core" / "skills" / "memory-oracle" / "SKILL.md").read_text(encoding="utf-8")
-    assert "socratic-requirements" in text
+    assert "clawseat-intake" in text
     assert "memory-report-mode" in text
     assert "decision_payload.py send" in text
 

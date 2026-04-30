@@ -97,7 +97,7 @@ install_skill_tier_for_home() {
   fi
 
   local -a core_skills=(clawseat-memory clawseat-decision-escalation)
-  local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting socratic-requirements)
+  local -a extended_skills=(clawseat-koder clawseat-privacy clawseat-memory-reporting clawseat-intake)
   local -a selected_skills=("${core_skills[@]}")
 
   if [[ "$tool" == "claude" || "$LOAD_ALL_SKILLS" == "1" ]]; then
@@ -153,7 +153,7 @@ install_skills_by_tier() {
   install_skill_tier_for_home codex "$HOME/.codex/skills"
   if [[ -d "$HOME/.openclaw" ]]; then
     install_skill_tier_for_home openclaw "$HOME/.openclaw/skills" \
-      "socratic-requirements" "clawseat-koder"
+      "clawseat-intake" "clawseat-koder"
   fi
 }
 

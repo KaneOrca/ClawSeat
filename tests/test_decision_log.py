@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SCRIPT = _REPO / "core" / "skills" / "socratic-requirements" / "scripts" / "decision-log.py"
+_SCRIPT = _REPO / "core" / "skills" / "clawseat-intake" / "scripts" / "decision-log.py"
 
 
 def _load_decision_log():

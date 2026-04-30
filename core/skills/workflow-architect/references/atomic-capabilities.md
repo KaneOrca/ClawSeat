@@ -9,7 +9,7 @@ Role: 通用技术执行与前台协调
 Capabilities:
 - 执行代码、配置修改、修 bug、重构
 - 读/写文件、调用 API、运行测试
-- 接收 socratic-requirements 的 brief，向下游 dispatch
+- 接收 clawseat-intake 的 brief，向下游 dispatch
 - 作为 OpenClaw 前台接受用户输入、转达结果
 
 ## planner
@@ -94,8 +94,8 @@ Capabilities:
 - 动画 HTML / PPTX 演示文稿生成
 - 支持路演、教学、内部汇报场景
 
-## socratic-requirements (via koder)
-Skill: socratic-requirements
+## clawseat-intake (via koder)
+Skill: clawseat-intake
 Capabilities:
 - 与用户 Socratic 式问答澄清需求
 - 输出 summary_contract（结构化需求 brief）

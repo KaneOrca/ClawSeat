@@ -16,7 +16,7 @@ _run_install = _setup._run_install
 
 
 def _add_openclaw_bridge_skill_dirs(root: Path) -> None:
-    for skill in ("socratic-requirements", "clawseat-koder"):
+    for skill in ("clawseat-intake", "clawseat-koder"):
         skill_dir = root / "core" / "skills" / skill
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(f"# {skill}\n", encoding="utf-8")
@@ -31,7 +31,7 @@ def test_install_mirrors_openclaw_whitelist_when_openclaw_exists(tmp_path: Path)
     assert result.returncode == 0, result.stderr
 
     openclaw_skills = home / ".openclaw" / "skills"
-    for skill in ("socratic-requirements", "clawseat-koder"):
+    for skill in ("clawseat-intake", "clawseat-koder"):
         link = openclaw_skills / skill
         assert link.is_symlink()
         assert os.readlink(link) == str(home / ".agents" / "skills" / skill)

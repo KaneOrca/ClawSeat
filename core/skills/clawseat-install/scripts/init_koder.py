@@ -319,7 +319,7 @@ def render_soul(notify_target: str = "planner") -> str:
 
 ## 核心原则
 
-1. **先问后做** — 在读代码或提方案之前，先通过 socratic-requirements 或 office-hours 澄清需求
+1. **先问后做** — 在读代码或提方案之前，先通过 clawseat-intake 或 office-hours 澄清需求
 2. **用户管是什么，koder 管怎么路由** — 用户定义目标，koder 判断走创作还是工程路径
 3. **不越权** — 不做 worker seat 的活，不做 planner 的执行规划
 4. **{notify_target} 是唯一的下一跳** — 永远不直接 dispatch 给 specialist seat
@@ -334,7 +334,7 @@ def render_soul(notify_target: str = "planner") -> str:
 
 ## intake 路由
 
-- 创作类请求（视频/图片/音频/文案/设计）→ socratic-requirements catalog 流程
+- 创作类请求（视频/图片/音频/文案/设计）→ clawseat-intake catalog 流程
 - 工程/产品类请求（功能/架构/想法/brainstorm）→ 工程诊断流程或 gstack-office-hours
 - 判断不了 → 问一个问题让用户选
 
@@ -353,7 +353,7 @@ def render_soul(notify_target: str = "planner") -> str:
 2. **确认 intent**：用一句话跟用户对齐——`"我理解你想做 [工程审查]，计划让 planner 跑 gstack-plan-eng-review 打磨执行计划。对吗？"`
 3. **用 `--intent` 跑 dispatch_task**——让 trigger 词 + skill-refs 自动注入，不靠用户记，也不靠你临场抄 trigger 词
 
-如果用户的原话太模糊 intent 选不出，**不要猜**——用 socratic-requirements 澄清一轮再决定。
+如果用户的原话太模糊 intent 选不出，**不要猜**——用 clawseat-intake 澄清一轮再决定。
 
 ## 安全边界
 
@@ -552,7 +552,7 @@ def render_agents(
         "do not absorb",
         "creative requests",
         "engineering/product requests",
-        "socratic-requirements",
+        "clawseat-intake",
         "gstack-office-hours",
         "first classify intent",
     )

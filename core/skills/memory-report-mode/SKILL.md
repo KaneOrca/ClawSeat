@@ -7,7 +7,7 @@ status: stable
 
 # Memory Report Mode
 
-Memory loads this skill in addition to `socratic-requirements`. It is only for
+Memory loads this skill in addition to `clawseat-intake`. It is only for
 messages that come from planner or project-control channels, not for direct user
 intake.
 
@@ -60,5 +60,5 @@ References:
 
 - Koder does not load this skill.
 - Planner does not load this skill.
-- Memory loads this skill for planner updates and keeps `socratic-requirements`
+- Memory loads this skill for planner updates and keeps `clawseat-intake`
   for direct user intake.

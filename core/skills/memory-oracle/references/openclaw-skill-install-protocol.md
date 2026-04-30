@@ -7,7 +7,7 @@ OpenClaw-facing ClawSeat skills automatically.
 
 ## Mirror Whitelist
 
-- `socratic-requirements`
+- `clawseat-intake`
 - `clawseat-koder`
 
 Other ClawSeat skills are not mirrored into OpenClaw. OpenClaw agents should
@@ -19,14 +19,14 @@ use progressive disclosure and load only the bridge skills they need.
 
 ```bash
 install_skill_tier_for_home openclaw "$HOME/.openclaw/skills" \
-  "socratic-requirements" "clawseat-koder"
+  "clawseat-intake" "clawseat-koder"
 ```
 
 The link target remains the ClawSeat SSOT under `~/.agents/skills/`; OpenClaw
 gets symlinks such as:
 
 ```text
-~/.openclaw/skills/socratic-requirements -> ~/.agents/skills/socratic-requirements
+~/.openclaw/skills/clawseat-intake -> ~/.agents/skills/clawseat-intake
 ```
 
 ## Per-Agent Activation
@@ -40,7 +40,7 @@ If OpenClaw is installed after ClawSeat, the operator may run reinstall or
 manually backfill:
 
 ```bash
-ln -sfn "$HOME/.agents/skills/socratic-requirements" "$HOME/.openclaw/skills/socratic-requirements"
+ln -sfn "$HOME/.agents/skills/clawseat-intake" "$HOME/.openclaw/skills/clawseat-intake"
 ln -sfn "$HOME/.agents/skills/clawseat-koder" "$HOME/.openclaw/skills/clawseat-koder"
 ```
 
