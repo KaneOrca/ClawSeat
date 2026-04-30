@@ -8,8 +8,8 @@
 #   shared provider file.
 # - ~/.agents/secrets/claude/<provider>/<seat>.env is the agent-admin
 #   seat-specific file written into session.toml.
-# Template-driven seeding must preserve real tokens in both locations when an
-# operator's scan/template only provides a placeholder such as minimax-token.
+# Template-driven seeding should preserve real tokens in both locations when the
+# incoming template or installer-provided token is only a placeholder.
 _CLAWSEAT_INSTALL_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 seat_secret_file_for() {
@@ -110,21 +110,33 @@ write_bootstrap_secret_file() {
   chmod 600 "$path" || die 31 PROJECT_SECRET_CHMOD_FAILED "unable to chmod $path"
 }
 
-_secret_file_has_real_token() {
+_secret_file_auth_token() {
   local path="$1"
   [[ -f "$path" ]] || return 1
-  grep -Eq 'sk-[A-Za-z0-9_-]{20,}' "$path"
+  local token
+  token="$(grep -m1 -E '^(export )?ANTHROPIC_AUTH_TOKEN=' "$path" | sed 's/.*ANTHROPIC_AUTH_TOKEN=//')" || return 1
+  [[ -n "$token" ]] || return 1
+  printf '%s\n' "$token"
+}
+
+_secret_value_is_placeholder_token() {
+  local value="${1:-}"
+  printf '%s\n' "$value" | grep -Eiq '(?:^|[[:space:]])+(<set-by-operator>|YOUR_TOKEN_HERE|minimax-token|deepseek-token|dry-run-placeholder|placeholder|dummy|example)(?:$|[[:space:]])'
+}
+
+_secret_file_has_real_token() {
+  local path="$1"
+  local token
+  token="$(_secret_file_auth_token "$path")" || return 1
+  [[ -n "$token" ]] || return 1
+  ! _secret_value_is_placeholder_token "$token"
 }
 
 _secret_file_has_placeholder_token() {
   local path="$1"
-  [[ -f "$path" ]] || return 1
-  grep -Eiq '(<set-by-operator>|minimax-token|placeholder|dummy|example)' "$path"
-}
-
-_secret_value_is_placeholder_token() {
-  local value="$1"
-  printf '%s\n' "$value" | grep -Eiq '(<set-by-operator>|minimax-token|dry-run-placeholder|placeholder|dummy|example)'
+  local token
+  token="$(_secret_file_auth_token "$path")" || return 1
+  _secret_value_is_placeholder_token "$token"
 }
 
 _write_runtime_secret_env() {
