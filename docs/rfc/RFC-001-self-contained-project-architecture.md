@@ -101,7 +101,15 @@ Key insight: **Use each LLM for its strength**. Claude reads/judges. Codex write
        └──────────────────┴─────────────────────┘
 ```
 
-### 3.1 通用栅格公式（max 2 rows，cols expand）
+### 3.1 workers 右侧填充策略
+
+当前 install 模板通过 `window_layout.workers_grid.right_fill_order` 选择右侧
+worker pane 的填充方式：
+
+- `col-major`（默认）：planner/main 左 50%，右侧单列从上到下填充。
+- `grid-2-rows`：历史 max-2-rows 栅格，保留给显式 opt-in 的 legacy layout。
+
+### 3.1.1 legacy grid-2-rows 公式（max 2 rows，cols expand）
 
 ```python
 def grid_for_n(n: int) -> tuple[int, int]:
