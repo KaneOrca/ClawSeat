@@ -59,6 +59,32 @@ On failure (command error or `iter > max_iterations`):
 - Do NOT retry silently.
 - Notify `notify_on_blocked` roles.
 - Record stderr, command output, and other evidence under `artifacts/`.
+## Strict Fan-in: verify specialist .consumed receipts (mandatory)
+
+Before forming a verdict on a multi-specialist workflow, planner MUST verify
+every specialist OO closeout two-step actually completed:
+
+```bash
+for seat in $(seats_in_workflow); do
+  receipt="$HOME/.agents/tasks/<project>/patrol/handoffs/<task_id>__${seat}__planner.json.consumed"
+  [[ -f "$receipt" ]] || verdict=BLOCKED reason="${seat} missing .consumed receipt - OO step 1 (complete_handoff.py) not run"
+done
+```
+
+If any `.consumed` file is missing, step verdict is `BLOCKED`; relay the
+BLOCKED reason to memory before any retry or re-dispatch.
+
+Exceptions:
+- planner self-loop steps where planner did not dispatch itself.
+- steps with explicit `test_policy=N/A` and no handoff JSON created.
+
+Inline DELIVERY.md read does NOT substitute for `.consumed`. A specialist
+writing DELIVERY.md without `complete_handoff.py` violates OO rule and must be
+caught here, not silently accepted.
+
+Why: koder rehearsal 2026-04-30 showed designer wrote DELIVERY but skipped
+`complete_handoff.py`; strict fan-in prevents planner from reporting false
+consumption.
 ## Post-DELIVERY Relay to Memory
 
 Upon receiving a builder/specialist DELIVERY notification via `send-and-verify`
