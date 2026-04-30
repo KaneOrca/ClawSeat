@@ -60,7 +60,7 @@ steps:
   - step_index: 1
     name: 选题与脚本撰写
     executor: koder
-    skill: socratic-requirements → script-writing-expert
+    skill: clawseat-intake → script-writing-expert
     inputs:
       - topic: 用户输入
     outputs:
@@ -120,7 +120,7 @@ steps:
   - step_index: 1
     name: 需求澄清
     executor: koder
-    skill: socratic-requirements
+    skill: clawseat-intake
     inputs:
       - user_request: 用户输入
     outputs:

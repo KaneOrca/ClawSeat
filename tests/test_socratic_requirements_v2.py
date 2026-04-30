@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_SKILL = _REPO / "core" / "skills" / "socratic-requirements" / "SKILL.md"
+_SKILL = _REPO / "core" / "skills" / "clawseat-intake" / "SKILL.md"
 _REFS = _SKILL.parent / "references"
 _REPORT_SKILL = _REPO / "core" / "skills" / "memory-report-mode" / "SKILL.md"
 _REPORT_REFS = _REPORT_SKILL.parent / "references"

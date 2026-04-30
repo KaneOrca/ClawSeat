@@ -3,7 +3,7 @@ name: workflow-architect
 description: >
   Planner 专属 skill。接收 koder 传来的结构化用户需求 brief，将用户的真实操作步骤
   映射到系统原子能力（seats / tools / skills），设计出可执行的工作流规格（workflow spec），
-  并将其沉淀为可复用模板。不做用户访谈（访谈由 koder 的 socratic-requirements 完成），
+  并将其沉淀为可复用模板。不做用户访谈（访谈由 koder 的 clawseat-intake 完成），
   不负责工具参数填充（参数由 designer 席位负责），只负责工作流「骨架设计」和「dispatch」。
 planner-exclusive: true
 ---
@@ -13,14 +13,14 @@ planner-exclusive: true
 ## 职责边界
 
 **做：**
-- 读取 koder 传来的结构化 brief（来自 socratic-requirements 的 `summary_contract`）
+- 读取 koder 传来的结构化 brief（来自 clawseat-intake 的 `summary_contract`）
 - 将每个用户步骤映射到系统原子能力（seat / skill / tool）
 - 输出符合 schema 的 workflow spec YAML
 - 将 spec 沉淀为可复用模板（`reuse_goal: template` 时）
 - 按 spec 中每个 step 的 executor 通过 gstack-harness dispatch_task.py 向下游派发
 
 **不做：**
-- 用户访谈（由 koder 的 `socratic-requirements` 完成）
+- 用户访谈（由 koder 的 `clawseat-intake` 完成）
 - 工具参数填充（由 `designer` 席位负责）
 - 实际执行任务（只负责骨架设计与 dispatch）
 
@@ -46,7 +46,7 @@ planner-exclusive: true
 | `reuse_goal` | `one-time`（单次执行）或 `template`（沉淀模板） |
 | 约束条件 | 平台、时长、输出格式等限制 |
 
-brief 格式来自 `socratic-requirements` 的 `summary_contract`。
+brief 格式来自 `clawseat-intake` 的 `summary_contract`。
 
 ### Phase 2 — 映射原子能力
 

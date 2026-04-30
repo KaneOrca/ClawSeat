@@ -51,7 +51,7 @@ Memory 被动读取的知识来自各席位 domain KB：
 ## KB 触发点 (v0.8)
 
 Memory dispatches a task via `dispatch_task.py` 时，SHOULD 调用
-`socratic-requirements/scripts/decision-log.py append` 记录派工决策到
+`clawseat-intake/scripts/decision-log.py append` 记录派工决策到
 当前 project 的 `~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
 Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Memory 的职责。
 
@@ -218,11 +218,15 @@ python3 ~/ClawSeat/core/scripts/agent_admin.py project create <name> <repo-root>
 
 Memory loads two companion skills:
 
-- `socratic-requirements`: direct user intake clarification for tmux users.
+ - `clawseat-intake`: **intake clarification, 遇歧义必先触发**。
+  - 触发条件:用户需求模糊 / 多种解读 / 跨层影响 / 代价高或不可逆 / 用户说"帮我想想"时 → **必须用此 skill 先问清,不得假设执行**
+  - 适用通道:tmux CLI + Feishu/Koder overlay 两路均适用
+  - 禁止模式:直接猜测执行 = SKILL violation(memory 越界)
+  - 用法:列 2-4 个选项,每轮一问;用户说"直接做"才停止询问
 - `memory-report-mode`: planner update sender routing, AUTO report mode, and
   goal-drift recall.
 
-Koder loads `socratic-requirements` but not `memory-report-mode`; planner does
+Koder loads `clawseat-intake` but not `memory-report-mode`; planner does
 not load either for high-context operator work.
 
 ## Decision Payload Output
