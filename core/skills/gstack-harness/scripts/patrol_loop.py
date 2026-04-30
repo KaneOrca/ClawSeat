@@ -121,6 +121,26 @@ def _append_rewake_log(log_path: Path, *, project: str, handoff: dict[str, Any],
         handle.write(line + "\n")
 
 
+def _is_codex_busy(target: str) -> bool:
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-t", target, "-p"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+
+    lines = result.stdout.splitlines()
+    tail = "\n".join(lines[-3:])
+    return (
+        "Working" in tail
+        or "Thinking" in tail
+        or "• " in tail
+        or "background terminal running" in tail
+    )
+
+
 def re_wake_stale_handoffs(project: str, threshold_hours: int = 2) -> int:
     stale = detect_stale_handoffs(project, threshold_hours=threshold_hours)
     if not stale:
@@ -140,9 +160,11 @@ def re_wake_stale_handoffs(project: str, threshold_hours: int = 2) -> int:
         target = str(handoff.get("target") or "")
         if not target or target == "<unknown>":
             continue
+        if _is_codex_busy(target):
+            continue
         msg = (
-            f"[stale-handoff-rewake] {handoff['task_id']} dispatched "
-            f"{handoff['age_hours']}h ago, no response — please pick up"
+            f"[TASK-QUEUE] 你有未处理的 handoff: {handoff['task_id']}(已 {handoff['age_hours']}h)。\n"
+            "请读 TODO.md 头部处理。"
         )
         subprocess.run(
             ["bash", str(send_script), "--project", project, target, msg],
