@@ -11,6 +11,7 @@ _SPECIALIST_SKILLS = [
     "creative-designer",
     "creative-planner",
     "designer",
+    "patrol",
     "reviewer",
 ]
 
