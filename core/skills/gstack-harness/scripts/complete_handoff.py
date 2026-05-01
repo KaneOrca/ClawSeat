@@ -33,6 +33,7 @@ from _common import (
     require_success,
     resolve_notify,
     send_feishu_user_message,
+    sanitize_name,
     stable_dispatch_nonce,
     utc_now_iso,
     write_delivery,
@@ -320,11 +321,36 @@ def build_frontstage_objective(
     return "\n".join(lines)
 
 
+def _infer_target_from_dispatch_handoff(
+    profile: object,
+    *,
+    task_id: str,
+    source: str,
+) -> str:
+    safe_task = sanitize_name(task_id)
+    safe_source = sanitize_name(source)
+    handoff_dir = Path(getattr(profile, "handoff_dir"))
+    pattern = f"{safe_task}__*__{safe_source}.json"
+    candidates: list[Path] = []
+    for path in handoff_dir.glob(pattern):
+        if path.is_file():
+            candidates.append(path)
+    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates:
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        reply_to = payload.get("reply_to")
+        if isinstance(reply_to, str) and reply_to.strip():
+            return reply_to.strip()
+    raise SystemExit("--target required: could not infer from dispatch handoff")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Complete or consume a harness handoff.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
     parser.add_argument("--source", required=True, help="Source seat for the completion or ACK.")
-    parser.add_argument("--target", default="planner", help="Target seat.")
+    parser.add_argument("--target", help="Target seat.")
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", help="Delivery title.")
     parser.add_argument("--summary", help="Delivery summary text.")
@@ -382,6 +408,12 @@ def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
     profile = load_profile(args.profile)
+    if args.target is None:
+        args.target = _infer_target_from_dispatch_handoff(
+            profile,
+            task_id=args.task_id,
+            source=args.source,
+        )
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     receipt = load_json(receipt_path) or {
@@ -450,9 +482,11 @@ def main() -> int:
     if args.frontstage_disposition and args.frontstage_disposition not in VALID_FRONTSTAGE_DISPOSITIONS:
         raise SystemExit("invalid --frontstage-disposition; use AUTO_ADVANCE or USER_DECISION_NEEDED")
 
+    frontstage_target_name = str(profile.heartbeat_owner).strip() or "koder"
+    frontstage_targeted = args.target in {frontstage_target_name, "koder"}
     planner_to_frontstage = (
         args.source == profile.active_loop_owner
-        and args.target == profile.heartbeat_owner
+        and frontstage_targeted
     )
     # Guard (followup #22): only planner can close out to the frontstage
     # supervisor (koder). Non-planner specialists that target koder fall
@@ -461,12 +495,12 @@ def main() -> int:
     # OC_DELEGATION_REPORT_V1 path is skipped (that path is gated on
     # source=planner). The receipt lands on disk but the user never hears
     # about it. Force such specialists back through planner.
-    if args.target == profile.heartbeat_owner and not planner_to_frontstage:
+    if frontstage_targeted and not planner_to_frontstage:
         raise SystemExit(
-            f"complete_handoff to {profile.heartbeat_owner!r} requires "
+            f"complete_handoff to {frontstage_target_name!r} requires "
             f"source={profile.active_loop_owner!r} (got source={args.source!r}). "
             f"Non-planner specialists must close back to planner; planner "
-            f"aggregates and forwards to {profile.heartbeat_owner!r} via Feishu "
+            f"aggregates and forwards to {frontstage_target_name!r} via Feishu "
             f"OC_DELEGATION_REPORT_V1. This enforces canonical chain §6 "
             f"closeout path."
         )

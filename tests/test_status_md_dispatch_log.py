@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import os
 import subprocess
 import sys
@@ -224,3 +225,28 @@ def test_atomic_write(tmp_path: Path, monkeypatch) -> None:
     assert ok is True
     assert calls == [(status.with_name("STATUS.md.tmp"), status)]
     assert "planner dispatched atomic-task to builder" in status.read_text(encoding="utf-8")
+
+
+def test_append_uses_flock_lockfile(tmp_path: Path, monkeypatch) -> None:
+    status = tmp_path / "STATUS.md"
+    status.write_text(_status_doc(), encoding="utf-8")
+    calls: list[int] = []
+    real_flock = _task_io.fcntl.flock
+
+    def fake_flock(fd: int, operation: int) -> None:
+        calls.append(operation)
+        real_flock(fd, operation)
+
+    monkeypatch.setattr(_task_io.fcntl, "flock", fake_flock)
+
+    ok = _task_io.append_status_dispatch_event(
+        status,
+        source="planner",
+        task_id="locked-task",
+        target="builder",
+        timestamp="2026-04-26T05:00:00+08:00",
+    )
+
+    assert ok is True
+    assert calls == [fcntl.LOCK_EX, fcntl.LOCK_UN]
+    assert status.with_name("STATUS.md.lock").exists()

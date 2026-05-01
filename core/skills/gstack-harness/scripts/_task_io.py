@@ -1,6 +1,8 @@
 """Task dispatch/completion file operations — extracted from _common.py."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+import fcntl
 import os
 import re
 import sys
@@ -122,6 +124,24 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def _dispatch_log_lock_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.lock")
+
+
+@contextmanager
+def _dispatch_log_lock(path: Path):
+    # Lock a sibling file instead of STATUS.md itself so the critical section
+    # stays valid across the atomic os.replace() write path.
+    lock_path = _dispatch_log_lock_path(path)
+    ensure_parent(lock_path)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def _dispatch_log_bounds(lines: list[str]) -> tuple[int, int]:
     header_idx = next(
         (idx for idx, line in enumerate(lines) if line.strip() == DISPATCH_LOG_HEADER),
@@ -146,21 +166,22 @@ def append_status_dispatch_log(path: Path, line: str) -> bool:
     returns False so the dispatch channel cannot be broken by STATUS.md drift.
     """
     try:
-        text = read_text(path)
-        lines = text.splitlines()
-        start, end = _dispatch_log_bounds(lines)
-        entries = [
-            item
-            for item in lines[start:end]
-            if item.strip() and item.strip() != "(none)"
-        ]
-        entries.append(line)
-        entries = entries[-DISPATCH_LOG_LIMIT:]
+        with _dispatch_log_lock(path):
+            text = read_text(path)
+            lines = text.splitlines()
+            start, end = _dispatch_log_bounds(lines)
+            entries = [
+                item
+                for item in lines[start:end]
+                if item.strip() and item.strip() != "(none)"
+            ]
+            entries.append(line)
+            entries = entries[-DISPATCH_LOG_LIMIT:]
 
-        new_lines = lines[:start] + [""] + entries
-        if end < len(lines):
-            new_lines += [""] + lines[end:]
-        _atomic_write_text(path, "\n".join(new_lines))
+            new_lines = lines[:start] + [""] + entries
+            if end < len(lines):
+                new_lines += [""] + lines[end:]
+            _atomic_write_text(path, "\n".join(new_lines))
         return True
     except Exception as exc:  # noqa: BLE001 side effect must never break dispatch
         print(f"warn: STATUS.md dispatch log append skipped: {exc}", file=sys.stderr)
