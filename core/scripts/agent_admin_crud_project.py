@@ -67,6 +67,7 @@ class ProjectCrud:
             engineers=list(engineer_ids),
             monitor_engineers=list(engineer_ids),
             template_name=str(template.get("template_name", template_name)),
+            declared_skills=list(merged.get("declared_skills", [])),
             seat_overrides={seat_id: {} for seat_id in engineer_ids},
             window_mode=getattr(args, "window_mode", None) or str(merged["window_mode"]),
             monitor_max_panes=int(merged["monitor_max_panes"]) or len(engineer_ids),

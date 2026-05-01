@@ -171,6 +171,7 @@ class Project:
     engineers: list[str]
     monitor_engineers: list[str]
     template_name: str = ""
+    declared_skills: list[str] = field(default_factory=list)
     seat_overrides: dict[str, dict[str, object]] | None = None
     window_mode: str = "project-monitor"
     monitor_max_panes: int = 4

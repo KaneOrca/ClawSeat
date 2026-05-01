@@ -19,7 +19,7 @@ def test_install_help_lists_builtin_templates_and_provider_deprecation() -> None
         check=False,
     )
     assert result.returncode == 0
-    assert "clawseat-creative|clawseat-engineering|clawseat-solo" in result.stdout
+    assert "clawseat-creative|clawseat-engineering|clawseat-solo|cartooner-creative" in result.stdout
     assert "--all-api-provider" in result.stdout
     assert "--provider now controls the memory seat only" in result.stdout
 
@@ -40,3 +40,16 @@ def test_solo_option_in_menu() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "clawseat-solo"
+
+
+def test_cartooner_option_in_menu() -> None:
+    """Selecting option 4 in prompt_kind_first_flow maps to cartooner-creative."""
+    script = f"source {REPO / 'scripts/install/lib/project.sh'}; prompt_template_for_choice 4"
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "cartooner-creative"

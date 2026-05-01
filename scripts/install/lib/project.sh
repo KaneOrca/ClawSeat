@@ -24,6 +24,7 @@ prompt_template_for_choice() {
     ""|1) printf '%s\n' "clawseat-creative" ;;
     2) printf '%s\n' "clawseat-engineering" ;;
     3) printf '%s\n' "clawseat-solo" ;;
+    4) printf '%s\n' "cartooner-creative" ;;
     *) return 1 ;;
   esac
 }
@@ -33,6 +34,7 @@ prompt_placeholder_for_template() {
     clawseat-creative)    printf '%s\n' "e.g. cartooner, artistic-tool" ;;
     clawseat-engineering) printf '%s\n' "e.g. coding-project, webapp" ;;
     clawseat-solo)        printf '%s\n' "e.g. minimal-solo, creative-side-project" ;;
+    cartooner-creative)    printf '%s\n' "e.g. carto-project, cartooner-campaign" ;;
     *)                    printf '%s\n' "e.g. myproject, experiment-01" ;;
   esac
 }
@@ -50,16 +52,17 @@ prompt_kind_first_flow() {
   printf '  %s\n' "$(_prompt_i18n_get kind_first_creative '1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]')" >&2
   printf '  %s\n' "$(_prompt_i18n_get kind_first_engineering '2) 工程项目 (6 seat: + reviewer 独立审查)')" >&2
   printf '  %s\n' "$(_prompt_i18n_get kind_first_solo '3) 极简协作 (3 seat: memory + builder + planner-gemini, all OAuth)')" >&2
+  printf '  %s\n' "$(_prompt_i18n_get kind_first_cartooner '4) Cartooner 创作席位 (4 seat: memory+writer+visual+patrol，工具混合)')" >&2
   printf '%s\n' "$(_prompt_i18n_get kind_first_recommend '推荐★：创作项目；理由：覆盖 planner/builder/patrol/designer，最适合首次安装。')" >&2
 
   local _kind=""
   while true; do
-    printf '%s' "$(_prompt_i18n_get kind_first_choice '选择 [1-3, Enter=1]: ')" >&2
+    printf '%s' "$(_prompt_i18n_get kind_first_choice '选择 [1-4, Enter=1]: ')" >&2
     read -r _kind < /dev/tty
     if CLAWSEAT_TEMPLATE_NAME="$(prompt_template_for_choice "$_kind")"; then
       break
     fi
-    printf '%s\n' "$(_prompt_i18n_get kind_first_invalid '请输入 1、2 或 3 (回车 = 1 创作项目)')" >&2
+    printf '%s\n' "$(_prompt_i18n_get kind_first_invalid '请输入 1、2、3 或 4 (回车 = 1 创作项目)')" >&2
   done
 
   local _placeholder
