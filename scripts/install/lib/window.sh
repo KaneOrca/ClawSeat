@@ -349,6 +349,12 @@ PY
 # right_fill_order=grid-2-rows (legacy RFC-001 §3.1): max 2 rows, expand cols
 #   N_workers=4 (main+3):    [[0, True], [1, True], [1, False]]
 #   N_workers=5 (main+4):    [[0, True], [1, True], [1, False], [2, False]]
+#
+# right_fill_order=balanced-2x2: equal 2x2 grid (all 4 panes same size; ignores
+# left_main 50%-width). Required for clawseat-creative 4-worker layouts where
+# col-major collapses right column to <24 rows (TUI breakage threshold).
+#   N_workers=4 (main+3):    [[0, True], [0, False], [1, False]]
+#   Other N_workers:         error (balanced-2x2 only valid for exactly 4 workers)
 
 workers_payload() {
   "$PYTHON_BIN" - "$PROJECT" "$WAIT_FOR_SEAT_SCRIPT" "$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml" "${PENDING_SEATS[@]}" <<'PY'
@@ -386,13 +392,26 @@ fill_order = str(layout.get("right_fill_order", "col-major"))
 def right_recipe(n_right: int, fill_order: str) -> list[list]:
     """Returns split steps relative to pane indices in the COMBINED layout
     (main worker is pane 0; right starts as pane 1 after first vertical split)."""
-    if fill_order not in {"col-major", "grid-2-rows"}:
+    if fill_order not in {"col-major", "grid-2-rows", "balanced-2x2"}:
         raise SystemExit(f"unknown right_fill_order: {fill_order!r}")
     if n_right == 0: return []
     if n_right == 1: return []  # right side is single pane (after the main-vs-right split)
 
     if fill_order == "col-major":
         return [[idx, False] for idx in range(1, n_right)]
+
+    if fill_order == "balanced-2x2":
+        # Equal 2x2 grid for exactly 4 workers (main + 3 right). After the
+        # outer [[0, True]] main-vs-right split: split pane 0 (main) horizontally
+        # → BL pane; split pane 1 (right) horizontally → BR pane. Result:
+        # pane 0=TL (main), pane 1=TR, pane 2=BL, pane 3=BR.
+        if n_right != 3:
+            raise SystemExit(
+                f"balanced-2x2 requires exactly 3 right_seats (4 workers total); "
+                f"got {n_right}. Use col-major or grid-2-rows for "
+                f"{n_right + 1}-worker layouts."
+            )
+        return [[0, False], [1, False]]
 
     # grid-2-rows: legacy max-2-rows formula. Build top row of right, then
     # horizontal splits per col.
@@ -431,9 +450,9 @@ panes = [
     },
 ]
 def right_order(n_right: int, fill_order: str) -> list[int]:
-    if fill_order not in {"col-major", "grid-2-rows"}:
+    if fill_order not in {"col-major", "grid-2-rows", "balanced-2x2"}:
         raise SystemExit(f"unknown right_fill_order: {fill_order!r}")
-    if fill_order == "col-major":
+    if fill_order in ("col-major", "balanced-2x2"):
         return list(range(n_right))
 
     cols = max(1, (n_right + 1) // 2 if n_right >= 3 else 1)
