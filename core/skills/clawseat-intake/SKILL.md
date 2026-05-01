@@ -9,7 +9,7 @@ description: >
   use for clear direct commands, quick diagnostics, or when the operator says "just do it".
 ---
 
-# Socratic Requirements
+# Clawseat-Intake
 
 统一的 intake 路由器：判定意图 → 选方法论 → 澄清 → 输出可执行规格。
 
