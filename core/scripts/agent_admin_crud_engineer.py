@@ -138,12 +138,6 @@ class EngineerCrud:
         self.hooks.ensure_dir(Path(session.runtime_dir))
         if session.secret_file:
             self.hooks.write_env_file(Path(session.secret_file), {}, self.hooks.ensure_dir, self.hooks.write_text)
-        if session.engineer_id not in project.engineers:
-            project.engineers.append(session.engineer_id)
-        if session.monitor and session.engineer_id not in project.monitor_engineers:
-            project.monitor_engineers.append(session.engineer_id)
-        self.hooks.write_project(project)
-
         profile_path = getattr(args, "profile", None)
         if profile_path:
             session_toml = self.hooks.session_path(project.name, engineer_id)

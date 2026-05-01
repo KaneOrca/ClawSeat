@@ -65,6 +65,11 @@ class TestDetectRuntime:
         r = detect_runtime(tmp_path)
         assert r["data"]["python"] is True
 
+    def test_python_source_file_detects_python_without_manifest(self, tmp_path):
+        write(tmp_path, "reference/tool/worker.py", "print('ok')\n")
+        r = detect_runtime(tmp_path)
+        assert r["data"]["python"] is True
+
     def test_package_json_detects_node(self, tmp_path):
         write(tmp_path, "package.json", json.dumps({"name": "app", "version": "1.0.0"}))
         r = detect_runtime(tmp_path)
@@ -170,6 +175,11 @@ class TestDetectTests:
 
     def test_pyproject_with_pytest_detects_pytest(self, tmp_path):
         write(tmp_path, "pyproject.toml", "[tool.pytest.ini_options]\ntestpaths = ['tests']\n")
+        r = detect_tests(tmp_path)
+        assert r["data"]["pytest"] is True
+
+    def test_python_test_source_detects_pytest_without_config(self, tmp_path):
+        write(tmp_path, "test_workspace/foo/tests/test_api.py", "def test_ok(): pass\n")
         r = detect_tests(tmp_path)
         assert r["data"]["pytest"] is True
 

@@ -7,12 +7,18 @@ REINSTALL_ROLLBACK_ARMED=0
 REINSTALL_BACKUP_SUFFIX=""
 REINSTALL_PROJECT_TOML_BACKUP=""
 REINSTALL_PROFILE_BACKUP=""
+REINSTALL_PROJECT_LOCAL_BACKUP=""
+REINSTALL_AGENTS_SECRETS_BACKUP=""
+REINSTALL_AGENT_RUNTIME_SECRETS_BACKUP=""
 REINSTALL_PROJECT_TOML_EXISTED=0
 REINSTALL_PROFILE_EXISTED=0
 REINSTALL_TEMPLATE_CHANGED=0
 REINSTALL_PREVIOUS_TEMPLATE_NAME=""
 REINSTALL_PREVIOUS_MEMORY_TOOL=""
 REINSTALL_PREVIOUS_MEMORY_MODEL=""
+REINSTALL_PROJECT_LOCAL_EXISTED=0
+REINSTALL_AGENTS_SECRETS_EXISTED=0
+REINSTALL_AGENT_RUNTIME_SECRETS_EXISTED=0
 
 _prompt_i18n_get() {
   local key="$1" fallback="${2:-$1}"
@@ -199,11 +205,34 @@ _restore_reinstall_file() {
   fi
 }
 
+_backup_reinstall_dir() {
+  local path="$1" existed_var="$2" backup_var="$3" backup_path=""
+  printf -v "$existed_var" '%s' 0
+  printf -v "$backup_var" '%s' ""
+  [[ -d "$path" ]] || return 0
+  backup_path="${path}.bak.${REINSTALL_BACKUP_SUFFIX}"
+  cp -a "$path" "$backup_path" || die 31 REINSTALL_BACKUP_FAILED "unable to backup $path"
+  printf -v "$existed_var" '%s' 1
+  printf -v "$backup_var" '%s' "$backup_path"
+}
+
+_restore_reinstall_dir() {
+  local path="$1" existed="$2" backup="$3"
+  if [[ "$existed" == "1" && -n "$backup" && -d "$backup" ]]; then
+    rm -rf "$path" || true
+    cp -a "$backup" "$path" || true
+  elif [[ "$existed" == "0" ]]; then
+    rm -rf "$path" || true
+  fi
+}
+
 _rollback_reinstall_project() {
   [[ "$REINSTALL_ROLLBACK_ARMED" == "1" ]] || return 0
   warn "reinstall failed; restoring project backups for $PROJECT"
-  _restore_reinstall_file "$PROJECT_RECORD_PATH" "$REINSTALL_PROJECT_TOML_EXISTED" "$REINSTALL_PROJECT_TOML_BACKUP"
+  _restore_reinstall_file "$HOME/.agents/tasks/$PROJECT/project-local.toml" "$REINSTALL_PROJECT_LOCAL_EXISTED" "$REINSTALL_PROJECT_LOCAL_BACKUP"
   _restore_reinstall_file "$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml" "$REINSTALL_PROFILE_EXISTED" "$REINSTALL_PROFILE_BACKUP"
+  _restore_reinstall_dir "$HOME/.agents/secrets" "$REINSTALL_AGENTS_SECRETS_EXISTED" "$REINSTALL_AGENTS_SECRETS_BACKUP"
+  _restore_reinstall_dir "$HOME/.agent-runtime/secrets" "$REINSTALL_AGENT_RUNTIME_SECRETS_EXISTED" "$REINSTALL_AGENT_RUNTIME_SECRETS_BACKUP"
   REINSTALL_ROLLBACK_ARMED=0
 }
 
@@ -313,8 +342,12 @@ _reinstall_project() {
   fi
 
   REINSTALL_BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S)"
+  local project_local_path="${HOME}/.agents/tasks/${PROJECT}/project-local.toml"
   _backup_reinstall_file "$PROJECT_RECORD_PATH" REINSTALL_PROJECT_TOML_EXISTED REINSTALL_PROJECT_TOML_BACKUP
   _backup_reinstall_file "$profile_path" REINSTALL_PROFILE_EXISTED REINSTALL_PROFILE_BACKUP
+  _backup_reinstall_file "$project_local_path" REINSTALL_PROJECT_LOCAL_EXISTED REINSTALL_PROJECT_LOCAL_BACKUP
+  _backup_reinstall_dir "$HOME/.agents/secrets" REINSTALL_AGENTS_SECRETS_EXISTED REINSTALL_AGENTS_SECRETS_BACKUP
+  _backup_reinstall_dir "$HOME/.agent-runtime/secrets" REINSTALL_AGENT_RUNTIME_SECRETS_EXISTED REINSTALL_AGENT_RUNTIME_SECRETS_BACKUP
   REINSTALL_ROLLBACK_ARMED=1
 
   if [[ "$MEMORY_TOOL_EXPLICIT" != "1" && -n "$REINSTALL_PREVIOUS_MEMORY_TOOL" ]]; then
@@ -656,40 +689,108 @@ raise SystemExit(0 if needs else 1)
 PY
 }
 
+project_template_name_changed() {
+  local expected_template="$1"
+  [[ -f "$PROJECT_RECORD_PATH" ]] || return 1
+  local current_template
+  current_template="$($PYTHON_BIN - "$PROJECT_RECORD_PATH" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+path = sys.argv[1]
+with open(path, "rb") as f:
+    data = tomllib.loads(f.read().decode("utf-8") if hasattr(f, "read") else "")
+print(str(data.get("template_name") or ""), end="")
+PY
+  )"
+  [[ "$current_template" != "$expected_template" ]]
+}
+
 migrate_project_profile_to_v2() {
   note "Step 5.6: migrate project profile from template defaults"
   if [[ ! -f "$PROJECT_RECORD_PATH" ]]; then
     warn "project profile migration skipped; missing $PROJECT_RECORD_PATH"
     return 0
   fi
-  if ! project_profile_needs_template_migration; then
+  local template_name_changed=0
+  local project_template_name
+  project_template_name="$($PYTHON_BIN - "$PROJECT_RECORD_PATH" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+path = sys.argv[1]
+with open(path, "rb") as f:
+    data = tomllib.loads(f.read().decode("utf-8") if hasattr(f, "read") else "")
+print(str(data.get("template_name") or ""), end="")
+PY
+  )"
+  if [[ "$project_template_name" != "$CLAWSEAT_TEMPLATE_NAME" ]]; then
+    template_name_changed=1
+    note "Step 5.6: detected template_name change: ${project_template_name:-<none>} => ${CLAWSEAT_TEMPLATE_NAME}"
+  fi
+
+  local needs_migration=0
+  if project_profile_needs_template_migration; then
+    needs_migration=1
+  elif [[ "$template_name_changed" != "1" ]]; then
     note "[install] project.toml already contains template-defined seats and override defaults"
     return 0
   fi
 
   local answer="${CLAWSEAT_PATROL_PROFILE_MIGRATE:-${CLAWSEAT_QA_PROFILE_MIGRATE:-}}"
-  if [[ -z "$answer" ]]; then
-    if [[ -t 0 && -t 1 ]]; then
-      printf '[install] 检测到 project.toml 缺 patrol engineer，是否升级? (Y/n) '
-      read -r answer
+  if [[ "$needs_migration" == "1" ]]; then
+    if [[ -z "$answer" ]]; then
+      if [[ -t 0 && -t 1 ]]; then
+        printf '[install] 检测到 project.toml 缺 patrol engineer，是否升级? (Y/n) '
+        read -r answer
+      else
+        answer="y"
+      fi
+    fi
+    if [[ "$answer" =~ ^[Nn]$ ]]; then
+      if [[ "$template_name_changed" != "1" ]]; then
+        warn "project.toml patrol engineer migration skipped by operator"
+        return 0
+      fi
+      warn "project.toml migration skipped for patrol overrides, but template change metadata will still be aligned"
     else
       answer="y"
     fi
   fi
-  if [[ "$answer" =~ ^[Nn]$ ]]; then
-    warn "project.toml patrol engineer migration skipped by operator"
+
+  if [[ "$needs_migration" == "0" && "$template_name_changed" != "1" ]]; then
+    note "[install] project.toml template_name already current: $project_template_name"
     return 0
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] migrate %q from template %q; preserve existing seat_overrides\n' "$PROJECT_RECORD_PATH" "$CLAWSEAT_TEMPLATE_NAME"
+    if [[ "$needs_migration" == "1" ]]; then
+      printf '[dry-run] migrate %q from template %q; preserve existing seat_overrides\n' "$PROJECT_RECORD_PATH" "$CLAWSEAT_TEMPLATE_NAME"
+    else
+      printf '[dry-run] update %q template_name from %q to %q\n' "$PROJECT_RECORD_PATH" "$project_template_name" "$CLAWSEAT_TEMPLATE_NAME"
+    fi
+    if [[ "$template_name_changed" == "1" ]]; then
+      printf '[dry-run] regenerate workspace: %q engineer regenerate-workspace --project %q --all-seats --yes\n' "$AGENT_ADMIN_SCRIPT" "$PROJECT"
+    fi
     return 0
   fi
 
   local backup_path="${PROJECT_RECORD_PATH}.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$PROJECT_RECORD_PATH" "$backup_path" \
     || die 31 PROJECT_PROFILE_BACKUP_FAILED "unable to backup $PROJECT_RECORD_PATH"
-  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" "$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml" <<'PY' \
+  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" "$REPO_ROOT/templates/${CLAWSEAT_TEMPLATE_NAME}.toml" "$CLAWSEAT_TEMPLATE_NAME" "$template_name_changed" <<'PY' \
     || die 31 PROJECT_PROFILE_MIGRATE_FAILED "unable to migrate $PROJECT_RECORD_PATH"
 from __future__ import annotations
 
@@ -704,6 +805,8 @@ except ModuleNotFoundError:
 
 path = Path(sys.argv[1])
 template_path = Path(sys.argv[2])
+template_name = sys.argv[3] if len(sys.argv) > 2 else ""
+template_changed = len(sys.argv) > 4 and sys.argv[4] == "1"
 text = path.read_text(encoding="utf-8")
 data = tomllib.loads(text)
 template = tomllib.loads(template_path.read_text(encoding="utf-8"))
@@ -729,9 +832,21 @@ def q_array(values: list[str]) -> str:
     return "[" + ", ".join(f'"{v}"' for v in values) + "]"
 
 template_ids = [str(spec["id"]) for spec in template_engineers]
-engineers = unique_extend(data.get("engineers", []), template_ids)
-monitor_engineers = unique_extend(data.get("monitor_engineers", []), template_ids)
-monitor_max_panes = max(int(template_defaults.get("monitor_max_panes", 0) or 0), int(data.get("monitor_max_panes", 0) or 0))
+if template_changed:
+    engineers = template_ids
+    monitor_engineers = [
+        str(spec["id"])
+        for spec in template_engineers
+        if bool(spec.get("monitor", True))
+    ]
+    monitor_max_panes = int(template_defaults.get("monitor_max_panes", 0) or 0)
+else:
+    engineers = unique_extend(data.get("engineers", []), template_ids)
+    monitor_engineers = unique_extend(data.get("monitor_engineers", []), template_ids)
+    monitor_max_panes = max(
+        int(template_defaults.get("monitor_max_panes", 0) or 0),
+        int(data.get("monitor_max_panes", 0) or 0),
+    )
 
 def set_or_insert(src: str, key: str, rendered: str) -> str:
     pattern = re.compile(rf"^{re.escape(key)}\s*=.*$", re.MULTILINE)
@@ -743,9 +858,28 @@ def set_or_insert(src: str, key: str, rendered: str) -> str:
         return src[: marker.start()] + line + "\n" + src[marker.start():]
     return src.rstrip() + "\n" + line + "\n"
 
+def remove_stale_seat_overrides(src: str, active_seats: set[str]) -> str:
+    pattern = re.compile(r"^\[seat_overrides\.([^\]]+)\]\s*$", re.MULTILINE)
+    out = []
+    cursor = 0
+    for match in pattern.finditer(src):
+        seat = match.group(1)
+        after = src[match.end():]
+        next_header = re.search(r"^\[", after, re.MULTILINE)
+        block_end = match.end() + (next_header.start() if next_header else len(after))
+        if seat not in active_seats:
+            out.append(src[cursor:match.start()])
+            cursor = block_end
+    out.append(src[cursor:])
+    return "".join(out)
+
+if template_changed:
+    text = remove_stale_seat_overrides(text, set(template_ids))
+
 text = set_or_insert(text, "engineers", q_array(engineers))
 text = set_or_insert(text, "monitor_engineers", q_array(monitor_engineers))
 text = set_or_insert(text, "monitor_max_panes", str(monitor_max_panes))
+text = set_or_insert(text, "template_name", f'"{template_name}"')
 
 def upsert_table_key(src: str, table: str, key: str, value: str, *, preserve_existing: bool = True) -> str:
     header = f"[{table}]"
@@ -792,6 +926,16 @@ for spec in template_engineers:
 path.write_text(text, encoding="utf-8")
 PY
   note "[install] project.toml template migration complete (backup: $backup_path)"
+
+  if [[ "$template_name_changed" == "1" ]]; then
+    if [[ -z "$AGENT_ADMIN_SCRIPT" || ! -f "$AGENT_ADMIN_SCRIPT" ]]; then
+      warn "workspace re-render skipped for $PROJECT because AGENT_ADMIN_SCRIPT is unavailable"
+      return 0
+    fi
+    "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" engineer regenerate-workspace --project "$PROJECT" --all-seats --yes \
+      || die 31 PROJECT_WORKSPACE_REGEN_FAILED "unable to regenerate workspaces for $PROJECT after template change"
+    note "[install] workspace regeneration completed for template update on $PROJECT"
+  fi
 }
 
 ensure_patrol_engineer_record() {

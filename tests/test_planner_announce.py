@@ -237,10 +237,12 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
 
     # ── Isolated profile ────────────────────────────────────────────────────────
     profile_text = real_profile.read_text(encoding="utf-8")
+    seats_match = _re.search(r"^seats\s*=\s*\[([^\]]*)\]", profile_text, _re.MULTILINE)
+    target_seat = "builder-1" if seats_match and '"builder-1"' in seats_match.group(1) else "builder"
     tasks_tmp = tmp_path / "tasks"
     ws_tmp = tmp_path / "workspaces"
     handoff_tmp = tmp_path / "handoffs"
-    for d in (tasks_tmp / "install" / "builder-1", ws_tmp / "install", handoff_tmp):
+    for d in (tasks_tmp / "install" / target_seat, ws_tmp / "install", handoff_tmp):
         d.mkdir(parents=True, exist_ok=True)
 
     profile_text = _re.sub(r'tasks_root\s*=\s*"[^"]*"', f'tasks_root = "{tasks_tmp}/install"', profile_text)
@@ -273,7 +275,7 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
             sys.executable, str(_SCRIPTS / "dispatch_task.py"),
             "--profile", str(tmp_profile),
             "--source", "planner",
-            "--target", "builder-1",
+            "--target", target_seat,
             "--task-id", "smoke-announce-e2e",
             "--title", "smoke test",
             "--objective", "verify announce gate",
@@ -297,7 +299,7 @@ def test_e2e_config_announce_via_profile(tmp_path, monkeypatch):
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
     # Message format: "[{project}] {source} → {target}: {task_id} {verb}"
-    for keyword in ("planner", "builder-1", "smoke-announce-e2e", "dispatched"):
+    for keyword in ("planner", target_seat, "smoke-announce-e2e", "dispatched"):
         assert keyword in stub_content, (
             f"Expected {keyword!r} in stub log but not found.\n"
             f"stub_log: {stub_content}\nstderr: {result.stderr}"

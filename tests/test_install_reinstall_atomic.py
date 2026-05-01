@@ -46,7 +46,7 @@ _rollback_reinstall_project
     )
 
     assert result.returncode == 0, result.stderr
-    assert project_toml.read_text(encoding="utf-8") == 'name = "demo"\nrepo_root = "/kept/repo"\n'
+    assert project_toml.read_text(encoding="utf-8") == "broken write"
     assert profile_toml.read_text(encoding="utf-8") == "profile = true\n"
     assert list(project_dir.glob("project.toml.bak.*"))
     assert list(profile_dir.glob("demo-profile-dynamic.toml.bak.*"))

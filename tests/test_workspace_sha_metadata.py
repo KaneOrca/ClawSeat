@@ -57,6 +57,7 @@ def _render(tool: str) -> dict[str, str]:
         repo_root=str(_REPO),
         tasks_root=str(_REPO / ".tasks"),
         profile_path="",
+        template_name="clawseat-engineering",
     )
     return TemplateHandlers(hooks).render_template_text(tool, session, project)
 
@@ -66,6 +67,7 @@ def _assert_metadata_first_line(text: str) -> None:
     assert first.startswith("<!-- rendered_from_clawseat_sha=")
     assert "rendered_at=" in first
     assert "renderer_version=v1" in first
+    assert "template_name=clawseat-engineering" in first
 
 
 def test_rendered_claude_md_contains_sha_comment() -> None:
