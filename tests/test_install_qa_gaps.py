@@ -308,6 +308,7 @@ def test_agent_admin_engineer_create_uses_patrol_minimax_defaults() -> None:
     from agent_admin_crud import CrudHandlers
 
     created_sessions: list[dict[str, object]] = []
+    write_project_calls: list[object] = []
     project = SimpleNamespace(
         name="qa-gaps",
         engineers=["memory", "planner", "builder", "designer"],
@@ -348,7 +349,7 @@ def test_agent_admin_engineer_create_uses_patrol_minimax_defaults() -> None:
         apply_template=lambda _session, _project: None,
         ensure_dir=lambda _path: None,
         write_env_file=lambda *_args: None,
-        write_project=lambda _project: None,
+        write_project=lambda _project: write_project_calls.append(_project),
     )
 
     rc = CrudHandlers(hooks).engineer_create(
@@ -361,3 +362,6 @@ def test_agent_admin_engineer_create_uses_patrol_minimax_defaults() -> None:
     assert created_sessions[0]["auth_mode"] == "api"
     assert created_sessions[0]["provider"] == "minimax"
     assert created_sessions[0]["monitor"] is False
+    assert project.engineers == ["memory", "planner", "builder", "designer"]
+    assert project.monitor_engineers == ["planner", "builder", "designer"]
+    assert write_project_calls == []

@@ -351,11 +351,11 @@ main() {
     trap '_reinstall_exit_trap $?' EXIT
   fi
   ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider
+  bootstrap_project_profile
+  migrate_project_profile_to_v2
   render_brief
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
   launch_seat "$PROJECT-$PRIMARY_SEAT_ID" "$MEMORY_WORKSPACE" "$BRIEF_PATH" "$PRIMARY_SEAT_ID"
-  bootstrap_project_profile
-  migrate_project_profile_to_v2
   ensure_privacy_kb_template
   install_skills_by_tier
   install_privacy_pre_commit_hook

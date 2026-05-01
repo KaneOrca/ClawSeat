@@ -14,6 +14,7 @@ NO subprocess calls (§D20). NO writes to disk.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -59,6 +60,52 @@ def _extract_python_version(pyproject_content: str) -> str | None:
     return None
 
 
+def _find_python_source(repo_root: Path) -> Path | None:
+    """Return one Python source file without walking bulky dependency output."""
+    skip_dirs = {
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        "node_modules",
+        "dist",
+        "build",
+        ".next",
+        ".turbo",
+        "__pycache__",
+    }
+    for root, dirs, files in os.walk(repo_root):
+        dirs[:] = [name for name in dirs if name not in skip_dirs]
+        for filename in files:
+            if filename.endswith(".py"):
+                return Path(root) / filename
+    return None
+
+
+def _find_python_test_source(repo_root: Path) -> Path | None:
+    """Return one Python test file without walking bulky dependency output."""
+    skip_dirs = {
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        "node_modules",
+        "dist",
+        "build",
+        ".next",
+        ".turbo",
+        "__pycache__",
+    }
+    for root, dirs, files in os.walk(repo_root):
+        dirs[:] = [name for name in dirs if name not in skip_dirs]
+        for filename in files:
+            if filename.endswith(".py") and (filename.startswith("test_") or filename.endswith("_test.py")):
+                return Path(root) / filename
+    return None
+
+
 # ── detect_runtime ─────────────────────────────────────────────────────────────
 
 
@@ -91,6 +138,11 @@ def detect_runtime(repo_root: Path) -> dict:
         if p.is_file():
             data["python"] = True
             evidence.append({"source_url": _file_url(p), "trust": "high"})
+    if not data["python"]:
+        source_file = _find_python_source(repo_root)
+        if source_file is not None:
+            data["python"] = True
+            evidence.append({"source_url": _file_url(source_file), "trust": "medium"})
 
     pyproject = repo_root / "pyproject.toml"
     if pyproject.is_file():
@@ -216,6 +268,11 @@ def detect_tests(repo_root: Path) -> dict:
                 data["pytest"] = True
                 if pyproject not in [Path(e["source_url"][7:]) for e in evidence]:
                     evidence.append({"source_url": _file_url(pyproject), "trust": "high"})
+    if not data["pytest"]:
+        test_source = _find_python_test_source(repo_root)
+        if test_source is not None:
+            data["pytest"] = True
+            evidence.append({"source_url": _file_url(test_source), "trust": "medium"})
 
     # ── jest ─────────────────────────────────────────────────────────────────
     jest_configs = ["jest.config.js", "jest.config.ts", "jest.config.mjs", "jest.config.cjs"]

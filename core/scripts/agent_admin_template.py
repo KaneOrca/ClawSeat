@@ -38,11 +38,12 @@ def _clawseat_head_sha() -> str:
     return sha if result.returncode == 0 and sha else "unknown"
 
 
-def _workspace_metadata_header() -> str:
+def _workspace_metadata_header(template_name: str = "") -> str:
     rendered_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    template_part = f" template_name={template_name}" if template_name else ""
     return (
         f"<!-- rendered_from_clawseat_sha={_clawseat_head_sha()} "
-        f"rendered_at={rendered_at} renderer_version=v1 -->"
+        f"rendered_at={rendered_at} renderer_version=v1{template_part} -->"
     )
 
 
@@ -508,7 +509,7 @@ class TemplateHandlers:
             rendered["AGENTS.md"] = gemini_memory if tool == "gemini" else claude_memory
             rendered["CLAUDE.md"] = claude_memory
             rendered["GEMINI.md"] = gemini_memory
-        metadata_header = _workspace_metadata_header()
+        metadata_header = _workspace_metadata_header(str(getattr(project, "template_name", "") or ""))
         for workspace_doc in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
             if workspace_doc in rendered:
                 rendered[workspace_doc] = _with_workspace_metadata(rendered[workspace_doc], metadata_header)
