@@ -51,10 +51,14 @@ def test_cleanup_script_builds_defensive_applescript(tmp_path: Path) -> None:
     assert 'exists process "iTerm2"' in script
     assert 'application "iTerm2"' in script
     assert 'candidateTitle is "clawseat-memories"' in script
+    assert "set staleWindows to missing value" not in script
+    assert "set closedWindow to missing value" in script
     assert "set activeSession to current session of activeTab" in script
     assert 'tell activeSession to set markerValue to variable named "user.window_title"' in script
     assert "on memoryWindowMarker" not in script
-    assert "close w" in script
+    assert "close w" not in script
+    assert "if markerValue is \"\" and closedWindow is missing value then" in script
+    assert "close closedWindow" in script
 
 
 def test_cleanup_noops_when_iterm_not_running(tmp_path: Path) -> None:
@@ -70,3 +74,10 @@ def test_cleanup_swallow_osascript_failure(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert "warn: cleanup-stale-memories-window skipped: application unavailable" in result.stderr
+
+
+def test_cleanup_outputs_warning_when_stale_window_closed(tmp_path: Path) -> None:
+    result, _, _ = _run_with_stub(tmp_path, output="closed=1")
+
+    assert result.returncode == 0, result.stderr
+    assert "warn: cleanup-stale-memories-window closed stale window(s): 1" in result.stderr
