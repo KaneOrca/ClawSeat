@@ -9,6 +9,10 @@ REINSTALL_PROJECT_TOML_BACKUP=""
 REINSTALL_PROFILE_BACKUP=""
 REINSTALL_PROJECT_TOML_EXISTED=0
 REINSTALL_PROFILE_EXISTED=0
+REINSTALL_TEMPLATE_CHANGED=0
+REINSTALL_PREVIOUS_TEMPLATE_NAME=""
+REINSTALL_PREVIOUS_MEMORY_TOOL=""
+REINSTALL_PREVIOUS_MEMORY_MODEL=""
 
 _prompt_i18n_get() {
   local key="$1" fallback="${2:-$1}"
@@ -239,13 +243,59 @@ OSA
   fi
 }
 
+read_reinstall_project_metadata() {
+  REINSTALL_PREVIOUS_TEMPLATE_NAME=""
+  REINSTALL_PREVIOUS_MEMORY_TOOL=""
+  REINSTALL_PREVIOUS_MEMORY_MODEL=""
+  REINSTALL_TEMPLATE_CHANGED=0
+  [[ -f "$PROJECT_RECORD_PATH" ]] || return 0
+  local metadata_line="" output=""
+  output="$(
+    "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+with open(sys.argv[1], "rb") as handle:
+    data = tomllib.load(handle)
+
+template_name = data.get("template_name", "").strip()
+seat_overrides = data.get("seat_overrides", {}) or {}
+memory_override = seat_overrides.get("memory", {})
+memory_tool = str(memory_override.get("tool", "")).strip()
+memory_model = str(memory_override.get("model", "")).strip()
+print(f"template_name={template_name}")
+print(f"memory_tool={memory_tool}")
+print(f"memory_model={memory_model}")
+PY
+  )"
+  while IFS= read -r metadata_line; do
+    case "$metadata_line" in
+      template_name=*) REINSTALL_PREVIOUS_TEMPLATE_NAME="${metadata_line#template_name=}" ;;
+      memory_tool=*) REINSTALL_PREVIOUS_MEMORY_TOOL="${metadata_line#memory_tool=}" ;;
+      memory_model=*) REINSTALL_PREVIOUS_MEMORY_MODEL="${metadata_line#memory_model=}" ;;
+    esac
+  done <<< "$output"
+  if [[ -n "$REINSTALL_PREVIOUS_TEMPLATE_NAME" && "$REINSTALL_PREVIOUS_TEMPLATE_NAME" != "$CLAWSEAT_TEMPLATE_NAME" ]]; then
+    REINSTALL_TEMPLATE_CHANGED=1
+  else
+    REINSTALL_TEMPLATE_CHANGED=0
+  fi
+}
+
 _reinstall_project() {
   local existing_repo_root="" profile_path="$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] reinstall %s: backup project.toml/profile, kill old sessions/windows, re-bootstrap\n' "$PROJECT"
-    return 0
-  fi
+  read_reinstall_project_metadata
   if [[ ! -f "$PROJECT_RECORD_PATH" ]]; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      warn "project.toml missing for $PROJECT (dry-run); continuing reinstall dry-run bootstrap path"
+      return 0
+    fi
     if [[ -f "$STATUS_FILE" ]]; then
       warn "project.toml missing for $PROJECT; treating --reinstall as repair from existing task state"
       _kill_existing_project_sessions "$PROJECT"
@@ -267,6 +317,24 @@ _reinstall_project() {
   _backup_reinstall_file "$profile_path" REINSTALL_PROFILE_EXISTED REINSTALL_PROFILE_BACKUP
   REINSTALL_ROLLBACK_ARMED=1
 
+  if [[ "$MEMORY_TOOL_EXPLICIT" != "1" && -n "$REINSTALL_PREVIOUS_MEMORY_TOOL" ]]; then
+    case "$REINSTALL_PREVIOUS_MEMORY_TOOL" in
+      codex|gemini)
+        warn "[install] reinstall: reusing existing project memory tool: ${REINSTALL_PREVIOUS_MEMORY_TOOL}"
+        MEMORY_TOOL="$REINSTALL_PREVIOUS_MEMORY_TOOL"
+        MEMORY_TOOL_EXPLICIT=1
+        if [[ "$REINSTALL_PREVIOUS_MEMORY_TOOL" == "codex" && -n "$REINSTALL_PREVIOUS_MEMORY_MODEL" && "$MEMORY_MODEL_EXPLICIT" == "0" ]]; then
+          MEMORY_MODEL="$REINSTALL_PREVIOUS_MEMORY_MODEL"
+        fi
+        ;;
+    esac
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] reinstall %s: backup project.toml/profile, kill old sessions/windows, re-bootstrap\n' "$PROJECT"
+    return 0
+  fi
+
   _kill_existing_project_sessions "$PROJECT"
   rm -f "$PROJECT_RECORD_PATH"
   rm -rf "$HOME/.agents/sessions/$PROJECT"
@@ -285,9 +353,42 @@ memory_primary_skips_claude_provider() {
   [[ "$PRIMARY_SEAT_ID" == "memory" && "$(primary_effective_tool)" != "claude" ]]
 }
 
+project_record_memory_model() {
+  [[ -f "$PROJECT_RECORD_PATH" ]] || return 0
+  "$PYTHON_BIN" - "$PROJECT_RECORD_PATH" <<'PY'
+from __future__ import annotations
+
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+with open(sys.argv[1], "rb") as handle:
+    data = tomllib.load(handle)
+
+seat_overrides = data.get("seat_overrides", {}) or {}
+memory_override = seat_overrides.get("memory") or {}
+memory_model = memory_override.get("model")
+if memory_model:
+    print(str(memory_model))
+PY
+}
+
 memory_effective_model() {
+  local seat_memory_model=""
   case "$MEMORY_TOOL" in
-    codex) printf '%s\n' "$MEMORY_MODEL" ;;
+    codex)
+      if [[ "$MEMORY_MODEL_EXPLICIT" == "0" ]]; then
+        seat_memory_model="$(project_record_memory_model || true)"
+        if [[ -n "$seat_memory_model" ]]; then
+          printf '%s\n' "$seat_memory_model"
+          return 0
+        fi
+      fi
+      printf '%s\n' "$MEMORY_MODEL"
+      ;;
     gemini)
       [[ "$MEMORY_MODEL_EXPLICIT" == "1" ]] && printf '%s\n' "$MEMORY_MODEL" || true
       ;;
@@ -745,6 +846,7 @@ bootstrap_project_profile() {
   note "Step 5.5: bootstrap project engineer profiles (no tmux start)"
   [[ -f "$WAIT_FOR_SEAT_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 WAIT_SCRIPT_MISSING "missing wait-for-seat script: $WAIT_FOR_SEAT_SCRIPT"
   [[ -f "$AGENT_ADMIN_SCRIPT" || "$DRY_RUN" == "1" ]] || die 31 AGENT_ADMIN_MISSING "missing agent_admin script: $AGENT_ADMIN_SCRIPT"
+  local profile_check_path="$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml"
   # Canonical templates live in templates/*.toml and must not be overwritten
   # by install-time generated template files.
   write_project_local_toml
@@ -763,6 +865,13 @@ bootstrap_project_profile() {
   fi
 
   mkdir -p "$AGENTS_TEMPLATES_ROOT" || die 31 TEMPLATE_ROOT_CREATE_FAILED "unable to create $AGENTS_TEMPLATES_ROOT"
+  if [[ "${REINSTALL_TEMPLATE_CHANGED:-0}" == "1" && -f "$profile_check_path" ]]; then
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf '[dry-run] reinstall template changed: remove stale profile %q before bootstrap\n' "$profile_check_path"
+    else
+      rm -f "$profile_check_path" || die 31 PROFILE_REMOVE_FAILED "unable to remove stale reinstall profile: $profile_check_path"
+    fi
+  fi
   (
     cd "$AGENTS_TEMPLATES_ROOT" &&
     "$PYTHON_BIN" "$AGENT_ADMIN_SCRIPT" project bootstrap --template "$CLAWSEAT_TEMPLATE_NAME" --local "$PROJECT_LOCAL_TOML"
@@ -770,7 +879,6 @@ bootstrap_project_profile() {
   ensure_deepseek_secret_template
   seed_bootstrap_secrets
 
-  local profile_check_path="$HOME/.agents/profiles/${PROJECT}-profile-dynamic.toml"
   if [[ ! -f "$profile_check_path" ]]; then
     die 31 PROFILE_RENDER_MISSING "agent_admin project bootstrap finished but profile not rendered: $profile_check_path. This indicates a regression in agent_admin_crud_bootstrap.py; profile-dynamic.toml is required by dispatch_task.py / state.seed."
   fi

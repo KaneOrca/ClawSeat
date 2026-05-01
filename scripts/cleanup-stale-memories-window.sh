@@ -6,7 +6,7 @@
 #
 # The pkg-C tabs path marks the live shared window with user.window_title.
 # Older windows named "clawseat-memories" may not have that marker; this helper
-# closes only those unmarked windows and exits 0 if iTerm is unavailable.
+# closes only the oldest stale unmarked window and exits 0 if iTerm is unavailable.
 set -euo pipefail
 
 if ! command -v osascript >/dev/null 2>&1; then
@@ -24,7 +24,7 @@ if itermRunning is false then
 end if
 
 tell application "iTerm2"
-  set closedCount to 0
+  set closedWindow to missing value
   repeat with w in windows
     set candidateTitle to ""
     try
@@ -37,12 +37,17 @@ tell application "iTerm2"
         set activeSession to current session of activeTab
         tell activeSession to set markerValue to variable named "user.window_title"
       end try
-      if markerValue is "" then
-        close w
-        set closedCount to closedCount + 1
+      if markerValue is "" and closedWindow is missing value then
+        set closedWindow to w
       end if
     end if
   end repeat
+
+  set closedCount to 0
+  if closedWindow is not missing value then
+    close closedWindow
+    set closedCount to 1
+  end if
   return "closed=" & closedCount
 end tell
 APPLESCRIPT
@@ -53,4 +58,10 @@ fi
 
 if [[ -n "$output" ]]; then
   printf '%s\n' "$output"
+  if [[ "$output" == closed=* ]]; then
+    closed_count="${output#closed=}"
+    if [[ "$closed_count" != "0" ]]; then
+      printf 'warn: cleanup-stale-memories-window closed stale window(s): %s\n' "$closed_count" >&2
+    fi
+  fi
 fi
