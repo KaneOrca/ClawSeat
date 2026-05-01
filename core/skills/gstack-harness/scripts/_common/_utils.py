@@ -67,6 +67,8 @@ def normalize_role(role: str) -> str:
         return "planner"
     if role in {"memory", "memory-oracle"}:
         return "memory"
+    if role and role.startswith("cartooner-"):
+        return role[len("cartooner-"):]
     # creative-* template roles normalise to their engineering counterpart so
     # planner-event detection and console sort priority work across templates.
     if role and role.startswith("creative-"):

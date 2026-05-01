@@ -48,6 +48,7 @@ class BootstrapCrud:
             engineers=[],
             monitor_engineers=[],
             template_name=str(template.get("template_name", args.template)),
+            declared_skills=list(merged.get("declared_skills", [])),
             seat_overrides=local_seat_overrides,
             window_mode=merged["window_mode"],
             monitor_max_panes=merged["monitor_max_panes"],
