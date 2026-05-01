@@ -153,6 +153,7 @@ _clawseat_behind_main_count() {
 
 _select_fresh_clawseat_root() {
   local candidate_root="$1"
+  local template_name="${2:-}"
   local worktree_list=""
   worktree_list="$(git -C "$candidate_root" worktree list --porcelain 2>/dev/null)" || {
     printf '%s\n' "$candidate_root"
@@ -237,6 +238,17 @@ _select_fresh_clawseat_root() {
       warn "      Skipping in favor of $best_path ($selected_label)."
       warn "      Override: --force-repo-root <path>"
     done
+  fi
+
+  if [[ -n "$template_name" ]]; then
+    local candidate_template="$candidate_root/templates/$template_name.toml"
+    local selected_template="$best_path/templates/$template_name.toml"
+    if [[ -f "$candidate_template" && ! -f "$selected_template" ]]; then
+      warn "ClawSeat REPO_ROOT=$best_path does not contain template '$template_name'."
+      warn "      Falling back to candidate worktree $candidate_root for requested template."
+      printf '%s\n' "$candidate_root"
+      return 0
+    fi
   fi
 
   printf '%s\n' "$best_path"

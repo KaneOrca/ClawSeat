@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+import sys
 
 try:
     from seat_claude_template import ensure_seat_claude_template
@@ -60,6 +61,18 @@ class StoreHandlers:
 
     def load_project(self, name: str) -> Any:
         data = self.hooks.load_toml(self.project_path(name))
+        raw_declared_skills = data.get("declared_skills", [])
+        if raw_declared_skills == []:
+            declared_skills: list[str] = []
+        elif isinstance(raw_declared_skills, list):
+            declared_skills = [str(item) for item in raw_declared_skills]
+        else:
+            print(
+                f"warning: declared_skills in {self.hooks.project_path(name)} is not a list; "
+                "ignoring and treating as empty",
+                file=sys.stderr,
+            )
+            declared_skills = []
         return self.hooks.project_cls(
             name=data["name"],
             repo_root=data["repo_root"],
@@ -67,6 +80,7 @@ class StoreHandlers:
             engineers=list(data.get("engineers", [])),
             monitor_engineers=list(data.get("monitor_engineers", [])),
             template_name=str(data.get("template_name", "")),
+            declared_skills=declared_skills,
             seat_overrides={
                 str(seat_id): dict(values)
                 for seat_id, values in data.get("seat_overrides", {}).items()
@@ -342,6 +356,7 @@ class StoreHandlers:
             "monitor_max_panes": int(defaults.get("monitor_max_panes", 4)),
             "open_detail_windows": bool(defaults.get("open_detail_windows", False)),
             "engineers": final_engineers,
+            "declared_skills": list(defaults.get("declared_skills", [])),
             "optional_skills": list(template.get("optional_skills", [])),
         }
 
@@ -365,6 +380,8 @@ class StoreHandlers:
                 f"monitor_engineers = {self.hooks.q_array(project.monitor_engineers)}",
             ]
         )
+        if project.declared_skills:
+            lines.append(f"declared_skills = {self.hooks.q_array(project.declared_skills)}")
         for seat_id, override in sorted((project.seat_overrides or {}).items()):
             lines.extend(["", f"[seat_overrides.{seat_id}]"])
             for key, value in override.items():
