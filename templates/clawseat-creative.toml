@@ -10,7 +10,10 @@ workers_window_title = "clawseat-{PROJECT}-workers"
 left_main_seat = "planner"
 left_main_width = "50%"
 right_seats = ["builder", "patrol", "designer"]
-right_fill_order = "col-major"
+# balanced-2x2: equal 2x2 grid (planner=TL, builder=TR, patrol=BL, designer=BR).
+# col-major collapsed right column to <24 rows in 1100px-tall window, breaking
+# Claude/Codex TUI rendering. Required for 4-worker creative layout.
+right_fill_order = "balanced-2x2"
 
 [defaults]
 home_mode = "real"
