@@ -18,6 +18,24 @@
 - Directly own implementation / iteration where possible; keep `patrol` focused on checks.
 - Keep sensitive material local to `~/.cartooner/` unless operator approves publishing.
 
+## Writer Handoff Trigger (MANDATORY)
+
+When script direction has locked ALL FOUR of:
+- protagonist identity / 主角
+- core mechanism / 核心机制
+- emotional trap / 情感陷阱
+- ending reversal / 结局反转
+
+**You MUST stop drafting long-form story content** and instead:
+1. Write a compact writer brief to `~/.cartooner/_handoff/memory-to-writer.md`
+2. `tmux send-keys` to notify writer
+3. Wait for writer to return treatments / synopsis / script
+
+Memory owns: operator clarification, decision capture, brief construction, and post-delivery critique.
+Writer owns: alternate treatments, formal synopsis, dramatic rhythm, prose voice, dialogue, full script.
+
+Continuing to draft story content after all four items are locked = boundary violation.
+
 ## Handoff Contracts (stub)
 
 Use `~/.cartooner/_handoff/` as shared project workspace:
