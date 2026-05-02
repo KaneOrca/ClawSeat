@@ -494,23 +494,16 @@ class TemplateHandlers:
                 project=project,
                 profile_display=profile_display,
             )
-            claude_memory = _insert_after_first_metadata_block(claude_memory, memory_reminder_lines)
-            gemini_memory = self._render_workspace_memory_template(
-                "gemini",
-                session=session,
-                project=project,
-                profile_display=profile_display,
-            )
-            gemini_memory = _insert_after_first_metadata_block(gemini_memory, memory_reminder_lines)
-            role_skill = "\n".join(
-                _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None)
-            )
-            if role_skill:
-                claude_memory = claude_memory.rstrip() + "\n" + role_skill + "\n"
-                gemini_memory = gemini_memory.rstrip() + "\n" + role_skill + "\n"
-            rendered["AGENTS.md"] = gemini_memory if tool == "gemini" else claude_memory
-            rendered["CLAUDE.md"] = claude_memory
-            rendered["GEMINI.md"] = gemini_memory
+            memory_doc = _insert_after_first_metadata_block(memory_doc, memory_reminder_lines)
+            if not is_cartooner_memory:
+                role_skill = "\n".join(
+                    _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None)
+                )
+                if role_skill:
+                    memory_doc = memory_doc.rstrip() + "\n" + role_skill + "\n"
+            rendered["AGENTS.md"] = memory_doc
+            rendered["CLAUDE.md"] = memory_doc
+            rendered["GEMINI.md"] = memory_doc
         metadata_header = _workspace_metadata_header(str(getattr(project, "template_name", "") or ""))
         for workspace_doc in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
             if workspace_doc in rendered:
