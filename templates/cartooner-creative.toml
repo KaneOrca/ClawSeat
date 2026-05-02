@@ -45,7 +45,6 @@ window = "memory"
 tool = "codex"
 auth_mode = "oauth"
 provider = "openai"
-model = "gpt-5.4"
 monitor = true
 human_facing = true
 active_loop_owner = true
