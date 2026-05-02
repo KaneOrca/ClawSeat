@@ -46,6 +46,8 @@ Pseudocode:
 def assign_owner(step):
     if step.requires_user_or_memory_decision:
         return "memory"
+    if step.requires_qa_browser_testing or step.requires_multimodal_ui_verification:
+        return "reviewer"  # qa-only mode: find bugs, log findings, report to planner
     if step.requires_implementation:
         return "builder"
     if step.requires_code_or_artifact_review:
@@ -67,6 +69,7 @@ Mandatory enforcement:
   routing, decomposition, or receipt consumption.
 - Planner must not keep implementation work local to save time.
 - Planner must not send review-only work to builder.
+- Planner must route browser QA testing steps to reviewer, not builder or patrol.
 - Planner must not send patrol cron findings directly to builder.
 
 ## 3. Swallow Semantics
