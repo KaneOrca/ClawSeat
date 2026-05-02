@@ -69,7 +69,19 @@ def _registry_path(home: Path) -> Path:
 
 def _normalise_role(role: str, seat_id: str) -> str:
     role = role.strip()
+    if role.startswith("minimal-"):
+        print(
+            f"warn: deprecated role namespace in session metadata mapped from {role} -> {role.removeprefix('minimal-')} "
+            f"for seat={seat_id}",
+            file=sys.stderr,
+        )
+        role = role.removeprefix("minimal-")
     if role.startswith("creative-"):
+        print(
+            f"warn: deprecated role namespace in session metadata mapped from {role} -> {role.removeprefix('creative-')} "
+            f"for seat={seat_id}",
+            file=sys.stderr,
+        )
         role = role.removeprefix("creative-")
     if role.startswith("code-"):
         role = role.removeprefix("code-")

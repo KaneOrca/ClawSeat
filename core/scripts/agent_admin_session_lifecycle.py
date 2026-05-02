@@ -187,7 +187,19 @@ class SessionStartLifecycle:
     def _role_for_session(self, session: Any, project: Any) -> str:
         def _generic_role(value: str) -> str:
             value = value.strip()
+            if value.startswith("minimal-"):
+                legacy = value.removeprefix("minimal-")
+                print(
+                    f"warn: deprecated role namespace in project context mapped from {value} -> {legacy}",
+                    file=sys.stderr,
+                )
+                value = legacy
             if value.startswith("creative-"):
+                legacy = value.removeprefix("creative-")
+                print(
+                    f"warn: deprecated role namespace in project context mapped from {value} -> {legacy}",
+                    file=sys.stderr,
+                )
                 value = value.removeprefix("creative-")
             if value.startswith("code-"):
                 value = value.removeprefix("code-")

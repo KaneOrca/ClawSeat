@@ -19,14 +19,14 @@ def test_install_help_lists_builtin_templates_and_provider_deprecation() -> None
         check=False,
     )
     assert result.returncode == 0
-    assert "clawseat-creative|clawseat-engineering|clawseat-solo|cartooner-creative" in result.stdout
+    assert "clawseat-engineering|clawseat-solo|cartooner-creative" in result.stdout
     assert "--all-api-provider" in result.stdout
     assert "--provider now controls the memory seat only" in result.stdout
 
 
 def test_templates_directory_has_builtin_rosters() -> None:
     roster_names = sorted(path.name for path in (REPO / "templates").glob("clawseat-*.toml"))
-    assert roster_names == ["clawseat-creative.toml", "clawseat-engineering.toml", "clawseat-solo.toml"]
+    assert roster_names == ["clawseat-engineering.toml", "clawseat-solo.toml"]
 
 
 def test_solo_option_in_menu() -> None:

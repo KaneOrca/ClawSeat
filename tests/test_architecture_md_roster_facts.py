@@ -20,7 +20,7 @@ def _template_seats(template: Path) -> list[str]:
 def test_architecture_project_template_roster_matches_templates() -> None:
     arch = ARCH.read_text(encoding="utf-8")
 
-    for template in sorted((REPO / "templates").glob("clawseat-*.toml")):
+    for template in sorted((REPO / "templates").glob("*.toml")):
         name = template.stem
         seats = _template_seats(template)
         matching_lines = [line for line in arch.splitlines() if f"`{name}`" in line]
@@ -31,8 +31,19 @@ def test_architecture_project_template_roster_matches_templates() -> None:
             assert seat in joined, f"{name} missing seat {seat}"
 
 
-def test_architecture_roster_uses_patrol_not_qa() -> None:
+def test_architecture_template_roster_contains_bv4_templates() -> None:
     arch = ARCH.read_text(encoding="utf-8")
     template_section = arch.split("### Project Templates", 1)[1].split("### Solo Template", 1)[0]
-    assert " patrol " in template_section
-    assert " qa " not in template_section
+    assert "`cartooner-creative`" in template_section
+    assert "`clawseat-engineering`" in template_section
+    assert "`clawseat-solo`" in template_section
+    assert "`clawseat-creative`" not in template_section
+
+
+def test_architecture_engineering_row_is_five_seats_with_reviewer_authority() -> None:
+    arch = ARCH.read_text(encoding="utf-8")
+    template_section = arch.split("### Project Templates", 1)[1].split("### Solo Template", 1)[0]
+    row = next(line for line in template_section.splitlines() if line.startswith("| `clawseat-engineering`"))
+    assert "| 5 |" in row
+    assert "reviewer" in row
+    assert "qa" in row.lower()

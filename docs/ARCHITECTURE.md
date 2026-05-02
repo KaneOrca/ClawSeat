@@ -109,7 +109,7 @@ is legacy; v0.7 reframes koder as the Feishu reverse channel — see §Mental Mo
 |---|---|---|
 | Machine | no global seat | machine facts are scan artifacts under `~/.agents/memory/machine/`; the v1 global memory daemon is legacy compat only |
 | Tenant (optional) | `koder` (one per OpenClaw/Feishu tenant, overlaid on existing OpenClaw agent) | Feishu reverse channel; lives on the OpenClaw side; never a tmux seat; never part of install |
-| Project | `memory`, `planner`, `builder`, `designer` | tmux `<project>-<seat>`; memory lives in the shared memories window, workers live in the per-project workers window; memory owns lifecycle; numbered/fan-out sessions are optional extensions |
+| Project | `memory`, `planner`, `builder`, `reviewer`, `patrol` | tmux `<project>-<seat>`; memory lives in the shared memories window, workers live in the per-project workers window; memory owns lifecycle; numbered/fan-out sessions are optional extensions |
 
 Verification uses the canonical `patrol` seat. Legacy verification-seat names
 were removed on 2026-04-29; migrate old project state with
@@ -147,9 +147,10 @@ which one to edit, use this table before you touch either:
 | `clawseat-install` | v0.7 install playbook. Calls `scripts/install.sh` which drives host bootstrap + environment scan + workers window + memories window; memory then runs Phase-A per `docs/INSTALL.md`. | Claude Code / Codex / OpenClaw runtimes when the user asks to install ClawSeat | `~/.agents/projects/<project>/project.toml`, `project-local.toml`, install artifacts under `~/.agents/tasks/<project>/install/`, entry-skill symlinks in `~/.claude/skills/` and `~/.codex/skills/` |
 | `cs` | Local `/cs` convenience alias (**post-install only**). Re-entry shorthand for the `docs/INSTALL.md` `Resume / Re-entry` section; reuses existing install state and relaunches memory if needed. | User in a local Claude Code / Codex session after install state already exists | Minimal — may relaunch memory/session state, but must not create project/profile/binding from scratch |
 
-The default v2 project story is `memory` / `planner` / `builder` /
-`designer`. Numbered seats such as `builder-1` belong to
-fan-out or migration examples, not the top-level narrative.
+The default v2 project story is `memory` with a rotating worker set (`planner`,
+`builder`, optional `reviewer`, `writer`, `visual`, and/or `patrol`) depending
+on the selected template. Numbered seats such as `builder-1` belong to fan-out
+or migration examples, not the top-level narrative.
 
 Invariant — do not cross the boundaries:
 
@@ -245,7 +246,7 @@ Recent structural changes:
 - **2026-04 — core/migration/ layer** — houses `*_dynamic.py` scripts that replace the legacy harness scripts for profiles with `[dynamic_roster].enabled = true`. Traffic flows through `core/transport/transport_router.py` so callers never pick the wrong path by hand.
 - **2026-04 — transport/payload consolidation (audit P0/P1)** — `build_notify_payload` extracted into `_task_io.py`, rendering/validation for codex provider config moved into a typed `CodexProviderConfig` dataclass, shells/*/adapter_shim.py collapsed onto `_shim_base.py`.
 - **2026-04 — install.sh enhancements** — `--repo-root` flag (FR-7) allows installing a project pointing to a different business repo (separate from the ClawSeat root); `--reset-harness-memory` clears per-seat harness choice history (FR-1 `last-harness.toml` persistence). `CLAWSEAT_FEISHU_ENABLED=0` env var disables all Feishu sends globally (send_delegation_report, planner stop-hook, announce helpers).
-- **2026-04 — project templates** — `--template` flag selects project roster: `clawseat-creative` (5-seat default creative chain), `clawseat-engineering` (6-seat engineering chain with reviewer), or `clawseat-solo` (3-seat minimal collaboration chain). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat correctly in `project-local.toml`.
+- **2026-04 — project templates** — `--template` flag selects one of three built-in rosters: `cartooner-creative` (4-seat), `clawseat-engineering` (5-seat with reviewer), or `clawseat-solo` (3-seat). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat is carried into `project-local.toml`.
 
 ### Project Templates
 
@@ -253,8 +254,8 @@ Three built-in project templates in `templates/`:
 
 | Template | Seats | Count | Use case |
 |----------|-------|-------|----------|
-| `clawseat-creative` | memory planner builder patrol designer | 5 | Default creative chain |
-| `clawseat-engineering` | memory planner builder reviewer patrol designer | 6 | Engineering chain with independent reviewer |
+| `cartooner-creative` | memory writer visual patrol | 4 | Creative chain with direct memory/operator collaboration |
+| `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review) |
 | `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
 
 ### Solo Template (Minimal 3-Seat)
@@ -271,11 +272,11 @@ No reviewer, patrol, or designer seats. Memory delegates orchestration to planne
 builder self-reviews; memory issues final verdict. All seats use OAuth - no API
 keys required.
 
-**Creative template seat responsibilities:**
-- `planner` (claude/oauth): planning, workflow orchestration, unit decomposition via cs-structure
-- `builder` (codex/oauth): workflow classification — cs-classify / cs-classify-short; delivers classification to designer
-- `patrol` (claude/minimax): scheduled or planner-requested evidence collection; reports without modifying code
-- `designer` (gemini/oauth): long-form writing (cs-write) + rubric scoring (cs-score) + review — issues APPROVED / CHANGES_REQUESTED verdicts to planner
+**Cartooner template seat responsibilities:**
+- `writer` (claude/oauth): deep creative writing and dialog craft on memory handoff
+- `visual` (gemini/oauth): storyboard, concept art, visual direction
+- `patrol` (claude/minimax): scheduled or memory-requested evidence collection; reports without modifying project state
+- `designer` row is intentionally not part of `cartooner-creative`; creative output is coordinated through memory + writer + visual.
 
 **Capability skill layer** (`core/skills/cs-*/`): tool-agnostic interface contracts (WHAT, not HOW). cs-classify routes long-form vs short-form; cs-structure runs the Hollywood Writers Room (Agent Teams); cs-write executes long-form content; cs-score applies rubric-based scoring. Workflow composition is the planner's responsibility, not the skills'.
 

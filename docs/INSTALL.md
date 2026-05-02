@@ -72,11 +72,13 @@ empty Enter accepts the default, and `详` gives a short explanation of roughly
 
 ### Step 1 — Template Decision
 
-**WHAT**: choose `clawseat-creative`, `clawseat-engineering`, or `clawseat-solo`. Use `detect_template_from_name <project>` once the project intent is known; otherwise default to creative.
+**WHAT**: choose `cartooner-creative`, `clawseat-engineering`, or `clawseat-solo`. Use
+`detect_template_from_name <project>` once the project intent is known. If the intent
+is unclear, default to `cartooner-creative`.
 
-**WHY default**: Recommended★: `clawseat-creative`. Reason: it gives planner, builder, patrol, and designer coverage without requiring reviewer overhead.
+**WHY**: Default to `cartooner-creative` because it keeps creative coverage (memory, writer, visual, patrol) without forcing reviewer overhead.
 
-**CONFIRM**: `[回车=默认 / 1 creative / 2 engineering / 3 solo / 详 / 取消]`
+**CONFIRM**: `[回车=默认 / 1 cartooner-creative / 2 engineering / 3 solo / 详 / 取消]`
 
 **ON-FAIL**: if the operator is unsure, give two examples per template and keep the default; if the template file is missing, offer `git status`, `git pull`, or `--force-repo-root <path>`.
 
@@ -271,7 +273,7 @@ Hook / CLI-first, Feishu is **write-only async notification**. ClawSeat does not
 |------|-------------|----------------|
 | planner | Stop-hook every turn → `lark-cli msg send` | structured summary to Feishu group (≤500 chars; never raw transcript) |
 | memory | skill-driven + Stop-hook | optional summary broadcast; durable memory delivery via `memory_deliver.py` when `[DELIVER:seat=<X>]` marker present |
-| builder / designer | none | CLI only, visible in their pane |
+| other seats (builder / writer / visual / reviewer / patrol) | none | CLI only, visible in their pane |
 
 The `koder` overlay (§4) is the inbound channel: operator messages on Feishu → OpenClaw-side koder → `tmux send-keys` into a ClawSeat seat.
 
@@ -360,7 +362,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--project <name>` | Install or reinstall a named ClawSeat project. Defaults to `install`. |
 | `--repo-root <path>` | Set the target project repository used as seat cwd. |
 | `--force-repo-root <path>` | Override the ClawSeat install code root when auto-detecting multiple worktrees is wrong. |
-| `--template <clawseat-creative\|clawseat-engineering\|clawseat-solo>` | Select the roster template. Creative has 5 seats; engineering has 6; solo has 3. |
+| `--template <cartooner-creative\|clawseat-engineering\|clawseat-solo>` | Select the roster template. cartooner-creative has 4 seats; engineering has 5; solo has 3. |
 | `--memory-tool <claude\|codex\|gemini>` | Override the primary memory seat tool. Non-Claude tools skip Claude provider selection. |
 | `--memory-model <model>` | Set the memory model when the selected memory tool supports an explicit model. |
 | `--provider <mode\|n>` | Select the memory-seat provider by detected candidate number or mode. |
@@ -378,8 +380,8 @@ bash scripts/install.sh --reset-harness-memory
 
 Available templates:
 
-- `clawseat-creative`: 5-seat creative template (memory + planner + builder + patrol + designer).
-- `clawseat-engineering`: 6-seat engineering template (memory + planner + builder + reviewer + patrol + designer).
+- `cartooner-creative`: 4-seat creative template (memory + writer + visual + patrol).
+- `clawseat-engineering`: 5-seat engineering template (memory + planner + builder + reviewer + patrol), where reviewer now merges QA + visual review.
 - `clawseat-solo`: 3-seat collaboration template (memory + builder + planner-gemini), all OAuth, standard brief -> workflow -> dispatch -> verdict cycle.
 
 ### Provider Selection — CLI Flag Mapping
@@ -440,9 +442,9 @@ What `install.sh` does in order:
    ClawSeat worktree, and load the install library modules from
    `scripts/install/lib/`.
 2. Resolve Python ≥3.11 before importing anything that needs `tomllib`.
-3. Resolve the project template and roster. `clawseat-creative` renders
-   `memory, planner, builder, patrol, designer`; `clawseat-engineering` adds
-   `reviewer`; `clawseat-solo` renders only `memory, builder, planner`.
+3. Resolve the project template and roster. `cartooner-creative` renders
+   `memory, writer, visual, patrol`; `clawseat-engineering` adds `reviewer` between
+   planner and patrol; `clawseat-solo` renders only `memory, builder, planner`.
 4. Run legacy path migration and seat liveness reconciliation.
 5. Verify host dependencies and run
    `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
@@ -484,7 +486,7 @@ done
 for s in install-memory; do
   tmux has-session -t "$s" || echo "MISSING $s"
 done
-for s in install-planner install-builder install-patrol install-designer; do
+for s in install-planner install-builder install-reviewer install-patrol install-writer install-visual; do
   tmux has-session -t "$s" 2>/dev/null && echo "UNEXPECTED $s"
 done
 ```
@@ -532,7 +534,7 @@ Memory executes Phase-A in order:
 | B2-verify-memory | `tmux has-session -t <project>-memory`; relaunch once if dead. | Memory seat alive. |
 | B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
 | B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
-| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`planner, builder, patrol, designer`, plus `reviewer` for engineering): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
+| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`cartooner-creative` uses `writer`, `visual`, `patrol`; `clawseat-engineering` uses `planner`, `builder`, `reviewer`, `patrol`; `clawseat-solo` uses `builder`, `planner`): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
 | B5-verify-feishu-binding | Read project binding metadata from `~/.agents/projects/install/project.toml` / `project-local.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
 | B6-smoke | If `feishu_group_id` set, memory triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, memory runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<memory + workers>`. |
@@ -551,7 +553,7 @@ Verify:
 ```bash
 grep -q '^phase=ready$' ~/.agents/tasks/install/STATUS.md
 grep -q '^providers=' ~/.agents/tasks/install/STATUS.md
-for s in install-memory install-planner install-builder install-patrol install-designer; do
+for s in install-memory install-planner install-builder install-reviewer install-patrol install-writer install-visual; do
   tmux has-session -t "$s" || echo "MISSING $s"
 done
 ```
@@ -628,7 +630,7 @@ Reversing the overlay: restore from backups in `<workspace>/.backup-koder-overla
 
 ClawSeat supports multiple concurrent projects (sessions prefixed `<project>-<seat>`).
 
-### Create a new project (default creative template)
+### Create a new project (default cartooner-creative template)
 
 ```bash
 bash scripts/install.sh --project <new-name>
@@ -639,24 +641,23 @@ bash scripts/install.sh --project <new-name> --repo-root /path/to/repo
 `install.sh --project` already wires `agent_admin project bootstrap` under the
 hood, so the same lazy-spawn install flow works for additional projects too.
 
-### Create a creative project (clawseat-creative template)
+### Create a cartooner-creative project (cartooner-creative template)
 
-For fiction, screenplay, or other creative work — uses a 5-seat roster
-(memory / planner:claude / builder:codex / patrol:claude / designer:gemini):
+For fiction, screenplay, or other creative work — uses a 4-seat roster
+(memory / writer:claude / visual:gemini / patrol:claude):
 
 | Seat | Tool | Role |
 |------|------|------|
-| memory | claude/oauth | lifecycle ops, patrol |
-| planner | claude/oauth | planning, workflow orchestration, unit decomposition |
-| builder | codex/oauth | workflow classification (cs-classify / cs-classify-short) |
-| patrol | claude/api | scheduled or planner-requested verification evidence |
-| designer | gemini/oauth | long-form writing (cs-write), rubric scoring (cs-score), creative review (APPROVED / CHANGES_REQUESTED) |
+| memory | claude/oauth | lifecycle ops + memory brief management |
+| writer | claude/oauth | deep creative writing and dialog craft |
+| visual | gemini/oauth | visual design, storyboard, concept art |
+| patrol | claude/api | scheduled or on-demand evidence checks |
 
 ```bash
 # Via install.sh (bootstraps and starts memory):
 bash scripts/install.sh --project myproject \
   --repo-root /path/to/myproject \
-  --template clawseat-creative
+  --template cartooner-creative
 
 # Or directly via agent_admin:
 # 1. Create local config file
@@ -665,25 +666,24 @@ project_name = "myproject"
 repo_root = "/path/to/myproject"
 EOF
 
-# 2. Bootstrap with creative template
+# 2. Bootstrap with cartooner-creative template
 agent_admin project bootstrap \
-  --template clawseat-creative \
+  --template cartooner-creative \
   --local /tmp/myproject-local.toml
 
 # 3. Use the new project
 agent_admin project use myproject
 ```
 
-For an engineering team project, use the 6-seat engineering template:
+For an engineering team project, use the 5-seat engineering template:
 
 | Seat | Tool | Role |
 |------|------|------|
 | memory | claude/oauth | lifecycle ops and dispatch |
 | planner | claude/api | planning and chain-level coordination |
 | builder | codex/oauth | implementation |
-| reviewer | claude/oauth | independent code review |
+| reviewer | claude/oauth | QA + visual consistency checks; independent code review gate |
 | patrol | claude/api | verification and evidence collection |
-| designer | gemini/oauth | UI/UX design and visual review |
 
 ```bash
 agent_admin project bootstrap \
