@@ -321,7 +321,7 @@ PROVIDER_DEFAULTS = {
         },
         "deepseek": {
             "base_url": "https://api.deepseek.com/anthropic",
-            "default_model": "deepseek-v4-pro",
+            "default_model": "deepseek-v4-pro[1M]",
             "url_markers": ("deepseek.com",),
         },
         "ark": {

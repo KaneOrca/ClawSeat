@@ -16,5 +16,5 @@ def test_deepseek_in_supported_runtime_matrix() -> None:
 
 def test_deepseek_in_provider_defaults() -> None:
     assert provider_default_base_url("claude", "deepseek") == "https://api.deepseek.com/anthropic"
-    assert provider_default_model("claude", "deepseek") == "deepseek-v4-pro"
+    assert provider_default_model("claude", "deepseek") == "deepseek-v4-pro[1M]"
     assert provider_url_matches("claude", "deepseek", "https://api.deepseek.com/anthropic")

@@ -109,4 +109,4 @@ def test_clawseat_creative_planner_role() -> None:
     assert planner["tool"] == "claude"
     assert planner["auth_mode"] == "api"
     assert planner["provider"] == "deepseek"
-    assert planner["model"] == "deepseek-v4-pro"
+    assert planner["model"] == "deepseek-v4-pro[1M]"

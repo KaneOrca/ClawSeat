@@ -207,7 +207,7 @@ write_provider_env() {
         resolved_base="$(provider_base_or_default deepseek "$base")"
         export_line ANTHROPIC_BASE_URL "$resolved_base"
         export_line ANTHROPIC_AUTH_TOKEN "$key"
-        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-deepseek-v4-pro}"
+        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-deepseek-v4-pro[1M]}"
         echo 'export API_TIMEOUT_MS=3000000'
         echo 'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
         echo 'unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY'
@@ -473,7 +473,7 @@ select_provider() {
         return
         ;;
       deepseek)
-        [[ -n "$FORCE_MODEL" ]] || FORCE_MODEL="deepseek-v4-pro"
+        [[ -n "$FORCE_MODEL" ]] || FORCE_MODEL="deepseek-v4-pro[1M]"
         remember_provider_selection deepseek "$FORCE_API_KEY" "$(provider_base_or_default deepseek)" "$FORCE_MODEL"
         if [[ "$DRY_RUN" == "1" ]]; then
           printf '[dry-run] force provider=deepseek via explicit api-key and write %s\n' "$PROVIDER_ENV"
@@ -699,7 +699,7 @@ seat_provider_for_explicit_provider() {
 seat_model_for_provider_mode() {
   case "$PROVIDER_MODE" in
     minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
-    deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro}" ;;
+    deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro[1M]}" ;;
     ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
     xcode-best|custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
     *) return 0 ;;
@@ -709,7 +709,7 @@ seat_model_for_provider_mode() {
 seat_model_for_explicit_provider() {
   case "$1" in
     minimax) printf '%s\n' "${PROVIDER_MODEL:-MiniMax-M2.7-highspeed}" ;;
-    deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro}" ;;
+    deepseek) printf '%s\n' "${PROVIDER_MODEL:-deepseek-v4-pro[1M]}" ;;
     ark) printf '%s\n' "${PROVIDER_MODEL:-ark-code-latest}" ;;
     xcode-best|custom_api|anthropic_console) [[ -n "$PROVIDER_MODEL" ]] && printf '%s\n' "$PROVIDER_MODEL" || true ;;
     *) return 0 ;;
@@ -766,7 +766,7 @@ launcher_custom_env_file_for_session() {
     deepseek)
       api_key="$PROVIDER_KEY"
       base_url="$(provider_base_or_default deepseek "$PROVIDER_BASE")"
-      model="${PROVIDER_MODEL:-deepseek-v4-pro}"
+      model="${PROVIDER_MODEL:-deepseek-v4-pro[1M]}"
       ;;
     ark)
       api_key="$PROVIDER_KEY"

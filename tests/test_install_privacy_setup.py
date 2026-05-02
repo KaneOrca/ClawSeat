@@ -124,7 +124,7 @@ def test_install_creates_deepseek_secret_template(tmp_path: Path) -> None:
     assert secret.read_text(encoding="utf-8") == (
         "ANTHROPIC_AUTH_TOKEN=<set-by-operator>\n"
         "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\n"
-        "ANTHROPIC_MODEL=deepseek-v4-pro\n"
+        "ANTHROPIC_MODEL=deepseek-v4-pro[1M]\n"
     )
 
 

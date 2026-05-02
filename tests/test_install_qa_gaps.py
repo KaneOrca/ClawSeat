@@ -141,7 +141,7 @@ def test_migrate_project_profile_skips_if_patrol_present(tmp_path: Path) -> None
             'tool = "claude"',
             'auth_mode = "api"',
             'provider = "deepseek"',
-            'model = "deepseek-v4-pro"',
+            'model = "deepseek-v4-pro[1M]"',
             "",
             "[seat_overrides.builder]",
             'tool = "codex"',

@@ -66,7 +66,7 @@ write_bootstrap_secret_file() {
       deepseek)
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
         export_line ANTHROPIC_BASE_URL "$(provider_base_or_default deepseek "$PROVIDER_BASE")"
-        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-deepseek-v4-pro}"
+        export_line ANTHROPIC_MODEL "${PROVIDER_MODEL:-deepseek-v4-pro[1M]}"
         ;;
       ark)
         export_line ANTHROPIC_AUTH_TOKEN "$PROVIDER_KEY"
@@ -285,7 +285,7 @@ ensure_deepseek_secret_template() {
   (umask 077; cat >"$secret_path" <<'EOF'
 ANTHROPIC_AUTH_TOKEN=<set-by-operator>
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
-ANTHROPIC_MODEL=deepseek-v4-pro
+ANTHROPIC_MODEL=deepseek-v4-pro[1M]
 EOF
   ) || die 31 DEEPSEEK_SECRET_WRITE_FAILED "unable to write $secret_path"
   chmod 600 "$secret_path" || die 31 DEEPSEEK_SECRET_CHMOD_FAILED "unable to chmod $secret_path"
