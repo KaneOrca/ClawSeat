@@ -7,10 +7,14 @@ shared_memories_window_title = "clawseat-memories"
 workers_window_title = "clawseat-{PROJECT}-workers"
 
 [window_layout.workers_grid]
-left_main_seat = "memory"
+# Source-of-truth: agent_admin_window._PRIMARY_SEAT_IDS = {"ancestor", "memory"}
+# filters memory out of workers payload — memory always renders as a tab in
+# the shared clawseat-memories window. Workers grid here is the 3 non-primary
+# seats: writer (left main, deep script craft) + visual + patrol (right column).
+left_main_seat = "writer"
 left_main_width = "50%"
-right_seats = ["writer", "visual", "patrol"]
-right_fill_order = "balanced-2x2"
+right_seats = ["visual", "patrol"]
+right_fill_order = "col-major"
 
 [defaults]
 home_mode = "real"
@@ -37,8 +41,7 @@ workspace_tools = [
 id = "memory"
 display_name = "cartooner-memory"
 role = "cartooner-memory"
-window = "workers"
-window_pane = "left-main"
+window = "memory"
 tool = "codex"
 auth_mode = "oauth"
 provider = "openai"
@@ -85,7 +88,7 @@ id = "writer"
 display_name = "cartooner-writer"
 role = "cartooner-writer"
 window = "workers"
-window_pane = "top-right"
+window_pane = "left-main"
 tool = "claude"
 auth_mode = "oauth"
 provider = "anthropic"
@@ -117,7 +120,7 @@ id = "visual"
 display_name = "cartooner-visual"
 role = "cartooner-visual"
 window = "workers"
-window_pane = "middle-right"
+window_pane = "top-right"
 tool = "gemini"
 auth_mode = "oauth"
 provider = "google"
