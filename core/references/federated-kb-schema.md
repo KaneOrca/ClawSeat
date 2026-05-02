@@ -26,6 +26,7 @@ not the sole store of project knowledge.
 ├── finding/<ts>-<slug>.md               ← Memory findings, orphan knowledge
 ├── task/<ts>-<slug>.md                  ← Memory task records, orphan knowledge
 ├── plan/<ts>-<slug>.md                  ← Memory plans, optional orphan knowledge
+├── reviewer/findings/<ts>-<slug>.md      ← Reviewer QA findings
 ├── builder/<ts>-<slug>.md               ← Builder domain KB
 ├── planner/<ts>-<slug>.md               ← Planner domain KB
 ├── reviewer/<ts>-<slug>.md              ← Reviewer domain KB
@@ -44,6 +45,7 @@ Seat KBs live under the Memory project tree:
 ├── builder/<ts>-<slug>.md
 ├── planner/<ts>-<slug>.md
 ├── reviewer/<ts>-<slug>.md
+├── reviewer/findings/<ts>-<slug>.md
 ├── patrol/doc-code-alignment/<ts>-<slug>.md
 ├── patrol/test-results/<ts>-<slug>.md
 ├── patrol/task-commit-gaps/<ts>-<slug>.md
@@ -55,6 +57,7 @@ Concrete paths:
 - `~/.agents/memory/projects/<project>/builder/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/planner/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/reviewer/<ts>-<slug>.md`
+- `~/.agents/memory/projects/<project>/reviewer/findings/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/patrol/doc-code-alignment/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/patrol/test-results/<ts>-<slug>.md`
 - `~/.agents/memory/projects/<project>/patrol/task-commit-gaps/<ts>-<slug>.md`
@@ -104,6 +107,23 @@ Seat-specific records may add fields. Recommended additions:
 - Reviewer: `risk_type`, `severity`
 - QA: `doc_file`, `code_file`, `issue_type`, `severity`, `first_seen`,
   `last_seen`, `resolved_at`, `model`
+
+### reviewer/findings/<ts>-<slug>.md
+
+Frontend/browser review findings written by reviewer QA mode use this sub-path:
+
+```markdown
+---
+task_id: task-id
+severity: HIGH | MEDIUM | LOW
+url: https://host/path
+repro: step-by-step repro steps
+screenshot_path: null | /abs/path/to/screenshot.png
+status: open | investigating | resolved
+---
+
+Free-form description (keep under 200 words).
+```
 
 ## Memory Read Protocol
 
