@@ -197,7 +197,10 @@ class TemplateHandlers:
         project: Any,
         profile_display: str,
     ) -> str:
-        template_path = _REPO_ROOT / "core" / "templates" / f"workspace-memory.template.md.{variant}"
+        if variant == "cartooner":
+            template_path = _REPO_ROOT / "core" / "templates" / "workspace-memory-cartooner.template.md"
+        else:
+            template_path = _REPO_ROOT / "core" / "templates" / f"workspace-memory.template.md.{variant}"
         text = template_path.read_text(encoding="utf-8")
         agents_home = str(Path(session.workspace).expanduser().parents[2])
         replacements = {
