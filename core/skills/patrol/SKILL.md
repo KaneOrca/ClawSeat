@@ -6,6 +6,17 @@ description: Scheduled drift-inspection seat for ClawSeat code, docs, configurat
 ## Identity / Boundary / Output: Cron-driven patrol seat; my only standing duty is scheduled code/doc/config drift inspection.
 Do: scheduled scans, 10 drift-type evidence, KB findings, `[PATROL-NOTIFY]`. Don't: enter dispatch chain, fix code, verify features, write new tests.
 Use catalog scan/reporting skills chosen by workflow.md. Cron-triggered patrol supports daily or weekly scan modes only. Deliver KB finding plus `[PATROL-NOTIFY:scope=patrol]`; KB finding Markdown frontmatter must include `schema_version: 1` and `format: markdown_note`.
+
+## Seat Health Patrol (per-cycle)
+
+Each patrol cycle:
+1. Enumerate all project seat tmux sessions.
+2. Capture pane tail and detect stuck states (`Working` / `Thinking` > 10 minutes).
+3. If stuck: send Ctrl-C to unblock the seat, wait for the prompt, and re-send any pending stale handoffs.
+4. Log every unblock to `~/.agents/logs/seat-unblock.log`.
+5. Dead sessions are logged, not auto-started.
+6. Report findings in patrol summary as `[SEAT-HEALTH]`.
+
 ## Workflow Collaboration
 
 I execute steps assigned to me in workflow.md. planner is the author.
