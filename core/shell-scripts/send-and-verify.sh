@@ -174,6 +174,28 @@ if [ "${CLAWSEAT_SEND_VERIFY_DEBUG:-0}" = "1" ]; then
   } >&2
 fi
 
+_wait_until_idle() {
+  local session="$1" max_wait="${2:-120}" poll_sec="${3:-4}"
+  local waited=0
+  while [ "$waited" -lt "$max_wait" ]; do
+    local tail_text
+    tail_text="$(env -u TMUX "$TMUX_BIN" capture-pane -t "$session" -p 2>/dev/null | tail -3 || true)"
+    case "$tail_text" in
+      *Working*|*Thinking*|*"• "*)
+        sleep "$poll_sec"
+        waited=$((waited + poll_sec))
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+  done
+  echo "send-and-verify: WARN target busy after ${waited}s, sending anyway (may be swallowed)" >&2
+  return 0
+}
+
+_wait_until_idle "$SESSION"
+
 if [ -n "$TMUX_SEND_BIN" ]; then
   # Delegate to tmux-send — compliant agent-launcher entry point.
   # Handles AGENT_LAUNCHER_TMUX_SEND_ACTIVE and Enter internally.
