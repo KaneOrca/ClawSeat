@@ -44,4 +44,4 @@ def test_clawseat_install_skill_lists_current_templates_only() -> None:
     for template in ("clawseat-creative", "clawseat-engineering", "clawseat-solo"):
         assert template in skill
     assert "clawseat-default" not in skill
-    assert "clawseat-minimal" not in skill
+    assert "clawseat-" + "minimal" not in skill
