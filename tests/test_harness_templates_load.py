@@ -1,8 +1,10 @@
-"""Regression: clawseat-engineering and clawseat-creative templates load correctly.
+"""Regression: clawseat-engineering template loads correctly.
 
-Verifies that the templates introduced in FEAT-HARNESS-TEMPLATES are syntactically
-valid TOML, have the expected seat count, and that each seat has the required fields
+Verifies that the template introduced in FEAT-HARNESS-TEMPLATES is syntactically
+valid TOML, has the expected seat count, and that each seat has the required fields
 (id, role, tool, auth_mode).
+
+clawseat-creative was deprecated 2026-05-02 (BV-2).
 """
 from __future__ import annotations
 
@@ -33,17 +35,16 @@ def _validate_seats(data: dict) -> list[dict]:
     return engineers
 
 
-def test_clawseat_engineering_loads_with_six_seats() -> None:
+def test_clawseat_engineering_loads_with_five_seats() -> None:
     data = _load("clawseat-engineering")
     seats = _validate_seats(data)
-    assert len(seats) == 6, f"expected 6 seats, got {len(seats)}: {[s['id'] for s in seats]}"
+    assert len(seats) == 5, f"expected 5 seats, got {len(seats)}: {[s['id'] for s in seats]}"
     seat_ids = [s["id"] for s in seats]
     assert "memory" in seat_ids
     assert "planner" in seat_ids
     assert "builder" in seat_ids
     assert "reviewer" in seat_ids
     assert "patrol" in seat_ids
-    assert "designer" in seat_ids
 
 
 def test_clawseat_engineering_builder_is_codex_oauth() -> None:
@@ -54,59 +55,4 @@ def test_clawseat_engineering_builder_is_codex_oauth() -> None:
     assert builder["provider"] == "openai"
 
 
-def test_clawseat_creative_memory_defaults_to_claude_oauth() -> None:
-    data = _load("clawseat-creative")
-    seats = _validate_seats(data)
-    memory = next(e for e in seats if e["id"] == "memory")
-    assert memory["tool"] == "claude"
-    assert memory["auth_mode"] == "oauth"
-    assert memory["provider"] == "anthropic"
-
-
-def test_clawseat_creative_loads_with_five_seats() -> None:
-    data = _load("clawseat-creative")
-    seats = _validate_seats(data)
-    assert len(seats) == 5, f"expected 5 seats, got {len(seats)}: {[s['id'] for s in seats]}"
-    seat_ids = [s["id"] for s in seats]
-    assert "memory" in seat_ids
-    assert "planner" in seat_ids
-    assert "builder" in seat_ids   # codex classification seat
-    assert "patrol" in seat_ids
-    assert "designer" in seat_ids  # gemini writing + scoring seat
-
-
-def test_clawseat_creative_builder_skills_has_classify_not_write() -> None:
-    """builder(codex) executes cs-classify only — cs-write must NOT be in its skills."""
-    data = _load("clawseat-creative")
-    builder = next(e for e in data["engineers"] if e["id"] == "builder")
-    skill_names = [s.split("/")[-2] for s in builder.get("skills", [])]
-    assert "cs-classify" in skill_names, f"builder must have cs-classify; got {skill_names}"
-    assert "cs-write" not in skill_names, f"builder must NOT have cs-write; got {skill_names}"
-
-
-def test_clawseat_creative_designer_skills_has_write_and_score() -> None:
-    """designer(gemini) executes cs-write + cs-score — both must be in its skills."""
-    data = _load("clawseat-creative")
-    designer = next(e for e in data["engineers"] if e["id"] == "designer")
-    skill_names = [s.split("/")[-2] for s in designer.get("skills", [])]
-    assert "cs-write" in skill_names, f"designer must have cs-write; got {skill_names}"
-    assert "cs-score" in skill_names, f"designer must have cs-score; got {skill_names}"
-
-
-def test_clawseat_creative_designer_is_gemini_oauth() -> None:
-    data = _load("clawseat-creative")
-    designer = next(e for e in data["engineers"] if e["id"] == "designer")
-    assert designer["tool"] == "gemini"
-    assert designer["auth_mode"] == "oauth"
-    assert designer["provider"] == "google"
-    assert designer["role"] == "creative-designer"
-
-
-def test_clawseat_creative_planner_role() -> None:
-    data = _load("clawseat-creative")
-    planner = next(e for e in data["engineers"] if e["id"] == "planner")
-    assert planner["role"] == "creative-planner"
-    assert planner["tool"] == "claude"
-    assert planner["auth_mode"] == "api"
-    assert planner["provider"] == "deepseek"
-    assert planner["model"] == "deepseek-v4-pro[1M]"
+# clawseat-creative tests removed — template deprecated 2026-05-02 (BV-2)
