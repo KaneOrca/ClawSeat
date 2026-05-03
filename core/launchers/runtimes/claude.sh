@@ -108,16 +108,26 @@ run_claude_runtime() {
     "$runtime_dir/xdg/cache" \
     "$runtime_dir/xdg/state"
 
-  # Same host-env preservation pattern as the oauth (host reuse) branch.
-  # oauth_token / api / anthropic-console seats also need PROXY/TLS/timeout
-  # to reach api.anthropic.com from region-restricted networks. The
-  # CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST gate is *not* applied here for
-  # CLAUDE_CODE_OAUTH_TOKEN because oauth_token mode supplies the token
-  # via secret_file, not host env — the helper's own gate handles that
-  # correctly (token only re-exported when host marker present).
+  # Same host-env preservation pattern as the oauth (host reuse) branch
+  # for PROXY/TLS/timeout — non-OAuth seats also need them to reach
+  # custom endpoints from region-restricted networks.
+  #
+  # CRITICAL: pass `0` to skip host-managed CLAUDE_CODE_* preservation.
+  # When CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1 (Claude Desktop wrapper),
+  # the host injects CLAUDE_CODE_OAUTH_TOKEN into every child process —
+  # including non-OAuth seats. Claude Code CLI prefers that token over
+  # ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY, so leaking it into a
+  # custom / minimax / xcode / deepseek seat sends an Anthropic OAuth
+  # token to a non-Anthropic endpoint and gets a spurious 401
+  # ("Authentication Fails, Your api key: ****QAA is invalid").
+  # The oauth_token branch below re-exports CLAUDE_CODE_OAUTH_TOKEN from
+  # the secret file, not from host env, so dropping host vars here is
+  # always safe.
   local _claude_host_env_snapshot
-  _claude_host_env_snapshot="$(capture_oauth_host_env)"
+  _claude_host_env_snapshot="$(capture_oauth_host_env 0)"
   unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_SUBSCRIBER_SUBSCRIPTION_ID
+  unset CLAUDE_CODE_RATE_LIMIT_TIER CLAUDE_CODE_SUBSCRIPTION_TYPE
+  unset CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST
   unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
   eval "$_claude_host_env_snapshot"
 

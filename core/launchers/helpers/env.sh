@@ -200,7 +200,16 @@ _OAUTH_PRESERVE_HOST_MANAGED_VARS=(CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST \
                                    CLAUDE_CODE_SUBSCRIPTION_TYPE \
                                    CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH)
 
+# Args:
+#   $1 — include_host_managed_oauth: "1" (default) to also preserve
+#        CLAUDE_CODE_OAUTH_TOKEN + sibling host-managed markers when
+#        CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1 is set. Pass "0" from
+#        non-OAuth call sites (api / custom / minimax / anthropic-console
+#        seats) — for those, CLAUDE_CODE_OAUTH_TOKEN would override the
+#        per-seat ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY and produce a
+#        spurious 401 against the non-Anthropic endpoint.
 capture_oauth_host_env() {
+  local include_host_managed_oauth="${1:-1}"
   local out="" name val
   # Always preserve PROXY / TLS / TIMEOUT vars when set on the host.
   for name in "${_OAUTH_PRESERVE_PROXY_VARS[@]}" \
@@ -211,10 +220,11 @@ capture_oauth_host_env() {
       out+="export $name=$(printf '%q' "$val"); "
     fi
   done
-  # Preserve host-managed CLAUDE_CODE_* only if the host marker is present.
-  # Without the marker, dropping these vars protects against stale token
-  # inheritance from older shell sessions.
-  if [[ "${CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST:-}" == "1" ]]; then
+  # Preserve host-managed CLAUDE_CODE_* only if the host marker is present
+  # AND the caller asked for it. Without the marker, dropping these vars
+  # protects against stale token inheritance from older shell sessions.
+  if [[ "$include_host_managed_oauth" == "1" ]] \
+     && [[ "${CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST:-}" == "1" ]]; then
     for name in "${_OAUTH_PRESERVE_HOST_MANAGED_VARS[@]}"; do
       val="${!name:-}"
       if [[ -n "$val" ]]; then
