@@ -146,3 +146,81 @@ load_custom_env() {
   set +a
   rm -f "$env_file"
 }
+
+# ============================================================================
+# OAuth seat host-env preservation
+#
+# ClawSeat OAuth seats (--auth oauth | oauth_token) inherit the tmux session's
+# environment. Historically the launcher did `unset ANTHROPIC_* CLAUDE_CODE_*`
+# to drop stale provider state, but it also wiped legitimate host-supplied
+# state — most importantly:
+#
+#   * HTTPS_PROXY / HTTP_PROXY / ALL_PROXY / NO_PROXY
+#     Required in region-restricted networks (China etc.) to reach
+#     api.anthropic.com. When dropped, OAuth seats hit transient
+#     "Request not allowed" 403s while the host's Claude Desktop
+#     (which keeps PROXY) works fine. See GitHub issue #30318 and the
+#     2026-05-03 "install-memory 403" investigation.
+#   * NODE_USE_SYSTEM_CA / NODE_EXTRA_CA_CERTS
+#     Needed when corporate / system CA bundles are not in Node's default.
+#   * API_TIMEOUT_MS
+#     Long requests (compaction, large agent tasks) need 600s+; without it
+#     defaults bite first.
+#   * CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST + sibling CLAUDE_CODE_* markers
+#     When set by the host (Claude Desktop wrapper), the host has already
+#     provided a known-good long-lived OAuth token via env. Preserve them
+#     so the OAuth seat can ride the host's authenticated session instead
+#     of churning through keychain refresh.
+#
+# This helper captures the relevant vars before we wipe provider state,
+# returning a small text blob the caller can `eval` after the wipe to
+# restore them. Only non-empty values are restored — never resurrects
+# unset / blank inheritance.
+#
+# Usage:
+#   local oauth_env_snapshot
+#   oauth_env_snapshot="$(capture_oauth_host_env)"
+#   unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ...
+#   eval "$oauth_env_snapshot"
+# ============================================================================
+_OAUTH_PRESERVE_PROXY_VARS=(HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY \
+                            https_proxy http_proxy all_proxy no_proxy)
+_OAUTH_PRESERVE_TLS_VARS=(NODE_USE_SYSTEM_CA NODE_EXTRA_CA_CERTS)
+_OAUTH_PRESERVE_TIMEOUT_VARS=(API_TIMEOUT_MS)
+# Host-managed CLAUDE_CODE_* state. CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1
+# is the Claude Desktop wrapper's marker; when present we trust that the
+# host provided a coherent OAuth env (token + tier + subscription markers)
+# and preserve all of them as a unit. CLAUDE_CODE_OAUTH_TOKEN by itself
+# without the marker is treated as stale and dropped (preserves the
+# original re-auth-on-stale-env safety property).
+_OAUTH_PRESERVE_HOST_MANAGED_VARS=(CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST \
+                                   CLAUDE_CODE_OAUTH_TOKEN \
+                                   CLAUDE_CODE_SUBSCRIBER_SUBSCRIPTION_ID \
+                                   CLAUDE_CODE_RATE_LIMIT_TIER \
+                                   CLAUDE_CODE_SUBSCRIPTION_TYPE \
+                                   CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH)
+
+capture_oauth_host_env() {
+  local out="" name val
+  # Always preserve PROXY / TLS / TIMEOUT vars when set on the host.
+  for name in "${_OAUTH_PRESERVE_PROXY_VARS[@]}" \
+              "${_OAUTH_PRESERVE_TLS_VARS[@]}" \
+              "${_OAUTH_PRESERVE_TIMEOUT_VARS[@]}"; do
+    val="${!name:-}"
+    if [[ -n "$val" ]]; then
+      out+="export $name=$(printf '%q' "$val"); "
+    fi
+  done
+  # Preserve host-managed CLAUDE_CODE_* only if the host marker is present.
+  # Without the marker, dropping these vars protects against stale token
+  # inheritance from older shell sessions.
+  if [[ "${CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST:-}" == "1" ]]; then
+    for name in "${_OAUTH_PRESERVE_HOST_MANAGED_VARS[@]}"; do
+      val="${!name:-}"
+      if [[ -n "$val" ]]; then
+        out+="export $name=$(printf '%q' "$val"); "
+      fi
+    done
+  fi
+  printf '%s\n' "$out"
+}

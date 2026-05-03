@@ -45,9 +45,17 @@ run_claude_runtime() {
     #   2. drop all agent-launcher-provided token env vars so Claude
     #      doesn't prefer a stale token/API-mode path over its own
     #      native login flow
+    #   3. PRESERVE host-supplied PROXY / TLS / timeout / Claude-Desktop
+    #      managed OAuth markers (see capture_oauth_host_env in env.sh).
+    #      Without preservation, OAuth seats in region-restricted networks
+    #      (China etc.) lose HTTPS_PROXY and hit transient 403 "Request
+    #      not allowed" while host Claude Desktop works fine. See the
+    #      2026-05-03 install-memory 403 investigation in MEMORY.md.
     # Older ClawSeat builds only restored HOME and missed XDG + CLAUDE_CODE_OAUTH_TOKEN,
     # leaving Claude looking at sandbox XDG dirs and picking up stale token env —
     # the root cause of the "re-auth every start" bug.
+    local _oauth_host_env_snapshot
+    _oauth_host_env_snapshot="$(capture_oauth_host_env)"
     unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
     unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_SUBSCRIBER_SUBSCRIPTION_ID
     export HOME="$REAL_HOME"
@@ -55,6 +63,8 @@ run_claude_runtime() {
     export XDG_DATA_HOME="$REAL_HOME/.local/share"
     export XDG_CACHE_HOME="$REAL_HOME/.cache"
     export XDG_STATE_HOME="$REAL_HOME/.local/state"
+    # Re-apply preserved host env after the wipe.
+    eval "$_oauth_host_env_snapshot"
     seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
     cd "$workdir"
     echo "────────────────────────────────────────"
@@ -63,6 +73,12 @@ run_claude_runtime() {
     echo " Directory:  $workdir"
     echo " HOME:       $HOME"
     echo " XDG_*:      \$REAL_HOME/{config,cache,state,local/share}"
+    if [[ -n "${HTTPS_PROXY:-}${HTTP_PROXY:-}" ]]; then
+      echo " PROXY:      ${HTTPS_PROXY:-${HTTP_PROXY:-}}"
+    fi
+    if [[ "${CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST:-}" == "1" ]]; then
+      echo " Host-managed OAuth: yes (Claude Desktop wrapper)"
+    fi
     echo "────────────────────────────────────────"
     exec claude --dangerously-skip-permissions
   fi
@@ -92,8 +108,18 @@ run_claude_runtime() {
     "$runtime_dir/xdg/cache" \
     "$runtime_dir/xdg/state"
 
+  # Same host-env preservation pattern as the oauth (host reuse) branch.
+  # oauth_token / api / anthropic-console seats also need PROXY/TLS/timeout
+  # to reach api.anthropic.com from region-restricted networks. The
+  # CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST gate is *not* applied here for
+  # CLAUDE_CODE_OAUTH_TOKEN because oauth_token mode supplies the token
+  # via secret_file, not host env — the helper's own gate handles that
+  # correctly (token only re-exported when host marker present).
+  local _claude_host_env_snapshot
+  _claude_host_env_snapshot="$(capture_oauth_host_env)"
   unset CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_SUBSCRIBER_SUBSCRIPTION_ID
   unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
+  eval "$_claude_host_env_snapshot"
 
   if [[ "$auth_mode" == "custom" ]]; then
     load_custom_env "$CUSTOM_ENV_FILE"

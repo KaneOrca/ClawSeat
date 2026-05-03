@@ -99,3 +99,54 @@ tmux kill-session -t install-koder-claude   # repeat for each seat
 ```
 
 See also `docs/ARCHITECTURE.md §3j`.
+
+## Host environment preservation (PROXY / TLS / Claude Desktop OAuth state)
+
+> Added 2026-05-04 after the install-memory 403 investigation.
+
+Claude OAuth seats (`oauth` and `oauth_token`) — and other claude-tool
+seats started by `core/launchers/agent-launcher.sh` — historically wiped
+all `ANTHROPIC_*` and `CLAUDE_CODE_*` env vars before launching to drop
+stale provider state. That wipe was *too broad*: it also dropped
+host-supplied state that OAuth seats genuinely need.
+
+### What is now preserved
+
+The `capture_oauth_host_env` helper in
+`core/launchers/helpers/env.sh` snapshots the relevant vars *before*
+the unset and restores them *after*. The whitelist:
+
+| Var | Why preserved |
+|-----|---------------|
+| `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` (and lower-case) | Required to reach `api.anthropic.com` on region-restricted networks (China etc.) — without it the seat hits transient `429`s that surface as `403 "Request not allowed"` while host Claude Desktop (which keeps PROXY) works fine. |
+| `NODE_USE_SYSTEM_CA` / `NODE_EXTRA_CA_CERTS` | Corporate/system CA bundles. |
+| `API_TIMEOUT_MS` | Long requests (compaction, large agent tasks) need 600s+. |
+| `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST` + sibling `CLAUDE_CODE_*` markers (token, subscription tier, etc.) | Only preserved when `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1` is set on the host (Claude Desktop wrapper marker). The presence of the marker means the host already gave us a coherent OAuth env we should ride; absence means treat any inherited token as stale and drop it (preserves the original re-auth-on-stale-env safety). |
+
+### What is still wiped (intentionally)
+
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_MODEL` — wiped to prevent API-mode env from polluting the
+  OAuth credential resolution path.
+- `CLAUDE_CODE_OAUTH_TOKEN` *without* the `PROVIDER_MANAGED_BY_HOST=1`
+  marker — wiped because anything in the env without the host marker
+  could be a stale token from an older shell session.
+- `BAGGAGE` (Sentry tracing) — not preserved across client boundaries.
+
+### Symptoms that originally drove this
+
+- install-memory (`oauth` host reuse) randomly returned
+  `API Error: 403 {"error":{"type":"forbidden","message":"Request not allowed"}}`
+  while host Claude Desktop on the same OAuth credential worked fine.
+- Restarting the seat (`agent_admin session start-engineer ... --reset`)
+  temporarily recovered.
+- Claude Code CLI v2.1.126 maps several transient server states to the
+  `403 "Request not allowed"` string, masking the real cause; the issue
+  is tracked upstream in
+  [anthropics/claude-code#53563](https://github.com/anthropics/claude-code/issues/53563)
+  and [#53635](https://github.com/anthropics/claude-code/issues/53635).
+- Even after this preservation, the upstream transient is not fully
+  fixed — the seat recovery flow (`session start-engineer --reset`,
+  which auto-refreshes the memories window via the hook in
+  `agent_admin_session_lifecycle._auto_refresh_memories_window_after_memory_start`)
+  remains the canonical workaround when 403 surfaces.
