@@ -280,12 +280,14 @@ class SessionStartLifecycle:
         self.hooks.ensure_api_secret_ready(session)
         project = self.hooks.load_project(session.project)
         self.hooks.apply_template(session, project)
-        if reset and self.hooks.tmux_has_session(session.session):
-            self._run_tmux_with_retry(
-                ["kill-session", "-t", session.session],
-                reason=f"reset existing session {session.session}",
-                check=False,
-            )
+        if reset:
+            if self.hooks.tmux_has_session(session.session):
+                self._run_tmux_with_retry(
+                    ["kill-session", "-t", session.session],
+                    reason=f"reset existing session {session.session}",
+                    check=False,
+                )
+            self.clean_stale_attach_clients(session.session)
         if self.hooks.tmux_has_session(session.session):
             self._assert_session_running(session, operation=f"start_engineer idempotent check for {session.session}")
             self._configure_session_display(session.session)
@@ -488,6 +490,101 @@ class SessionStartLifecycle:
                 f"cleanup stale-tool session {stale_session} failed, "
                 f"exit={returncode}, detail={detail or '<empty>'}"
             )
+
+    def _live_tmux_client_pids(self, session_name: str) -> set[int]:
+        if not self.hooks.tmux_has_session(session_name):
+            return set()
+        result = self._run_tmux_with_retry(
+            ["list-clients", "-t", session_name, "-F", "#{client_pid}"],
+            reason=f"inspect tmux clients for {session_name}",
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return set()
+        live_client_pids: set[int] = set()
+        for raw_pid in result.stdout.splitlines():
+            pid_text = raw_pid.strip()
+            if pid_text.isdigit():
+                live_client_pids.add(int(pid_text))
+        return live_client_pids
+
+    def _tmux_attach_candidate_processes(self, session_name: str) -> list[tuple[int, str]]:
+        result = subprocess.run(
+            ["pgrep", "-f", "tmux attach"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+        )
+        if result.returncode not in (0, 1):
+            detail = (result.stderr or result.stdout or "").strip()
+            raise SessionStartError(
+                f"inspect tmux attach clients for {session_name} failed, "
+                f"exit={result.returncode}, detail={detail or '<empty>'}"
+            )
+        pids = sorted(
+            {
+                int(raw_pid.strip())
+                for raw_pid in (result.stdout or "").splitlines()
+                if raw_pid.strip().isdigit()
+            }
+        )
+        candidates: list[tuple[int, str]] = []
+        for pid in pids:
+            proc = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "command="],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+            )
+            if proc.returncode != 0:
+                continue
+            command = (proc.stdout or "").strip()
+            if not command or "tmux attach" not in command or session_name not in command:
+                continue
+            if "new-session" in command:
+                continue
+            candidates.append((pid, command))
+        return candidates
+
+    def clean_stale_attach_clients(self, session_name: str, *, dry_run: bool = False) -> list[int]:
+        """Reap tmux attach clients that target a session about to be respawned."""
+        live_client_pids = self._live_tmux_client_pids(session_name)
+        candidates = self._tmux_attach_candidate_processes(session_name)
+        reaped: list[int] = []
+        for pid, command in candidates:
+            if pid in live_client_pids:
+                continue
+            if dry_run:
+                print(
+                    f"tmux clean-stale-clients: dry-run pid={pid} session={session_name} command={command}",
+                    file=sys.stderr,
+                )
+                reaped.append(pid)
+                continue
+            result = subprocess.run(
+                ["kill", "-TERM", str(pid)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=TMUX_COMMAND_TIMEOUT_SECONDS,
+            )
+            if result.returncode == 0:
+                reaped.append(pid)
+                print(
+                    f"start-engineer: reaped stale attach client pid={pid} session={session_name}",
+                    file=sys.stderr,
+                )
+                continue
+            detail = (result.stderr or result.stdout or "").strip().lower()
+            if "no such process" in detail:
+                continue
+            raise SessionStartError(
+                f"reap stale attach client {pid} for {session_name} failed, "
+                f"exit={result.returncode}, detail={detail or '<empty>'}"
+            )
+        return reaped
 
     def _auto_recover_grid_after_start(self, session: Any) -> None:
         # Skip under pytest — the test harness mocks subprocess and our hook
