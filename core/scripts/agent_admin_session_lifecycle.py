@@ -428,6 +428,13 @@ class SessionStartLifecycle:
         # if no misroute exists it prints "ok" and exits 0.
         self._auto_recover_grid_after_start(session)
 
+        # When a memory seat is (re)started, the shared clawseat-memories
+        # iTerm window's tab for this project is still attached to the
+        # OLD (now-killed) tmux session — the operator sees a "detached"
+        # banner and has to manually re-attach. Auto-refresh the memories
+        # window so the tab reconnects to the fresh session.
+        self._auto_refresh_memories_window_after_memory_start(session)
+
     def _stale_tool_variant_sessions(self, session: Any) -> list[str]:
         project_name = str(getattr(session, "project", "") or "").strip()
         engineer_id = str(getattr(session, "engineer_id", "") or "").strip()
@@ -529,6 +536,38 @@ class SessionStartLifecycle:
                 )
         except Exception as exc:  # noqa: BLE001 silent-ok: hook must not fail start-engineer
             print(f"warn: grid recovery hook after {session.session}: {exc} (log: {log_path})", file=sys.stderr)
+
+    def _auto_refresh_memories_window_after_memory_start(self, session: Any) -> None:
+        # Skip under pytest — the test harness mocks subprocess and our hook
+        # shows up as an extra iterm driver call that breaks strict equality
+        # assertions.
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+        if os.environ.get("CLAWSEAT_DISABLE_MEMORIES_AUTOREFRESH") == "1":
+            return
+        seat_id = getattr(session, "engineer_id", "") or ""
+        if seat_id not in ("ancestor", "memory"):
+            return
+        project_name = getattr(session, "project", None)
+        if not project_name:
+            return
+        try:
+            project = self.hooks.load_project(project_name)
+        except Exception as exc:  # noqa: BLE001 silent-ok: hook must not fail start-engineer
+            print(
+                f"warn: memories refresh skipped — load_project({project_name!r}) failed: {exc}",
+                file=sys.stderr,
+            )
+            return
+        try:
+            # Imported lazily to avoid circular imports during agent_admin bootstrap.
+            from agent_admin_window import ensure_memories_pane
+            ensure_memories_pane(project)
+        except Exception as exc:  # noqa: BLE001 silent-ok: hook must not fail start-engineer
+            print(
+                f"warn: ensure_memories_pane after {session.session}: {exc}",
+                file=sys.stderr,
+            )
 
     def stop_engineer(self, session: Any, *, close_iterm_pane: bool = False, **legacy_kwargs: Any) -> None:
         # Backward-compat: callers (incl. agent_admin_commands.py) historically

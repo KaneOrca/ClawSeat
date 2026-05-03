@@ -676,15 +676,22 @@ def test_ensure_tabs_per_tab_status_aggregation(no_tmux_calls):
 
     result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
     assert result["status"] == "ok"
+    # Order: install=skipped, cartooner=detect-failure (mismatch session, new tab created),
+    # arena=created (not in window). Then prune sweeps the original stale 'cartooner'-marked
+    # tab whose session.name didn't match — added at the end as 'pruned'.
     assert [entry["status"] for entry in result["tabs"]] == [
         "skipped",
         "detect-failure",
         "created",
+        "pruned",
     ]
-    assert [entry["tab"] for entry in result["tabs"]] == ["install", "cartooner", "arena"]
+    assert [entry["tab"] for entry in result["tabs"]] == ["install", "cartooner", "arena", "cartooner"]
     assert result["tabs_created"] == 2
     assert result["tabs_skipped"] == 1
+    assert result["tabs_pruned"] == 1
     assert len(existing.tabs) == 4
+    # The original stale 'cartooner' tab (mismarked) was closed by prune
+    assert stale.closed is True
 
 
 def test_build_tabs_append_failure_does_not_close_existing_window(no_tmux_calls):
@@ -1049,3 +1056,46 @@ def test_build_tabs_does_not_prune_when_creating_new_window(no_tmux_calls):
     result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
     assert result["status"] == "ok"
     assert result["tabs_pruned"] == 0
+
+
+def test_build_tabs_prunes_tab_with_mismarked_user_tab_name(no_tmux_calls):
+    """Stale tab whose user.tab_name marker matches a spec but whose session
+    is attached to the WRONG tmux session must still be pruned.
+
+    Real-world cause: a previous driver bug wrote install marker onto a tab
+    that was already attached to cartooner-front-memory-codex. Naive prune
+    saw the marker, said "this is install, keep", missing the mismatch.
+    """
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    # Tab 0 (current_tab): MIS-MARKED — user.tab_name says "install" but
+    # session.name is the wrong tmux session (cartooner-front-memory-codex).
+    existing.current_tab.current_session.name = "cartooner-front-memory-codex"
+    existing.current_tab.current_session.variables["user.tab_name"] = "install"
+    existing.current_tab.title = "install"
+    # Tab 1: legitimate install tab — marker matches AND session matches.
+    install_tab = _FakeTab(_FakeSession(sid="t-install"))
+    install_tab.current_session.name = "install-memory-claude"
+    install_tab.current_session.variables["user.tab_name"] = "install"
+    install_tab.title = "install"
+    existing.tabs.append(install_tab)
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [
+            {"name": "install", "command": "tmux attach -t '=install-memory-claude'"},
+        ],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    # The mis-marked tab should be pruned (session.name mismatch overrides marker).
+    assert result["tabs_pruned"] == 1
+    assert existing.current_tab.closed is True  # mis-marked tab killed
+    assert install_tab.closed is False  # legitimate tab survives

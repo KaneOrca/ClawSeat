@@ -659,16 +659,28 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
     # Prune stale tabs not in the current spec when reusing an existing window.
     # Without this, every rebuild leaves dead tabs (e.g. -zsh fallback after a
     # tmux attach failure) accumulating forever.
+    #
+    # Strict matching: a tab is "expected" only when BOTH its user.tab_name
+    # marker matches a spec.name AND its session.name matches that spec's
+    # expected session substring. A tab whose marker says "install" but is
+    # actually attached to "cartooner-front-memory-codex" (mismarker from a
+    # historical driver bug) must still be pruned.
     tabs_pruned = 0
     if ensure and not created_window:
-        expected_names = {spec["name"] for spec in tabs}
+        spec_by_name = {spec["name"]: spec for spec in tabs}
         for tab in list(getattr(window, "tabs", []) or []):
             try:
                 tab_name = await _tab_name(tab)
             except Exception:  # noqa: BLE001 - if we can't read the name, leave it alone
                 continue
-            if not tab_name or tab_name in expected_names:
+            if not tab_name:
                 continue
+            matching_spec = spec_by_name.get(tab_name)
+            if matching_spec is not None:
+                # Marker matches a spec; verify session.name agrees before sparing the tab.
+                matched, _ = await _tab_matches_expected(tab, matching_spec)
+                if matched:
+                    continue
             if await _safe_close_tab(tab):
                 tabs_pruned += 1
                 tab_results.append({"status": "pruned", "tab": tab_name})
