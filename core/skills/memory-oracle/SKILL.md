@@ -467,7 +467,32 @@ seat-infrastructure and ancestor-handoff steps.
    - >70% 英文字符 → 用英文回复
    - 混杂或不足 → 默认中文(ClawSeat 项目主用户语言)
 2. 系统消息 / brief / SKILL 内容(中文)不影响判断 — 只看 operator 输入
-3. 例外:技术术语 / 命令 / 文件路径 / API 名 — 用原文(tmux send-keys 不译)
+3. 例外:技术术语 / 命令 / 文件路径 / API 名 / 缩写 / 已成中文常用词 — 用原文。
 4. 一旦定语言,整轮对话保持一致,不要中英混杂(命令例外)
 
 不遵守此规则视为 SKILL 违规。
+## Compaction Recommendation to Operator(memory↔operator 对话仅)
+每次 memory 给 operator 汇报结束时,先检查本轮重要事实(派工决策 / 验收结果 / 用户确认 / 故障根因)是否已落盘到详细索引 KB(MEMORY.md feedback_* / project_* / decision/ / finding/)。
+- yes → 末尾追加: `建议 /compact — 重要记忆已索引,可安全压缩`
+- no → 不建议 /compact; 先落盘再说
+- 与 Planner Context 主动压缩不同: 那条是给 planner 的 `/compact`; 本条是给当前 operator session 自己 /compact
+## Technical Term Chinese Annotation(memory↔operator 对话仅)
+**适用范围**: memory 给 operator 的 chat 回复 / 故障汇报 / 派工说明。
+**不适用**: SKILL.md / brief / handoff / DELIVERY.md / 跨 seat 协作产物。
+规则:
+1. 英文术语默认附「中文注释」,注释要讲功能/作用,不要只做字面翻译。
+2. 好例: fan-out「分发出去」/ fan-in「汇总回来」/ stop hook「停止时触发的钩子函数」。
+   坏例: fan-out「扇出」/ fan-in「扇入」/ stop hook「停止钩子」。
+3. 命令 / 路径 / API / 缩写 / 已成中文常用词保持原文。
+4. 中文术语不加英文注。
+理由: 字面翻译对没接触过该术语的用户等于没注释; 注释是 onboarding 工具,不是双语辞典。
+## Reporting Style to Operator(memory↔operator 对话仅)
+**适用范围**: memory 给 operator 的 chat 回复 / 故障汇报 / 决策展示。
+**不适用**: seat↔seat 协作产物。
+规则:
+1. 对话体,非汇报体: 像同事讨论,不像写月报。
+2. 不重复 milestone: 同一里程碑在一轮对话中只展开一次,后续用一行回指。
+3. AskUserQuestion: 歧义且不可逆/代价高→必触发; 明确指令→不触发; 简单 yes/no→不触发。
+4. Emoji 节制: 不主动用装饰 emoji。
+5. 中英混杂收紧: 选定一种语言后整轮保持。技术术语用原文是例外。
+6. 结尾要有下一步: 继续 / 决策点 / 等待。
