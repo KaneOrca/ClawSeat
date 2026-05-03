@@ -70,6 +70,8 @@ class _FakeTab:
         self.current_session = root
         self.title = ""
         self.invoke_title_raises = False
+        self.closed = False
+        self.close_will_fail = False
 
     async def async_set_title(self, title: str) -> None:
         self.title = title
@@ -80,6 +82,11 @@ class _FakeTab:
         if invocation == "iterm2.get_tab_title()":
             return self.title or self.current_session.name
         return ""
+
+    async def async_close(self, force: bool = False) -> None:
+        if self.close_will_fail:
+            raise RuntimeError("simulated tab close failure")
+        self.closed = True
 
 
 class _FakeWindow:
@@ -472,6 +479,7 @@ def test_build_tabs_creates_new_window_tabs(no_tmux_calls):
         ],
         "tabs_created": 2,
         "tabs_skipped": 0,
+        "tabs_pruned": 0,
         "window_id": "w-fake",
     }
 
@@ -970,3 +978,74 @@ class TestSessionSurvival:
         # This test just affirms the contract by reading the docstring.
         assert "never executes ANY tmux command directly" in driver.__doc__
         assert "session survives" in driver.__doc__.lower()
+
+
+def test_build_tabs_prunes_stale_tabs_when_reusing_window(no_tmux_calls):
+    """ensure=True with reused window must close tabs not in spec.
+
+    Regression: rebuilds previously left stale tabs (e.g. -zsh fallback after
+    failed tmux attach) accumulating forever. Now prune any tab whose name
+    is not in the new spec.
+    """
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    # Tab 0 (current_tab): a stale -zsh fallback (spec doesn't include it)
+    existing.current_tab.current_session.name = "-zsh"
+    existing.current_tab.current_session.variables["user.tab_name"] = "-zsh"
+    existing.current_tab.title = "-zsh"
+    # Tab 1: legitimate install tab matching new spec — should be skipped (kept)
+    install_tab = _FakeTab(_FakeSession(sid="t-install"))
+    install_tab.current_session.name = "install-memory-claude"
+    install_tab.current_session.variables["user.tab_name"] = "install"
+    install_tab.title = "install"
+    existing.tabs.append(install_tab)
+    # Tab 2: stale 'dead-project' tab from a project whose memory was killed
+    dead_tab = _FakeTab(_FakeSession(sid="t-dead"))
+    dead_tab.current_session.name = "dead-memory"
+    dead_tab.current_session.variables["user.tab_name"] = "dead-project"
+    dead_tab.title = "dead-project"
+    existing.tabs.append(dead_tab)
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [
+            {"name": "install", "command": "tmux attach -t '=install-memory-claude'"},
+        ],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+
+    assert result["status"] == "ok"
+    assert result["tabs_pruned"] == 2  # both -zsh tab and dead-project tab pruned
+    # Tab close was called on both stale tabs
+    assert existing.current_tab.closed is True  # -zsh tab
+    assert dead_tab.closed is True
+    # Install tab survived
+    assert install_tab.closed is False
+
+
+def test_build_tabs_does_not_prune_when_creating_new_window(no_tmux_calls):
+    """If we just created the window, there are no stale tabs to prune."""
+    _FakeWindowFactory.app_windows = []  # no existing window
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [
+            {"name": "install", "command": "tmux attach -t '=install-memory'"},
+        ],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    assert result["tabs_pruned"] == 0

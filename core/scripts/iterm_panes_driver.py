@@ -237,6 +237,36 @@ async def _safe_close_window(window: Any) -> None:
         pass
 
 
+async def _safe_close_tab(tab: Any) -> bool:
+    """Best-effort close of a stale tab (sessions iterated, then tab.async_close).
+
+    Returns True on success, False otherwise. Never raises.
+    """
+    if tab is None:
+        return False
+    # iterm2 SDK closes tabs via tab.async_close(force=True) when available;
+    # fall back to closing the underlying session(s).
+    closer = getattr(tab, "async_close", None)
+    if closer is not None:
+        try:
+            await closer(force=True)
+            return True
+        except Exception:  # noqa: BLE001 fall through to session-level close
+            pass
+    sessions_attr = getattr(tab, "sessions", None) or []
+    closed_any = False
+    for session in sessions_attr:
+        sess_closer = getattr(session, "async_close", None)
+        if sess_closer is None:
+            continue
+        try:
+            await sess_closer(force=True)
+            closed_any = True
+        except Exception:  # noqa: BLE001 silent-ok: cleanup best-effort
+            pass
+    return closed_any
+
+
 async def _build_layout(connection: Any, payload: dict[str, Any]) -> dict[str, Any]:
     title = payload["title"]
     panes = payload["panes"]
@@ -626,12 +656,30 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
             "window_id": getattr(window, "window_id", ""),
         }
 
+    # Prune stale tabs not in the current spec when reusing an existing window.
+    # Without this, every rebuild leaves dead tabs (e.g. -zsh fallback after a
+    # tmux attach failure) accumulating forever.
+    tabs_pruned = 0
+    if ensure and not created_window:
+        expected_names = {spec["name"] for spec in tabs}
+        for tab in list(getattr(window, "tabs", []) or []):
+            try:
+                tab_name = await _tab_name(tab)
+            except Exception:  # noqa: BLE001 - if we can't read the name, leave it alone
+                continue
+            if not tab_name or tab_name in expected_names:
+                continue
+            if await _safe_close_tab(tab):
+                tabs_pruned += 1
+                tab_results.append({"status": "pruned", "tab": tab_name})
+
     return {
         "status": "ok",
         "mode": "tabs",
         "tabs": tab_results,
         "tabs_created": tabs_created,
         "tabs_skipped": tabs_skipped,
+        "tabs_pruned": tabs_pruned,
         "window_id": getattr(window, "window_id", ""),
     }
 

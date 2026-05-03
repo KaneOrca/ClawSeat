@@ -380,18 +380,23 @@ def _tmux_session_names() -> list[str]:
 
 def build_memories_payload(project: Any) -> dict[str, Any] | None:
     del project  # The shared memories window is built from all registered project memory sessions.
+    # Only render tabs for projects whose memory tmux session is actually live.
+    # Stale registry entries (project registered but seat killed) would otherwise
+    # produce "tmux attach failed → -zsh fallback" garbage tabs that accumulate
+    # forever across rebuilds.
+    live_sessions = set(_tmux_session_names())
     tabs = [
         {
             "name": entry.name,
             "command": f"tmux attach -t '={entry.tmux_name}'",
         }
         for entry in projects_registry.enumerate_projects()
-        if entry.name and entry.tmux_name
+        if entry.name and entry.tmux_name and entry.tmux_name in live_sessions
     ]
     if not tabs:
         memory_sessions = sorted(
             session
-            for session in _tmux_session_names()
+            for session in live_sessions
             if session.endswith("-memory")
         )
         tabs = [
