@@ -127,6 +127,73 @@ class CommandHandlers:
             print(f"no sandbox tool dirs needed reseed for {project.name}")
         return 0
 
+    def tmux_clean_stale_clients(self, args: Any) -> int:
+        project = self.hooks.load_project_or_current(getattr(args, "project", None))
+        project_sessions = self.hooks.load_project_sessions(project.name)
+        ordered_sessions: list[Any] = []
+        seen: set[str] = set()
+        for engineer_id in list(getattr(project, "engineers", []) or []):
+            if engineer_id in seen:
+                continue
+            session = project_sessions.get(engineer_id)
+            if session is None:
+                continue
+            ordered_sessions.append(session)
+            seen.add(engineer_id)
+        for engineer_id in sorted(project_sessions):
+            if engineer_id in seen:
+                continue
+            ordered_sessions.append(project_sessions[engineer_id])
+
+        dry_run = bool(getattr(args, "dry_run", False))
+        total_candidates = 0
+        total_whitelist_hits = 0
+        total_skip_count = 0
+        total_sessions = 0
+
+        if not ordered_sessions:
+            print(
+                f"tmux clean-stale-clients: project={project.name} sessions=0 "
+                f"candidates=0 whitelist_hits=0 skip_count=0 dry_run={int(dry_run)}"
+            )
+            return 0
+
+        for session in ordered_sessions:
+            try:
+                report = self.hooks.session_service.clean_stale_attach_clients_report(
+                    session.session,
+                    dry_run=dry_run,
+                )
+                self.hooks.session_service.clean_stale_attach_clients(
+                    session.session,
+                    dry_run=dry_run,
+                    report=report,
+                )
+            except Exception as exc:  # noqa: BLE001 - surface a readable CLI error
+                raise self.hooks.error_cls(
+                    f"tmux clean-stale-clients failed for {session.session}: {exc}"
+                ) from exc
+
+            candidate_count = len(report.candidate_pids)
+            whitelist_hits = report.whitelist_hit_count
+            skip_count = report.skip_count
+            total_candidates += candidate_count
+            total_whitelist_hits += whitelist_hits
+            total_skip_count += skip_count
+            total_sessions += 1
+            print(
+                f"tmux clean-stale-clients: session={session.session} "
+                f"candidates={candidate_count} whitelist_hits={whitelist_hits} "
+                f"skip_count={skip_count} dry_run={int(dry_run)}"
+            )
+
+        print(
+            f"tmux clean-stale-clients: project={project.name} sessions={total_sessions} "
+            f"candidates={total_candidates} whitelist_hits={total_whitelist_hits} "
+            f"skip_count={total_skip_count} dry_run={int(dry_run)}"
+        )
+        return 0
+
     def session_batch_start_engineer(self, args: Any) -> int:
         """Atomically start N seats: parallel tmux, then single iTerm window.
 

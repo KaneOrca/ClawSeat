@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from agent_admin_session_base import (
     os,
     shlex,
@@ -27,6 +29,38 @@ from agent_admin_session_base import (
     SessionStartError,
 )
 from seat_roles import normalize_seat_role
+
+
+@dataclass(frozen=True)
+class CleanStaleAttachClientsReport:
+    session_name: str
+    candidate_processes: tuple[tuple[int, str], ...]
+    live_client_pids: frozenset[int]
+    dry_run: bool = False
+
+    @property
+    def candidate_pids(self) -> tuple[int, ...]:
+        return tuple(pid for pid, _command in self.candidate_processes)
+
+    @property
+    def stale_processes(self) -> tuple[tuple[int, str], ...]:
+        return tuple(
+            (pid, command)
+            for pid, command in self.candidate_processes
+            if pid not in self.live_client_pids
+        )
+
+    @property
+    def stale_pids(self) -> tuple[int, ...]:
+        return tuple(pid for pid, _command in self.stale_processes)
+
+    @property
+    def whitelist_hit_count(self) -> int:
+        return len(self.candidate_processes) - len(self.stale_processes)
+
+    @property
+    def skip_count(self) -> int:
+        return len(self.candidate_processes) if self.dry_run else self.whitelist_hit_count
 
 
 class SessionStartLifecycle:
@@ -548,15 +582,34 @@ class SessionStartLifecycle:
             candidates.append((pid, command))
         return candidates
 
-    def clean_stale_attach_clients(self, session_name: str, *, dry_run: bool = False) -> list[int]:
-        """Reap tmux attach clients that target a session about to be respawned."""
+    def clean_stale_attach_clients_report(
+        self,
+        session_name: str,
+        *,
+        dry_run: bool = False,
+    ) -> CleanStaleAttachClientsReport:
         live_client_pids = self._live_tmux_client_pids(session_name)
-        candidates = self._tmux_attach_candidate_processes(session_name)
+        candidates = tuple(self._tmux_attach_candidate_processes(session_name))
+        return CleanStaleAttachClientsReport(
+            session_name=session_name,
+            candidate_processes=candidates,
+            live_client_pids=frozenset(live_client_pids),
+            dry_run=dry_run,
+        )
+
+    def clean_stale_attach_clients(
+        self,
+        session_name: str,
+        *,
+        dry_run: bool = False,
+        report: CleanStaleAttachClientsReport | None = None,
+    ) -> list[int]:
+        """Reap tmux attach clients that target a session about to be respawned."""
+        report = report or self.clean_stale_attach_clients_report(session_name, dry_run=dry_run)
+        effective_dry_run = dry_run or report.dry_run
         reaped: list[int] = []
-        for pid, command in candidates:
-            if pid in live_client_pids:
-                continue
-            if dry_run:
+        for pid, command in report.stale_processes:
+            if effective_dry_run:
                 print(
                     f"tmux clean-stale-clients: dry-run pid={pid} session={session_name} command={command}",
                     file=sys.stderr,

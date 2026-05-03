@@ -204,17 +204,22 @@ detect_trust_prompt() {
 
 while true; do
   if resolve_session "$BASE_SESSION"; then
+    attach_rc=0
     if env -u TMUX tmux attach -t "=$TARGET_SESSION"; then
-      print_reconnecting "$TARGET_SESSION"
+      attach_rc=0
     else
+      attach_rc=$?
       pane_text="$(capture_pane_text "$TARGET_SESSION")"
       if detect_trust_prompt "$pane_text"; then
         print_trust_prompt_detected "$TARGET_SESSION"
-      else
-        print_reconnecting "$TARGET_SESSION"
       fi
     fi
     sleep "$RECONNECT_PAUSE"
+    if env -u TMUX tmux has-session -t "=$TARGET_SESSION" 2>/dev/null; then
+      print_reconnecting "$TARGET_SESSION"
+      continue
+    fi
+    exit "$attach_rc"
   else
     print_waiting
     sleep "$POLL_SECONDS"
