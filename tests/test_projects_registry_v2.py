@@ -202,6 +202,60 @@ def test_validate_registry_vs_project_toml_warns_on_mismatch(tmp_path: Path, mon
     assert "template_name mismatch" in "\n".join(warnings)
 
 
+def test_cli_validate_prints_one_line_status_and_quiet_suppresses(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CLAWSEAT_REGISTRY_HOME", str(tmp_path / ".clawseat"))
+    agents = tmp_path / ".agents"
+    project_dir = agents / "projects" / "demo"
+    project_dir.mkdir(parents=True)
+    (project_dir / "project.toml").write_text(
+        "\n".join(
+            [
+                'name = "demo"',
+                'template_name = "clawseat-creative"',
+                'engineers = ["memory", "planner"]',
+                "",
+                "[seat_overrides.memory]",
+                'tool = "codex"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    projects_registry.register_project(
+        "demo",
+        "ancestor",
+        primary_seat_tool="claude",
+        template_name="clawseat-engineering",
+    )
+
+    env = _env(tmp_path)
+    env["HOME"] = str(tmp_path)
+    registry = _SCRIPTS / "projects_registry.py"
+    result = subprocess.run(
+        [sys.executable, str(registry), "validate", "demo"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert result.stdout.strip() == (
+        "projects_registry validate demo: FAIL — "
+        "primary_seat mismatch: registry=ancestor project.toml=memory; "
+        "primary_seat_tool mismatch: registry=claude project.toml=codex; "
+        "template_name mismatch: registry=clawseat-engineering project.toml=clawseat-creative"
+    )
+
+    quiet = subprocess.run(
+        [sys.executable, str(registry), "validate", "demo", "--quiet"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert quiet.returncode == 1
+    assert quiet.stdout == ""
+
+
 def test_agent_admin_start_engineer_touches_last_access(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CLAWSEAT_REGISTRY_HOME", str(tmp_path / ".clawseat"))
     projects_registry.register_project("demo", "memory", tmux_name="demo-memory")

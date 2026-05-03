@@ -52,13 +52,14 @@ def _handlers(projects: dict[str, SimpleNamespace]) -> CommandHandlers:
 
 def test_parser_registers_open_grid_flags() -> None:
     parser = agent_admin.build_parser()
-    args = parser.parse_args(["window", "open-grid", "spawn49", "--recover", "--open-memory"])
+    args = parser.parse_args(["window", "open-grid", "spawn49", "--recover", "--open-memory", "--quiet"])
 
     assert args.command == "window"
     assert args.window_command == "open-grid"
     assert args.project == "spawn49"
     assert args.recover is True
     assert args.open_memory is True
+    assert args.quiet is True
 
 
 def test_build_grid_payload_uses_project_roster_and_wait_for_seat_commands() -> None:
@@ -217,6 +218,48 @@ def test_open_grid_window_unknown_template_falls_back(
     assert result["recovered"] is False
     assert [payload["title"] for payload in payloads] == ["clawseat-spawn49"]
     assert "unknown template_name 'custom-foo'" in capsys.readouterr().err
+
+
+def test_window_open_grid_prints_summary_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = _project(["ancestor", "planner", "builder"])
+    handlers = _handlers({"spawn49": project})
+
+    monkeypatch.setattr(
+        agent_admin_window,
+        "open_grid_window",
+        lambda *args, **kwargs: {"status": "ok", "window_id": "grid"},
+    )
+
+    rc = handlers.window_open_grid(
+        SimpleNamespace(project="spawn49", recover=False, rebuild=False, open_memory=False, quiet=False)
+    )
+
+    assert rc == 0
+    assert capsys.readouterr().out.strip() == "window open-grid: rebuilt project=spawn49 seats=3"
+
+
+def test_window_open_grid_quiet_suppresses_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = _project(["ancestor", "planner", "builder"])
+    handlers = _handlers({"spawn49": project})
+
+    monkeypatch.setattr(
+        agent_admin_window,
+        "open_grid_window",
+        lambda *args, **kwargs: {"status": "ok", "window_id": "grid"},
+    )
+
+    rc = handlers.window_open_grid(
+        SimpleNamespace(project="spawn49", recover=False, rebuild=False, open_memory=False, quiet=True)
+    )
+
+    assert rc == 0
+    assert capsys.readouterr().out == ""
 
 
 def test_open_grid_open_memory_is_v1_compat_noop(monkeypatch: pytest.MonkeyPatch) -> None:

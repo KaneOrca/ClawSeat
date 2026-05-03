@@ -88,9 +88,8 @@ Use `open-grid --recover`.
 
 ### Window operations
 
-Use `agent_admin window open-grid --project ${PROJECT_NAME}` and
-`agent_admin window open-grid ${PROJECT_NAME} [--recover]`; implementation may
-use `osascript` and `iterm_panes_driver.py`.
+Use `tmux list-panes -t '=${PRIMARY_SESSION_NAME}'`; implementation may use
+`osascript` and `iterm_panes_driver.py`.
 
 ## Official Documentation Gate
 

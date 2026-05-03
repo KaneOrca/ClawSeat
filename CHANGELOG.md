@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.1] - 2026-05-03
+
+### Fixed
+
+- BF-mor-2 / F17: replaced stale `agent_admin window list-panes` references
+  with canonical `tmux list-panes` / `tmux list-clients` wording in the
+  bootstrap doc and recovery script.
+- BF-mor-3 / F21: `window open-grid` now prints
+  `window open-grid: rebuilt project=<p> seats=<N>` by default and accepts
+  `--quiet` to suppress the summary line.
+- BF-mor-4 / F22: `projects_registry validate` now prints
+  `projects_registry validate <p>: OK|FAIL — <reason>` by default and accepts
+  `--quiet` to suppress the summary line.
+
 ## [Unreleased]
 
 ### Changed
