@@ -467,7 +467,13 @@ seat-infrastructure and ancestor-handoff steps.
    - >70% 英文字符 → 用英文回复
    - 混杂或不足 → 默认中文(ClawSeat 项目主用户语言)
 2. 系统消息 / brief / SKILL 内容(中文)不影响判断 — 只看 operator 输入
-3. 例外:技术术语 / 命令 / 文件路径 / API 名 — 用原文(tmux send-keys 不译)
+3. 术语注释规则(memory↔operator 仅):
+   - 英文术语默认附「中文注释」,注释要讲功能/作用,不要只做字面翻译
+   - 好例: fan-out「分发出去」/ fan-in「汇总回来」/ stop hook「停止时触发的钩子函数」
+   - 坏例: fan-out「扇出」/ fan-in「扇入」
+   - 命令 / 路径 / API / 缩写 / 已成中文常用词保持原文
+   - 中文术语不加英文注
+   理由: 注释是 onboarding 工具不是双语辞典,少量重复优于错过术语
 4. 一旦定语言,整轮对话保持一致,不要中英混杂(命令例外)
 
 不遵守此规则视为 SKILL 违规。
