@@ -214,6 +214,7 @@ while true; do
         print_trust_prompt_detected "$TARGET_SESSION"
       fi
     fi
+    printf 'DETACHED from %s\n' "$TARGET_SESSION"
     sleep "$RECONNECT_PAUSE"
     if env -u TMUX tmux has-session -t "=$TARGET_SESSION" 2>/dev/null; then
       print_reconnecting "$TARGET_SESSION"

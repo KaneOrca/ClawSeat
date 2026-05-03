@@ -41,7 +41,7 @@ except Exception:
     print("memory")
 PY
 )"
-agent_admin_bin="$(cd "$(dirname "$0")/.." && pwd)/core/scripts/agent_admin.py"
+agent_admin_bin="$(realpath -m "$(dirname "$0")/../core/scripts/agent_admin.py")"
 resolve_session_name() {
   local seat_id="$1"
   python3 "$agent_admin_bin" session-name "$seat_id" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$seat_id"
@@ -108,7 +108,7 @@ warn_pty_pressure() {
   fi
 }
 
-PRIMARY_SESSION="$(resolve_session_name "$PRIMARY_SEAT_ID")"
+PRIMARY_SESSION="$(python3 "$agent_admin_bin" session-name "$PRIMARY_SEAT_ID" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$PRIMARY_SEAT_ID")"
 WINDOW_TITLE="clawseat-${PROJECT}-workers"
 
 if ! env -u TMUX tmux has-session -t "=$PRIMARY_SESSION" 2>/dev/null; then
