@@ -1099,3 +1099,46 @@ def test_build_tabs_prunes_tab_with_mismarked_user_tab_name(no_tmux_calls):
     assert result["tabs_pruned"] == 1
     assert existing.current_tab.closed is True  # mis-marked tab killed
     assert install_tab.closed is False  # legitimate tab survives
+
+
+def test_build_tabs_does_not_prune_freshly_created_tabs(no_tmux_calls):
+    """Regression: prune must skip tabs we JUST created in the same call.
+
+    A freshly created tab's `tmux attach` runs asynchronously in the new
+    session. session.name has not updated yet when prune runs, so the
+    strict marker+session check would falsely classify the new tab as
+    stale and immediately kill it.
+    """
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    # Pre-existing legitimate tab (cartooner) — should be skipped & spared.
+    existing.current_tab.current_session.name = "cartooner-memory-codex"
+    existing.current_tab.current_session.variables["user.tab_name"] = "cartooner"
+    existing.current_tab.title = "cartooner"
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [
+            {"name": "cartooner", "command": "tmux attach -t '=cartooner-memory-codex'"},
+            {"name": "install",   "command": "tmux attach -t '=install-memory-claude'"},
+        ],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    assert result["tabs_created"] == 1
+    assert result["tabs_skipped"] == 1
+    # The newly created install tab must NOT be pruned, even though its
+    # session.name hasn't been set yet (it's still the default _FakeSession
+    # name which is empty / doesn't match install-memory-claude).
+    assert result["tabs_pruned"] == 0
+    # Both tabs survived
+    assert existing.current_tab.closed is False
+    new_tab = existing.tabs[1]
+    assert new_tab.closed is False

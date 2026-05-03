@@ -585,6 +585,12 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
     tabs_created = 0
     tabs_skipped = 0
     tab_results: list[dict[str, str]] = []
+    # Track tab objects we've just created or skipped this run; prune must
+    # not touch them. Tabs we just created have not had time for the tmux
+    # attach inside them to update session.name yet, so the strict marker+
+    # session check would falsely classify them as "stale" and kill them
+    # immediately after creation.
+    handled_tab_ids: set[int] = set()
 
     try:
         for spec in tabs:
@@ -595,6 +601,12 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                 if matched:
                     tabs_skipped += 1
                     tab_results.append({"status": "skipped", "tab": spec["name"]})
+                    # Mark the matched tab as handled so prune skips it.
+                    for existing_tab in getattr(window, "tabs", []) or []:
+                        ok, _ = await _tab_matches_expected(existing_tab, spec)
+                        if ok:
+                            handled_tab_ids.add(id(existing_tab))
+                            break
                     continue
                 if detection_failure:
                     status = "detect-failure"
@@ -639,6 +651,7 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                     }
 
             await _configure_tab(tab, spec, delay_s)
+            handled_tab_ids.add(id(tab))
             tabs_created += 1
             entry = {"status": status, "tab": spec["name"]}
             if reason:
@@ -660,15 +673,22 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
     # Without this, every rebuild leaves dead tabs (e.g. -zsh fallback after a
     # tmux attach failure) accumulating forever.
     #
-    # Strict matching: a tab is "expected" only when BOTH its user.tab_name
-    # marker matches a spec.name AND its session.name matches that spec's
-    # expected session substring. A tab whose marker says "install" but is
-    # actually attached to "cartooner-front-memory-codex" (mismarker from a
-    # historical driver bug) must still be pruned.
+    # Strict matching for stale tabs: a tab is "expected" only when BOTH its
+    # user.tab_name marker matches a spec.name AND its session.name matches
+    # that spec's expected session substring. A tab whose marker says "install"
+    # but is actually attached to "cartooner-front-memory-codex" (mismarker
+    # from a historical driver bug) must still be pruned.
+    #
+    # CRITICAL: skip any tab we just created or matched in the loop above
+    # (`handled_tab_ids`). A freshly created tab's `tmux attach` has not had
+    # time to update session.name, so the strict match would falsely classify
+    # it as stale and kill it immediately after creation.
     tabs_pruned = 0
     if ensure and not created_window:
         spec_by_name = {spec["name"]: spec for spec in tabs}
         for tab in list(getattr(window, "tabs", []) or []):
+            if id(tab) in handled_tab_ids:
+                continue
             try:
                 tab_name = await _tab_name(tab)
             except Exception:  # noqa: BLE001 - if we can't read the name, leave it alone
