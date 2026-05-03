@@ -340,14 +340,20 @@ def test_start_engineer_reset_kills_session_before_launcher(
 
     with (
         patch.object(svc, "_assert_session_running"),
+        patch.object(
+            svc,
+            "clean_stale_attach_clients",
+            side_effect=lambda session_name, **kwargs: events.append(f"cleanup:{session_name}") or [],
+        ),
         patch.object(svc, "_run_tmux_with_retry", side_effect=fake_tmux),
     ):
         svc.start_engineer(session, reset=True)
 
     assert events[0] == f"tmux:kill-session -t {session.session}"
+    assert events[1] == f"cleanup:{session.session}"
     # stale-tool cleanup probe (list-sessions returns empty → no kill)
-    assert events[1] == "tmux:list-sessions -F #{session_name}"
-    assert events[2] == "launcher"
+    assert events[2] == "tmux:list-sessions -F #{session_name}"
+    assert events[3] == "launcher"
 
 
 def test_stop_engineer_still_kills_tmux_session(tmp_path: Path):

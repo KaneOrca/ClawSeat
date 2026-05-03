@@ -927,6 +927,10 @@ def cmd_session_effective_launch(args: argparse.Namespace) -> int:
     return INFO_HANDLERS.session_effective_launch(args)
 
 
+def cmd_tmux_clean_stale_clients(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.tmux_clean_stale_clients(args)
+
+
 def ensure_api_secret_ready(session: SessionRecord) -> None:
     SWITCH_HANDLERS.ensure_secret_ready(session)
 
@@ -1251,6 +1255,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_session_effective_launch=cmd_session_effective_launch,
     cmd_session_switch_harness=cmd_session_switch_harness,
     cmd_session_switch_auth=cmd_session_switch_auth,
+    cmd_tmux_clean_stale_clients=cmd_tmux_clean_stale_clients,
     cmd_window_open_monitor=cmd_window_open_monitor,
     cmd_window_open_dashboard=cmd_window_open_dashboard,
     cmd_window_open_grid=cmd_window_open_grid,

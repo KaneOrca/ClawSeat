@@ -46,6 +46,7 @@ class ParserHooks:
     cmd_session_effective_launch: Callable[[Any], int]
     cmd_session_switch_harness: Callable[[Any], int]
     cmd_session_switch_auth: Callable[[Any], int]
+    cmd_tmux_clean_stale_clients: Callable[[Any], int]
     cmd_window_open_monitor: Callable[[Any], int]
     cmd_window_open_dashboard: Callable[[Any], int]
     cmd_window_open_grid: Callable[[Any], int]
@@ -497,6 +498,17 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     switch_auth.add_argument("--mode", required=True, choices=["oauth", "oauth_token", "api"])
     switch_auth.add_argument("--provider", required=True)
     switch_auth.set_defaults(func=hooks.cmd_session_switch_auth)
+
+    tmux = sub.add_parser("tmux", help="tmux client maintenance operations.")
+    tmux_sub = tmux.add_subparsers(dest="tmux_command", required=True)
+
+    tmux_clean_stale_clients = tmux_sub.add_parser(
+        "clean-stale-clients",
+        help="Reap stale tmux attach clients for a project.",
+    )
+    tmux_clean_stale_clients.add_argument("--project")
+    tmux_clean_stale_clients.add_argument("--dry-run", action="store_true")
+    tmux_clean_stale_clients.set_defaults(func=hooks.cmd_tmux_clean_stale_clients)
 
     window = sub.add_parser("window", help="iTerm/tmux project window operations.")
     window_sub = window.add_subparsers(dest="window_command", required=True)
