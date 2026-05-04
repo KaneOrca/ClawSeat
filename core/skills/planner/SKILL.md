@@ -26,7 +26,7 @@ ClawSeat supports two entry points:
    directly to planner; planner decomposes it to specialists)
 
 Both routes share the same chain endpoint: when the chain closes, planner
-relays to memory so memory can synthesize KB retention. NN Post-DELIVERY Relay
+relays to memory so memory can synthesize KB retention. Standard Post-DELIVERY Relay
 covers memory-entry; Chain End Relay covers planner-entry.
 
 memory remains the KB retention authority. planner does not write KB directly;
@@ -52,28 +52,7 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 - Fan-in by consuming every delivery before starting dependent steps.
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
 ## Workflow Collaboration
-
-I execute steps assigned to me in workflow.md. planner is the author.
-
-On receiving send-and-verify notification:
-
-1. Read `~/.agents/tasks/<project>/<task_id>/workflow.md`
-2. Find step where `owner_role=<my-role>`, `status=pending`, and all prereqs are done
-3. `agent_admin task update-status <task_id> <step> in_progress --project <p>`
-4. Execute `skill_commands` listed in step
-5. Write artifacts and `DELIVERY.md`
-6. `agent_admin task update-status <task_id> <step> done --project <p>`
-7. Notify `notify_on_done` roles via send-and-verify
-
-Poll fallback: if no push arrives after idle time, run
-`agent_admin task list-pending --project <p> --owner-role <my-role>` and claim
-only a ready step assigned to your role.
-
-On failure (command error or `iter > max_iterations`):
-
-- Do NOT retry silently.
-- Notify `notify_on_blocked` roles.
-- Record stderr, command output, and other evidence under `artifacts/`.
+See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 ## Strict Fan-in: verify specialist .consumed receipts (mandatory)
 
 Before forming a verdict on a multi-specialist workflow, planner MUST verify
@@ -142,7 +121,7 @@ Include a brief summary for memory to synthesize into KB:
 - implementation summary
 - key decisions made
 
-memory-entry route: NN Post-DELIVERY Relay already covers this.
+memory-entry route: Standard Post-DELIVERY Relay already covers this.
 planner-entry route: this section is the mandate; planner self-drives the final
 memory relay after chain closeout.
 
@@ -162,15 +141,7 @@ summary while removing redundant turn history. Gemini context accumulates
 linearly, so compact keeps planner latency bounded without losing workflow
 state.
 ## Context Management
-
-# Planner Context Policy
-
-Planner is the workflow orchestrator and keeps cross-task decision context.
-
-- `[CLEAR-REQUESTED] FORBIDDEN` for planner.
-- `[COMPACT-REQUESTED] ONLY` for planner context management.
-- Trigger compact at a cross-phase boundary or when context usage is > 80%.
-- Compact summaries must preserve active task ids, dispatch decisions,
-  blockers, owner assignments, and pending reviews.
+See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true; emit [COMPACT-REQUESTED] at >80% context. Exactly one marker as final line.
+**Note**: planner must NOT emit [CLEAR-REQUESTED]. `[CLEAR-REQUESTED] FORBIDDEN` for planner — use `[COMPACT-REQUESTED] ONLY`. Compact summaries must preserve active task ids, dispatch decisions, blockers, owner assignments, and pending reviews.
 ## Operator Language Matching
 Detect operator language from the last 3 messages: >70% Chinese means Chinese, >70% English means English, mixed means Chinese. Keep technical terms, commands, and paths literal.

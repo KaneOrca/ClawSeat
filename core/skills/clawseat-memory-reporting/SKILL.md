@@ -127,7 +127,7 @@ next: <≤ 80 字描述下一动作>
 **例**:
 ```
 ═══ STATUS ═══
-phase: ready  |  M1 batch 1: A/B/D ✅, C 🔄
+phase: ready  |  M1 batch 1: A/B/D [done], C [in-progress]
 dispatches: pkg-c → planner
 issues: 14 total / 2 open (#3 banner LOW, #6 covered by C)
 next: 等 C → 启动 batch 2
