@@ -65,14 +65,12 @@ def test_project_bootstrap_populates_seat_claude_templates(tmp_path: Path) -> No
     builder_template = engineers_root / "builder" / ".claude-template"
     reviewer_template = engineers_root / "reviewer" / ".claude-template"
     patrol_template = engineers_root / "patrol" / ".claude-template"
-    designer_template = engineers_root / "designer" / ".claude-template"
     memory_template = engineers_root / "memory" / ".claude-template"
 
     assert planner_template.is_dir()
     assert builder_template.is_dir()
     assert reviewer_template.is_dir()
     assert patrol_template.is_dir()
-    assert designer_template.is_dir()
     assert memory_template.is_dir()
 
     assert {path.name for path in (planner_template / "skills").iterdir()} == {
@@ -95,12 +93,6 @@ def test_project_bootstrap_populates_seat_claude_templates(tmp_path: Path) -> No
     }
     assert {path.name for path in (patrol_template / "skills").iterdir()} == {
         "patrol",
-        "clawseat",
-        "gstack-harness",
-        "tmux-basics",
-    }
-    assert {path.name for path in (designer_template / "skills").iterdir()} == {
-        "designer",
         "clawseat",
         "gstack-harness",
         "tmux-basics",

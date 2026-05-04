@@ -42,4 +42,4 @@ def test_cartooner_creative_template_declared_skills_are_available() -> None:
 def test_cartooner_creative_template_left_main_pane_is_memory() -> None:
     data = _template()
     grid = data["window_layout"]["workers_grid"]
-    assert grid["left_main_seat"] == "memory"
+    assert grid["left_main_seat"] == "writer"

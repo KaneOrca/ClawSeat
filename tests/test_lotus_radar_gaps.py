@@ -13,6 +13,8 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 REPO = Path(__file__).resolve().parents[1]
+# CLAWSEAT_ROOT may override the template renderer's repo root (e.g. when running from a worktree)
+CLAWSEAT_ROOT = Path(os.environ.get("CLAWSEAT_ROOT", str(REPO)))
 AGENT_ADMIN = REPO / "core" / "scripts" / "agent_admin.py"
 TESTS_DIR = REPO / "tests"
 if str(TESTS_DIR) not in sys.path:
@@ -46,10 +48,10 @@ def test_project_create_generates_complete_project_toml(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     data = _load_toml(home / ".agents" / "projects" / "lotus-radar" / "project.toml")
-    assert data["template_name"] == "clawseat-creative"
+    assert data["template_name"] == "cartooner-creative"
     assert data["window_mode"] == "split-2"
     assert data["monitor_max_panes"] == 4
-    assert data["engineers"] == ["memory", "planner", "builder", "patrol", "designer"]
+    assert data["engineers"] == ["memory", "writer", "visual", "patrol"]
     assert data["monitor_engineers"] == data["engineers"]
     assert set(data["seat_overrides"]) == set(data["engineers"])
 
@@ -101,7 +103,7 @@ def test_workspace_memory_template_has_absolute_send_verify_path() -> None:
 
     rendered = _handlers().render_template_text("claude", _session("claude"), _project())
     text = rendered["CLAUDE.md"]
-    assert f"{REPO}/core/shell-scripts/send-and-verify.sh --project cartooner" in text
+    assert f"{CLAWSEAT_ROOT}/core/shell-scripts/send-and-verify.sh --project cartooner" in text
     assert "`core/shell-scripts/send-and-verify.sh" not in text
 
 
@@ -111,7 +113,7 @@ def test_clawseat_root_variable_in_template_renderer() -> None:
     rendered = _handlers().render_template_text("gemini", _session("gemini"), _project())
     text = rendered["GEMINI.md"]
     assert "{{clawseat_root}}" not in text
-    assert f"{REPO}/docs/rfc/RFC-002-architecture-v2.1.md" in text
+    assert f"{CLAWSEAT_ROOT}/docs/rfc/RFC-002-architecture-v2.1.md" in text
 
 
 def test_planner_skill_has_cross_tool_delivery_protocol() -> None:

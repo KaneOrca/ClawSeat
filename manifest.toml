@@ -27,7 +27,6 @@ optional = [
 ]
 
 [templates]
-clawseat-creative = "templates/clawseat-creative.toml"
 clawseat-engineering = "templates/clawseat-engineering.toml"
 clawseat-solo = { path = "templates/clawseat-solo.toml", description = "Minimal 3-seat collaboration, all OAuth top models, planner-gemini dispatch cycle" }
 
