@@ -374,6 +374,56 @@ _reinstall_project() {
   note "[install] reinstall prepared for $PROJECT (backup suffix: $REINSTALL_BACKUP_SUFFIX)"
 }
 
+_restore_reinstall_project_seat_overrides() {
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  [[ "$REINSTALL_PROJECT_TOML_EXISTED" == "1" ]] || return 0
+  [[ -n "$REINSTALL_PROJECT_TOML_BACKUP" && -f "$REINSTALL_PROJECT_TOML_BACKUP" ]] || return 0
+  [[ -f "$PROJECT_RECORD_PATH" ]] || return 0
+  "$PYTHON_BIN" - "$REINSTALL_PROJECT_TOML_BACKUP" "$PROJECT_RECORD_PATH" <<'PY'
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+backup_path = Path(sys.argv[1])
+current_path = Path(sys.argv[2])
+
+section_re = re.compile(r"^\[seat_overrides\.([^\]]+)\]\s*$", re.MULTILINE)
+
+
+def extract_blocks(text: str) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    for match in section_re.finditer(text):
+        seat = match.group(1)
+        after = text[match.end():]
+        next_header = re.search(r"^\[", after, re.MULTILINE)
+        block_end = match.end() + (next_header.start() if next_header else len(after))
+        block = text[match.start():block_end].rstrip("\n") + "\n\n"
+        blocks.append((seat, block))
+    return blocks
+
+
+def upsert_block(text: str, seat: str, block: str) -> str:
+    match = re.search(rf"^\[seat_overrides\.{re.escape(seat)}\]\s*$", text, re.MULTILINE)
+    if match:
+        after = text[match.end():]
+        next_header = re.search(r"^\[", after, re.MULTILINE)
+        block_end = match.end() + (next_header.start() if next_header else len(after))
+        return text[:match.start()] + block + text[block_end:]
+    return text.rstrip("\n") + "\n\n" + block
+
+
+backup_text = backup_path.read_text(encoding="utf-8")
+current_text = current_path.read_text(encoding="utf-8")
+merged = current_text
+for seat, block in extract_blocks(backup_text):
+    merged = upsert_block(merged, seat, block)
+if merged != current_text:
+    current_path.write_text(merged, encoding="utf-8")
+PY
+}
+
 memory_primary_uses_codex() {
   [[ "$PRIMARY_SEAT_ID" == "memory" && "$(primary_effective_tool)" == "codex" ]]
 }

@@ -114,7 +114,10 @@ _secret_file_auth_token() {
   local path="$1"
   [[ -f "$path" ]] || return 1
   local token
-  token="$(grep -m1 -E '^(export )?ANTHROPIC_AUTH_TOKEN=' "$path" | sed 's/.*ANTHROPIC_AUTH_TOKEN=//')" || return 1
+  token="$(
+    grep -m1 -E '^(export )?(ANTHROPIC_AUTH_TOKEN|ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN)=' "$path" \
+      | sed -E 's/^(export )?(ANTHROPIC_AUTH_TOKEN|ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN)=//'
+  )" || return 1
   [[ -n "$token" ]] || return 1
   printf '%s\n' "$token"
 }

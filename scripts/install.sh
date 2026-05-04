@@ -353,6 +353,9 @@ main() {
   fi
   ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider
   bootstrap_project_profile
+  if [[ "$FORCE_REINSTALL" == "1" ]]; then
+    _restore_reinstall_project_seat_overrides
+  fi
   migrate_project_profile_to_v2
   render_brief
   note "Step 5: launch primary seat ($PRIMARY_SEAT_ID) via agent-launcher"
