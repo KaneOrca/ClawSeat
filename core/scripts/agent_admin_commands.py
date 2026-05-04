@@ -557,6 +557,13 @@ class CommandHandlers:
             rebuild=bool(getattr(args, "rebuild", False)),
             open_memory=bool(getattr(args, "open_memory", False)),
         )
+        if not bool(getattr(args, "quiet", False)):
+            primary_seat = window_ops._project_primary_seat_id(project)
+            worker_count = len(window_ops._project_grid_seat_ids(project))
+            seat_count = worker_count if primary_seat == "memory" else worker_count + 1
+            if seat_count <= 0:
+                seat_count = 1
+            print(f"window open-grid: rebuilt project={project.name} seats={seat_count}")
         return 0
 
     def window_open_engineer(self, args: Any) -> int:

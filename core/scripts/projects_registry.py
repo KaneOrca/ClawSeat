@@ -430,9 +430,15 @@ def _cmd_touch(args: argparse.Namespace) -> int:
 
 def _cmd_validate(args: argparse.Namespace) -> int:
     warnings = validate_registry_vs_project_toml(args.project)
-    for warning in warnings:
-        print(f"warn: {warning}")
-    return 0
+    quiet = bool(getattr(args, "quiet", False))
+    ok = not warnings
+    if not quiet:
+        if ok:
+            print(f"projects_registry validate {args.project}: OK")
+        else:
+            reason = "; ".join(warnings)
+            print(f"projects_registry validate {args.project}: FAIL — {reason}")
+    return 0 if ok else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -480,6 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_cmd = sub.add_parser("validate")
     validate_cmd.add_argument("project")
+    validate_cmd.add_argument("--quiet", action="store_true")
     validate_cmd.set_defaults(func=_cmd_validate)
 
     return parser

@@ -528,6 +528,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     open_grid.add_argument("--recover", action="store_true")
     open_grid.add_argument("--rebuild", action="store_true", help="Close any existing project window and open a fresh grid.")
     open_grid.add_argument("--open-memory", action="store_true")
+    open_grid.add_argument("--quiet", action="store_true", help="Suppress the summary line.")
     open_grid.set_defaults(func=hooks.cmd_window_open_grid)
 
     open_engineer = window_sub.add_parser("open-engineer")

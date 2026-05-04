@@ -166,4 +166,4 @@ warn_worker_seat_clients
 warn_pty_pressure
 
 echo
-echo "verify: tmux list-clients per seat - see agent_admin window list-panes --project ${PROJECT}"
+echo "verify: tmux list-clients -t \"=$PRIMARY_SESSION\" per seat"

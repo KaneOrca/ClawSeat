@@ -16,3 +16,9 @@ def test_recover_grid_session_name_includes_tool_suffix() -> None:
 def test_recover_grid_window_title_has_workers_suffix() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert 'WINDOW_TITLE="clawseat-${PROJECT}-workers"' in text
+
+
+def test_recover_grid_final_verify_uses_tmux_list_clients() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'verify: tmux list-clients -t \\"=$PRIMARY_SESSION\\" per seat' in text
+    assert "agent_admin window list-panes" not in text

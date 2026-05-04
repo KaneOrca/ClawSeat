@@ -56,7 +56,7 @@ bash ${CLAWSEAT_ROOT}/core/scripts/seat-diagnostic.sh ${PROJECT_NAME} <seat>
 ## Pane ↔ Seat 映射（强制理解）
 
 - workers 窗口 pane 的身份以 `user.seat_id` 为准，不要靠 pane 显示名、滚动内容或你自己的视觉猜测判断。
-- 如需核对当前窗口，把 `python3 ${CLAWSEAT_ROOT}/core/scripts/agent_admin.py window list-panes --project ${PROJECT_NAME}` 当 canonical。
+- 如需核对当前窗口，把 `tmux list-panes -t '=${PRIMARY_SESSION_NAME}'` 当 canonical。
 - 默认布局固定为：
   - `Row1-Col1 = memory / primary seat`
   - `Row1-Col2 = planner`
