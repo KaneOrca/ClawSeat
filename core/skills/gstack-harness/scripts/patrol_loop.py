@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from _common import executable_command, load_profile, materialize_profile_runtime, require_success, run_command
+import tomllib
 
 
 MAX_REWAKES_PER_CYCLE = 5
 REWAKE_COOLDOWN_SECONDS = 30 * 60
+SEAT_HEALTH_THRESHOLD_SECONDS = 10 * 60
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,6 +51,130 @@ def _tasks_root() -> Path:
 
 def _rewake_log_path() -> Path:
     return Path.home() / ".agents" / "logs" / "stale-handoff-rewake.log"
+
+
+def _seat_unblock_log_path() -> Path:
+    return Path.home() / ".agents" / "logs" / "seat-unblock.log"
+
+
+def _append_seat_unblock_log(
+    *,
+    project: str,
+    seat: str,
+    session: str,
+    task_id: str,
+    action: str,
+    reason: str,
+    age_seconds: int | None = None,
+) -> None:
+    log_path = _seat_unblock_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {
+        "ts": time.time(),
+        "project": project,
+        "seat": seat,
+        "session": session,
+        "task_id": task_id,
+        "action": action,
+        "reason": reason,
+    }
+    if age_seconds is not None:
+        payload["age_seconds"] = age_seconds
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _capture_pane_tail(target: str) -> tuple[bool, str]:
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-t", target, "-p"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, "capture-pane failed"
+    tail = "\n".join(result.stdout.splitlines()[-3:]).strip()
+    return True, tail
+
+
+def _tail_busy_reason(tail_text: str) -> tuple[bool, str]:
+    if not tail_text:
+        return False, "idle"
+    if "background terminal running" in tail_text:
+        return False, "background terminal running"
+    if "Working" in tail_text or "Thinking" in tail_text or "• " in tail_text:
+        return True, tail_text
+    return False, "idle"
+
+
+def _seat_blocked_for(target: str, threshold_seconds: int = 600) -> tuple[bool, str]:
+    ok, tail_text = _capture_pane_tail(target)
+    if not ok:
+        return False, tail_text
+    blocked, reason = _tail_busy_reason(tail_text)
+    if not blocked:
+        return False, reason
+    return True, reason
+
+
+def _load_project_engineers(project: str) -> list[str]:
+    project_toml = Path.home() / ".agents" / "projects" / project / "project.toml"
+    if not project_toml.is_file():
+        return []
+    try:
+        data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    engineers = data.get("engineers") or []
+    return [str(item) for item in engineers if str(item).strip()]
+
+
+def _project_sessions(project: str) -> set[str]:
+    result = subprocess.run(
+        ["tmux", "list-sessions", "-F", "#S"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def _pending_handoff_age_seconds(project: str, seat: str) -> int | None:
+    handoffs_dir = _tasks_root() / project / "patrol" / "handoffs"
+    if not handoffs_dir.is_dir():
+        return None
+    now = time.time()
+    ages: list[int] = []
+    for json_path in sorted(handoffs_dir.glob("*__*__*.json")):
+        if json_path.name.endswith(".consumed") or json_path.with_suffix(".json.consumed").exists():
+            continue
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        target = str(data.get("target") or json_path.name.rsplit("__", 1)[-1].removesuffix(".json")).strip()
+        if target != seat:
+            continue
+        try:
+            stat = json_path.stat()
+        except OSError:
+            continue
+        ages.append(int(now - stat.st_mtime))
+    return max(ages) if ages else None
+
+
+def _unblock_seat(target: str, task_id: str) -> dict[str, Any]:
+    subprocess.run(
+        ["tmux", "send-keys", "-t", target, "\x03"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    time.sleep(2)
+    blocked, reason = _seat_blocked_for(target)
+    return {"target": target, "task_id": task_id, "blocked": blocked, "reason": reason}
 
 
 def detect_stale_handoffs(project: str, threshold_hours: int = 2) -> list[dict[str, Any]]:
@@ -121,26 +247,6 @@ def _append_rewake_log(log_path: Path, *, project: str, handoff: dict[str, Any],
         handle.write(line + "\n")
 
 
-def _is_codex_busy(target: str) -> bool:
-    result = subprocess.run(
-        ["tmux", "capture-pane", "-t", target, "-p"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return False
-
-    lines = result.stdout.splitlines()
-    tail = "\n".join(lines[-3:])
-    return (
-        "Working" in tail
-        or "Thinking" in tail
-        or "• " in tail
-        or "background terminal running" in tail
-    )
-
-
 def re_wake_stale_handoffs(project: str, threshold_hours: int = 2) -> int:
     stale = detect_stale_handoffs(project, threshold_hours=threshold_hours)
     if not stale:
@@ -160,8 +266,33 @@ def re_wake_stale_handoffs(project: str, threshold_hours: int = 2) -> int:
         target = str(handoff.get("target") or "")
         if not target or target == "<unknown>":
             continue
-        if _is_codex_busy(target):
+        blocked, reason = _seat_blocked_for(target)
+        if reason == "background terminal running":
             continue
+        if blocked:
+            age_seconds = int(handoff.get("age_hours", 0)) * 3600
+            if age_seconds < SEAT_HEALTH_THRESHOLD_SECONDS:
+                continue
+            unblock_result = _unblock_seat(target, str(handoff.get("task_id", "<unknown>")))
+            _append_seat_unblock_log(
+                project=project,
+                seat=target,
+                session=target,
+                task_id=str(handoff.get("task_id", "<unknown>")),
+                action="unblock",
+                reason=unblock_result["reason"] or reason,
+                age_seconds=age_seconds,
+            )
+            if unblock_result["blocked"]:
+                _append_seat_unblock_log(
+                    project=project,
+                    seat=target,
+                    session=target,
+                    task_id=str(handoff.get("task_id", "<unknown>")),
+                    action="unblock_failed",
+                    reason=unblock_result["reason"],
+                    age_seconds=age_seconds,
+                )
         msg = (
             f"[TASK-QUEUE] 你有未处理的 handoff: {handoff['task_id']}(已 {handoff['age_hours']}h)。\n"
             "请读 TODO.md 头部处理。"
@@ -173,6 +304,58 @@ def re_wake_stale_handoffs(project: str, threshold_hours: int = 2) -> int:
         _append_rewake_log(log_path, project=project, handoff=handoff, now=now)
         sent += 1
     return sent
+
+
+def _patrol_seat_health(project: str) -> dict[str, Any]:
+    engineers = _load_project_engineers(project)
+    sessions = _project_sessions(project)
+    ok = 0
+    blocked = 0
+    dead = 0
+    for seat in engineers:
+        session = f"{project}-{seat}"
+        if session not in sessions:
+            dead += 1
+            _append_seat_unblock_log(
+                project=project,
+                seat=seat,
+                session=session,
+                task_id="seat-health",
+                action="dead",
+                reason="session missing",
+            )
+            continue
+        is_blocked, reason = _seat_blocked_for(session)
+        if not is_blocked:
+            ok += 1
+            continue
+        age_seconds = _pending_handoff_age_seconds(project, seat) or 0
+        if age_seconds < SEAT_HEALTH_THRESHOLD_SECONDS:
+            ok += 1
+            continue
+        unblock_result = _unblock_seat(session, f"seat-health:{seat}")
+        blocked += 1
+        _append_seat_unblock_log(
+            project=project,
+            seat=seat,
+            session=session,
+            task_id=f"seat-health:{seat}",
+            action="health_unblock",
+            reason=unblock_result["reason"] or reason,
+            age_seconds=age_seconds,
+        )
+        if unblock_result["blocked"]:
+            _append_seat_unblock_log(
+                project=project,
+                seat=seat,
+                session=session,
+                task_id=f"seat-health:{seat}",
+                action="health_unblock_failed",
+                reason=unblock_result["reason"],
+                age_seconds=age_seconds,
+            )
+    summary = f"[SEAT-HEALTH:project={project},ok={ok},blocked={blocked},dead={dead}]"
+    return {"ok": ok, "blocked": blocked, "dead": dead, "summary": summary}
 
 
 def main() -> int:
@@ -187,7 +370,9 @@ def main() -> int:
     if result.stdout.strip():
         print(result.stdout.strip())
     run_auto_supersede(profile)
+    seat_health = _patrol_seat_health(profile.project_name)
     rewake_count = re_wake_stale_handoffs(profile.project_name)
+    print(seat_health["summary"])
     if rewake_count:
         print(f"[STALE-HANDOFF-REWAKE:project={profile.project_name},count={rewake_count}]")
     return 0
