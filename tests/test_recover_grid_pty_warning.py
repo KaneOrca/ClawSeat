@@ -140,3 +140,109 @@ def test_recover_grid_warns_when_pty_usage_hits_threshold(tmp_path: Path) -> Non
     assert result.returncode == 0
     assert "ok: proj-memory-claude has 1 client(s) — no recovery needed" in result.stdout
     assert "warn: PTY usage 8/10 (80%) >= 80% — run agent_admin tmux clean-stale-clients --project proj" in result.stderr
+
+
+def test_recover_grid_does_not_require_realpath(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _write_project_toml(home, "proj")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+
+    _write_executable(
+        bin_dir / "realpath",
+        "#!/usr/bin/env bash\nexit 99\n",
+    )
+    _write_executable(
+        bin_dir / "python3",
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            real_python={REAL_PYTHON!s}
+            if [[ "${{1:-}}" == *"/core/scripts/agent_admin.py" && "${{2:-}}" == "session-name" ]]; then
+              project="proj"
+              seat="${{3:-}}"
+              shift 3
+              while (($#)); do
+                case "${{1:-}}" in
+                  --project)
+                    project="${{2:-$project}}"
+                    shift 2
+                    ;;
+                  *)
+                    shift
+                    ;;
+                esac
+              done
+              printf '%s-%s-claude\\n' "$project" "$seat"
+              exit 0
+            fi
+            exec "$real_python" "$@"
+            """
+        ),
+    )
+    _write_executable(
+        bin_dir / "tmux",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            cmd="${1:-}"
+            shift || true
+            case "$cmd" in
+              has-session)
+                exit 0
+                ;;
+              list-clients)
+                printf '/dev/ttys001\\n'
+                exit 0
+                ;;
+              detach-client)
+                exit 0
+                ;;
+              *)
+                echo "unexpected tmux command: $cmd" >&2
+                exit 2
+                ;;
+            esac
+            """
+        ),
+    )
+    _write_executable(
+        bin_dir / "osascript",
+        "#!/usr/bin/env bash\nprintf '1\\n'\n",
+    )
+    _write_executable(
+        bin_dir / "ls",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            for _ in 1 2 3 4 5 6 7 8; do
+              printf '/dev/ttys%03d\\n' "$_"
+            done
+            """
+        ),
+    )
+    _write_executable(
+        bin_dir / "sysctl",
+        "#!/usr/bin/env bash\nprintf '10\\n'\n",
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["HOME"] = str(home)
+    env["CLAWSEAT_REAL_HOME"] = str(home)
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "proj"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "ok: proj-memory-claude has 1 client(s) — no recovery needed" in result.stdout

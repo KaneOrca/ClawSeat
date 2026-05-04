@@ -41,7 +41,8 @@ except Exception:
     print("memory")
 PY
 )"
-agent_admin_bin="$(realpath -m "$(dirname "$0")/../core/scripts/agent_admin.py")"
+agent_admin_dir="$(cd "$(dirname "$0")/.." && pwd -P)"
+agent_admin_bin="$agent_admin_dir/core/scripts/agent_admin.py"
 resolve_session_name() {
   local seat_id="$1"
   python3 "$agent_admin_bin" session-name "$seat_id" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$seat_id"
