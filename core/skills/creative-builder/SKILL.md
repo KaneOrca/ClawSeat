@@ -59,23 +59,13 @@ description: >
   → complete_handoff --target designer（交 designer 执行写作和评分）
 ```
 
-## TODO Queue Priority (process queue head first, skip zombie)
-
-On receiving a wake-up or starting a new task:
-
-1. Check TODO.md from the TOP: 先看队首 / queue head, not the latest tail entry.
-2. If the head entry task_id is already `[superseded]` or marked ✅ MERGED in memory KB, skip it.
-3. If the head entry age > 3 days with no matching DELIVERY.md update, mark `[superseded]` and skip.
-4. Otherwise process the head entry.
-5. When the head is done, move to the next `[pending]` entry.
-
-**Why**: `dispatch_task.py` appends to tail. Picking tail-first leaves head zombie tasks permanently unprocessed.
+## TODO Queue Priority
+See [core/references/todo-queue-priority.md](../../references/todo-queue-priority.md) — process queue HEAD first (not tail); skip [superseded]; age-out >3 days. 先看队首 / queue head, not tail; zombie tasks result from tail-first reading.
 
 ## 3. Deliver
 
-## Handoff Receipt (两步走,不可二选一)
-
-specialist 完成 task 必须: 1. call `complete_handoff.py` 写 durable `.consumed` receipt; 2. then call `send-and-verify.sh` wake reply_to seat. send-and-verify is wake-up only and cannot substitute. complete_handoff.py 失败要 escalate 给 reply_to + memory,不能静默 send-and-verify only.
+## Handoff Receipt
+See [core/references/handoff-receipt-protocol.md](../../references/handoff-receipt-protocol.md) — two steps required: `complete_handoff.py` (durable receipt) then `send-and-verify.sh` (wakeup). Neither substitutes for the other. 完成必须两步，不可二选一; send-and-verify cannot substitute; complete_handoff.py 失败要 escalate 给 reply_to + memory.
 
 标准收口（移交 designer 执行写作）：
 

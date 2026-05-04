@@ -26,21 +26,14 @@ def test_specialist_skills_under_60_lines() -> None:
 
 
 def test_skills_contain_workflow_collaboration_section() -> None:
-    workflow = (_REPO / "core" / "skills" / "planner" / "references" / "workflow-collaboration-template.md").read_text(
-        encoding="utf-8"
-    ).split("\n", 2)[2].strip()
-    context = (_REPO / "core" / "skills" / "clawseat-memory" / "references" / "context-management-template.md").read_text(
-        encoding="utf-8"
-    ).split("\n", 2)[2].strip()
-
     for name, path in _SKILLS.items():
         text = path.read_text(encoding="utf-8")
         assert "## Workflow Collaboration" in text
         assert "## Context Management" in text
-        assert workflow in text
+        # Sections now use shared reference links instead of inline copies
+        assert "workflow-collaboration-protocol.md" in text or "workflow-collaboration-template.md" in text
+        assert "context-management-protocol.md" in text or "context-management-template.md" in text
         if name == "planner":
             assert "## Workflow Authoring" in text
             assert "COMPACT" in text
             assert "FORBIDDEN" in text
-        else:
-            assert context in text
