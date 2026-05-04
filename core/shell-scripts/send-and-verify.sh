@@ -1,17 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # send-and-verify.sh — fire-and-forget: send message + 3 Enter flushes
-# Usage: ./send-and-verify.sh [--project <project>] <session> "<message>"
+# Usage: ./send-and-verify.sh [--project <project>] [--force] <session> "<message>"
 # Exit codes: 0=sent, 1=param error/SESSION_NOT_FOUND/SESSION_DEAD/TMUX_MISSING,
 #             2=INPUT_REJECTED (control chars or oversized message, audit H3)
 #             3=PROJECT_REQUIRED (multi-project mode, no project scope given, audit C6)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PROJECT=""; if [ "${1:-}" = "--project" ]; then PROJECT="${2:-}"; shift 2; fi
+PROJECT=""
+FORCE_SEND=0
+while [ $# -gt 0 ]; do
+  case "${1:-}" in
+    --project)
+      PROJECT="${2:-}"
+      shift 2
+      ;;
+    --force)
+      FORCE_SEND=1
+      shift
+      ;;
+    --help|-h)
+      echo "Usage: send-and-verify.sh [--project <project>] [--force] <session> \"<message>\""
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 SESSION="${1:-}"; MSG="${2:-}"
 if [ -z "$SESSION" ] || [ -z "$MSG" ]; then
-  echo "Usage: send-and-verify.sh [--project <project>] <session> \"<message>\""; exit 1
+  echo "Usage: send-and-verify.sh [--project <project>] [--force] <session> \"<message>\""; exit 1
 fi
 
 # ── C6: multi-project guardrail ──────────────────────────────────────
@@ -174,6 +198,7 @@ if [ "${CLAWSEAT_SEND_VERIFY_DEBUG:-0}" = "1" ]; then
   } >&2
 fi
 
+WAIT_BUSY_SECONDS=0
 _wait_until_idle() {
   local session="$1" max_wait="${2:-120}" poll_sec="${3:-4}"
   local waited=0
@@ -190,11 +215,17 @@ _wait_until_idle() {
         ;;
     esac
   done
-  echo "send-and-verify: WARN target busy after ${waited}s, sending anyway (may be swallowed)" >&2
-  return 0
+  WAIT_BUSY_SECONDS="$waited"
+  return 1
 }
 
-_wait_until_idle "$SESSION"
+if ! _wait_until_idle "$SESSION"; then
+  if [ "$FORCE_SEND" -ne 1 ]; then
+    echo "send-and-verify: FAIL_CLOSED target busy after ${WAIT_BUSY_SECONDS}s; use --force to override" >&2
+    exit 1
+  fi
+  echo "send-and-verify: WARN target busy after ${WAIT_BUSY_SECONDS}s, sending anyway (--force)" >&2
+fi
 
 if [ -n "$TMUX_SEND_BIN" ]; then
   # Delegate to tmux-send — compliant agent-launcher entry point.

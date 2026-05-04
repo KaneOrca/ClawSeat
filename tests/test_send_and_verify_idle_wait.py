@@ -146,11 +146,25 @@ def test_send_waits_through_busy_then_idles(tmp_path: Path) -> None:
     assert any(line.startswith("tmux-send ") for line in calls)
 
 
-def test_send_times_out_after_busy_wait_then_warns(tmp_path: Path) -> None:
+def test_send_times_out_fails_closed_without_force(tmp_path: Path) -> None:
     env, log_file = _make_env(tmp_path, capture_mode="busy")
     result = _run(["--project", "demo", "target-seat", "hello"], env=env)
+    assert result.returncode == 1, result.stderr
+    assert "send-and-verify: FAIL_CLOSED target busy after 120s; use --force to override" in result.stderr
+    calls = log_file.read_text(encoding="utf-8").splitlines()
+    capture_calls = [line for line in calls if line.startswith("capture-pane #")]
+    sleep_calls = [line for line in calls if line.startswith("sleep ")]
+    assert len(capture_calls) == 30
+    assert len(sleep_calls) == 30
+    assert not any(line.startswith("tmux-send ") for line in calls)
+    assert not any(line.startswith("send-keys ") for line in calls)
+
+
+def test_send_times_out_with_force_overrides_fail_closed(tmp_path: Path) -> None:
+    env, log_file = _make_env(tmp_path, capture_mode="busy")
+    result = _run(["--project", "demo", "--force", "target-seat", "hello"], env=env)
     assert result.returncode == 0, result.stderr
-    assert "send-and-verify: WARN target busy after 120s, sending anyway (may be swallowed)" in result.stderr
+    assert "send-and-verify: WARN target busy after 120s, sending anyway (--force)" in result.stderr
     calls = log_file.read_text(encoding="utf-8").splitlines()
     capture_calls = [line for line in calls if line.startswith("capture-pane #")]
     sleep_calls = [line for line in calls if line.startswith("sleep ")]
