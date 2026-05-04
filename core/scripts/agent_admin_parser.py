@@ -75,7 +75,7 @@ class ParserHooks:
 def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-admin")
     sub = parser.add_subparsers(dest="command", required=True)
-    template_help = "Template name/path. Built-ins: clawseat-creative, clawseat-engineering, clawseat-solo."
+    template_help = "Template name/path. Built-ins: cartooner-creative, clawseat-engineering, clawseat-solo."
 
     migrate = sub.add_parser("migrate-legacy", help="Migrate legacy engineer/profile state.")
     migrate.add_argument("--force", action="store_true")
@@ -167,9 +167,9 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_create_nested.add_argument("repo_root")
     project_create_nested.add_argument(
         "--template",
-        default="clawseat-creative",
+        default="cartooner-creative",
         metavar="TEMPLATE",
-        help=f"Project roster template to use (default: clawseat-creative). {template_help}",
+        help=f"Project roster template to use (default: cartooner-creative). {template_help}",
     )
     project_create_nested.add_argument("--window-mode", choices=["tabs-1up", "tabs-2up", "split-2"], default=None)
     project_create_nested.add_argument("--open-detail-windows", action="store_true")
