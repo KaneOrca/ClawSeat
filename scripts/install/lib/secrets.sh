@@ -167,7 +167,13 @@ seed_bootstrap_secrets() {
   local seat secret_path src_path provider auth tool model path_index path
   if [[ "$DRY_RUN" == "1" ]]; then
     for seat in "${PENDING_SEATS[@]}"; do
-      read -r tool auth provider model < <(template_seat_config "$seat" 2>/dev/null || true)
+      # Dry-run must stay non-fatal even when the legacy template file is
+      # absent (for example clawseat-creative after the BV-2 cleanup). In that
+      # case we skip the per-seat copy trace instead of tripping `read` on EOF.
+      local template_line=""
+      template_line="$(template_seat_config "$seat" 2>/dev/null || true)"
+      [[ -n "$template_line" ]] || continue
+      read -r tool auth provider model <<<"$template_line"
       if [[ -n "$FORCE_ALL_API_PROVIDER" && "$auth" == "api" ]]; then
         provider="$(seat_provider_for_explicit_provider "$FORCE_ALL_API_PROVIDER")"
       fi
