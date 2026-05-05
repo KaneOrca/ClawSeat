@@ -126,28 +126,7 @@ def harness_profile(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def fake_skill_dir(tmp_path: Path) -> Path:
-    """Create a temporary skill directory with a SKILL.md file."""
-    skill_dir = tmp_path / "fake-skill"
-    skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text(
-        "# Fake Skill\nA placeholder skill for testing.\n",
-        encoding="utf-8",
-    )
-    return skill_dir
-
-
-@pytest.fixture()
 def isolated_tasks_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point send-and-verify multi-project detection at an empty temp tree."""
     monkeypatch.setenv("AGENTS_TASKS_ROOT", str(tmp_path))
     return tmp_path
-
-
-@pytest.fixture()
-def monkeypatch_clawseat_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path):
-    """Set CLAWSEAT_ROOT env var to the real repo root.
-
-    Not autouse -- tests must request this fixture explicitly.
-    """
-    monkeypatch.setenv("CLAWSEAT_ROOT", str(repo_root))
