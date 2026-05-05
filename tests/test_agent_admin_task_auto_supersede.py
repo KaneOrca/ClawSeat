@@ -105,5 +105,5 @@ def test_patrol_loop_invokes_task_auto_supersede_each_tick() -> None:
     text = (REPO / "core" / "skills" / "gstack-harness" / "scripts" / "patrol_loop.py").read_text(
         encoding="utf-8"
     )
-    assert "run_auto_supersede(profile)" in text
+    assert "run_auto_supersede(profile, age_days=args.auto_supersede_age_days)" in text
     assert '"auto-supersede"' in text

@@ -23,7 +23,8 @@ def _write_stale_handoff(home: Path, task_id: str, *, target: str = "builder") -
         json.dumps({"task_id": task_id, "source": "planner", "target": target}),
         encoding="utf-8",
     )
-    ts = time.time() - 3 * 3600
+    age_hours = patrol_loop.STALE_THRESHOLD_HOURS + 1
+    ts = time.time() - age_hours * 3600
     os.utime(path, (ts, ts))
     return path
 
@@ -43,7 +44,7 @@ def test_re_wake_stale_handoffs_sends_once_and_logs(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr(patrol_loop.subprocess, "run", fake_run)
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 1
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 1
     assert len(calls) == 2
     assert calls[0] == ["tmux", "capture-pane", "-t", "builder", "-p"]
     assert calls[1][0:4] == [
@@ -54,13 +55,13 @@ def test_re_wake_stale_handoffs_sends_once_and_logs(tmp_path: Path, monkeypatch)
     ]
     assert calls[1][4] == "builder"
     assert (
-        "[TASK-QUEUE] 你有未处理的 handoff: stale-one(已 3h)。"
+        f"[TASK-QUEUE] 你有未处理的 handoff: stale-one(已 {patrol_loop.STALE_THRESHOLD_HOURS + 1}h)。"
         in calls[1][5]
     )
     assert "请读 TODO.md 头部处理。" in calls[1][5]
     assert "stale-one" in (home / ".agents" / "logs" / "stale-handoff-rewake.log").read_text(encoding="utf-8")
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 0
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 0
     assert len(calls) == 2
 
 
@@ -80,7 +81,7 @@ def test_re_wake_stale_handoffs_caps_each_cycle_at_five(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(patrol_loop.subprocess, "run", fake_run)
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 5
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 5
     assert len(calls) == 10
     send_calls = [call for call in calls if call and call[0] == "bash"]
     assert len(send_calls) == 5
