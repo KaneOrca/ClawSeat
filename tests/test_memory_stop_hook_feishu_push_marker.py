@@ -92,6 +92,8 @@ def _run_hook(
             "CALLS_LOG": str(calls_log),
             "TMUX_RC": str(tmux_rc),
             "PYTHON_RC": str(python_rc),
+            "CLAWSEAT_PROJECT": "install",
+            "AGENTS_PROJECT": "install",
             "TMUX_DISPLAY_MESSAGE": "install-memory-claude",
             "CLAUDE_PROJECT_DIR": str(REPO),
             "LARK_CLI_RC": "0",
