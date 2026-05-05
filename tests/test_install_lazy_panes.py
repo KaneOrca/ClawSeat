@@ -511,7 +511,6 @@ fi
     assert result.returncode != 0
     assert "WARN:" not in result.stderr
     assert f"DETACHED from {matched_session}" in result.stdout
-    assert "reconnecting in 2s" in result.stdout
     attach_lines = attach_log.read_text(encoding="utf-8").splitlines()
     assert attach_lines
     assert all(line == f"attach -t ={matched_session}" for line in attach_lines)

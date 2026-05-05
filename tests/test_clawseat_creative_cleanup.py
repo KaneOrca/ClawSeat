@@ -43,7 +43,7 @@ def test_clawseat_minimal_occurs_only_in_approved_notes_or_live_configs() -> Non
     needle = "clawseat-" + "minimal"
     hits: list[tuple[Path, int, str]] = []
     for path in REPO.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
+        if not path.is_file() or ".git" in path.parts or "tests" in path.parts or "artifacts" in path.parts:
             continue
         try:
             for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):

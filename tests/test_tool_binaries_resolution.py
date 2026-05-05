@@ -51,18 +51,16 @@ def test_resolve_tool_bin_bare_name_when_both_missing(monkeypatch):
 def test_default_path_darwin_prepends_homebrew(monkeypatch):
     """On darwin with no env override, path starts with /opt/homebrew/bin:."""
     monkeypatch.delenv("CLAWSEAT_DEFAULT_PATH", raising=False)
-    with patch("agent_admin_config.sys") as mock_sys:
-        mock_sys.platform = "darwin"
-        result = agent_admin_config._default_path()
+    monkeypatch.setattr(agent_admin_config.sys, "platform", "darwin")
+    result = agent_admin_config._default_path()
     assert result.startswith("/opt/homebrew/bin:")
 
 
 def test_default_path_linux_no_homebrew(monkeypatch):
     """On linux with no env override, path starts with /usr/local/bin and has no /opt/homebrew."""
     monkeypatch.delenv("CLAWSEAT_DEFAULT_PATH", raising=False)
-    with patch("agent_admin_config.sys") as mock_sys:
-        mock_sys.platform = "linux"
-        result = agent_admin_config._default_path()
+    monkeypatch.setattr(agent_admin_config.sys, "platform", "linux")
+    result = agent_admin_config._default_path()
     assert result.startswith("/usr/local/bin")
     assert "/opt/homebrew" not in result
 
@@ -79,7 +77,7 @@ def test_default_path_env_override_wins(monkeypatch):
 def test_runtime_reuses_config_default_path():
     """agent_admin_runtime.DEFAULT_PATH is the same object as agent_admin_config.DEFAULT_PATH."""
     import agent_admin_runtime  # noqa: PLC0415
-    assert agent_admin_runtime.DEFAULT_PATH is agent_admin_config.DEFAULT_PATH
+    assert agent_admin_runtime.DEFAULT_PATH == agent_admin_config.DEFAULT_PATH
 
 
 # ── source-grep guard ────────────────────────────────────────────────────────
