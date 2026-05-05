@@ -184,23 +184,15 @@ protocol gap for the failing seat; re-run rehearsal until chain passes.
 
 ## Startup Workspace Freshness Check
 
-启动 B0/B1 阶段应做一次 workspace stale 检测；这是提示，不是 hard block。若
-ClawSeat repo 不可读或当前 workspace 没有渲染元数据，静默跳过。
-
-```bash
-workspace_sha="$(sed -n 's/^<!-- rendered_from_clawseat_sha=\([^ ]*\) .*$/\1/p' CLAUDE.md 2>/dev/null | head -1)"
-clawseat_sha="$(git -C ~/ClawSeat rev-parse HEAD 2>/dev/null || true)"
-if [ -n "$workspace_sha" ] && [ -n "$clawseat_sha" ] && [ "$workspace_sha" != "$clawseat_sha" ]; then
-  echo 'STALE WORKSPACE: ClawSeat has updated since last render.'
-  echo 'Run: agent_admin engineer regenerate-workspace --project <p> --all-seats'
-fi
-```
+启动 B0/B1 阶段应做一次 workspace stale 检测；若 `CLAUDE.md` 里的
+`rendered_from_clawseat_sha` 与 `git -C ~/ClawSeat rev-parse HEAD`
+不一致，提示 `STALE WORKSPACE: ClawSeat has updated since last render.`
+并建议 `agent_admin engineer regenerate-workspace --project <p> --all-seats`；
+无法读取 repo 或渲染元数据时静默跳过。
 
 ## Install Flow Canonicality
 
-When the operator asks to bring up a new project, answer with `install.sh`, not
-`agent_admin project create`. install.sh is the canonical entry point.
-`agent_admin project create` is an internal primitive; using it directly will miss workspace rendering, profile generation, secret seeding, and skills installation.
+When the operator asks to bring up a new project, answer with install.sh, not `agent_admin project create`. install.sh is the canonical entry point; `agent_admin project create` is an internal primitive that skips workspace rendering, profile generation, secret seeding, and skills installation.
 
 Canonical answer:
 
@@ -213,6 +205,25 @@ Wrong answer:
 ```bash
 python3 ~/ClawSeat/core/scripts/agent_admin.py project create <name> <repo-root>
 ```
+
+## 文档编辑边界（prose-only exception）
+
+memory MAY directly edit prose-only content in any file, including other
+seats' `SKILL.md` and templates: typo / grammar / formatting; dead links /
+stale anchors / broken markdown; stale facts (commit hashes, paths, dates);
+descriptions / comments / "Why" blocks; illustrative examples (non-contract).
+
+memory MUST NOT edit, even when a human calls it "just docs": contract
+statements (MUST/SHOULD/必须/不能/禁止); trigger conditions; step sequences /
+field names / handoff format; rendering directives / template variables;
+contract-pattern examples.
+
+Decision test: "diff 一眼看得出纯文字清理 vs 行为变化吗？" yes ->
+memory; no -> builder via brief. Operations: single-file prose typo -> direct
+push to main, commit prefix `docs:`; multi-file prose sweep -> open PR titled
+`docs: ...`; template prose change -> record `re-render pending` line in
+STATUS.md. memory's own memory-oracle SKILL follows the same standard: prose
+OK, contract clauses NOT.
 
 ## Skill Loading
 
@@ -233,42 +244,24 @@ not load either for high-context operator work.
 
 When Memory needs the Feishu/Koder decision path, produce a
 `decision_payload` JSON object that validates against
-`core/schemas/decision-payload.schema.json`, then send it to Koder via the
-tmux-send transport capability:
-
-```bash
-python3 core/skills/memory-oracle/scripts/decision_payload.py send \
-  --session <project>-koder \
-  --payload-file /path/to/decision_payload.json
-```
-
-The helper validates required fields, option shape, timeout default, and
-schema-safe additional properties before invoking transport. Validation failure
-blocks the send.
+`core/schemas/decision-payload.schema.json`, then send it with `python3
+core/skills/memory-oracle/scripts/decision_payload.py send --session
+<project>-koder --payload-file /path/to/decision_payload.json`. The helper
+validates required fields, option shape, timeout default, and schema-safe
+additional properties before invoking transport; validation failure blocks the
+send.
 
 ## 目录布局（v0.8）
 
 ```text
 ~/.agents/memory/
-├── machine/<*.json>                     credentials / network / openclaw / github / current_context
-├── learnings/                           跨项目模式（如有）
-├── shared/                              library_knowledge / patterns / examples
-├── index.json                           scan_index.py 全局综合索引
-├── events.log                           全局 append-only JSONL
-├── responses/<task_id>.json             memory_deliver.py 输出
-└── projects/<project>/
-    ├── dev_env.json
-    ├── decision/<ts>-<slug>.md          Memory orphan decision
-    ├── finding/<ts>-<slug>.md           Memory orphan finding
-    ├── task/<ts>-<slug>.md              Memory orphan task
-    ├── plan/<ts>-<slug>.md              Memory orphan plan
-    ├── builder/<ts>-<slug>.md
-    ├── planner/<ts>-<slug>.md
-    ├── reviewer/<ts>-<slug>.md
-    ├── patrol/doc-code-alignment/<ts>-<slug>.md
-    ├── patrol/test-results/<ts>-<slug>.md
-    ├── patrol/task-commit-gaps/<ts>-<slug>.md
-    └── _index/
+├── machine/<*.json>  credentials / network / openclaw / github / current_context
+├── learnings/        跨项目模式（如有）
+├── shared/           library_knowledge / patterns / examples
+├── index.json        scan_index.py 全局综合索引
+├── events.log        全局 append-only JSONL
+├── responses/<task_id>.json  memory_deliver.py 输出
+└── projects/<project>/{dev_env.json,decision/,finding/,task/,plan/,builder/,planner/,reviewer/,patrol/, _index/}
 ```
 
 ## 工具速查
