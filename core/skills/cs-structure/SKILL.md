@@ -82,6 +82,10 @@ Teammate: 叙事设计师
 
 **启动要求**：ancestor 的运行环境需设置 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`。
 
+### Fallback Mode
+
+If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is unavailable or Agent Teams cannot start in the current runtime, ancestor must continue in a sequential single-agent mode. The fallback must produce the same `creative/structure/` artifacts (`world.md`, `entities.md`, `outline.md`, and `units/`) in the same layout; only the collaboration mechanism changes. Gate 1 and Gate 2 still apply.
+
 ## GATE 1: 世界观 + 人物确认
 
 编剧室的世界观架构师和人物设计师完成初稿后**暂停**：

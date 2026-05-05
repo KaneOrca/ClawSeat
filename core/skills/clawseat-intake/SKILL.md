@@ -201,6 +201,12 @@ N. 其他（请描述）
 
 每轮只推进一个问题。创作路径优先收敛选项；工程路径优先开放追问。
 
+### Authority Boundary
+
+- `clawseat-intake` 只负责诊断与澄清；Phase E0-E3 的输出是 advisory。
+- 如果接下来需要的是 workflow spec、dispatch brief，或任何要写进 `workflow.md` 的规范，必须由 planner 派单给 `workflow-architect`。
+- 不要把 intake 的结论当成 workflow authoring 的授权边界；它只提供问题定义和约束，不直接生成派工规范。
+
 ---
 
 ## 飞书通道适配

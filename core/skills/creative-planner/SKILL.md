@@ -57,7 +57,17 @@ dispatch creative-designer 时，TODO objective 必须传递绝对路径：
 
 ### Step 0 — cs-classify（工作流选择）
 
-接到 brief 后，先 dispatch **creative-builder** 执行 cs-classify 得到 `classification.json`，根据 `type` 自行决定流程：
+接到 brief 后，先由 planner 通过 `dispatch_task.py` 派单 **creative-builder** 执行 `cs-classify`，让它产出 `classification.json`。creative-planner 只读取这个 `classification.json` 的 `type` 来决定流程，不在当前 session 里口头猜路由：
+
+```bash
+python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
+  --profile "$CREATIVE_PLANNER_PROFILE" \
+  --target creative-builder \
+  --task-id <task_id> \
+  --title "cs-classify: <brief_title>" \
+  --objective "brief_path=$PROJECT_REPO_ROOT/creative/brief.md; output=classification.json" \
+  --test-policy N/A
+```
 
 - **long-form**（`type=long-form`）：
   `cs-structure（Agent Teams）→ cs-write → cs-score`
