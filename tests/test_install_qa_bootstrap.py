@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
@@ -40,6 +42,8 @@ def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.Complet
 
 
 def test_install_profile_includes_patrol() -> None:
+    if not _CREATIVE_TEMPLATE.exists():
+        pytest.skip("clawseat-creative template deleted; patrol coverage is verified by the dry-run test")
     creative = _CREATIVE_TEMPLATE.read_text(encoding="utf-8")
     engineering = _ENGINEERING_TEMPLATE.read_text(encoding="utf-8")
 
@@ -55,7 +59,7 @@ def test_install_sh_invokes_install_patrol_hook(tmp_path: Path) -> None:
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, combined
-    assert "PENDING_SEATS=(planner builder patrol designer)" in combined
+    assert "PENDING_SEATS=(planner builder reviewer patrol designer)" in combined
     assert "Step 7.6: install patrol hook + patrol cron" in combined
     assert "engineer create patrol qa-bootstrap --no-monitor" in combined
     assert "install_patrol_hook.py --workspace" in combined

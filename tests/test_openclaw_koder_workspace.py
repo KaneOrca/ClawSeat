@@ -474,6 +474,7 @@ def test_bootstrap_harness_start_skips_openclaw_frontstage_tmux_start(monkeypatc
     monkeypatch.setattr(bootstrap_harness, "_link_sandbox_tasks_to_real_home", lambda *args, **kwargs: None)
     monkeypatch.setattr(bootstrap_harness, "_sync_workspaces_host_to_sandbox", lambda *args, **kwargs: None)
     monkeypatch.setattr(bootstrap_harness, "seed_empty_secret_from_peer", lambda *args, **kwargs: None)
+    monkeypatch.setenv("GSTACK_SKILLS_ROOT", "/Users/ywf/.gstack/repos/gstack/.agents/skills")
 
     rc = bootstrap_harness.main()
 

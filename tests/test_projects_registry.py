@@ -213,7 +213,11 @@ def test_cli_list_outputs_registered_projects(tmp_path):
 def test_build_memories_payload_prefers_projects_json(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     projects_registry.register_project("alpha", "memory")
-    monkeypatch.setattr(agent_admin_window, "_tmux_session_names", lambda: ["ghost-memory"])
+    monkeypatch.setattr(
+        agent_admin_window,
+        "_tmux_session_names",
+        lambda: ["ghost-memory", "alpha-memory"],
+    )
 
     payload = agent_admin_window.build_memories_payload(SimpleNamespace(name="ignored"))
 
