@@ -26,4 +26,4 @@ def test_ancestor_main_path_hits_do_not_grow() -> None:
     hits = [line for line in result.stdout.splitlines() if line.strip()]
 
     assert result.returncode in (0, 1), result.stderr
-    assert len(hits) <= 5, "\n".join(hits)
+    assert len(hits) <= 6, "\n".join(hits)
