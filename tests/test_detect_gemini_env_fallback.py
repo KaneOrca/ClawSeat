@@ -25,6 +25,7 @@ def test_detect_gemini_state_uses_google_api_keys(tmp_path: Path, key: str) -> N
         "CLAWSEAT_TEST_OSTYPE": "linux-gnu",
         "ANTHROPIC_API_KEY": "",
         "CLAUDE_API_KEY": "",
+        "CLAUDE_CODE_OAUTH_TOKEN": "",
         "OPENAI_API_KEY": "",
         "GEMINI_API_KEY": "",
         "GOOGLE_API_KEY": "",

@@ -62,6 +62,11 @@ PY
     fi
   fi
 
+  if [[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    printf 'oauth\n'
+    return 0
+  fi
+
   if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_API_KEY:-}" ]]; then
     printf 'api_key\n'
     return 0

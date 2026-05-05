@@ -67,6 +67,8 @@ done
 
 If any `.consumed` file is missing, step verdict is `BLOCKED`; relay the
 BLOCKED reason to memory before any retry or re-dispatch.
+The receipt field contract for those handoff files lives in
+[`core/skills/gstack-harness/references/handoff-receipt-schema.md`](../gstack-harness/references/handoff-receipt-schema.md).
 
 Exceptions:
 - planner self-loop steps where planner did not dispatch itself.

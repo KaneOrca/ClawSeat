@@ -343,7 +343,10 @@ def _infer_target_from_dispatch_handoff(
         reply_to = payload.get("reply_to")
         if isinstance(reply_to, str) and reply_to.strip():
             return reply_to.strip()
-    raise SystemExit("--target required: could not infer from dispatch handoff")
+    raise SystemExit(
+        f"--target required: could not infer from dispatch handoff for task_id={task_id!r}; "
+        f"searched {handoff_dir} with pattern {pattern}"
+    )
 
 
 def parse_args() -> argparse.Namespace:
