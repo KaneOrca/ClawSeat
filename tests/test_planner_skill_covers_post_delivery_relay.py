@@ -17,7 +17,7 @@ def test_planner_skill_documents_post_delivery_relay_to_memory() -> None:
 
     assert section_match is not None
     section = section_match.group("section")
-    assert "ready-for-merge" in section
+    assert "complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify" in section
     assert re.search(r"Update .*planner/DELIVERY\.md", section, flags=re.I | re.S)
-    assert re.search(r"send-and-verify(?:\.sh)?.*memory", section, flags=re.I | re.S)
+    assert "wake-up only" in section
     assert len(re.findall(r"^\d+\.", section, flags=re.M)) >= 4

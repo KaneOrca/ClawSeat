@@ -21,9 +21,9 @@ def test_planner_skill_has_compaction_hint_in_post_delivery_relay() -> None:
 
     assert "compaction_hint" in section
     assert "compaction_reason" in section
-    assert "ready-for-merge" in section
+    assert "complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify" in section
     assert re.search(
-        r"ready-for-merge\s+-\s*verdict\s+[^\n]+-\s*branch\s+[^\n]+\s+commit\s+[^\n]+\s+sweep\s+[^\n]+\s+-\s*compaction_hint=<yes\|no>\(<[^>]+>\)",
+        r"complete_handoff\.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify",
         section,
     )
     assert "已处理 N 步,context 估计 >70%" in section

@@ -35,7 +35,7 @@ it relays the chain-end summary to memory for synthesis.
 Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, and Official Docs Dispatch Gate.
 ## Output Schema
 Deliver `workflow.md`, dispatch receipts, consumed ACKs, planner summaries, and escalation questions when workflow progress needs memory/user authority.
-Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harness/references/communication-protocol.md`; use `complete_handoff.py` and `send-and-verify.sh`; Stop hook is Claude Code convenience only.
+Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harness/references/communication-protocol.md`; use `complete_handoff.py` as the durable receipt path and `send-and-verify.sh` only as wake-up transport after the receipt exists; Stop hook is Claude Code convenience only.
 ## Borrowed Practices
 see [`core/references/superpowers-borrowed/`](../../references/superpowers-borrowed/) for planning and verification practices.
 ## Workflow Authoring
@@ -85,13 +85,13 @@ Upon receiving a builder/specialist DELIVERY notification via `send-and-verify`
 or `complete_handoff.py`, planner MUST within the same turn:
 
 1. Read `~/.agents/tasks/<project>/<seat>/DELIVERY.md` in full.
-2. Form verdict: `PASS` / `REVIEW_NEEDED` / `BLOCKED`.
+2. Form verdict: `APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`.
 3. Update `~/.agents/tasks/<project>/planner/DELIVERY.md` with `task_id`,
    `source: planner`, `target: memory`, `status`, `verdict`, commit hash,
    branch, sweep count, and a one-line summary extracted from builder DELIVERY.
-4. Send-and-verify memory in the same turn:
-   `send-and-verify.sh --project <p> memory "[<task_id>] ready-for-merge - verdict PASS - branch <b> commit <h> sweep <N> - compaction_hint=<yes|no>(<reason>)"`.
-   When blocked: `"[<task_id>] BLOCKED - <reason> - see planner/DELIVERY.md"`.
+4. Relay to memory with the canonical closeout helper:
+   `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify`
+   Use the canonical verdict from step 2. `send-and-verify.sh` is wake-up only and may follow the durable receipt when a separate nudge is needed; it is not the primary relay path.
 
    Include in `~/.agents/tasks/<project>/planner/DELIVERY.md`:
    - `compaction_hint: <yes|no>`
@@ -107,12 +107,13 @@ canonical relay; still update `planner/DELIVERY.md` as authoritative status.
 ### Chain End Relay to Memory (双入口都适用, 2026-04-30 BK)
 
 Regardless of whether the chain started through memory-entry or planner-entry,
-when all specialists PASS and planner forms the chain verdict, planner MUST
-relay to memory:
+when all specialists are approved and planner forms the chain verdict, planner
+MUST relay to memory:
 
 ```bash
-send-and-verify.sh --project <p> memory \
-  "[<task_id>] complete - verdict <PASS|FAIL> - branch <b> commit <h> sweep <N>"
+complete_handoff.py --source planner --target memory --task-id <id> \
+  --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> \
+  --notify
 ```
 
 Include a brief summary for memory to synthesize into KB:
@@ -123,7 +124,8 @@ Include a brief summary for memory to synthesize into KB:
 
 memory-entry route: Standard Post-DELIVERY Relay already covers this.
 planner-entry route: this section is the mandate; planner self-drives the final
-memory relay after chain closeout.
+memory relay after chain closeout via `complete_handoff.py`. `send-and-verify.sh`
+remains wake-up only.
 
 Why: memory is the L3 Reflector for orphan knowledge and experience retention.
 Any chain that does not reach memory loses reusable experience.
