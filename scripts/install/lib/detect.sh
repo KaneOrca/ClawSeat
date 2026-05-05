@@ -160,13 +160,22 @@ detect_all() {
   branch="$(detect_branch_state)"
   projects="$(detect_existing_projects)"
   timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  cat <<JSON
-{
-  "oauth": ${oauth},
-  "pty": ${pty},
-  "branch": ${branch},
-  "existing_projects": ${projects},
-  "timestamp": "$timestamp"
-}
-JSON
+  python3 - "$oauth" "$pty" "$branch" "$projects" "$timestamp" <<'PY'
+import json
+import sys
+
+oauth = json.loads(sys.argv[1])
+pty = json.loads(sys.argv[2])
+branch = json.loads(sys.argv[3])
+projects = json.loads(sys.argv[4])
+timestamp = sys.argv[5]
+
+print(json.dumps({
+    "oauth": oauth,
+    "pty": pty,
+    "branch": branch,
+    "existing_projects": projects,
+    "timestamp": timestamp,
+}))
+PY
 }

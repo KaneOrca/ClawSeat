@@ -11,7 +11,6 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 _CORE_LIB = _SCRIPT_DIR.parents[2] / "lib"
 if str(_CORE_LIB) not in sys.path:
     sys.path.insert(0, str(_CORE_LIB))
-from real_home import real_user_home
 from utils import load_toml, q, q_array
 
 
@@ -37,8 +36,8 @@ def resolve_clawseat_root() -> Path:
 
 
 def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, bootstrap_only: bool) -> list[str]:
-    tasks_root = str(real_user_home() / ".agents" / "tasks" / project_name)
-    workspace_root = str(real_user_home() / ".agents" / "workspaces" / project_name)
+    tasks_root = f"~/.agents/tasks/{project_name}"
+    workspace_root = f"~/.agents/workspaces/{project_name}"
     heartbeat_owner = str(data.get("heartbeat_owner", "koder"))
     active_loop_owner = str(data.get("active_loop_owner", "memory"))
     default_notify_target = str(data.get("default_notify_target", "memory"))
@@ -57,7 +56,7 @@ def build_lines(data: dict[str, Any], *, project_name: str, repo_root: str, boot
     heartbeat_transport = "tmux"
     materialized_seats_list = [str(seat) for seat in legacy_seats]
     runtime_seats_list = list(materialized_seats_list)
-    heartbeat_receipt = str(real_user_home() / ".openclaw" / "koder" / f"{project_name}-HEARTBEAT_RECEIPT.toml")
+    heartbeat_receipt = f"~/.openclaw/koder/{project_name}-HEARTBEAT_RECEIPT.toml"
 
     lines = [
         "version = 2",

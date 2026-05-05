@@ -124,7 +124,26 @@ _secret_file_auth_token() {
 
 _secret_value_is_placeholder_token() {
   local value="${1:-}"
-  printf '%s\n' "$value" | grep -Eiq '(?:^|[[:space:]])+(<set-by-operator>|YOUR_TOKEN_HERE|minimax-token|deepseek-token|dry-run-placeholder|placeholder|dummy|example)(?:$|[[:space:]])'
+  local normalized
+  [[ -n "$value" ]] || return 1
+  normalized="$(printf '%s\n' "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$normalized" in
+    '<set-by-operator>'|\
+    'your_token_here'|\
+    'minimax-token'|\
+    'deepseek-token'|\
+    'dry-run-placeholder'|\
+    'dry-run-placeholder-key'|\
+    'dry-run-placeholder-token'|\
+    'placeholder'|\
+    'dummy'|\
+    'example')
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 _secret_file_has_real_token() {
