@@ -27,6 +27,8 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "core" / "scripts"))
 
@@ -67,6 +69,28 @@ class _Recorder:
     def __call__(self, project, sessions, engineers):  # noqa: ARG002
         self.fired_at = time.monotonic()
         self.fired_with_sessions = sessions
+
+
+@pytest.fixture(autouse=True)
+def _caller_dispatch_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = tmp_path / "caller.toml"
+    profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = true",
+                "escalation_authority = false",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
 
 
 def _make_handlers(

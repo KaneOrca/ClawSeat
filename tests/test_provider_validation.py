@@ -296,13 +296,32 @@ def _fake_crud_hooks(error_cls=RuntimeError):
     return hooks
 
 
-def test_engineer_create_rejects_anthropix_before_any_side_effect():
+def test_engineer_create_rejects_anthropix_before_any_side_effect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """This is the one that matters: today's failure mode was
     `engineer create designer-1 install claude oauth anthropix` silently
     succeeding. After validation, it must raise BEFORE we touch disk.
     """
     from types import SimpleNamespace
     from agent_admin_crud import CrudHandlers  # noqa: WPS433
+
+    caller_profile = tmp_path / "caller.toml"
+    caller_profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = false",
+                "escalation_authority = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(caller_profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
 
     hooks = _fake_crud_hooks()
     handlers = CrudHandlers(hooks)

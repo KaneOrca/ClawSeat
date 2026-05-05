@@ -258,6 +258,24 @@ def test_cli_validate_prints_one_line_status_and_quiet_suppresses(tmp_path: Path
 
 def test_agent_admin_start_engineer_touches_last_access(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CLAWSEAT_REGISTRY_HOME", str(tmp_path / ".clawseat"))
+    caller_profile = tmp_path / "caller.toml"
+    caller_profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = true",
+                "escalation_authority = false",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(caller_profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
     projects_registry.register_project("demo", "memory", tmux_name="demo-memory")
     before = projects_registry.get_project("demo").last_access  # type: ignore[union-attr]
     time.sleep(0.001)

@@ -304,8 +304,27 @@ def test_workers_recipe_4_pane_labels() -> None:
     assert [pane["label"] for pane in payload["panes"]] == ["planner", "builder", "designer", "patrol"]
 
 
-def test_agent_admin_engineer_create_uses_patrol_minimax_defaults() -> None:
+def test_agent_admin_engineer_create_uses_patrol_minimax_defaults(tmp_path: Path, monkeypatch) -> None:
     from agent_admin_crud import CrudHandlers
+
+    caller_profile = tmp_path / "caller.toml"
+    caller_profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = false",
+                "escalation_authority = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(caller_profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
 
     created_sessions: list[dict[str, object]] = []
     write_project_calls: list[object] = []

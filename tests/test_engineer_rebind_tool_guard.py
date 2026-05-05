@@ -25,6 +25,28 @@ from agent_admin_crud import CrudHandlers
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
+@pytest.fixture(autouse=True)
+def _caller_escalation_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = tmp_path / "caller.toml"
+    profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = false",
+                "escalation_authority = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
+
 def _make_session(tool: str = "claude") -> SimpleNamespace:
     return SimpleNamespace(
         engineer_id="koder",

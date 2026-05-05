@@ -7,6 +7,7 @@ import subprocess
 import sys
 from typing import Any, Callable
 
+from agent_admin_crud_base import require_caller_authority
 import agent_admin_window as window_ops
 
 
@@ -46,6 +47,9 @@ class CommandHandlers:
     def _session_supports_heartbeat_provisioning(self, session: Any) -> bool:
         return str(getattr(session, "tool", "") or "") == "claude"
 
+    def _require_dispatch_authority(self, action: str) -> None:
+        require_caller_authority("dispatch", action, self.hooks.error_cls)
+
     def _validate_project_seat_override(self, session: Any, *, accept_override: bool = False) -> None:
         project_name = str(getattr(session, "project", "") or "").strip()
         engineer_id = str(getattr(session, "engineer_id", "") or "").strip()
@@ -77,6 +81,7 @@ class CommandHandlers:
             raise self.hooks.error_cls(f"error: {message}")
 
     def session_start_engineer(self, args: Any) -> int:
+        self._require_dispatch_authority("session start-engineer")
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self._validate_project_seat_override(
             session,
@@ -214,6 +219,7 @@ class CommandHandlers:
         iTerm current-window race even without the fix in
         agent_admin_window.py.
         """
+        self._require_dispatch_authority("session batch-start-engineer")
         import concurrent.futures
         import sys
 
@@ -347,6 +353,7 @@ class CommandHandlers:
         return 0 if provisioned or args.dry_run or already_verified else 1
 
     def session_stop_engineer(self, args: Any) -> int:
+        self._require_dispatch_authority("session stop-engineer")
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self.hooks.session_service.stop_engineer(session, close_iterm_pane=not getattr(args, "keep_iterm_tab", False))
         return 0

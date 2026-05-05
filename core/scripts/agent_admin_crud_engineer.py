@@ -13,6 +13,7 @@ from agent_admin_crud_base import (
     CrudHooks,
     _update_profile_seat,
     archive_session_artifacts,
+    require_caller_authority,
 )
 from seat_roles import normalize_seat_role
 
@@ -65,6 +66,9 @@ class EngineerCrud:
     def __init__(self, hooks: CrudHooks) -> None:
         self.hooks = hooks
 
+    def _require_escalation_authority(self, action: str) -> None:
+        require_caller_authority("escalation", action, self.hooks.error_cls)
+
     def _archive_session_artifacts(self, session: Any) -> None:
         archive_session_artifacts(self.hooks, session)
 
@@ -90,6 +94,7 @@ class EngineerCrud:
         return {}
 
     def engineer_create(self, args: Any) -> int:
+        self._require_escalation_authority("engineer create")
         projects = self.hooks.load_projects()
         project = projects[args.project]
         engineer_id = normalize_seat_role(self.hooks.normalize_name(args.engineer))
@@ -168,6 +173,7 @@ class EngineerCrud:
         return 0
 
     def engineer_delete(self, args: Any) -> int:
+        self._require_escalation_authority("engineer delete")
         project_name = getattr(args, "project", None)
         if project_name:
             session = self.hooks.resolve_engineer_session(args.engineer, project_name=project_name)
@@ -191,6 +197,7 @@ class EngineerCrud:
         return 0
 
     def engineer_rename(self, args: Any) -> int:
+        self._require_escalation_authority("engineer rename")
         old = self.hooks.resolve_engineer(args.old)
         new_id = self.hooks.normalize_name(args.new)
         if self.hooks.engineer_path(new_id).exists():
@@ -284,6 +291,7 @@ class EngineerCrud:
         return 0
 
     def engineer_rebind(self, args: Any) -> int:
+        self._require_escalation_authority("engineer rebind")
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         requested_tool = getattr(args, "tool", None)
         if requested_tool is not None and requested_tool != session.tool:
@@ -428,6 +436,7 @@ class EngineerCrud:
             print(f"hint\t{path}\tno OPERATOR-CUSTOM markers found, fully re-rendered")
 
     def engineer_regenerate_workspace(self, args: Any) -> int:
+        self._require_escalation_authority("engineer regenerate-workspace")
         project = self.hooks.load_project(args.project)
         assume_yes = bool(getattr(args, "yes", False))
         if getattr(args, "all_seats", False):
@@ -451,6 +460,7 @@ class EngineerCrud:
         return 0
 
     def engineer_secret_set(self, args: Any) -> int:
+        self._require_escalation_authority("engineer secret-set")
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         if session.auth_mode != "api" or not session.secret_file:
             raise self.hooks.error_cls(f"{session.engineer_id} does not use API secrets")
