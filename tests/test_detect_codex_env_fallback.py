@@ -22,6 +22,7 @@ def test_detect_codex_state_uses_openai_api_key(tmp_path: Path) -> None:
         "CLAWSEAT_TEST_OSTYPE": "linux-gnu",
         "ANTHROPIC_API_KEY": "",
         "CLAUDE_API_KEY": "",
+        "CLAUDE_CODE_OAUTH_TOKEN": "",
         "OPENAI_API_KEY": "sk-test",
         "GEMINI_API_KEY": "",
         "GOOGLE_API_KEY": "",
