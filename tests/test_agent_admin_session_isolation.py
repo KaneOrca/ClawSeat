@@ -325,7 +325,7 @@ def test_start_engineer_reset_kills_session_before_launcher(
         secret_content="OPENAI_API_KEY=codex-xcode-token\n",
     )
     svc, hooks = _make_service(tmp_path, session)
-    hooks.tmux_has_session.side_effect = [True, False]
+    hooks.tmux_has_session.side_effect = [True, False, False]
     events: list[str] = []
 
     def fake_run(cmd, **kwargs):

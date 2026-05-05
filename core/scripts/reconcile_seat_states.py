@@ -281,7 +281,11 @@ def reconcile(*, project: str | None = None, tmux_output_file: str | None = None
         for key, parsed in sorted(parsed_live.items()):
             existing = get_seat(conn, parsed.project, parsed.seat_id)
             update = _seat_from_parsed(home, parsed, "live", now)
-            upsert_seat(conn, _merge_seat(existing, update))
+            upsert_seat(
+                conn,
+                _merge_seat(existing, update),
+                allow_stopped_revival=True,
+            )
             counts["live"] += 1
         for project_name in sorted(known):
             for seat in list_seats(conn, project_name, status="live"):

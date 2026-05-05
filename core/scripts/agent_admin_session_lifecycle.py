@@ -277,6 +277,37 @@ class SessionStartLifecycle:
         return _generic_role(str(session.engineer_id))
 
     def _record_seat_live(self, session: Any, project: Any) -> None:
+        compat_globals = getattr(self, "_compat_module_globals", None)
+        if not isinstance(compat_globals, dict):
+            compat_globals = {}
+        tmux_has_session_fn = compat_globals.get(
+            "tmux_has_session",
+            getattr(self.hooks, "tmux_has_session", None),
+        )
+        session_name = str(getattr(session, "session", "") or "")
+        if callable(tmux_has_session_fn) and not tmux_has_session_fn(session_name):
+            print(
+                f"warn: state.db upsert_seat skipped (session missing): {session_name}",
+                file=sys.stderr,
+            )
+            return
+        self._record_seat_status(
+            session,
+            project,
+            status="live",
+            allow_stopped_revival=True,
+            verify_tmux_session=True,
+        )
+
+    def _record_seat_status(
+        self,
+        session: Any,
+        project: Any,
+        *,
+        status: str,
+        allow_stopped_revival: bool = False,
+        verify_tmux_session: bool = False,
+    ) -> None:
         try:
             now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             compat_globals = getattr(self, "_compat_module_globals", None)
@@ -285,21 +316,45 @@ class SessionStartLifecycle:
             open_db_fn = compat_globals.get("open_db", open_db)
             upsert_seat_fn = compat_globals.get("upsert_seat", upsert_seat)
             seat_cls = compat_globals.get("Seat", Seat)
+            tmux_has_session_fn = compat_globals.get(
+                "tmux_has_session",
+                getattr(self.hooks, "tmux_has_session", None),
+            )
+            project_name = getattr(session, "project", None)
+            if project_name is None and project is not None:
+                project_name = getattr(project, "name", project)
+            engineer_id = getattr(session, "engineer_id", None)
+            if not project_name or not engineer_id:
+                return
+            session_name = str(getattr(session, "session", "") or "")
+            if verify_tmux_session and callable(tmux_has_session_fn) and not tmux_has_session_fn(session_name):
+                print(
+                    f"warn: state.db upsert_seat skipped (session missing): {session_name}",
+                    file=sys.stderr,
+                )
+                return
             with open_db_fn() as conn:
+                if verify_tmux_session and callable(tmux_has_session_fn) and not tmux_has_session_fn(session_name):
+                    print(
+                        f"warn: state.db upsert_seat skipped (session missing): {session_name}",
+                        file=sys.stderr,
+                    )
+                    return
                 upsert_seat_fn(
                     conn,
                     seat_cls(
-                        project=str(session.project),
-                        seat_id=str(session.engineer_id),
+                        project=str(project_name),
+                        seat_id=str(engineer_id),
                         role=self._role_for_session(session, project),
                         tool=str(session.tool),
                         auth_mode=str(session.auth_mode),
                         provider=str(session.provider),
-                        status="live",
+                        status=status,
                         last_heartbeat=now,
-                        session_name=str(session.session),
-                        workspace=str(session.workspace),
+                        session_name=session_name or None,
+                        workspace=str(getattr(session, "workspace", "") or "") or None,
                     ),
+                    allow_stopped_revival=allow_stopped_revival,
                 )
         except Exception as exc:  # noqa: BLE001 state.db must not block startup
             print(f"warn: state.db upsert_seat failed (non-fatal): {exc}", file=sys.stderr)
@@ -750,11 +805,18 @@ class SessionStartLifecycle:
                         f"warn: iterm_pane_close_failed: tty={tty} session={session.session} detail={result['detail']}",
                         file=sys.stderr,
                     )
-        self._run_tmux_with_retry(
-            ["kill-session", "-t", session.session],
-            reason=f"stop engineer {session.session}",
-            check=False,
-        )
+        try:
+            self._run_tmux_with_retry(
+                ["kill-session", "-t", session.session],
+                reason=f"stop engineer {session.session}",
+                check=False,
+            )
+        finally:
+            self._record_seat_status(
+                session,
+                getattr(session, "project", None),
+                status="stopped",
+            )
 
     def status(self, session: Any) -> str:
         return "running" if self.hooks.tmux_has_session(session.session) else "stopped"
