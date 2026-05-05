@@ -13,6 +13,8 @@ seat types used by workflow-driven architecture.
 - Long operational detail belongs in `core/references/`, not in generated
   workspace prompts.
 - `/clear` and `/compact` are control actions, not casual cleanup commands.
+- Canonical seat ownership and dispatch-preclear rules live in
+  `core/references/seat-ownership.md`.
 
 ## Memory
 

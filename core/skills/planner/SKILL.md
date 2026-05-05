@@ -53,6 +53,34 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
 ## Workflow Collaboration
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
+
+## /clear before dispatch protocol
+
+Before planner sends task N+1 to worker W, planner MUST evaluate three gates:
+
+1. **Closure gate** - task N on W is fully closed:
+   - `~/.agents/tasks/<project>/patrol/handoffs/<task_N>__<W>__planner.json.consumed` exists
+   - `~/.agents/tasks/<project>/<W>/DELIVERY.md` exists
+   If not closed -> skip `/clear`, dispatch directly.
+2. **Context-relatedness gate** - planner judges whether task N and N+1 share
+   material context (same code surface, same investigation thread, continuation
+   work). Planner judgment is authoritative; misclassification is recoverable
+   (worker re-loads from brief/workflow.md).
+   If related -> skip `/clear`, dispatch directly.
+3. **Idle gate** - pane snapshot:
+   ```bash
+   tmux capture-pane -t $(agentctl session-name <W> --project <project>) -p | tail -8
+   ```
+   Last line is a waiting prompt (`❯`) and no active marker (`Cogitated`,
+   `Thinking`, `Working`, `Misting`, `… (N tokens)`, spinner). If busy -> skip
+   `/clear`, dispatch directly.
+
+All three gates pass -> send `/clear` -> wait 2s -> dispatch.
+Any gate fails -> dispatch without `/clear`.
+
+Precedent: memory's planner `/compact` rule already uses the same
+pane-snapshot idle pattern; this is the symmetric inverse for worker context.
+
 ## Strict Fan-in: verify specialist .consumed receipts (mandatory)
 
 Before forming a verdict on a multi-specialist workflow, planner MUST verify
