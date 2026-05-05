@@ -431,6 +431,7 @@ _check_api_keys_for_template() {
 
 select_provider() {
   note "Step 3: primary seat provider"
+  unset CLAWSEAT_INSTALL_SKIP_CLAUDE_REQUIRED
   local mode="" label="" key="" base="" reply="" primary_template_tool="" primary_template_auth="" primary_template_provider="" primary_template_model="" effective_memory_tool=""
   local -a candidates=()
 
@@ -440,6 +441,7 @@ select_provider() {
   effective_memory_tool="${MEMORY_TOOL:-$primary_template_tool}"
 
   if [[ "$PRIMARY_SEAT_ID" == "memory" && "$effective_memory_tool" != "claude" ]]; then
+    export CLAWSEAT_INSTALL_SKIP_CLAUDE_REQUIRED=1
     remember_provider_selection oauth
     if [[ "$DRY_RUN" == "1" ]]; then
       printf 'Project: %s\n' "$PROJECT"

@@ -79,6 +79,7 @@ FORCE_PROVIDER_CHOICE="${CLAWSEAT_INSTALL_PROVIDER:-}"
 FORCE_BASE_URL=""
 FORCE_API_KEY=""
 FORCE_MODEL=""
+REPO_ROOT_FORCED_NOTICE=""
 MEMORY_TOOL="${CLAWSEAT_MEMORY_TOOL:-}"
 MEMORY_TOOL_EXPLICIT="${CLAWSEAT_MEMORY_TOOL:+1}"
 MEMORY_MODEL="${CLAWSEAT_MEMORY_MODEL:-gpt-5.4-mini}"
@@ -132,12 +133,19 @@ configure_clawseat_repo_root() {
   if [[ -n "$FORCE_REPO_ROOT" ]]; then
     [[ -d "$FORCE_REPO_ROOT" ]] || die 2 INVALID_REPO_ROOT "--force-repo-root must be an existing directory: $FORCE_REPO_ROOT"
     REPO_ROOT="$(cd "$FORCE_REPO_ROOT" && pwd)"
-    printf 'info: REPO_ROOT forced to %s (--force-repo-root)\n' "$REPO_ROOT" >&2
+    REPO_ROOT_FORCED_NOTICE="info: REPO_ROOT forced to $REPO_ROOT (--force-repo-root)"
   else
     selected_root="$(_select_fresh_clawseat_root "$REPO_ROOT" "$CLAWSEAT_TEMPLATE_NAME")"
     [[ -n "$selected_root" ]] && REPO_ROOT="$selected_root"
   fi
   refresh_clawseat_repo_paths
+}
+
+emit_repo_root_forced_notice() {
+  if [[ -n "$REPO_ROOT_FORCED_NOTICE" ]]; then
+    printf '%s\n' "$REPO_ROOT_FORCED_NOTICE" >&2
+    REPO_ROOT_FORCED_NOTICE=""
+  fi
 }
 
 run() {
@@ -351,7 +359,12 @@ main() {
     _reinstall_project
     trap '_reinstall_exit_trap $?' EXIT
   fi
-  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider
+  # Provider selection runs before bootstrap preflight so non-TTY installs can
+  # fail with provider guidance instead of a claude_required hard block, and so
+  # memory-tool overrides can inform the later preflight gate.
+  ensure_python_tomllib_fallback; scan_machine; select_provider
+  emit_repo_root_forced_notice
+  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin
   bootstrap_project_profile
   if [[ "$FORCE_REINSTALL" == "1" ]]; then
     _restore_reinstall_project_seat_overrides

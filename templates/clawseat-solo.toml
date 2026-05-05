@@ -1,6 +1,7 @@
 version = 1
 template_name = "clawseat-solo"
 description = "Memory + builder + planner, all OAuth top models. Standard brief → workflow → dispatch → verdict cycle."
+# graceful-fallback: external skill refs below are optional installs; seats degrade gracefully when absent.
 
 [window_layout]
 shared_memories_window_title = "clawseat-memories"
