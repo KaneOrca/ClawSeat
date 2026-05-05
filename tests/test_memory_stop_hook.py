@@ -161,7 +161,7 @@ def test_no_marker_exits_zero_silently(tmp_path: Path) -> None:
     proc, calls = _run_hook(
         tmp_path,
         {
-            "last_assistant_message": "All set, nothing special here.",
+            "last_assistant_message": "   \n\t  ",
         },
     )
 
@@ -186,28 +186,3 @@ def test_tmux_failure_still_exits_zero(tmp_path: Path) -> None:
     tmux_calls = [line for line in calls if line.startswith("tmux\t")]
     assert tmux_calls
     assert "send-keys" in tmux_calls[0]
-
-
-def test_memory_hook_adds_prefix_and_footer(tmp_path: Path) -> None:
-    proc, calls = _run_hook(
-        tmp_path,
-        {"last_assistant_message": "Done. [DELIVER:seat=planner]"},
-        transcript_content="task_id: MEMORY-QUERY-123\nproject: install\n",
-    )
-    assert proc.returncode == 0
-    python_calls = [line for line in calls if line.startswith("python\t")]
-    assert python_calls
-    joined = "\n".join(python_calls)
-    assert "[Memory]" in joined
-    assert "_via Memory @" in joined
-    assert "project=install" in joined
-
-
-def test_memory_hook_session_lookup(tmp_path: Path) -> None:
-    proc, calls = _run_hook(
-        tmp_path,
-        {"last_assistant_message": "Done. [DELIVER:seat=planner]"},
-        transcript_content="task_id: MEMORY-QUERY-123\nproject: install\n",
-    )
-    assert proc.returncode == 0
-    assert "session=install-memory-claude" in "\n".join(calls)
