@@ -22,6 +22,11 @@ def test_reviewer_skill_has_qa_mode_and_no_fix_contract() -> None:
     assert "## QA Testing Mode (browser / multimodal)" in text
     assert "reviewer/findings/<ts>-<slug>.md" in text
     assert "DO NOT fix bugs" in text
+    assert "canonical verdict" in text.lower()
+    assert "APPROVED" in text
+    assert "APPROVED_WITH_NITS" in text
+    assert "CHANGES_REQUESTED" in text
+    assert "PASS/FAIL" not in text
 
 
 def test_reviewer_skill_has_visual_review_language() -> None:
@@ -69,7 +74,11 @@ def test_reviewer_skill_has_visual_review_mode_after_qa() -> None:
     assert "typography" in vr_section.lower()
     assert "color" in vr_section.lower()
     assert "component alignment" in vr_section.lower()
-    assert "FINDINGS-LOGGED" in vr_section
+    assert "APPROVED" in vr_section
+    assert "APPROVED_WITH_NITS" in vr_section
+    assert "CHANGES_REQUESTED" in vr_section
+    assert "BLOCKED" in vr_section
+    assert "FINDINGS-LOGGED" not in vr_section
     assert "Notify planner" in vr_section
 
 
