@@ -359,8 +359,12 @@ main() {
     _reinstall_project
     trap '_reinstall_exit_trap $?' EXIT
   fi
-  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin; ensure_python_tomllib_fallback; scan_machine; select_provider
+  # Provider selection runs before bootstrap preflight so non-TTY installs can
+  # fail with provider guidance instead of a claude_required hard block, and so
+  # memory-tool overrides can inform the later preflight gate.
+  ensure_python_tomllib_fallback; scan_machine; select_provider
   emit_repo_root_forced_notice
+  ensure_host_deps; reconcile_seat_liveness_state; prompt_autoupdate_optin
   bootstrap_project_profile
   if [[ "$FORCE_REINSTALL" == "1" ]]; then
     _restore_reinstall_project_seat_overrides

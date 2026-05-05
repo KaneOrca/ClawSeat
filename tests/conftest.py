@@ -27,6 +27,7 @@ for _p in _EXTRA_PATHS:
         sys.path.insert(0, _p)
 
 from _task_io import write_todo  # noqa: E402
+from migrate_profile import build_lines  # noqa: E402
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -174,3 +175,31 @@ def seed_install_compat_backlog_paths() -> None:
             test_policy=None,
             **payload,
         )
+
+    profile_path = Path.home() / ".agents" / "profiles" / "install-profile-dynamic.toml"
+    if not profile_path.exists():
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        (Path.home() / ".agents" / "tasks" / "install").mkdir(parents=True, exist_ok=True)
+        (Path.home() / ".agents" / "workspaces" / "install").mkdir(parents=True, exist_ok=True)
+        (Path.home() / ".agents" / "tasks" / "install" / "patrol" / "handoffs").mkdir(parents=True, exist_ok=True)
+        lines = build_lines(
+            {
+                "profile_name": "install",
+                "description": "canonical install profile for CI compatibility",
+                "send_script": str(REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"),
+                "agent_admin": str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"),
+                "heartbeat_owner": "koder",
+                "active_loop_owner": "planner",
+                "default_notify_target": "planner",
+                "seat_roles": {
+                    "koder": "frontstage-supervisor",
+                    "builder": "code-builder",
+                    "planner": "planner-dispatcher",
+                },
+                "seats": ["koder", "builder", "planner"],
+            },
+            project_name="install",
+            repo_root=str(REPO_ROOT),
+            bootstrap_only=False,
+        )
+        profile_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

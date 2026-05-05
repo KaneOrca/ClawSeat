@@ -367,6 +367,12 @@ def _check_iterm2_python_module() -> PreflightItem:
 
 def _check_claude_required() -> PreflightItem:
     """Check claude CLI installed — HARD_BLOCKED for install bootstrap."""
+    if os.environ.get("CLAWSEAT_INSTALL_SKIP_CLAUDE_REQUIRED", "").strip() == "1":
+        return PreflightItem(
+            name="claude_required",
+            status=PreflightStatus.PASS,
+            message="claude CLI check skipped for non-Claude memory tool",
+        )
     path = shutil.which("claude")
     if path:
         return PreflightItem(

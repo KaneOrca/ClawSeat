@@ -12,16 +12,6 @@ _detect_repo_root() {
   fi
 }
 
-_detect_json_string() {
-  local value="${1:-}"
-  python3 - "$value" <<'PY' 2>/dev/null || printf '"%s"' "${value//\"/\\\"}"
-import json
-import sys
-
-print(json.dumps(sys.argv[1]))
-PY
-}
-
 _detect_legacy_oauth_file() {
   local -a candidates=("$@")
   local candidate=""
@@ -115,7 +105,7 @@ detect_oauth_states() {
 
 detect_pty_resource() {
   local used="0" total="256" warn="false"
-  used="$(tmux ls 2>/dev/null | wc -l | tr -d '[:space:]' || printf '0')"
+  used="$(tmux ls 2>/dev/null | wc -l | tr -d '[:space:]' 2>/dev/null || true)"
   [[ "$used" =~ ^[0-9]+$ ]] || used="0"
   (( used > 200 )) && warn="true"
   printf '{"used":%s,"total":%s,"warn":%s}\n' "$used" "$total" "$warn"
@@ -138,7 +128,14 @@ detect_branch_state() {
   repo_root="$(_detect_repo_root)"
   branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
   [[ "$branch" != "main" ]] && warn="true"
-  printf '{"branch":%s,"warn":%s}\n' "$(_detect_json_string "$branch")" "$warn"
+  python3 - "$branch" "$warn" <<'PY'
+import json
+import sys
+
+branch = sys.argv[1]
+warn = sys.argv[2] == "true"
+print(json.dumps({"branch": branch, "warn": warn}))
+PY
 }
 
 detect_existing_projects() {
