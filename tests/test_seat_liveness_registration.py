@@ -35,6 +35,7 @@ def test_start_engineer_registers_seat_live(tmp_path: Path, monkeypatch: pytest.
         secret_content="ANTHROPIC_AUTH_TOKEN=minimax-token\n",
     )
     svc, _hooks = _make_service(tmp_path, session)
+    monkeypatch.setitem(svc._compat_module_globals, "tmux_has_session", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         aas.subprocess,
         "run",
@@ -74,6 +75,7 @@ def test_start_engineer_state_db_failure_is_nonfatal(
         secret_content="ANTHROPIC_AUTH_TOKEN=minimax-token\n",
     )
     svc, _hooks = _make_service(tmp_path, session)
+    monkeypatch.setitem(svc._compat_module_globals, "tmux_has_session", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         aas.subprocess,
         "run",
@@ -102,6 +104,7 @@ def test_start_engineer_normalises_template_role(tmp_path: Path, monkeypatch: py
     )
     session.project_engineers = {"builder": type("Engineer", (), {"role": "code-builder"})()}
     svc, _hooks = _make_service(tmp_path, session)
+    monkeypatch.setitem(svc._compat_module_globals, "tmux_has_session", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         aas.subprocess,
         "run",

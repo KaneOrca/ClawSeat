@@ -42,7 +42,7 @@ def test_start_engineer_does_not_kill_session_when_onboarding_is_detected(
         secret_content="ANTHROPIC_AUTH_TOKEN=minimax-token\n",
     )
     svc, hooks = _make_service(tmp_path, session)
-    hooks.tmux_has_session.side_effect = [False, True]
+    hooks.tmux_has_session.side_effect = [False, True, True]
 
     tmux_calls: list[list[str]] = []
 
