@@ -47,24 +47,10 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 - Dispatch directly to a live specialist when one matches `owner_role`.
 - Attempt restart through the liveness gate before any SWALLOW fallback.
 - SWALLOW only specialist roles after restart failure; never SWALLOW memory.
-- Before SWALLOW PASS, check step `core_ux`:
-  - `core_ux: false` → SWALLOW PASS allowed.
-  - `core_ux: true` → SWALLOW PASS DENIED; either BOUNCE specialist or
-    escalate with `reason="core_ux_swallow_blocked"`.
 - Encode user decision points as explicit `AskUserQuestion` workflow steps.
 - Use `mode=parallel_subagents` only for independent work with disjoint write scopes.
 - Fan-in by consuming every delivery before starting dependent steps.
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
-
-### Hypothesis Fix Counter handling
-
-Dispatches carrying `hypothesis_fix_counter_exceeded=true` in the handoff JSON are
-assumed to be repeated speculative fixes on the same finding. Planner policy:
-
-- BOUNCE specialist and stop SWALLOW PASS.
-- Attach reviewer/patrol RCA request in the next dispatch chain.
-- Do not convert repeated speculative fixes into normal retry cycles without a new
-  trace-first RCA path.
 ## Workflow Collaboration
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 
@@ -108,14 +94,21 @@ done
 ```
 
 If any `.consumed` file is missing, step verdict is `BLOCKED`; relay the
-BLOCKED reason to memory before any retry or re-dispatch. Missing `core_ux_gate` for
-`core_ux=true` steps is also hard BLOCKED before planner relay:
+BLOCKED reason to memory before any retry or re-dispatch.
+The receipt field contract for those handoff files lives in
+[`core/skills/gstack-harness/references/handoff-receipt-schema.md`](../gstack-harness/references/handoff-receipt-schema.md).
 
-- If workflow step has `core_ux: true` and completion handoff lacks `core_ux_gate`,
-  block the chain: `BLOCKED: core_ux_gate missing`.
+Exceptions:
+- planner self-loop steps where planner did not dispatch itself.
+- steps with explicit `test_policy=N/A` and no handoff JSON created.
 
-Inline DELIVERY.md read does NOT substitute for `.consumed`.
-Exceptions: planner self-loop steps where planner did not dispatch itself.
+Inline DELIVERY.md read does NOT substitute for `.consumed`. A specialist
+writing DELIVERY.md without `complete_handoff.py` violates OO rule and must be
+caught here, not silently accepted.
+
+Why: koder rehearsal 2026-04-30 showed designer wrote DELIVERY but skipped
+`complete_handoff.py`; strict fan-in prevents planner from reporting false
+consumption.
 
 ### SUPERSEDED claims
 
@@ -189,3 +182,9 @@ See [core/references/context-management-protocol.md](../../references/context-ma
 **Note**: planner must NOT emit [CLEAR-REQUESTED]. `[CLEAR-REQUESTED] FORBIDDEN` for planner — use `[COMPACT-REQUESTED] ONLY`. Compact summaries must preserve active task ids, dispatch decisions, blockers, owner assignments, and pending reviews.
 ## Operator Language Matching
 Detect operator language from the last 3 messages: >70% Chinese means Chinese, >70% English means English, mixed means Chinese. Keep technical terms, commands, and paths literal.
+
+
+## DF dispatch hardening note
+- Only one outstanding planner -> builder dispatch may exist at a time.
+- `dispatch_task.py` now blocks the second builder dispatch until the prior `__builder__planner.json` completion receipt exists.
+- `--force-parallel-builder` is the explicit bypass for the CX parallel-wave exception; use it only when the dispatch plan expects the wakeup-collapsing risk.

@@ -89,3 +89,8 @@ The durable ACK trail has two pieces:
 
 The sentinel only records presence. For field-level contract checks, use the
 JSON receipt fields above.
+
+
+## DF completion receipt additions
+- `base_drift_acknowledged` - optional boolean completion receipt field for intentional current-main drift.
+- `drift_reason` - optional JSON string capturing `drift_from`, `drift_to`, and `orthogonal_files_verified`.
