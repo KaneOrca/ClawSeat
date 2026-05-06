@@ -56,6 +56,7 @@ module installed (`pip install --user iterm2`).
 from __future__ import annotations
 
 import asyncio
+import re
 import json
 import shlex
 import sys
@@ -452,6 +453,17 @@ def _expected_session_substr(spec: dict[str, str]) -> str:
     return ""
 
 
+def _memory_session_alive(project_name: str, session_name: str, expected_session: str) -> bool:
+    if not project_name or not session_name:
+        return False
+    if expected_session and expected_session not in session_name:
+        return False
+    return re.fullmatch(
+        rf"^{re.escape(project_name)}-memory(?:-(?:claude|codex|gemini))?$",
+        session_name,
+    ) is not None
+
+
 def _session_name_matches(session_name: str, expected_tab_name: str, expected_session: str) -> bool:
     if expected_session and expected_session in session_name:
         return True
@@ -697,6 +709,18 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                 continue
             matching_spec = spec_by_name.get(tab_name)
             if matching_spec is not None:
+                expected_session = _expected_session_substr(matching_spec)
+                try:
+                    session_name = await _tab_session_name(tab)
+                except Exception:  # noqa: BLE001 best-effort metadata lookup
+                    session_name = ""
+                if _memory_session_alive(tab_name, session_name, expected_session):
+                    print(
+                        f"INFO: prune skipped live memory tab={tab_name} "
+                        f"session={session_name}",
+                        file=sys.stderr,
+                    )
+                    continue
                 # Marker matches a spec; verify session.name agrees before sparing the tab.
                 matched, _ = await _tab_matches_expected(tab, matching_spec)
                 if matched:
