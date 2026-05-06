@@ -100,11 +100,21 @@ class _FakeWindowFactory:
 _fake_iterm2 = types.ModuleType("iterm2")
 _fake_iterm2.async_get_app = _FakeWindowFactory.async_get_app  # type: ignore[attr-defined]
 _fake_iterm2.run_until_complete = lambda coro: asyncio.run(coro(None))  # type: ignore[attr-defined]
-_FakeWindowClass = type("Window", (), {"async_create": classmethod(lambda cls, connection: _FakeWindow())})  # type: ignore[misc]
+async def _fake_async_window_create(connection: object) -> _FakeWindow:
+    del connection
+    return _FakeWindow()
+
+
+_FakeWindowClass = type("Window", (), {"async_create": classmethod(_fake_async_window_create)})  # type: ignore[misc]
 _fake_iterm2.Window = _FakeWindowClass  # type: ignore[attr-defined]
 sys.modules["iterm2"] = _fake_iterm2
 
 import core.scripts.iterm_panes_driver as driver  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _use_local_fake_iterm2(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(driver, "iterm2", _fake_iterm2)
 
 
 def _memory_session_project_tab() -> _FakeWindow:
