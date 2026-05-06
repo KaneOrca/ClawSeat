@@ -17,7 +17,7 @@ from typing import Any
 # Import canonical real-HOME resolver (SSOT at core/lib/real_home.py). When
 # this module is imported from a seat sandbox HOME, os.path.expanduser and
 # Path.home() return the sandbox tree — so any "~" in a skill-registry
-# path resolves against `/Users/ywf/.agents/runtime/identities/.../home/`
+# path resolves against `<HOME>/.agents/runtime/identities/.../home/`
 # instead of the operator's real home, and every gstack-skills lookup
 # misses. R1-VERIFY flagged this as BLOCKING because builder-1's R1-HOME
 # pass missed this file.

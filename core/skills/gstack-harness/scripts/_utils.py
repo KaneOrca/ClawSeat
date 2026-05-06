@@ -25,7 +25,7 @@ from typing import Any, Iterable
 # OPENCLAW_HOME against Path.home() we end up writing to/looking under
 # the sandbox tree, which explains the live-install symptom
 # `workspace_sync: <seat> status=skip reason=host_workspace_not_found
-# host=/Users/ywf/.agent-runtime/.../home/.agents/workspaces/...` —
+# host=<HOME>/.agent-runtime/.../home/.agents/workspaces/...` —
 # bootstrap resolved profile.workspace_root against the sandbox HOME
 # and the matching directory simply doesn't exist there.
 #

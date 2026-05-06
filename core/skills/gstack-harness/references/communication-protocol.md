@@ -30,7 +30,7 @@ other. It is the protocol layer. State transitions and assignment rules live in
 Standard command shape:
 
 ```bash
-/Users/ywf/ClawSeat/core/shell-scripts/send-and-verify.sh \
+<CLAWSEAT_REPO>/core/shell-scripts/send-and-verify.sh \
   --project <project> <target-seat-or-session> "<message>"
 ```
 
