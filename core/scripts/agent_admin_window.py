@@ -596,6 +596,8 @@ def open_grid_window(
                 "reason": "rebuild defaults to workers-only",
             }
 
+        result["memory"] = open_memory_window()
+
         worker_count = len(_project_grid_seat_ids(project))
         worker_seats = worker_count
         if worker_seats <= 0:
