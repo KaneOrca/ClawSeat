@@ -431,12 +431,15 @@ class SessionStartLifecycle:
                 env.pop("CLAWSEAT_MEMORY_BRIEF", None)
                 env.pop("CLAWSEAT_ANCESTOR_BRIEF", None)
                 env["CLAWSEAT_ROOT"] = str(Path(self.hooks.launcher_path).resolve().parents[2])
+                env["REAL_HOME"] = str(self._real_home_for_tool_seeding())
                 env["CLAWSEAT_PROJECT"] = session.project
                 env["CLAWSEAT_PROVIDER"] = session.provider
                 env["CLAWSEAT_SEAT"] = session.engineer_id
                 env["CLAWSEAT_ENGINEER_ID"] = session.engineer_id
                 env["CLAWSEAT_ENGINEER_PROFILE"] = str(_engineer_profile_path(session.engineer_id))
                 env["CLAWSEAT_TOOLS_ISOLATION"] = tools_isolation
+                if reset:
+                    env["CLAWSEAT_NO_AUTO_RESUME"] = "1"
                 if tools_isolation == "per-project":
                     env["CLAWSEAT_PROJECT_TOOL_ROOT"] = str(
                         project_tool_root(session.project, home=self._real_home_for_tool_seeding())

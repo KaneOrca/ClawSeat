@@ -167,12 +167,14 @@ launch_seat() {
 
   local -a cmd=(env "CLAWSEAT_ROOT=$CLAWSEAT_ROOT")
   cmd+=("CLAWSEAT_PROJECT=$PROJECT")
+  cmd+=("REAL_HOME=${REAL_HOME:-$HOME}")
   cmd+=("CLAWSEAT_MEMORY_BRIEF=$brief_path")
   cmd+=("CLAWSEAT_ANCESTOR_BRIEF=$brief_path")
   [[ -n "$seat_id" ]] && cmd+=("CLAWSEAT_SEAT=$seat_id")
   if [[ "$seat_id" == "$PRIMARY_SEAT_ID" && "$launcher_tool" != "claude" && -n "$launcher_model" ]]; then
     cmd+=("LAUNCHER_CUSTOM_MODEL=$launcher_model")
   fi
+  [[ -n "${CLAWSEAT_NO_AUTO_RESUME:-}" ]] && cmd+=("CLAWSEAT_NO_AUTO_RESUME=$CLAWSEAT_NO_AUTO_RESUME")
   cmd+=(bash "$LAUNCHER_SCRIPT" --headless --tool "$launcher_tool" --auth "$auth_mode" --dir "$cwd" --session "$actual_session")
   [[ -n "$custom_env_file" ]] && cmd+=(--custom-env-file "$custom_env_file")
   [[ "$DRY_RUN" == "1" ]] && cmd+=(--dry-run)

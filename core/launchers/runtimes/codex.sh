@@ -33,6 +33,20 @@ run_codex_runtime() {
   local auth_mode="$1"
   local workdir="$2"
   local session_name="$3"
+  local -a resume_args=()
+  local resume_label=""
+  local resume_session_id=""
+
+  if [[ "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]]; then
+    resume_session_id="$(launcher_read_active_session_id "${CLAWSEAT_SEAT:-}" 2>/dev/null || true)"
+    if [[ -n "$resume_session_id" ]]; then
+      resume_args=(--resume "$resume_session_id")
+      resume_label="$resume_session_id"
+    else
+      resume_args=(--last)
+      resume_label="last"
+    fi
+  fi
 
   if [[ "$auth_mode" == "chatgpt" ]]; then
     export HOME="$REAL_HOME"
@@ -45,7 +59,8 @@ run_codex_runtime() {
     echo " Directory:  $workdir"
     echo " CODEX_HOME: $CODEX_HOME"
     echo "────────────────────────────────────────"
-    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir"
+    [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" "${resume_args[@]}"
   fi
 
   local secret_file="" runtime_dir
@@ -120,11 +135,12 @@ PY
   echo " HOME:       $HOME"
   echo " CODEX_HOME: $CODEX_HOME"
   echo "────────────────────────────────────────"
+  [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
   if [[ "$auth_mode" == "custom" ]]; then
     if [[ -n "${LAUNCHER_CUSTOM_MODEL:-}" ]]; then
-      exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi -m "${LAUNCHER_CUSTOM_MODEL}"
+      exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi -m "${LAUNCHER_CUSTOM_MODEL}" "${resume_args[@]}"
     fi
-    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi
+    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi "${resume_args[@]}"
   fi
-  exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir"
+  exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" "${resume_args[@]}"
 }

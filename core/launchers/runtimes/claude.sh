@@ -34,6 +34,17 @@ run_claude_runtime() {
   local workdir="$2"
   local session_name="$3"
   local mode_label="Claude Code"
+  local -a resume_args=()
+  local resume_label=""
+  local resume_session_id=""
+
+  if [[ "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]]; then
+    resume_session_id="$(launcher_read_active_session_id "${CLAWSEAT_SEAT:-}" 2>/dev/null || true)"
+    if [[ -n "$resume_session_id" ]]; then
+      resume_args=(--resume "$resume_session_id")
+      resume_label="$resume_session_id"
+    fi
+  fi
 
   if [[ "$auth_mode" == "oauth" ]]; then
     # "oauth" in ClawSeat is not "launcher does OAuth" — it's "reuse the
@@ -80,7 +91,8 @@ run_claude_runtime() {
       echo " Host-managed OAuth: yes (Claude Desktop wrapper)"
     fi
     echo "────────────────────────────────────────"
-    exec claude --dangerously-skip-permissions
+    [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+    exec claude --dangerously-skip-permissions "${resume_args[@]}"
   fi
 
   local secret_file="" runtime_dir
@@ -208,5 +220,6 @@ run_claude_runtime() {
   echo " HOME:       $HOME"
   echo " AGENT_HOME: $AGENT_HOME"
   echo "────────────────────────────────────────"
-  exec claude --dangerously-skip-permissions
+  [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+  exec claude --dangerously-skip-permissions "${resume_args[@]}"
 }

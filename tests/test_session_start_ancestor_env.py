@@ -31,6 +31,7 @@ def _capture_start_engineer_env(
     monkeypatch: pytest.MonkeyPatch,
     *,
     engineer_id: str,
+    reset: bool = False,
 ) -> dict[str, str]:
     sandbox_home = tmp_path / "sandbox-home"
     real_home = tmp_path / "real-home"
@@ -65,7 +66,7 @@ def _capture_start_engineer_env(
         patch.object(svc, "_assert_session_running"),
         patch.object(svc, "_run_tmux_with_retry"),
     ):
-        svc.start_engineer(session)
+        svc.start_engineer(session, reset=reset)
 
     assert launcher_calls, "launcher was not invoked"
     cmd, env = launcher_calls[0]
@@ -95,3 +96,10 @@ def test_start_engineer_non_ancestor_does_not_inject_brief_env(tmp_path: Path, m
 
     assert "CLAWSEAT_MEMORY_BRIEF" not in env
     assert "CLAWSEAT_ANCESTOR_BRIEF" not in env
+
+
+def test_start_engineer_reset_disables_auto_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = _capture_start_engineer_env(tmp_path, monkeypatch, engineer_id="planner", reset=True)
+
+    assert env["REAL_HOME"] == str(tmp_path / "real-home")
+    assert env["CLAWSEAT_NO_AUTO_RESUME"] == "1"

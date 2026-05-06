@@ -21,6 +21,7 @@ class ParserHooks:
     cmd_start_identity: Callable[[Any], int]
     cmd_session_name: Callable[[Any], int]
     cmd_project_open: Callable[[Any], int]
+    cmd_seat_resume: Callable[[Any], int]
     cmd_project_current: Callable[[Any], int]
     cmd_project_use: Callable[[Any], int]
     cmd_project_create: Callable[[Any], int]
@@ -28,6 +29,7 @@ class ParserHooks:
     cmd_project_delete: Callable[[Any], int]
     cmd_project_layout_set: Callable[[Any], int]
     cmd_project_bind: Callable[[Any], int]
+    cmd_project_resume: Callable[[Any], int]
     cmd_project_binding_show: Callable[[Any], int]
     cmd_project_binding_list: Callable[[Any], int]
     cmd_project_unbind: Callable[[Any], int]
@@ -161,6 +163,15 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_open_nested = project_sub.add_parser("open")
     project_open_nested.add_argument("project")
     project_open_nested.set_defaults(func=hooks.cmd_project_open)
+
+    project_resume_nested = project_sub.add_parser("resume", help="Resume all seats in a project.")
+    project_resume_nested.add_argument("project")
+    project_resume_nested.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Skip auto-resume and start each seat fresh.",
+    )
+    project_resume_nested.set_defaults(func=hooks.cmd_project_resume)
 
     project_create_nested = project_sub.add_parser("create")
     project_create_nested.add_argument("project")
@@ -361,6 +372,21 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     project_validate_nested.add_argument("--project", required=True)
     project_validate_nested.set_defaults(func=hooks.cmd_project_validate)
+
+    seat = sub.add_parser("seat", help="Per-seat resume operations.")
+    seat_sub = seat.add_subparsers(dest="seat_command", required=True)
+    seat_resume = seat_sub.add_parser(
+        "resume",
+        help="Resume a single seat from its active session marker.",
+    )
+    seat_resume.add_argument("seat")
+    seat_resume.add_argument("--project")
+    seat_resume.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Skip auto-resume and start the seat fresh.",
+    )
+    seat_resume.set_defaults(func=hooks.cmd_seat_resume)
 
     # P1 layered-model: machine ... (§3).
     machine = sub.add_parser("machine", help="Machine-layer operations.")

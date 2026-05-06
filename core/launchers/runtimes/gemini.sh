@@ -33,6 +33,14 @@ run_gemini_runtime() {
   local auth_mode="$1"
   local workdir="$2"
   local session_name="$3"
+  local -a resume_args=()
+  local resume_label=""
+
+  if [[ "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]]; then
+    resume_args=(--resume latest)
+    resume_label="$(launcher_read_active_session_id "${CLAWSEAT_SEAT:-}" 2>/dev/null || true)"
+    [[ -z "$resume_label" ]] && resume_label="latest"
+  fi
 
   if [[ "$auth_mode" == "oauth" ]]; then
     unset GEMINI_API_KEY GOOGLE_API_KEY
@@ -46,7 +54,8 @@ run_gemini_runtime() {
     echo " Directory:  $workdir"
     echo " HOME:       $HOME"
     echo "────────────────────────────────────────"
-    exec gemini -y
+    [[ -n "$resume_args" ]] && launcher_resume_banner "$resume_label" >&2
+    exec gemini -y "${resume_args[@]}"
   fi
 
   local secret_file="" runtime_dir
@@ -94,8 +103,9 @@ run_gemini_runtime() {
   echo " HOME:       $HOME"
   echo " XDG_CONFIG: $XDG_CONFIG_HOME"
   echo "────────────────────────────────────────"
+  [[ -n "$resume_args" ]] && launcher_resume_banner "$resume_label" >&2
   if [[ -n "${LAUNCHER_CUSTOM_MODEL:-}" ]]; then
-    exec gemini -y -m "${LAUNCHER_CUSTOM_MODEL}"
+    exec gemini -y -m "${LAUNCHER_CUSTOM_MODEL}" "${resume_args[@]}"
   fi
-  exec gemini -y
+  exec gemini -y "${resume_args[@]}"
 }
