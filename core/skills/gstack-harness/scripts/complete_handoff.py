@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import os
 import re
 import sys
@@ -354,6 +355,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
     parser.add_argument("--source", required=True, help="Source seat for the completion or ACK.")
     parser.add_argument("--target", help="Target seat.")
+    parser.add_argument("--branch", help="Feature branch used to auto-fill branch_base/branch_tip.")
+    parser.add_argument("--pr-number", help="Pull Request number for closure fields.")
+    parser.add_argument("--ci-conclusion", help="CI conclusion marker for closure fields.")
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", help="Delivery title.")
     parser.add_argument("--summary", help="Delivery summary text.")
@@ -407,6 +411,101 @@ def _receipt_test_policy(
     return None
 
 
+def _load_dispatch_receipt_for_completion(
+    profile: object,
+    task_id: str,
+    source: str,
+) -> dict[str, object] | None:
+    safe_task = sanitize_name(task_id)
+    safe_source = sanitize_name(source)
+    handoff_dir = Path(getattr(profile, "handoff_dir"))
+    pattern = f"{safe_task}__*__{safe_source}.json"
+    candidates: list[Path] = []
+    for path in handoff_dir.glob(pattern):
+        if path.is_file():
+            candidates.append(path)
+    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates:
+        payload = load_json(path)
+        if isinstance(payload, dict) and payload.get("kind") == "dispatch":
+            return payload
+    return None
+
+
+def _git_main_ref(repo_root: Path) -> str | None:
+    if not repo_root:
+        return None
+    for ref in ("clawseat/main", "origin/main"):
+        try:
+            subprocess.run(
+                ["git", "-C", str(repo_root), "rev-parse", "--verify", ref],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            continue
+        return ref
+    return None
+
+
+def _git_branch_and_base(
+    repo_root: Path,
+    branch: str,
+) -> tuple[str, str]:
+    base_ref = _git_main_ref(Path(repo_root))
+    if base_ref is None:
+        raise RuntimeError("could not resolve main ref in repo; expected clawseat/main or origin/main")
+    branch_tip = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", branch],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if not branch_tip:
+        raise RuntimeError(f"could not resolve branch tip for {branch!r}")
+    branch_base = subprocess.run(
+        ["git", "-C", str(repo_root), "merge-base", branch, base_ref],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if not branch_base:
+        raise RuntimeError(f"could not resolve merge-base for branch {branch!r} against {base_ref}")
+    return branch_base, branch_tip
+
+
+def _validate_completion_receipt(
+    receipt: dict[str, object],
+    source_dispatch: dict[str, object] | None,
+) -> None:
+    expected_base = (
+        source_dispatch.get("expected_base_sha")
+        if isinstance(source_dispatch, dict)
+        else None
+    )
+    if not isinstance(expected_base, str) or not expected_base:
+        return
+
+    missing = [
+        key
+        for key in ("branch_base", "branch_tip", "pr_number", "ci_conclusion")
+        if not receipt.get(key)
+    ]
+    if missing:
+        raise SystemExit(
+            f"closure receipt missing required fields: {missing} "
+            "Add --branch, --pr-number and --ci-conclusion."
+        )
+
+    actual_base = receipt.get("branch_base")
+    if actual_base != expected_base:
+        raise SystemExit(
+            "branch_base mismatch: receipt base does not match dispatch expected_base_sha."
+            " Rebase the feature branch onto the current main and retry."
+        )
+
+
 def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
@@ -426,6 +525,30 @@ def main() -> int:
         "target": args.target,
     }
     receipt["correlation_id"] = correlation_id
+    if args.branch:
+        repo_root = getattr(profile, "repo_root", None)
+        if not repo_root:
+            raise SystemExit("cannot compute branch closure fields without profile.repo_root")
+        try:
+            branch_base, branch_tip = _git_branch_and_base(Path(repo_root), args.branch)
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+            raise SystemExit(
+                f"failed to auto-compute closure fields for branch {args.branch!r}: {exc}"
+            )
+        receipt["branch_base"] = branch_base
+        receipt["branch_tip"] = branch_tip
+    if args.pr_number is not None:
+        receipt["pr_number"] = args.pr_number
+    if args.ci_conclusion is not None:
+        receipt["ci_conclusion"] = args.ci_conclusion
+    source_dispatch_receipt = _load_dispatch_receipt_for_completion(
+        profile,
+        task_id=args.task_id,
+        source=args.source,
+    )
+    if not args.ack_only:
+        _validate_completion_receipt(receipt, source_dispatch_receipt)
+
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
     receipt_test_policy = _receipt_test_policy(
