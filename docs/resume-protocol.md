@@ -37,3 +37,4 @@ This document is the contract for the DC session auto-resume flow.
 - `CLAWSEAT_NO_AUTO_RESUME=1` disables launch-time auto-resume.
 - Fresh session starts must continue to honor the explicit no-resume mode.
 - The banner before attach is `Resuming session <id> from <timestamp>`.
+- The launcher re-reads the seat marker on each spawn, so a new respawn always picks up the latest committed session id.
