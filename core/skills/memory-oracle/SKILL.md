@@ -113,15 +113,6 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
-## Planner Context 主动压缩
-
-When planner relay reports `compaction_hint=yes`, memory MUST proactively compact planner context：
-
-1. Verify planner is idle (`tmux capture-pane -t $(agentctl session-name planner --project <p>) -p` 不应出现 working/thinking 输出)。
-2. `send-and-verify.sh --project <p> planner "/compact"`。
-3. Wait 3 秒后确认 planner 会话仍存活。
-4. 记录到 `~/.agents/tasks/<project>/STATUS.md`：`[compacted planner @ <ts>]`。
-
 ## Canonical Workflow Entry (memory dispatch 必走步)
 
 Before notifying planner of a new task, memory MUST create canonical workflow
@@ -468,7 +459,7 @@ seat-infrastructure and ancestor-handoff steps.
 每次 memory 给 operator 汇报结束时,先检查本轮重要事实(派工决策 / 验收结果 / 用户确认 / 故障根因)是否已落盘到详细索引 KB(MEMORY.md feedback_* / project_* / decision/ / finding/)。
 - yes → 末尾追加: `建议 /compact — 重要记忆已索引,可安全压缩`
 - no → 不建议 /compact; 先落盘再说
-- 与 Planner Context 主动压缩不同: 那条是给 planner 的 `/compact`; 本条是给当前 operator session 自己 /compact
+- 与 planner 的 `/compact` 规则不同: 上面这条是给当前 operator session 自己 /compact
 ## Technical Term Chinese Annotation(memory↔operator 对话仅)
 **适用范围**: memory 给 operator 的 chat 回复 / 故障汇报 / 派工说明。
 **不适用**: SKILL.md / brief / handoff / DELIVERY.md / 跨 seat 协作产物。

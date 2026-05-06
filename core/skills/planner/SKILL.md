@@ -123,12 +123,6 @@ or `complete_handoff.py`, planner MUST within the same turn:
    `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify`
    Use the canonical verdict from step 2. `send-and-verify.sh` is wake-up only and may follow the durable receipt when a separate nudge is needed; it is not the primary relay path.
 
-   Include in `~/.agents/tasks/<project>/planner/DELIVERY.md`:
-   - `compaction_hint: <yes|no>`
-   - `compaction_reason: <reason>`
-   - For `yes`: `"已处理 N 步,context 估计 >70%"` or `"本 task 含大量 file read / sweep output"`.
-   - For `no`: `"单步小改,context 占用低"`.
-
 Why: if planner forms a verdict but idles waiting for user input, memory does
 not know the task is ready and the planner-to-memory chain breaks.
 
