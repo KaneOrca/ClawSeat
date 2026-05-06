@@ -11,8 +11,6 @@ from pathlib import Path
 import shutil
 from typing import Any, Callable
 
-from real_home import real_user_home
-
 from agent_admin_crud_base import require_caller_authority
 import agent_admin_window as window_ops
 
@@ -108,6 +106,11 @@ class CommandHandlers:
             print(f"heartbeat: {exc}")
 
     def _resume_state_dir(self) -> Path:
+        core_lib = Path(__file__).resolve().parents[1] / "lib"
+        if str(core_lib) not in sys.path:
+            sys.path.insert(0, str(core_lib))
+        from real_home import real_user_home
+
         return real_user_home() / ".agent-runtime" / "active"
 
     def _resume_session_path(self, seat: str) -> Path:
