@@ -35,23 +35,36 @@ def emit(name: str, value: str) -> None:
     print(f"{name}={shlex.quote(value)}")
 
 
+def fail(message: str) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(1)
+
+
 raw = os.environ.get("HOOK_PAYLOAD_JSON", "").strip()
 if not raw:
     raise SystemExit(0)
 try:
     payload = json.loads(raw)
-except json.JSONDecodeError:
-    raise SystemExit(0)
+except json.JSONDecodeError as exc:
+    fail(f"error: invalid Stop payload JSON: {exc.msg}")
+
+session_id = str(payload.get("session_id", "") or "").strip()
+if not session_id:
+    fail("error: Stop payload missing session_id")
 
 transcript_path = str(payload.get("transcript_path", "") or "").strip()
+if not transcript_path:
+    fail("error: Stop payload missing transcript_path")
+transcript_file = Path(transcript_path).expanduser()
+if not transcript_file.is_file():
+    fail(f"error: transcript_path does not exist: {transcript_file}")
+
 last_assistant_message = str(payload.get("last_assistant_message", "") or "")
 
-transcript_text = ""
-if transcript_path:
-    try:
-        transcript_text = Path(transcript_path).expanduser().read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        transcript_text = ""
+try:
+    transcript_text = transcript_file.read_text(encoding="utf-8", errors="replace")
+except OSError as exc:
+    fail(f"error: unable to read transcript_path {transcript_file}: {exc}")
 
 combined = "\n".join(part for part in (transcript_text, last_assistant_message) if part)
 
@@ -131,6 +144,7 @@ response = {
 }
 
 emit("TRANSCRIPT_PATH", transcript_path)
+emit("SESSION_ID", session_id)
 emit("CLEAR_REQUESTED", "1" if "[CLEAR-REQUESTED]" in combined else "0")
 emit("MEMORY_PUSH", "1" if push_text else "0")
 emit("MEMORY_PUSH_TEXT", push_text)
@@ -276,7 +290,9 @@ main() {
   payload_json="$(cat || true)"
   [[ -n "$payload_json" ]] || return 0
 
-  parsed="$(parse_payload "$payload_json" || true)"
+  if ! parsed="$(parse_payload "$payload_json")"; then
+    return 1
+  fi
   [[ -n "$parsed" ]] || return 0
   eval "$parsed"
 
@@ -317,5 +333,4 @@ main() {
   fi
 }
 
-main "$@" || true
-exit 0
+main "$@"
