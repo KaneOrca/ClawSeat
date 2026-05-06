@@ -522,12 +522,21 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
 
     open_grid = window_sub.add_parser(
         "open-grid",
-        help="Reopen the project iTerm grid. --open-memory is retained as a no-op v1 compatibility flag.",
+        help="Reopen the project iTerm grid. --open-memory/--refresh-memories control explicit memory refresh.",
     )
     open_grid.add_argument("project")
     open_grid.add_argument("--recover", action="store_true")
     open_grid.add_argument("--rebuild", action="store_true", help="Close any existing project window and open a fresh grid.")
-    open_grid.add_argument("--open-memory", action="store_true")
+    open_grid.add_argument(
+        "--open-memory",
+        action="store_true",
+        help="Compatibility alias for explicit memory refresh during grid open.",
+    )
+    open_grid.add_argument(
+        "--refresh-memories",
+        action="store_true",
+        help="Explicitly refresh the shared memories window during this run.",
+    )
     open_grid.add_argument("--quiet", action="store_true", help="Suppress the summary line.")
     open_grid.set_defaults(func=hooks.cmd_window_open_grid)
 
