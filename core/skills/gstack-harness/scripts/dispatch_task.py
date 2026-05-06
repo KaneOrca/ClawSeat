@@ -6,6 +6,7 @@ import os
 import subprocess
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add core/lib to path so seat_resolver can be imported
@@ -39,6 +40,9 @@ from _common import (
 )
 
 from seat_resolver import resolve_seat_from_profile
+
+
+_DISPATCH_LOG_HEADER_RE = re.compile(r"^##\s+.*dispatch.*log", re.IGNORECASE | re.MULTILINE)
 
 
 def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
@@ -86,6 +90,57 @@ def _resolve_hypothesis_counter(
     if not handoff_dir.exists():
         return finding_id, 0, False
     return finding_id, *_count_finding_history(handoff_dir, finding_id, exclude_task=task_id)
+
+def _dispatch_status_audit_dir(profile: object, project: str | None = None) -> Path:
+    try:
+        handoff_dir = Path(profile.handoff_dir)  # type: ignore[attr-defined]
+    except Exception:
+        handoff_dir = None
+    if handoff_dir:
+        return handoff_dir / "audit"
+    return (Path.home() / ".agents" / "tasks" / str(project or "install") / "patrol" / "handoffs" / "audit")
+
+
+def _status_has_dispatch_log_section(text: str) -> bool:
+    return bool(_DISPATCH_LOG_HEADER_RE.search(text))
+
+
+def _append_dispatch_status_log_placeholder(path: Path, now: str) -> bool:
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+    else:
+        text = ""
+        path.parent.mkdir(parents=True, exist_ok=True)
+    if _status_has_dispatch_log_section(text):
+        return False
+
+    marker = "## dispatch log (append-only, last 20)"
+    comment = f"<!-- auto-healed by dispatch_task.py at {now}; original section absent -->"
+    placeholder = f"{marker}\n\n{comment}\n\n(none)\n"
+    cleaned = text.rstrip()
+    if cleaned:
+        path.write_text(f"{cleaned}\n\n{placeholder}\n", encoding="utf-8")
+    else:
+        path.write_text(f"{placeholder}\n", encoding="utf-8")
+    print(
+        "INFO: STATUS.md dispatch-log section auto-healed",
+        file=sys.stderr,
+    )
+    return True
+
+
+def _write_dispatch_status_log_audit(profile: object, task_id: str, project: str, now: str) -> None:
+    audit_dir = _dispatch_status_audit_dir(profile, project)
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    write_json(
+        audit_dir / f"dispatch-log-heal-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json",
+        {
+            "task_id": task_id,
+            "project": project,
+            "timestamp": now,
+            "reason": "section_absent",
+        },
+    )
 
 
 
@@ -526,6 +581,9 @@ def main() -> int:
         status="pending",
         notes=args.notes,
     )
+    dispatch_status_ts = utc_now_iso()
+    if _append_dispatch_status_log_placeholder(profile.status_doc, dispatch_status_ts):
+        _write_dispatch_status_log_audit(profile, args.task_id, profile.project_name, dispatch_status_ts)
     receipt = {
         "kind": "dispatch",
         "task_id": args.task_id,
