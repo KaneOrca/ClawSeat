@@ -109,6 +109,17 @@ caught here, not silently accepted.
 Why: koder rehearsal 2026-04-30 showed designer wrote DELIVERY but skipped
 `complete_handoff.py`; strict fan-in prevents planner from reporting false
 consumption.
+
+### SUPERSEDED claims
+
+Closure relays that classify a CH/BT/CW finding as `SUPERSEDED` must include a
+finding-id → commit-hash mapping table. Findings without a cited commit hash for
+the fix are reclassified as `STILL-OPEN`.
+
+| finding_id | commit_hash | verified_by |
+|------------|-------------|-------------|
+| CH-C1 | 41f9aed | grep file:line at HEAD |
+
 ## Post-DELIVERY Relay to Memory
 
 Upon receiving a builder/specialist DELIVERY notification via `send-and-verify`

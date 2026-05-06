@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import re
 import sys
 from pathlib import Path
@@ -91,6 +92,42 @@ def _resolve_gstack_skills_root() -> str:
 
 
 _GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
+
+
+def _git_main_tip(repo_root: Path | str | None) -> str | None:
+    """Return the tip SHA for a known main remote reference."""
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip expected_base_sha", file=sys.stderr)
+        return None
+    for ref in ("clawseat/main", "origin/main"):
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", ref],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            msg = (exc.stderr or exc.stdout or "").strip()
+            print(
+                f"warn: cannot read {ref} in {root}: {msg or 'unknown git error'}",
+                file=sys.stderr,
+            )
+            continue
+        except FileNotFoundError:
+            print("warn: git not found; skip expected_base_sha", file=sys.stderr)
+            return None
+        sha = result.stdout.strip()
+        if sha:
+            return sha
+    print(
+        "warn: missing refs clawseat/main and origin/main; skip expected_base_sha",
+        file=sys.stderr,
+    )
+    return None
 
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
@@ -401,6 +438,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
     reply_to = args.reply_to or args.source
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
@@ -444,6 +482,8 @@ def main() -> int:
         "notified_at": None,
         "notify_message": None,
     }
+    if expected_base_sha:
+        receipt["expected_base_sha"] = expected_base_sha
     if do_notify:
         message = build_notify_message(
             args.target,

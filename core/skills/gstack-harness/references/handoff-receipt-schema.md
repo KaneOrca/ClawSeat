@@ -48,6 +48,10 @@ Required fields:
 - `task_id`
 - `source`
 - `target`
+- `branch_base`: git merge-base <feature_branch> <main>
+- `branch_tip`: git rev-parse <feature_branch>
+- `pr_number`: PR number used for closeout
+- `ci_conclusion`: success | failure | strict-diff | strict_diff_zero
 - `status`
 - `title`
 - `summary`
@@ -71,6 +75,10 @@ Common optional fields:
 - `notify_message`
 - `feishu_delegation_report`
 - `feishu_group_broadcast`
+
+Optional fields:
+
+- `expected_base_sha`: git rev-parse of `clawseat/main` or `origin/main` captured by `dispatch_task.py` at dispatch time
 
 ## 3. Consumed ACK
 
