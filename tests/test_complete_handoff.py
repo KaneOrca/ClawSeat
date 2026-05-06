@@ -236,7 +236,7 @@ def test_completion_rejects_stale_branch_base_against_expected(tmp_path: Path) -
     ).stdout.strip()
     subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/clawseat/main", head], check=True)
 
-    result = _complete(profile, "C5", branch="main")
+    result = _complete(profile, "C5", branch="main", pr_number="101", ci_conclusion="success")
     assert result.returncode != 0
     assert "branch_base mismatch" in result.stderr
 
@@ -263,7 +263,11 @@ def test_ack_only_skips_closure_validation_when_expected_base_present(tmp_path: 
 
     result = _complete(profile, "C7", ack_only=True)
     assert result.returncode == 0, result.stderr
-    assert (handoffs / "C7__builder__planner.json.consumed").exists()
+    assert (handoffs / "C7__builder__planner.json").exists()
+    receipt = json.loads((handoffs / "C7__builder__planner.json").read_text(encoding="utf-8"))
+    assert receipt["kind"] == "completion"
+    assert "consumed_at" in receipt
+    assert receipt["consumed_ack"].startswith("Consumed: C7 from builder at ")
 
 
 def test_complete_handoff_help_includes_branch_and_closure_flags() -> None:
