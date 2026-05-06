@@ -115,6 +115,31 @@ def _dispatch(profile: Path, task_id: str, *, no_notify: bool = True) -> subproc
     return _run(*args)
 
 
+def _dispatch_with_handoff_fields(
+    profile: Path,
+    task_id: str,
+    *,
+    core_ux: bool = False,
+    no_notify: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    args = [
+        str(_DISPATCH),
+        "--profile", str(profile),
+        "--source", "planner",
+        "--target", "builder",
+        "--task-id", task_id,
+        "--title", f"test {task_id}",
+        "--objective", "run",
+        "--test-policy", "UPDATE",
+        "--reply-to", "planner",
+    ]
+    if core_ux:
+        args.append("--core-ux")
+    if no_notify:
+        args.append("--no-notify")
+    return _run(*args)
+
+
 def _complete(
     profile: Path,
     task_id: str,
@@ -123,6 +148,7 @@ def _complete(
     branch: str | None = None,
     pr_number: str | None = None,
     ci_conclusion: str | None = None,
+    core_ux_gate: str | None = None,
     ack_only: bool = False,
     no_notify: bool = True,
 ) -> subprocess.CompletedProcess[str]:
@@ -146,6 +172,8 @@ def _complete(
         args.extend(["--pr-number", pr_number])
     if ci_conclusion:
         args.extend(["--ci-conclusion", ci_conclusion])
+    if core_ux_gate is not None:
+        args.extend(["--core-ux-gate", core_ux_gate])
     if ack_only:
         args.append("--ack-only")
     if no_notify:
@@ -195,6 +223,41 @@ def test_completion_without_branch_fields_fails_when_expected_base_present(tmp_p
     assert "closure receipt missing required fields" in result.stderr
     assert "branch_base" in result.stderr
     assert not (handoffs / "C2__builder__planner.json").exists()
+
+
+def test_completion_requires_core_ux_gate_for_core_ux_steps(tmp_path: Path) -> None:
+    repo = _init_git_repo(tmp_path)
+    profile, handoffs, _ = _write_profile(tmp_path, repo)
+    assert _dispatch_with_handoff_fields(profile, "C9", core_ux=True).returncode == 0
+
+    result = _complete(profile, "C9", branch="feat/CX-test", pr_number="109", ci_conclusion="success")
+    assert result.returncode != 0
+    assert "core_ux_gate is required for core_ux steps" in result.stderr
+    assert not (handoffs / "C9__builder__planner.json").exists()
+
+    result = _complete(
+        profile,
+        "C9",
+        branch="feat/CX-test",
+        pr_number="109",
+        ci_conclusion="success",
+        # explicit positive case
+        core_ux_gate="met",
+    )
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads((handoffs / "C9__builder__planner.json").read_text(encoding="utf-8"))
+    assert receipt["core_ux_gate"] == "met"
+
+
+def test_completion_does_not_require_core_ux_gate_for_non_core_ux(tmp_path: Path) -> None:
+    repo = _init_git_repo(tmp_path)
+    profile, handoffs, _ = _write_profile(tmp_path, repo)
+    assert _dispatch_with_handoff_fields(profile, "C10", core_ux=False).returncode == 0
+
+    result = _complete(profile, "C10", branch="feat/CX-test", pr_number="110", ci_conclusion="success")
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads((handoffs / "C10__builder__planner.json").read_text(encoding="utf-8"))
+    assert "core_ux_gate" not in receipt
 
 
 def test_completion_missing_pr_number_fails(tmp_path: Path) -> None:

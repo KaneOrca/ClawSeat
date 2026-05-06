@@ -41,6 +41,7 @@ subagent_count: 0
 per_subagent_inner_parallel: 0
 context_per_subagent: ""
 skill_commands: []
+core_ux: false
 artifacts: []
 notify_on_done: [planner]
 notify_on_issues: [planner]
@@ -60,6 +61,8 @@ Field definitions:
 - `subagent_count`: integer, `dynamic`, or `based_on_<artifact>`.
 - `per_subagent_inner_parallel`: integer. `0` means no nested fan-out.
 - `context_per_subagent`: description given to each subagent.
+- `core_ux`: `true` when this step affects user-facing behavior and requires
+  product_acceptance criteria checks. Default is `false`.
 - `skill_commands`: list of skill invocation strings.
 - `artifacts`: list of files or directories the step must produce or inspect.
 - `notify_on_done`: roles to notify after successful completion.
@@ -85,6 +88,7 @@ mode: single
 subagent_count: 0
 per_subagent_inner_parallel: 0
 context_per_subagent: ""
+core_ux: false
 skill_commands: []
 artifacts:
   - core/references/seat-capabilities.md
@@ -112,6 +116,7 @@ mode: parallel_subagents
 subagent_count: 3
 per_subagent_inner_parallel: 0
 context_per_subagent: "Audit one reference doc for required sections."
+core_ux: true
 skill_commands:
   - "Skill: review"
 artifacts:
@@ -140,6 +145,7 @@ prereq: [extract-scenes]
 mode: nested
 subagent_count: based_on_extraction   # Step 3 extracted character+scene count
 per_subagent_inner_parallel: 4        # each subagent fans out a 4-image grid
+core_ux: false
 context_per_subagent: |
   Generate 4-variant image grid for character/scene from Step 3 extraction.
 skill_commands:
