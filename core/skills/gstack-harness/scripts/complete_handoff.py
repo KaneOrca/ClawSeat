@@ -358,6 +358,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--branch", help="Feature branch used to auto-fill branch_base/branch_tip.")
     parser.add_argument("--pr-number", help="Pull Request number for closure fields.")
     parser.add_argument("--ci-conclusion", help="CI conclusion marker for closure fields.")
+    parser.add_argument(
+        "--core-ux-gate",
+        choices=["met", "unmet", "n_a"],
+        help="Required when dispatch indicates core_ux=true.",
+    )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", help="Delivery title.")
     parser.add_argument("--summary", help="Delivery summary text.")
@@ -432,6 +437,20 @@ def _load_dispatch_receipt_for_completion(
     return None
 
 
+def _requires_core_ux_gate(
+    source_dispatch: dict[str, object] | None,
+) -> bool:
+    if not isinstance(source_dispatch, dict):
+        return False
+    value = source_dispatch.get("core_ux")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        return lowered in {"true", "1", "yes"}
+    return False
+
+
 def _git_main_ref(repo_root: Path) -> str | None:
     if not repo_root:
         return None
@@ -478,6 +497,8 @@ def _git_branch_and_base(
 def _validate_completion_receipt(
     receipt: dict[str, object],
     source_dispatch: dict[str, object] | None,
+    *,
+    core_ux_gate: str | None,
 ) -> None:
     expected_base = (
         source_dispatch.get("expected_base_sha")
@@ -503,6 +524,12 @@ def _validate_completion_receipt(
         raise SystemExit(
             "branch_base mismatch: receipt base does not match dispatch expected_base_sha."
             " Rebase the feature branch onto the current main and retry."
+        )
+
+    if _requires_core_ux_gate(source_dispatch) and core_ux_gate is None:
+        raise SystemExit(
+            "core_ux_gate is required for core_ux steps; pass --core-ux-gate "
+            "met|unmet|n_a."
         )
 
 
@@ -541,13 +568,19 @@ def main() -> int:
         receipt["pr_number"] = args.pr_number
     if args.ci_conclusion is not None:
         receipt["ci_conclusion"] = args.ci_conclusion
+    if args.core_ux_gate is not None:
+        receipt["core_ux_gate"] = args.core_ux_gate
     source_dispatch_receipt = _load_dispatch_receipt_for_completion(
         profile,
         task_id=args.task_id,
         source=args.source,
     )
     if not args.ack_only:
-        _validate_completion_receipt(receipt, source_dispatch_receipt)
+        _validate_completion_receipt(
+            receipt,
+            source_dispatch_receipt,
+            core_ux_gate=args.core_ux_gate,
+        )
 
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")

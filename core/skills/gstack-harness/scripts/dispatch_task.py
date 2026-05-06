@@ -16,6 +16,7 @@ if str(_core_lib) not in sys.path:
 from real_home import real_user_home
 
 from _common import (
+    load_json,
     _should_announce_planner_event,
     _try_announce_planner_event,
     add_notify_args,
@@ -50,6 +51,41 @@ def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
         content,
         re.MULTILINE,
     ))
+
+
+def _count_finding_history(
+    handoff_dir: Path,
+    finding_id: str,
+    *,
+    exclude_task: str | None = None,
+) -> tuple[int, bool]:
+    """Count prior handoff records with the same finding_id."""
+    count = 0
+    for path in sorted(handoff_dir.glob("*.json")):
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("finding_id") != finding_id:
+            continue
+        if exclude_task and payload.get("task_id") == exclude_task:
+            continue
+        if payload.get("kind") not in {"dispatch", "completion"}:
+            continue
+        count += 1
+    return count, count >= 3
+
+
+def _resolve_hypothesis_counter(
+    profile: object,
+    finding_id: str | None,
+    task_id: str,
+) -> tuple[str | None, int, bool]:
+    if not finding_id:
+        return None, 0, False
+    handoff_dir = Path(getattr(profile, "handoff_dir", ""))
+    if not handoff_dir.exists():
+        return finding_id, 0, False
+    return finding_id, *_count_finding_history(handoff_dir, finding_id, exclude_task=task_id)
 
 
 
@@ -321,6 +357,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--notes", default="dispatched via gstack-harness", help="TASKS.md note.")
     parser.add_argument("--docs-consulted", default="", help="Memory KB record path for official-docs research.")
     parser.add_argument("--docs-skip-reason", default="", help="Explicit reason official-docs research was not required.")
+    parser.add_argument("--finding-id", help="Finding id for hypothesis_fix_counter tracking.")
+    parser.add_argument(
+        "--rca-override",
+        action="store_true",
+        help=(
+            "Allow hypothesis fix dispatch when counter>=3; require trace-first RCA."
+        ),
+    )
+    parser.add_argument(
+        "--core-ux",
+        action="store_true",
+        help="Mark this workflow step as core_ux=true for completion validation.",
+    )
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
     add_notify_args(parser)
     parser.add_argument(
@@ -439,6 +488,17 @@ def main() -> int:
         )
         return 2
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
+    (
+        finding_id,
+        hypothesis_fix_counter,
+        hypothesis_fix_counter_exceeded,
+    ) = _resolve_hypothesis_counter(profile, args.finding_id, args.task_id)
+    if hypothesis_fix_counter_exceeded and not args.rca_override:
+        print(
+            f"warning: hypothesis_fix_counter exceeded ({hypothesis_fix_counter}) "
+            f"for finding_id {finding_id!r}. Consider --rca-override.",
+            file=sys.stderr,
+        )
     reply_to = args.reply_to or args.source
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
@@ -478,6 +538,11 @@ def main() -> int:
         "reply_to": reply_to,
         "docs_consulted": args.docs_consulted or None,
         "docs_skip_reason": args.docs_skip_reason or None,
+        "finding_id": finding_id,
+        "hypothesis_fix_counter": hypothesis_fix_counter,
+        "hypothesis_fix_counter_exceeded": hypothesis_fix_counter_exceeded,
+        "rca_override": True if args.rca_override else None,
+        "core_ux": args.core_ux,
         "assigned_at": utc_now_iso(),
         "notified_at": None,
         "notify_message": None,

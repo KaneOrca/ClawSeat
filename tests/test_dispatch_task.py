@@ -97,8 +97,15 @@ def _init_repo(repo_root: Path) -> str:
     return head
 
 
-def _dispatch(profile: Path, task_id: str) -> subprocess.CompletedProcess[str]:
-    return _run(
+def _dispatch(
+    profile: Path,
+    task_id: str,
+    *,
+    finding_id: str | None = None,
+    rca_override: bool = False,
+    core_ux: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    args = [
         "--profile", str(profile),
         "--source", "planner",
         "--target", "builder",
@@ -108,7 +115,14 @@ def _dispatch(profile: Path, task_id: str) -> subprocess.CompletedProcess[str]:
         "--test-policy", "UPDATE",
         "--reply-to", "planner",
         "--no-notify",
-    )
+    ]
+    if finding_id:
+        args.extend(["--finding-id", finding_id])
+    if rca_override:
+        args.append("--rca-override")
+    if core_ux:
+        args.append("--core-ux")
+    return _run(*args)
 
 
 def test_dispatch_records_expected_base_sha_when_git_main_known(tmp_path: Path) -> None:
@@ -132,3 +146,59 @@ def test_dispatch_skips_expected_base_sha_when_git_main_missing(tmp_path: Path) 
     receipt = handoffs / "TASK-BASE-2__planner__builder.json"
     payload = json.loads(receipt.read_text(encoding="utf-8"))
     assert "expected_base_sha" not in payload
+
+
+def test_dispatch_records_finding_id_and_counter(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _init_repo(repo_root)
+    profile, handoffs = _write_profile(tmp_path, repo_root)
+    finding_id = "install-finding-hypo"
+
+    first = _dispatch(profile, "H1", finding_id=finding_id)
+    assert first.returncode == 0, first.stderr
+    first_payload = json.loads(
+        (handoffs / "H1__planner__builder.json").read_text(encoding="utf-8")
+    )
+    assert first_payload["finding_id"] == finding_id
+    assert first_payload["hypothesis_fix_counter"] == 0
+    assert first_payload["hypothesis_fix_counter_exceeded"] is False
+
+    second = _dispatch(profile, "H2", finding_id=finding_id)
+    assert second.returncode == 0, second.stderr
+    second_payload = json.loads(
+        (handoffs / "H2__planner__builder.json").read_text(encoding="utf-8")
+    )
+    assert second_payload["hypothesis_fix_counter"] == 1
+    assert second_payload["hypothesis_fix_counter_exceeded"] is False
+
+
+def test_dispatch_warns_when_hypothesis_counter_exceeds_without_rca_override(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _init_repo(repo_root)
+    profile, handoffs = _write_profile(tmp_path, repo_root)
+    finding_id = "install-finding-exceeded"
+
+    for i in range(3):
+        result = _dispatch(profile, f"EX-{i}", finding_id=finding_id)
+        assert result.returncode == 0, result.stderr
+
+    result = _dispatch(profile, "EX-4", finding_id=finding_id)
+    assert result.returncode == 0, result.stderr
+    assert "hypothesis_fix_counter exceeded" in result.stderr
+
+    payload = json.loads(
+        (handoffs / "EX-4__planner__builder.json").read_text(encoding="utf-8")
+    )
+    assert payload["finding_id"] == finding_id
+    assert payload["hypothesis_fix_counter"] == 3
+    assert payload["hypothesis_fix_counter_exceeded"] is True
+    assert payload["rca_override"] is None
+
+    result_override = _dispatch(profile, "EX-5", finding_id=finding_id, rca_override=True)
+    assert result_override.returncode == 0, result_override.stderr
+    override_payload = json.loads(
+        (handoffs / "EX-5__planner__builder.json").read_text(encoding="utf-8")
+    )
+    assert override_payload["rca_override"] is True
