@@ -885,6 +885,14 @@ def cmd_session_status(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.session_status(args)
 
 
+def cmd_seat_resume(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.seat_resume(args)
+
+
+def cmd_project_resume(args: argparse.Namespace) -> int:
+    return COMMAND_HANDLERS.project_resume(args)
+
+
 def cmd_session_reconcile(args: argparse.Namespace) -> int:
     from reconcile_seat_states import reconcile
 
@@ -1230,6 +1238,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_start_identity=cmd_start_identity,
     cmd_session_name=cmd_session_name,
     cmd_project_open=cmd_project_open,
+    cmd_seat_resume=cmd_seat_resume,
     cmd_project_current=cmd_project_current,
     cmd_project_use=cmd_project_use,
     cmd_project_create=cmd_project_create,
@@ -1237,6 +1246,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_project_delete=cmd_project_delete,
     cmd_project_layout_set=cmd_project_layout_set,
     cmd_project_bind=cmd_project_bind,
+    cmd_project_resume=cmd_project_resume,
     cmd_project_binding_show=cmd_project_binding_show,
     cmd_project_binding_list=cmd_project_binding_list,
     cmd_project_unbind=cmd_project_unbind,

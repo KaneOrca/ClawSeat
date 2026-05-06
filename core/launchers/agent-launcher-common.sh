@@ -82,3 +82,56 @@ launcher_slugify() {
   fi
   printf '%s\n' "$slug"
 }
+
+launcher_active_session_dir() {
+  local launcher_home="${REAL_HOME:-${HOME:-}}"
+  [[ -n "$launcher_home" ]] || return 1
+  printf '%s\n' "$launcher_home/.agent-runtime/active"
+}
+
+launcher_active_session_file() {
+  local seat="${1:-${CLAWSEAT_SEAT:-}}"
+  local active_dir=""
+  [[ -n "$seat" ]] || return 1
+  active_dir="$(launcher_active_session_dir)"
+  printf '%s/%s.session\n' "$active_dir" "$seat"
+}
+
+launcher_read_active_session_id() {
+  local seat="${1:-${CLAWSEAT_SEAT:-}}"
+  local active_file=""
+  active_file="$(launcher_active_session_file "$seat")" || return 1
+  [[ -f "$active_file" ]] || return 1
+  python3 - "$active_file" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+try:
+    text = path.read_text(encoding="utf-8", errors="replace").strip()
+except OSError:
+    raise SystemExit(1)
+if text:
+    print(text)
+PY
+}
+
+launcher_write_active_session_id() {
+  local seat="${1:-${CLAWSEAT_SEAT:-}}"
+  local session_id="${2:-}"
+  local active_file=""
+  local active_dir=""
+  [[ -n "$seat" ]] || return 0
+  [[ -n "$session_id" ]] || return 0
+  active_file="$(launcher_active_session_file "$seat")" || return 0
+  active_dir="$(dirname "$active_file")"
+  mkdir -p "$active_dir" 2>/dev/null || return 0
+  printf '%s\n' "$session_id" >"$active_file" 2>/dev/null || return 0
+  chmod 600 "$active_file" 2>/dev/null || true
+}
+
+launcher_resume_banner() {
+  local session_id="${1:-<unknown>}"
+  local when="${2:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  printf 'Resuming session %s from %s\n' "$session_id" "$when"
+}

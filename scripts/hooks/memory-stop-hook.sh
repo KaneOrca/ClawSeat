@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_CLAWSEAT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAWSEAT_ROOT="${CLAWSEAT_ROOT:-${CLAUDE_PROJECT_DIR:-$DEFAULT_CLAWSEAT_ROOT}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [[ -f "$CLAWSEAT_ROOT/core/launchers/agent-launcher-common.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$CLAWSEAT_ROOT/core/launchers/agent-launcher-common.sh"
+fi
 # v1 LEGACY (M4 remove): retired global memory session "machine-memory-claude".
 LEGACY_GLOBAL_MEMORY_SESSION="$(printf '%s-%s-%s' machine memory claude)"
 SESSION_NAME="${TMUX_SESSION_NAME:-$LEGACY_GLOBAL_MEMORY_SESSION}"
@@ -258,6 +262,14 @@ print(message)
 PY
 }
 
+write_active_session_marker() {
+  local seat="${CLAWSEAT_SEAT:-}"
+  local session_id="${SESSION_ID:-}"
+  [[ -n "$seat" ]] || return 0
+  [[ -n "$session_id" ]] || return 0
+  launcher_write_active_session_id "$seat" "$session_id" || true
+}
+
 deliver_response() {
   local target="$1" task_id="$2" profile="$3" response_json="$4"
   local deliver_script="$CLAWSEAT_ROOT/core/skills/memory-oracle/scripts/memory_deliver.py"
@@ -295,6 +307,7 @@ main() {
   fi
   [[ -n "$parsed" ]] || return 0
   eval "$parsed"
+  write_active_session_marker || true
 
   hook_project="${DELIVER_PROJECT:-${CLAWSEAT_PROJECT:-${AGENTS_PROJECT:-unknown}}}"
   [[ -n "$hook_project" ]] || hook_project="unknown"

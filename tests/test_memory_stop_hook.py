@@ -88,6 +88,8 @@ def _run_hook(
     """Run the stop hook with PATH wrappers and return the process + log lines."""
 
     bin_dir, calls_log = _make_wrapped_path(tmp_path, tmux_rc=tmux_rc, python_rc=python_rc)
+    home = tmp_path / "home"
+    home.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update(
         {
@@ -97,6 +99,9 @@ def _run_hook(
             "PYTHON_RC": str(python_rc),
             "TMUX_DISPLAY_MESSAGE": "install-memory-claude",
             "CLAUDE_PROJECT_DIR": str(_REPO),
+            "HOME": str(home),
+            "REAL_HOME": str(home),
+            "CLAWSEAT_SEAT": "builder",
         }
     )
     transcript = tmp_path / "transcript.jsonl"
@@ -159,6 +164,20 @@ def test_deliver_marker_triggers_memory_deliver_call(tmp_path: Path) -> None:
     assert python_calls
     assert "memory_deliver.py" in python_calls[0]
     assert "planner" in python_calls[0]
+
+
+def test_stop_hook_writes_active_session_marker(tmp_path: Path) -> None:
+    proc, _calls = _run_hook(
+        tmp_path,
+        {
+            "last_assistant_message": "Done.",
+        },
+    )
+
+    active_file = tmp_path / "home" / ".agent-runtime" / "active" / "builder.session"
+
+    assert proc.returncode == 0
+    assert active_file.read_text(encoding="utf-8").strip() == "session-123"
 
 
 def test_no_marker_exits_zero_silently(tmp_path: Path) -> None:
