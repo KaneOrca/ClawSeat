@@ -69,7 +69,12 @@ def _capture_start_engineer_env(
         svc.start_engineer(session, reset=reset)
 
     assert launcher_calls, "launcher was not invoked"
-    cmd, env = launcher_calls[0]
+    launcher_call = next(
+        (call for call in launcher_calls if call[0][:2] == ["bash", hooks.launcher_path]),
+        None,
+    )
+    assert launcher_call is not None, "launcher command was not captured"
+    cmd, env = launcher_call
     assert cmd[:2] == ["bash", hooks.launcher_path]
     return env
 

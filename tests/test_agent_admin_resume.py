@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -130,7 +131,9 @@ def _make_handlers(
     real_home = tmp_path / "real-home"
     real_home.mkdir(parents=True, exist_ok=True)
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(resume_mod, "real_user_home", lambda: real_home)
+    real_home_module = types.ModuleType("real_home")
+    real_home_module.real_user_home = lambda: real_home  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "real_home", real_home_module)
     monkeypatch.setattr(resume_mod.projects_registry, "touch_project", lambda _project: None)
 
     status_script = _REPO / "core" / "shell-scripts" / "check-engineer-status.sh"
