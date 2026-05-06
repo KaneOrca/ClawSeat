@@ -321,12 +321,12 @@ def parse_args() -> argparse.Namespace:
         metavar="ROLE",
         help="Pick least-busy live seat with this role from state.db (e.g. 'builder').",
     )
-parser.add_argument(
-    "--force-parallel-builder",
-    action="store_true",
-    help="Bypass the serial builder dispatch lock.",
-)
-parser.add_argument("--task-id", required=True, help="Task id.")
+    parser.add_argument(
+        "--force-parallel-builder",
+        action="store_true",
+        help="Bypass the serial builder dispatch lock.",
+    )
+    parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
     parser.add_argument(

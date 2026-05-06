@@ -381,17 +381,17 @@ def parse_args() -> argparse.Namespace:
         "--next-action",
         help="Short frontstage instruction, especially when a user decision is needed.",
     )
-parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
-parser.add_argument(
-    "--base-drift-acknowledged",
-    action="store_true",
-    help="Acknowledge that branch_base differs from the current main tip.",
-)
-parser.add_argument(
-    "--drift-reason",
-    help="JSON drift rationale with drift_from, drift_to, and orthogonal_files_verified.",
-)
-add_notify_args(parser)
+    parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
+    parser.add_argument(
+        "--base-drift-acknowledged",
+        action="store_true",
+        help="Acknowledge that branch_base differs from the current main tip.",
+    )
+    parser.add_argument(
+        "--drift-reason",
+        help="JSON drift rationale with drift_from, drift_to, and orthogonal_files_verified.",
+    )
+    add_notify_args(parser)
     return parser.parse_args()
 
 
