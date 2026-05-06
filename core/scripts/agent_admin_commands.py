@@ -16,6 +16,8 @@ import agent_admin_window as window_ops
 
 
 _RESUME_DEDUPE_WINDOW_SECONDS = 30
+projects_registry = None
+real_user_home = None
 
 
 @dataclass
@@ -89,9 +91,11 @@ class CommandHandlers:
 
     def _touch_project(self, project_name: str) -> None:
         try:
-            import projects_registry
+            registry = projects_registry
+            if registry is None:
+                import projects_registry as registry
 
-            projects_registry.touch_project(project_name)
+            registry.touch_project(project_name)
         except Exception as exc:
             print(f"projects registry touch skipped: {exc}", file=sys.stderr)
 
@@ -106,12 +110,14 @@ class CommandHandlers:
             print(f"heartbeat: {exc}")
 
     def _resume_state_dir(self) -> Path:
-        core_lib = Path(__file__).resolve().parents[1] / "lib"
-        if str(core_lib) not in sys.path:
-            sys.path.insert(0, str(core_lib))
-        from real_home import real_user_home
+        resolver = real_user_home
+        if resolver is None:
+            core_lib = Path(__file__).resolve().parents[1] / "lib"
+            if str(core_lib) not in sys.path:
+                sys.path.insert(0, str(core_lib))
+            from real_home import real_user_home as resolver
 
-        return real_user_home() / ".agent-runtime" / "active"
+        return resolver() / ".agent-runtime" / "active"
 
     def _resume_session_path(self, seat: str) -> Path:
         return self._resume_state_dir() / f"{seat}.session"
