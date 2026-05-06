@@ -66,8 +66,8 @@ related_skills:
 
 ## 不可暴露 — 路径模式
 
-- /Users/ywf/.agents/secrets/**
-- /Users/ywf/.openclaw/credentials/**
+- ~/.agents/secrets/**
+- ~/.openclaw/credentials/**
 - ~/.config/gh/hosts.yml
 
 ## 不可暴露 — 飞书 group / app id
