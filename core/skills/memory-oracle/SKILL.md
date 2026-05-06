@@ -113,6 +113,18 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
+## Brief Schema (user_facing)
+
+For user-facing changes, set `user_facing: true` in the brief frontmatter and
+include:
+
+- `product_acceptance_criteria:` as a markdown checkbox list (5-minute verifiable
+  items)
+- `product_acceptance_criteria` is REQUIRED when `user_facing: true`
+
+If dispatching the same finding repeatedly, add `rca_override: true` only with
+explicit operator approval.
+
 ## Canonical Workflow Entry (memory dispatch 必走步)
 
 Before notifying planner of a new task, memory MUST create canonical workflow
