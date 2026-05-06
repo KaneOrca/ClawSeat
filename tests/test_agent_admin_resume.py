@@ -75,6 +75,7 @@ def _make_session(tmp_path: Path, seat: str, tool: str, project_name: str = "ins
 
 def _make_handlers(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     *,
     tool_by_seat: dict[str, str],
     tmux_alive_by_session: dict[str, bool] | None = None,
@@ -130,7 +131,6 @@ def _make_handlers(
 
     real_home = tmp_path / "real-home"
     real_home.mkdir(parents=True, exist_ok=True)
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(resume_mod, "real_user_home", lambda: real_home, raising=False)
     projects_registry_module = types.ModuleType("projects_registry")
     projects_registry_module.touch_project = lambda _project: None  # type: ignore[attr-defined]
@@ -167,9 +167,14 @@ def test_resume_parser_accepts_fresh_flags() -> None:
     assert project_args.fresh is True
 
 
-def test_seat_resume_sends_resume_command_for_idle_shell(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_seat_resume_sends_resume_command_for_idle_shell(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     handlers, service, sent_commands = _make_handlers(
         tmp_path,
+        monkeypatch,
         tool_by_seat={"builder": "codex"},
         tmux_alive_by_session={"install-builder-codex": True},
         status_by_seat={"builder": "IDLE (shell, no task)"},
@@ -189,9 +194,14 @@ def test_seat_resume_sends_resume_command_for_idle_shell(tmp_path: Path, capsys:
     assert "install-builder-codex" in out
 
 
-def test_seat_resume_spawns_fresh_when_tmux_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_seat_resume_spawns_fresh_when_tmux_missing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     handlers, service, sent_commands = _make_handlers(
         tmp_path,
+        monkeypatch,
         tool_by_seat={"builder": "codex"},
     )
 
@@ -204,9 +214,10 @@ def test_seat_resume_spawns_fresh_when_tmux_missing(tmp_path: Path, capsys: pyte
     assert "install-builder-codex" in out
 
 
-def test_seat_resume_rejects_live_harness(tmp_path: Path) -> None:
+def test_seat_resume_rejects_live_harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     handlers, service, sent_commands = _make_handlers(
         tmp_path,
+        monkeypatch,
         tool_by_seat={"builder": "codex"},
         tmux_alive_by_session={"install-builder-codex": True},
         status_by_seat={"builder": "WORKING (codex tool)"},
@@ -219,9 +230,10 @@ def test_seat_resume_rejects_live_harness(tmp_path: Path) -> None:
     assert sent_commands == []
 
 
-def test_project_resume_continues_after_failure(tmp_path: Path) -> None:
+def test_project_resume_continues_after_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     handlers, service, sent_commands = _make_handlers(
         tmp_path,
+        monkeypatch,
         tool_by_seat={"builder": "codex", "reviewer": "gemini"},
         tmux_alive_by_session={"install-reviewer-gemini": True},
         status_by_seat={"builder": "IDLE (shell, no task)", "reviewer": "WORKING (gemini active)"},
