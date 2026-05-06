@@ -11,7 +11,6 @@ from pathlib import Path
 import shutil
 from typing import Any, Callable
 
-import projects_registry
 from real_home import real_user_home
 
 from agent_admin_crud_base import require_caller_authority
@@ -92,6 +91,8 @@ class CommandHandlers:
 
     def _touch_project(self, project_name: str) -> None:
         try:
+            import projects_registry
+
             projects_registry.touch_project(project_name)
         except Exception as exc:
             print(f"projects registry touch skipped: {exc}", file=sys.stderr)
