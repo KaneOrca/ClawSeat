@@ -454,21 +454,21 @@ def main() -> int:
         args.objective,
         args.skill_refs,
     )
-todo_path = profile.todo_path(args.target)
-if normalize_role(profile.seat_roles.get(args.target, "")) == "builder" and args.source == "planner":
-    outstanding_builder_task_id = _outstanding_builder_dispatch_task_id(profile.handoff_dir)
-    if outstanding_builder_task_id:
-        if args.force_parallel_builder:
-            print(
-                "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"BLOCKED: builder dispatch outstanding ({outstanding_builder_task_id}); awaiting __builder__planner.json",
-                file=sys.stderr,
-            )
-            return 2
+    todo_path = profile.todo_path(args.target)
+    if normalize_role(profile.seat_roles.get(args.target, "")) == "builder" and args.source == "planner":
+        outstanding_builder_task_id = _outstanding_builder_dispatch_task_id(profile.handoff_dir)
+        if outstanding_builder_task_id:
+            if args.force_parallel_builder:
+                print(
+                    "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"BLOCKED: builder dispatch outstanding ({outstanding_builder_task_id}); awaiting __builder__planner.json",
+                    file=sys.stderr,
+                )
+                return 2
     if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
