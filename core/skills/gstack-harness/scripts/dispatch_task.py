@@ -469,7 +469,7 @@ if normalize_role(profile.seat_roles.get(args.target, "")) == "builder" and args
                 file=sys.stderr,
             )
             return 2
-if _is_task_already_queued(todo_path, args.task_id):
+    if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
             file=sys.stderr,

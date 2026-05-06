@@ -643,26 +643,26 @@ def main() -> int:
         receipt["branch_tip"] = branch_tip
     if args.pr_number is not None:
         receipt["pr_number"] = args.pr_number
-if args.ci_conclusion is not None:
-    receipt["ci_conclusion"] = args.ci_conclusion
-if args.base_drift_acknowledged:
-    receipt["base_drift_acknowledged"] = True
-if args.drift_reason is not None:
-    receipt["drift_reason"] = args.drift_reason
-source_dispatch_receipt = _load_dispatch_receipt_for_completion(
+    if args.ci_conclusion is not None:
+        receipt["ci_conclusion"] = args.ci_conclusion
+    if args.base_drift_acknowledged:
+        receipt["base_drift_acknowledged"] = True
+    if args.drift_reason is not None:
+        receipt["drift_reason"] = args.drift_reason
+    source_dispatch_receipt = _load_dispatch_receipt_for_completion(
         profile,
         task_id=args.task_id,
         source=args.source,
     )
-if not args.ack_only:
-    _validate_completion_receipt(receipt, source_dispatch_receipt)
-    _validate_base_drift(
-        receipt,
-        getattr(profile, "repo_root", None),
-        pr_number=args.pr_number,
-        base_drift_acknowledged=args.base_drift_acknowledged,
-        drift_reason=args.drift_reason,
-    )
+    if not args.ack_only:
+        _validate_completion_receipt(receipt, source_dispatch_receipt)
+        _validate_base_drift(
+            receipt,
+            getattr(profile, "repo_root", None),
+            pr_number=args.pr_number,
+            base_drift_acknowledged=args.base_drift_acknowledged,
+            drift_reason=args.drift_reason,
+        )
 
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
