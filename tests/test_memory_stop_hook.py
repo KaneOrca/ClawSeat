@@ -84,7 +84,6 @@ def _run_hook(
     session_id: str | None = "session-123",
     include_transcript_path: bool = True,
     raw_input: str | None = None,
-    extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     """Run the stop hook with PATH wrappers and return the process + log lines."""
 
@@ -105,8 +104,6 @@ def _run_hook(
             "CLAWSEAT_SEAT": "builder",
         }
     )
-    if extra_env:
-        env.update(extra_env)
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(transcript_content, encoding="utf-8")
     payload = {
