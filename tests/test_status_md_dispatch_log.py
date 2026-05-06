@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import json
 import fcntl
 import os
 import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
+
 import _task_io
 
 
 _REPO = Path(__file__).resolve().parents[1]
 _SCRIPTS = _REPO / "core" / "skills" / "gstack-harness" / "scripts"
+_DISPATCH_LOG = "## dispatch log (append-only, last 20)"
 
 
 def _status_doc(entries: list[str] | None = None) -> str:
@@ -26,7 +33,7 @@ def _status_doc(entries: list[str] | None = None) -> str:
 
 def _dispatch_log_entries(text: str) -> list[str]:
     lines = text.splitlines()
-    start = lines.index("## dispatch log (append-only, last 20)") + 1
+    start = lines.index(_DISPATCH_LOG) + 1
     end = len(lines)
     for idx in range(start, len(lines)):
         if idx > start and lines[idx].startswith("## "):
@@ -39,13 +46,24 @@ def _dispatch_log_entries(text: str) -> list[str]:
     ]
 
 
-def _make_profile(tmp_path: Path, *, status_text: str | None = None) -> tuple[Path, Path]:
+def _audit_dir(profile: Path) -> Path:
+    data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    return Path(data["handoff_dir"]) / "audit"
+
+
+def _make_profile(
+    tmp_path: Path,
+    *,
+    status_text: str | None = None,
+    repo_root: Path | None = None,
+) -> tuple[Path, Path]:
     tasks = tmp_path / "tasks" / "install"
     workspaces = tmp_path / "workspaces" / "install"
     handoffs = tasks / "patrol" / "handoffs"
     status = tasks / "STATUS.md"
     status.parent.mkdir(parents=True, exist_ok=True)
     status.write_text(status_text if status_text is not None else _status_doc(), encoding="utf-8")
+    repo_root = repo_root or _REPO
 
     profile = tmp_path / "profile.toml"
     profile.write_text(
@@ -54,7 +72,7 @@ version = 1
 profile_name = "test-profile"
 template_name = "gstack-harness"
 project_name = "install"
-repo_root = "{_REPO}"
+repo_root = "{repo_root}"
 tasks_root = "{tasks}"
 project_doc = "{tasks / "PROJECT.md"}"
 tasks_doc = "{tasks / "TASKS.md"}"
@@ -86,6 +104,32 @@ runtime_seats = ["planner", "builder"]
     return profile, status
 
 
+def _init_git_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "ci"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "ci@example.com"], check=True)
+
+    (repo / "README.md").write_text("main\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "main", "-q"], check=True)
+
+    main_sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/clawseat/main", main_sha], check=True)
+
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "feat/status-ack"], check=True)
+    (repo / "FEATURE.md").write_text("feature\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "FEATURE.md"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "feature branch", "-q"], check=True)
+    return repo
+
+
 def _run_dispatch(profile: Path, task_id: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -115,29 +159,43 @@ def _run_dispatch(profile: Path, task_id: str) -> subprocess.CompletedProcess[st
     )
 
 
-def _run_complete(profile: Path, task_id: str) -> subprocess.CompletedProcess[str]:
+def _run_complete(
+    profile: Path,
+    task_id: str,
+    *,
+    branch: str | None = None,
+    pr_number: str | None = None,
+    ci_conclusion: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    args = [
+        sys.executable,
+        str(_SCRIPTS / "complete_handoff.py"),
+        "--profile",
+        str(profile),
+        "--source",
+        "builder",
+        "--target",
+        "planner",
+        "--task-id",
+        task_id,
+        "--summary",
+        "no-op done",
+        "--status",
+        "done",
+        "--verdict",
+        "APPROVED",
+        "--commit",
+        "abc1234",
+        "--no-notify",
+    ]
+    if branch:
+        args.extend(["--branch", branch])
+    if pr_number:
+        args.extend(["--pr-number", pr_number])
+    if ci_conclusion:
+        args.extend(["--ci-conclusion", ci_conclusion])
     return subprocess.run(
-        [
-            sys.executable,
-            str(_SCRIPTS / "complete_handoff.py"),
-            "--profile",
-            str(profile),
-            "--source",
-            "builder",
-            "--target",
-            "planner",
-            "--task-id",
-            task_id,
-            "--summary",
-            "no-op done",
-            "--status",
-            "done",
-            "--verdict",
-            "APPROVED",
-            "--commit",
-            "abc1234",
-            "--no-notify",
-        ],
+        args,
         capture_output=True,
         text=True,
         cwd=str(_SCRIPTS),
@@ -156,11 +214,18 @@ def test_dispatch_appends_line(tmp_path: Path) -> None:
 
 
 def test_complete_appends_ack(tmp_path: Path) -> None:
-    profile, status = _make_profile(tmp_path)
+    repo = _init_git_repo(tmp_path)
+    profile, status = _make_profile(tmp_path, repo_root=repo)
     dispatch = _run_dispatch(profile, "status-ack")
     assert dispatch.returncode == 0, dispatch.stderr
 
-    result = _run_complete(profile, "status-ack")
+    result = _run_complete(
+        profile,
+        "status-ack",
+        branch="feat/status-ack",
+        pr_number="101",
+        ci_conclusion="success",
+    )
 
     assert result.returncode == 0, result.stderr
     entries = _dispatch_log_entries(status.read_text(encoding="utf-8"))
@@ -185,16 +250,22 @@ def test_truncation_keeps_last_20(tmp_path: Path) -> None:
     assert entries[-1].endswith(": planner dispatched status-truncate to builder test_policy=UPDATE")
 
 
-def test_missing_section_skips(tmp_path: Path) -> None:
+def test_missing_section_auto_heals_and_writes_audit(tmp_path: Path) -> None:
     before = "# test — STATUS\n\n## phase\n\nphase=ready\n"
     profile, status = _make_profile(tmp_path, status_text=before)
 
     result = _run_dispatch(profile, "status-missing-section")
 
     assert result.returncode == 0
-    assert status.read_text(encoding="utf-8") == before
-    assert "STATUS.md dispatch log append skipped" in result.stderr
-    assert "section missing" in result.stderr
+    repaired = status.read_text(encoding="utf-8")
+    assert _DISPATCH_LOG in repaired
+    assert "planner dispatched status-missing-section to builder" in repaired
+    assert "INFO: STATUS.md dispatch-log section auto-healed" in result.stderr
+    audit_files = sorted(_audit_dir(profile).glob("dispatch-log-heal-*.json"))
+    assert len(audit_files) == 1
+    audit = json.loads(audit_files[0].read_text(encoding="utf-8"))
+    assert audit["task_id"] == "status-missing-section"
+    assert audit["reason"] == "section_absent"
 
 
 def test_atomic_write(tmp_path: Path, monkeypatch) -> None:

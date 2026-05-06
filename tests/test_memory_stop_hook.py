@@ -214,3 +214,43 @@ def test_tmux_failure_still_exits_zero(tmp_path: Path) -> None:
     tmux_calls = [line for line in calls if line.startswith("tmux\t")]
     assert tmux_calls
     assert "send-keys" in tmux_calls[0]
+
+
+def test_invalid_json_exits_one_and_reports_error(tmp_path: Path) -> None:
+    proc, calls = _run_hook(
+        tmp_path,
+        {},
+        raw_input="{not-json",
+    )
+
+    assert proc.returncode == 1
+    assert calls == []
+    assert "invalid Stop payload JSON" in proc.stderr
+
+
+def test_missing_transcript_path_exits_one(tmp_path: Path) -> None:
+    proc, calls = _run_hook(
+        tmp_path,
+        {
+            "last_assistant_message": "hello",
+        },
+        include_transcript_path=False,
+    )
+
+    assert proc.returncode == 1
+    assert calls == []
+    assert "transcript_path" in proc.stderr
+
+
+def test_empty_session_id_exits_one(tmp_path: Path) -> None:
+    proc, calls = _run_hook(
+        tmp_path,
+        {
+            "last_assistant_message": "hello",
+        },
+        session_id="",
+    )
+
+    assert proc.returncode == 1
+    assert calls == []
+    assert "session_id" in proc.stderr
