@@ -549,12 +549,22 @@ def open_memory_window() -> dict[str, Any]:
     return {"status": "skipped", "reason": "global memory window retired"}
 
 
+def _should_refresh_memories(
+    *,
+    rebuild: bool,
+    open_memory: bool,
+    refresh_memories: bool,
+) -> bool:
+    return (open_memory or refresh_memories) or not rebuild
+
+
 def open_grid_window(
     project: Any,
     *,
     recover: bool = False,
     rebuild: bool = False,
     open_memory: bool = False,
+    refresh_memories: bool = False,
 ) -> dict[str, Any]:
     template_name = str(getattr(project, "template_name", "") or "")
     if _project_primary_seat_id(project) == "memory":
@@ -568,11 +578,32 @@ def open_grid_window(
             result = run_iterm_panes_driver(build_workers_payload(project))
             result["recovered"] = False
             result["rebuilt"] = bool(rebuild)
-        result["memories"] = ensure_memories_pane(project)
-        result["memory"] = {
-            "status": "skipped",
-            "reason": "v2 minimal uses memories tabs",
-        }
+        if _should_refresh_memories(
+            rebuild=rebuild,
+            open_memory=open_memory,
+            refresh_memories=refresh_memories,
+        ):
+            result["memories"] = ensure_memories_pane(project)
+        else:
+            print(
+                "agent_admin_window: DEPRECATED: --rebuild no longer refreshes memories by default. "
+                "This legacy behavior is deprecated: use --refresh-memories (or --open-memory) "
+                "to restore legacy behavior.",
+                file=sys.stderr,
+            )
+            result["memories"] = {
+                "status": "skipped",
+                "reason": "rebuild defaults to workers-only",
+            }
+
+        worker_count = len(_project_grid_seat_ids(project))
+        worker_seats = worker_count
+        if worker_seats <= 0:
+            worker_seats = 1
+        result["summary"] = (
+            f"window open-grid: rebuilt project={project.name} seats={worker_seats} "
+            f"{'memories=touched' if result['memories'].get('status') == 'ok' else 'memories=skipped'}"
+        )
         return result
 
     if template_name not in _V1_GRID_TEMPLATES:

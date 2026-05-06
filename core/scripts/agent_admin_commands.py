@@ -558,19 +558,26 @@ class CommandHandlers:
         project = projects.get(args.project)
         if project is None:
             raise self.hooks.error_cls(f"project not registered: {args.project}")
-        window_ops.open_grid_window(
+        result = window_ops.open_grid_window(
             project,
             recover=bool(getattr(args, "recover", False)),
             rebuild=bool(getattr(args, "rebuild", False)),
             open_memory=bool(getattr(args, "open_memory", False)),
+            refresh_memories=bool(getattr(args, "refresh_memories", False)),
         )
         if not bool(getattr(args, "quiet", False)):
-            primary_seat = window_ops._project_primary_seat_id(project)
-            worker_count = len(window_ops._project_grid_seat_ids(project))
-            seat_count = worker_count if primary_seat == "memory" else worker_count + 1
-            if seat_count <= 0:
-                seat_count = 1
-            print(f"window open-grid: rebuilt project={project.name} seats={seat_count}")
+            line = str(result.get("summary", "")).strip()
+            if not line:
+                primary_seat = window_ops._project_primary_seat_id(project)
+                worker_count = len(window_ops._project_grid_seat_ids(project))
+                seat_count = worker_count if primary_seat == "memory" else worker_count + 1
+                if seat_count <= 0:
+                    seat_count = 1
+                line = f"window open-grid: rebuilt project={project.name} seats={seat_count}"
+                memories = result.get("memories")
+                if isinstance(memories, dict) and "status" in memories:
+                    line += f" memories={'touched' if memories.get('status') == 'ok' else 'skipped'}"
+            print(line)
         return 0
 
     def window_open_engineer(self, args: Any) -> int:
