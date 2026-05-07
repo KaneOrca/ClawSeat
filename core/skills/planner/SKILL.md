@@ -122,6 +122,9 @@ the fix are reclassified as `STILL-OPEN`.
 
 ### Core UX gate
 
+`core_ux=true` and `core_ux: true` are the canonical dispatch flags for this
+route.
+
 For any core_ux relay, `SWALLOW PASS DENIED` if the closure tries to accept a
 PASS without surfacing `core_ux_gate`. Planner must bounce or escalate instead
 of silently normalizing the PASS away.

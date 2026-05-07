@@ -75,7 +75,7 @@ def _outstanding_builder_dispatch_task_id(handoff_dir: Path | str) -> str | None
 def _finding_hypothesis_counter(handoff_dir: Path | str, finding_id: str) -> int:
     handoff_dir = Path(handoff_dir)
     if not handoff_dir.exists():
-        return 1
+        return 0
     suffix = "__planner__builder.json"
     count = 0
     for receipt_path in sorted(handoff_dir.glob(f"*{suffix}")):
@@ -85,7 +85,7 @@ def _finding_hypothesis_counter(handoff_dir: Path | str, finding_id: str) -> int
             continue
         if isinstance(payload, dict) and payload.get("finding_id") == finding_id:
             count += 1
-    return count + 1
+    return count
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
@@ -481,17 +481,31 @@ def main() -> int:
     if normalize_role(profile.seat_roles.get(args.target, "")) == "builder" and args.source == "planner":
         outstanding_builder_task_id = _outstanding_builder_dispatch_task_id(profile.handoff_dir)
         if outstanding_builder_task_id:
-            if args.force_parallel_builder:
-                print(
-                    "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"BLOCKED: builder dispatch outstanding ({outstanding_builder_task_id}); awaiting __builder__planner.json",
-                    file=sys.stderr,
-                )
-                return 2
+            outstanding_receipt_path = profile.handoff_path(
+                outstanding_builder_task_id,
+                args.source,
+                args.target,
+            )
+            outstanding_finding_id = None
+            try:
+                outstanding_payload = json.loads(outstanding_receipt_path.read_text(encoding="utf-8"))
+                if isinstance(outstanding_payload, dict):
+                    outstanding_finding_id = outstanding_payload.get("finding_id")
+            except Exception:  # noqa: BLE001 best-effort guard
+                outstanding_finding_id = None
+            same_finding_retry = bool(args.finding_id and outstanding_finding_id == args.finding_id)
+            if not same_finding_retry:
+                if args.force_parallel_builder:
+                    print(
+                        "WARNING: bypassing serial builder dispatch lock; multi-dispatch wakeup collapse risk",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"BLOCKED: builder dispatch outstanding ({outstanding_builder_task_id}); awaiting __builder__planner.json",
+                        file=sys.stderr,
+                    )
+                    return 2
     if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
@@ -541,15 +555,20 @@ def main() -> int:
         "assigned_at": utc_now_iso(),
         "notified_at": None,
         "notify_message": None,
+        "rca_override": None,
     }
     if getattr(args, "finding_id", None):
         finding_id = str(args.finding_id)
         hypothesis_counter = _finding_hypothesis_counter(profile.handoff_dir, finding_id)
+        hypothesis_counter_exceeded = hypothesis_counter >= 3
         receipt["finding_id"] = finding_id
+        receipt["hypothesis_fix_counter"] = hypothesis_counter
         receipt["hypothesis_counter"] = hypothesis_counter
-        if hypothesis_counter > 1 and not getattr(args, "rca_override", False):
+        receipt["hypothesis_fix_counter_exceeded"] = hypothesis_counter_exceeded
+        receipt["hypothesis_counter_exceeded"] = hypothesis_counter_exceeded
+        if hypothesis_counter_exceeded and not getattr(args, "rca_override", False):
             print(
-                f"warn: hypothesis counter {hypothesis_counter} exceeded for finding_id={finding_id}; "
+                f"warn: hypothesis_fix_counter exceeded for finding_id={finding_id};",
                 "pass --rca-override to suppress",
                 file=sys.stderr,
             )

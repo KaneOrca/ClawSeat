@@ -358,6 +358,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--branch", help="Feature branch used to auto-fill branch_base/branch_tip.")
     parser.add_argument("--pr-number", help="Pull Request number for closure fields.")
     parser.add_argument("--ci-conclusion", help="CI conclusion marker for closure fields.")
+    parser.add_argument(
+        "--core-ux-gate",
+        choices=["met", "unmet", "n_a"],
+        help="Required when dispatch indicates core_ux=true.",
+    )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", help="Delivery title.")
     parser.add_argument("--summary", help="Delivery summary text.")
