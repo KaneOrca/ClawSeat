@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 # Add core/lib to path so seat_resolver can be imported
@@ -17,7 +17,6 @@ if str(_core_lib) not in sys.path:
 from real_home import real_user_home
 
 from _common import (
-    load_json,
     _should_announce_planner_event,
     _try_announce_planner_event,
     add_notify_args,
@@ -42,9 +41,6 @@ from _common import (
 from seat_resolver import resolve_seat_from_profile
 
 
-_DISPATCH_LOG_HEADER_RE = re.compile(r"^##\s+.*dispatch.*log", re.IGNORECASE | re.MULTILINE)
-
-
 def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
     """Return True if task_id appears under a [pending] or [queued] header in todo_path."""
     if not todo_path.exists():
@@ -57,91 +53,39 @@ def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
     ))
 
 
-def _count_finding_history(
-    handoff_dir: Path,
-    finding_id: str,
-    *,
-    exclude_task: str | None = None,
-) -> tuple[int, bool]:
-    """Count prior handoff records with the same finding_id."""
-    count = 0
-    for path in sorted(handoff_dir.glob("*.json")):
-        payload = load_json(path)
-        if not isinstance(payload, dict):
-            continue
-        if payload.get("finding_id") != finding_id:
-            continue
-        if exclude_task and payload.get("task_id") == exclude_task:
-            continue
-        if payload.get("kind") not in {"dispatch", "completion"}:
-            continue
-        count += 1
-    return count, count >= 3
 
-
-def _resolve_hypothesis_counter(
-    profile: object,
-    finding_id: str | None,
-    task_id: str,
-) -> tuple[str | None, int, bool]:
-    if not finding_id:
-        return None, 0, False
-    handoff_dir = Path(getattr(profile, "handoff_dir", ""))
+def _outstanding_builder_dispatch_task_id(handoff_dir: Path | str) -> str | None:
+    handoff_dir = Path(handoff_dir)
     if not handoff_dir.exists():
-        return finding_id, 0, False
-    return finding_id, *_count_finding_history(handoff_dir, finding_id, exclude_task=task_id)
-
-def _dispatch_status_audit_dir(profile: object, project: str | None = None) -> Path:
-    try:
-        handoff_dir = Path(profile.handoff_dir)  # type: ignore[attr-defined]
-    except Exception:
-        handoff_dir = None
-    if handoff_dir:
-        return handoff_dir / "audit"
-    return (Path.home() / ".agents" / "tasks" / str(project or "install") / "patrol" / "handoffs" / "audit")
-
-
-def _status_has_dispatch_log_section(text: str) -> bool:
-    return bool(_DISPATCH_LOG_HEADER_RE.search(text))
+        return None
+    suffix = "__planner__builder.json"
+    for receipt_path in sorted(handoff_dir.glob(f"*{suffix}")):
+        name = receipt_path.name
+        if not name.endswith(suffix):
+            continue
+        task_id = name[: -len(suffix)]
+        if not task_id:
+            continue
+        completion_path = handoff_dir / f"{task_id}__builder__planner.json"
+        if not completion_path.exists():
+            return task_id
+    return None
 
 
-def _append_dispatch_status_log_placeholder(path: Path, now: str) -> bool:
-    if path.exists():
-        text = path.read_text(encoding="utf-8")
-    else:
-        text = ""
-        path.parent.mkdir(parents=True, exist_ok=True)
-    if _status_has_dispatch_log_section(text):
-        return False
-
-    marker = "## dispatch log (append-only, last 20)"
-    comment = f"<!-- auto-healed by dispatch_task.py at {now}; original section absent -->"
-    placeholder = f"{marker}\n\n{comment}\n\n(none)\n"
-    cleaned = text.rstrip()
-    if cleaned:
-        path.write_text(f"{cleaned}\n\n{placeholder}\n", encoding="utf-8")
-    else:
-        path.write_text(f"{placeholder}\n", encoding="utf-8")
-    print(
-        "INFO: STATUS.md dispatch-log section auto-healed",
-        file=sys.stderr,
-    )
-    return True
-
-
-def _write_dispatch_status_log_audit(profile: object, task_id: str, project: str, now: str) -> None:
-    audit_dir = _dispatch_status_audit_dir(profile, project)
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    write_json(
-        audit_dir / f"dispatch-log-heal-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json",
-        {
-            "task_id": task_id,
-            "project": project,
-            "timestamp": now,
-            "reason": "section_absent",
-        },
-    )
-
+def _finding_hypothesis_counter(handoff_dir: Path | str, finding_id: str) -> int:
+    handoff_dir = Path(handoff_dir)
+    if not handoff_dir.exists():
+        return 0
+    suffix = "__planner__builder.json"
+    count = 0
+    for receipt_path in sorted(handoff_dir.glob(f"*{suffix}")):
+        try:
+            payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 best-effort scan
+            continue
+        if isinstance(payload, dict) and payload.get("finding_id") == finding_id:
+            count += 1
+    return count
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
@@ -394,7 +338,19 @@ def parse_args() -> argparse.Namespace:
         metavar="ROLE",
         help="Pick least-busy live seat with this role from state.db (e.g. 'builder').",
     )
+    parser.add_argument(
+        "--force-parallel-builder",
+        action="store_true",
+        help="Bypass the serial builder dispatch lock.",
+    )
     parser.add_argument("--task-id", required=True, help="Task id.")
+    parser.add_argument("--finding-id", help="Optional finding id for hypothesis-fix tracking.")
+    parser.add_argument("--core-ux", action="store_true", help="Mark the dispatch as core UX.")
+    parser.add_argument(
+        "--rca-override",
+        action="store_true",
+        help="Suppress the hypothesis counter warning when intentionally re-dispatching a finding.",
+    )
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
     parser.add_argument(
@@ -412,19 +368,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--notes", default="dispatched via gstack-harness", help="TASKS.md note.")
     parser.add_argument("--docs-consulted", default="", help="Memory KB record path for official-docs research.")
     parser.add_argument("--docs-skip-reason", default="", help="Explicit reason official-docs research was not required.")
-    parser.add_argument("--finding-id", help="Finding id for hypothesis_fix_counter tracking.")
-    parser.add_argument(
-        "--rca-override",
-        action="store_true",
-        help=(
-            "Allow hypothesis fix dispatch when counter>=3; require trace-first RCA."
-        ),
-    )
-    parser.add_argument(
-        "--core-ux",
-        action="store_true",
-        help="Mark this workflow step as core_ux=true for completion validation.",
-    )
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
     add_notify_args(parser)
     parser.add_argument(
@@ -536,6 +479,34 @@ def main() -> int:
         args.skill_refs,
     )
     todo_path = profile.todo_path(args.target)
+    if normalize_role(profile.seat_roles.get(args.target, "")) == "builder" and args.source == "planner":
+        outstanding_builder_task_id = _outstanding_builder_dispatch_task_id(profile.handoff_dir)
+        if outstanding_builder_task_id:
+            outstanding_receipt_path = profile.handoff_path(
+                outstanding_builder_task_id,
+                args.source,
+                args.target,
+            )
+            outstanding_finding_id = None
+            try:
+                outstanding_payload = json.loads(outstanding_receipt_path.read_text(encoding="utf-8"))
+                if isinstance(outstanding_payload, dict):
+                    outstanding_finding_id = outstanding_payload.get("finding_id")
+            except Exception:  # noqa: BLE001 best-effort guard
+                outstanding_finding_id = None
+            same_finding_retry = bool(args.finding_id and outstanding_finding_id == args.finding_id)
+            if not same_finding_retry:
+                if args.force_parallel_builder:
+                    print(
+                        "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"BLOCKED: builder dispatch outstanding ({outstanding_builder_task_id}); awaiting __builder__planner.json",
+                        file=sys.stderr,
+                    )
+                    return 2
     if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
@@ -543,17 +514,6 @@ def main() -> int:
         )
         return 2
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
-    (
-        finding_id,
-        hypothesis_fix_counter,
-        hypothesis_fix_counter_exceeded,
-    ) = _resolve_hypothesis_counter(profile, args.finding_id, args.task_id)
-    if hypothesis_fix_counter_exceeded and not args.rca_override:
-        print(
-            f"warning: hypothesis_fix_counter exceeded ({hypothesis_fix_counter}) "
-            f"for finding_id {finding_id!r}. Consider --rca-override.",
-            file=sys.stderr,
-        )
     reply_to = args.reply_to or args.source
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
@@ -581,9 +541,6 @@ def main() -> int:
         status="pending",
         notes=args.notes,
     )
-    dispatch_status_ts = utc_now_iso()
-    if _append_dispatch_status_log_placeholder(profile.status_doc, dispatch_status_ts):
-        _write_dispatch_status_log_audit(profile, args.task_id, profile.project_name, dispatch_status_ts)
     receipt = {
         "kind": "dispatch",
         "task_id": args.task_id,
@@ -596,15 +553,30 @@ def main() -> int:
         "reply_to": reply_to,
         "docs_consulted": args.docs_consulted or None,
         "docs_skip_reason": args.docs_skip_reason or None,
-        "finding_id": finding_id,
-        "hypothesis_fix_counter": hypothesis_fix_counter,
-        "hypothesis_fix_counter_exceeded": hypothesis_fix_counter_exceeded,
-        "rca_override": True if args.rca_override else None,
-        "core_ux": args.core_ux,
         "assigned_at": utc_now_iso(),
         "notified_at": None,
         "notify_message": None,
+        "rca_override": None,
     }
+    if args.core_ux:
+        receipt["core_ux"] = True
+    if getattr(args, "finding_id", None):
+        finding_id = str(args.finding_id)
+        hypothesis_counter = _finding_hypothesis_counter(profile.handoff_dir, finding_id)
+        hypothesis_counter_exceeded = hypothesis_counter >= 3
+        receipt["finding_id"] = finding_id
+        receipt["hypothesis_fix_counter"] = hypothesis_counter
+        receipt["hypothesis_counter"] = hypothesis_counter
+        receipt["hypothesis_fix_counter_exceeded"] = hypothesis_counter_exceeded
+        receipt["hypothesis_counter_exceeded"] = hypothesis_counter_exceeded
+        if hypothesis_counter_exceeded and not getattr(args, "rca_override", False):
+            print(
+                f"warn: hypothesis_fix_counter exceeded for finding_id={finding_id};",
+                "pass --rca-override to suppress",
+                file=sys.stderr,
+            )
+        if getattr(args, "rca_override", False):
+            receipt["rca_override"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
     if do_notify:
@@ -709,6 +681,7 @@ def main() -> int:
         task_id=args.task_id,
         target=args.target,
         test_policy=args.test_policy,
+        audit_dir=profile.handoff_dir / "audit",
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import os
 import re
@@ -387,6 +388,15 @@ def parse_args() -> argparse.Namespace:
         help="Short frontstage instruction, especially when a user decision is needed.",
     )
     parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
+    parser.add_argument(
+        "--base-drift-acknowledged",
+        action="store_true",
+        help="Acknowledge that branch_base differs from the current main tip.",
+    )
+    parser.add_argument(
+        "--drift-reason",
+        help="JSON drift rationale with drift_from, drift_to, and orthogonal_files_verified.",
+    )
     add_notify_args(parser)
     return parser.parse_args()
 
@@ -437,20 +447,6 @@ def _load_dispatch_receipt_for_completion(
     return None
 
 
-def _requires_core_ux_gate(
-    source_dispatch: dict[str, object] | None,
-) -> bool:
-    if not isinstance(source_dispatch, dict):
-        return False
-    value = source_dispatch.get("core_ux")
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        return lowered in {"true", "1", "yes"}
-    return False
-
-
 def _git_main_ref(repo_root: Path) -> str | None:
     if not repo_root:
         return None
@@ -494,17 +490,112 @@ def _git_branch_and_base(
     return branch_base, branch_tip
 
 
+def _git_current_main_tip(repo_root: Path | None) -> str | None:
+    if not repo_root:
+        return None
+    try:
+        main_ref = _git_main_ref(Path(repo_root))
+        if main_ref is None:
+            return None
+        return subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", main_ref],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except Exception:
+        return None
+
+
+def _gh_pr_files(repo_root: Path, pr_number: str | int) -> set[str]:
+    result = subprocess.run(
+        ["gh", "pr", "view", str(pr_number), "--json", "files"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout or "{}")
+    files = payload.get("files", [])
+    return {
+        entry["path"]
+        for entry in files
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str) and entry["path"]
+    }
+
+
+def _git_diff_name_only(repo_root: Path, drift_from: str, drift_to: str) -> set[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "diff", "--name-only", f"{drift_from}..{drift_to}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def _validate_base_drift(
+    receipt: dict[str, object],
+    repo_root: Path | None,
+    *,
+    pr_number: str | int | None,
+    base_drift_acknowledged: bool,
+    drift_reason: str | None,
+) -> None:
+    branch_base = receipt.get("branch_base")
+    if not isinstance(branch_base, str) or not branch_base:
+        return
+    current_main_tip = _git_current_main_tip(repo_root)
+    if not current_main_tip:
+        return
+    if branch_base == current_main_tip:
+        if base_drift_acknowledged:
+            print(
+                "WARNING: base_drift_acknowledged provided but branch_base already matches current main; ignoring drift acknowledgement.",
+                file=sys.stderr,
+            )
+        return
+    if not base_drift_acknowledged:
+        raise SystemExit(
+            "base drift detected: branch_base does not match current main; pass --base-drift-acknowledged and a valid --drift-reason to continue."
+        )
+    if not drift_reason:
+        raise SystemExit("base drift detected: missing --drift-reason.")
+    try:
+        drift_data = json.loads(drift_reason)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid drift_reason JSON: {exc}") from exc
+    if not isinstance(drift_data, dict):
+        raise SystemExit("drift_reason must be a JSON object.")
+    drift_from = drift_data.get("drift_from")
+    drift_to = drift_data.get("drift_to")
+    orthogonal_verified = drift_data.get("orthogonal_files_verified")
+    if drift_from != branch_base:
+        raise SystemExit("drift_reason drift_from must match branch_base.")
+    if drift_to != current_main_tip:
+        raise SystemExit("drift_reason drift_to must match current main.")
+    if orthogonal_verified is not True:
+        raise SystemExit("drift_reason must set orthogonal_files_verified true.")
+    if pr_number is None:
+        raise SystemExit("base drift validation requires --pr-number.")
+    drift_files = _git_diff_name_only(repo_root, str(drift_from), str(drift_to))
+    pr_files = _gh_pr_files(repo_root, pr_number)
+    overlap = sorted(drift_files & pr_files)
+    if overlap:
+        raise SystemExit("base drift is not orthogonal; overlapping files: " + ", ".join(overlap))
+
+
 def _validate_completion_receipt(
     receipt: dict[str, object],
     source_dispatch: dict[str, object] | None,
-    *,
-    core_ux_gate: str | None,
 ) -> None:
     expected_base = (
         source_dispatch.get("expected_base_sha")
         if isinstance(source_dispatch, dict)
         else None
     )
+    if isinstance(source_dispatch, dict) and source_dispatch.get("core_ux") and not receipt.get("core_ux_gate"):
+        raise SystemExit("core_ux_gate is required for core_ux steps")
     if not isinstance(expected_base, str) or not expected_base:
         return
 
@@ -524,12 +615,6 @@ def _validate_completion_receipt(
         raise SystemExit(
             "branch_base mismatch: receipt base does not match dispatch expected_base_sha."
             " Rebase the feature branch onto the current main and retry."
-        )
-
-    if _requires_core_ux_gate(source_dispatch) and core_ux_gate is None:
-        raise SystemExit(
-            "core_ux_gate is required for core_ux steps; pass --core-ux-gate "
-            "met|unmet|n_a."
         )
 
 
@@ -570,16 +655,23 @@ def main() -> int:
         receipt["ci_conclusion"] = args.ci_conclusion
     if args.core_ux_gate is not None:
         receipt["core_ux_gate"] = args.core_ux_gate
+    if args.base_drift_acknowledged:
+        receipt["base_drift_acknowledged"] = True
+    if args.drift_reason is not None:
+        receipt["drift_reason"] = args.drift_reason
     source_dispatch_receipt = _load_dispatch_receipt_for_completion(
         profile,
         task_id=args.task_id,
         source=args.source,
     )
     if not args.ack_only:
-        _validate_completion_receipt(
+        _validate_completion_receipt(receipt, source_dispatch_receipt)
+        _validate_base_drift(
             receipt,
-            source_dispatch_receipt,
-            core_ux_gate=args.core_ux_gate,
+            getattr(profile, "repo_root", None),
+            pr_number=args.pr_number,
+            base_drift_acknowledged=args.base_drift_acknowledged,
+            drift_reason=args.drift_reason,
         )
 
     source_role = profile.seat_roles.get(args.source, "")
@@ -619,6 +711,7 @@ def main() -> int:
             verdict=args.verdict,
             commit=args.commit,
             test_policy=receipt_test_policy,
+            audit_dir=profile.handoff_dir / "audit",
         )
         print(ack_line)
         print(f"receipt: {receipt_path}")
@@ -896,6 +989,7 @@ def main() -> int:
         verdict=args.verdict,
         commit=args.commit,
         test_policy=receipt_test_policy,
+        audit_dir=profile.handoff_dir / "audit",
     )
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")

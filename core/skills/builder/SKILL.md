@@ -28,11 +28,15 @@ Before relaying PASS to planner, builder DELIVERY.md MUST include all 6:
 5. CI 3.11 conclusion=success OR strict-diff vs main = 0
 6. `git merge-base clawseat/main clawseat/<branch>` = `clawseat/main` HEAD
 
-When source dispatch marks `core_ux=true`, append:
-
-7. `core_ux_gate: met|unmet|n_a`
-- If `met`, include 1-3 evidence snippets (command output, URL, screenshot path,
-  or log excerpt) proving the product-acceptance gate passed.
-
 Closure block missing or any line failing = relay is malformed.
 Use `complete_handoff.py --branch <name>` to auto-fill `branch_base` + `branch_tip`.
+
+
+## DF base-drift closeout note
+- `complete_handoff.py` now accepts `--base-drift-acknowledged` and `--drift-reason` for intentional completion on an older dispatch base.
+- When `branch_base` differs from current `main`, supply a JSON `drift_reason` with `drift_from`, `drift_to`, and `orthogonal_files_verified`.
+- If the branch is already aligned with current `main`, the script warns and ignores the acknowledgement flag.
+
+## Core UX gate note
+- `core_ux_gate` is still mandatory on core_ux closeouts; do not swallow a PASS relay or normalize it away.
+- `SWALLOW PASS DENIED` means the closure must surface `core_ux_gate` explicitly instead of claiming success through omission.

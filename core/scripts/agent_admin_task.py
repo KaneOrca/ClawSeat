@@ -19,6 +19,7 @@ DISPATCH_LOG_COMMENT = (
     "<!-- dispatch_task.py / complete_handoff.py append entries here. "
     "Do not delete this section. -->"
 )
+DISPATCH_LOG_HEAL_NOTE = "<!-- auto-healed by dispatch_task.py -->"
 
 
 @dataclass
@@ -81,8 +82,8 @@ def _status_template(task_id: str) -> str:
     return (
         f"# Status: {task_id}\n\n"
         "status: pending\n\n"
-        f"{DISPATCH_LOG_HEADER}\n\n"
-        f"{DISPATCH_LOG_COMMENT}\n"
+        f"{DISPATCH_LOG_COMMENT}\n\n"
+        f"{DISPATCH_LOG_HEADER}\n"
     )
 
 
@@ -91,7 +92,7 @@ def _ensure_status_dispatch_log_section(path: Path) -> None:
     if DISPATCH_LOG_HEADER in text:
         return
     path.write_text(
-        text.rstrip() + f"\n\n{DISPATCH_LOG_HEADER}\n\n{DISPATCH_LOG_COMMENT}\n",
+        text.rstrip() + f"\n\n{DISPATCH_LOG_HEAL_NOTE}\n\n{DISPATCH_LOG_HEADER}\n",
         encoding="utf-8",
     )
 
