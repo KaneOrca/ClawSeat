@@ -98,7 +98,14 @@ materialized_seats = [\"planner\", \"builder\"]
     return profile, handoffs, tasks
 
 
-def _dispatch(profile: Path, task_id: str, *, no_notify: bool = True) -> subprocess.CompletedProcess[str]:
+def _dispatch(
+    profile: Path,
+    task_id: str,
+    *,
+    no_notify: bool = True,
+    expected_branch: str = "feat/CX-test",
+    expected_worktree: str = "/tmp/CX-test-wt",
+) -> subprocess.CompletedProcess[str]:
     args = [
         str(_DISPATCH),
         "--profile", str(profile),
@@ -109,11 +116,11 @@ def _dispatch(profile: Path, task_id: str, *, no_notify: bool = True) -> subproc
         "--objective", "run",
         "--test-policy", "UPDATE",
         "--reply-to", "planner",
-        "--expected-branch",
-        "feat/CX-test",
-        "--expected-worktree",
-        "/tmp/CX-test-wt",
     ]
+    if expected_branch:
+        args.extend(["--expected-branch", expected_branch])
+    if expected_worktree:
+        args.extend(["--expected-worktree", expected_worktree])
     if no_notify:
         args.append("--no-notify")
     return _run(*args)
