@@ -377,11 +377,12 @@ def _profile_handoff_path(profile: object, task_id: str, source: str, target: st
 def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Path]:
     handoffs_dir = Path(os.path.expandvars(str(handoffs_dir))).expanduser().resolve()
     pattern = f"{sanitize_name(task_id)}__*__planner.json"
+    def _emit_skip_rename() -> None:
+        message = f"info: skip rename; no incoming planner handoffs found for {task_id} in {handoffs_dir}"
+        print(message)
+        print(message, file=sys.stderr)
     if not handoffs_dir.exists():
-        print(
-            f"info: skip rename; no incoming planner handoffs found for {task_id} in {handoffs_dir}",
-            file=sys.stderr,
-        )
+        _emit_skip_rename()
         return []
     candidates = [path for path in handoffs_dir.glob(pattern) if path.is_file()]
     candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
@@ -391,10 +392,7 @@ def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Pa
         path.replace(consumed)
         renamed.append(consumed)
     if not renamed:
-        print(
-            f"info: skip rename; no incoming planner handoffs found for {task_id} in {handoffs_dir}",
-            file=sys.stderr,
-        )
+        _emit_skip_rename()
     return renamed
 
 

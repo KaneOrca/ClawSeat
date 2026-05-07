@@ -63,7 +63,7 @@ def _make_profile(
     status = tasks / "STATUS.md"
     status.parent.mkdir(parents=True, exist_ok=True)
     status.write_text(status_text if status_text is not None else _status_doc(), encoding="utf-8")
-    repo_root = repo_root or _REPO
+    repo_root = repo_root or (tmp_path / "missing-repo")
 
     profile = tmp_path / "profile.toml"
     profile.write_text(

@@ -24,6 +24,7 @@ from _common import (
     assert_target_not_memory,
     broadcast_feishu_group_message,
     build_notify_message,
+    load_json,
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     normalize_role,
@@ -520,7 +521,7 @@ def main() -> int:
         return 2
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
-    if target_role == "builder":
+    if target_role == "builder" and not args.finding_id:
         outstanding_task = _builder_outstanding_task(todo_path)
         if outstanding_task and outstanding_task != args.task_id:
             if args.force_parallel_builder:

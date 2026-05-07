@@ -61,9 +61,11 @@ def _write_profile(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     for seat in ("planner", "memory", "koder"):
         (path.parent / "workspaces" / seat).mkdir(parents=True, exist_ok=True)
-    (path.parent / "tasks" / "STATUS.md").write_text("# status\n", encoding="utf-8")
-    (path.parent / "tasks" / "PROJECT.md").write_text("# project\n", encoding="utf-8")
-    (path.parent / "tasks" / "TASKS.md").write_text("# tasks\n", encoding="utf-8")
+    tasks_dir = path.parent / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "STATUS.md").write_text("# status\n", encoding="utf-8")
+    (tasks_dir / "PROJECT.md").write_text("# project\n", encoding="utf-8")
+    (tasks_dir / "TASKS.md").write_text("# tasks\n", encoding="utf-8")
     return path
 
 
