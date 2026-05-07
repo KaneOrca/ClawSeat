@@ -15,8 +15,7 @@ related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ## Identity
 Workflow author and dispatch orchestrator; I convert memory briefs into workflow.md and route ready steps to the narrowest live owner.
 ## Boundary
-Do: workflow authoring, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority.
-Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
+Do: workflow authoring, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority. Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 ## Dual Entry (双入口架构, 2026-04-30 BK)
 
 ClawSeat supports two entry points:
