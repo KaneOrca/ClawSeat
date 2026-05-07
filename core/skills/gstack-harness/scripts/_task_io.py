@@ -312,6 +312,9 @@ def write_delivery(
     user_summary: str | None = None,
     next_action: str | None = None,
     correlation_id: str | None = None,
+    branch: str | None = None,
+    commit: str | None = None,
+    sweep_count: int | str | None = None,
 ) -> None:
     lines = [
         f"task_id: {task_id}",
@@ -322,6 +325,12 @@ def write_delivery(
     ]
     if correlation_id:
         lines.append(f"correlation_id: {correlation_id}")
+    if branch:
+        lines.append(f"branch: {branch}")
+    if commit:
+        lines.append(f"commit: {commit}")
+    if sweep_count is not None:
+        lines.append(f"sweep_count: {sweep_count}")
     lines += [
         "",
         f"# Delivery: {title}",

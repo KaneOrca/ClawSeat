@@ -181,6 +181,20 @@ def _seat_fallback_receipt_path(profile: object, seat: str, primary: Path) -> Pa
     return profile.workspace_for(seat) / ".clawseat" / "handoffs" / primary.name  # type: ignore[attr-defined]
 
 
+def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Path]:
+    consumed_paths = sorted(handoffs_dir.glob(f"{task_id}__*__planner.json.consumed"))
+    for path in sorted(handoffs_dir.glob(f"{task_id}__*__planner.json")):
+        consumed = path.with_name(f"{path.name}.consumed")
+        path.replace(consumed)
+        consumed_paths.append(consumed)
+    if not consumed_paths:
+        print(
+            f"info: no incoming builder→planner receipt for task {task_id!r}; skip rename",
+            file=sys.stderr,
+        )
+    return consumed_paths
+
+
 def persist_delivery(
     profile: object,
     *,
@@ -196,6 +210,9 @@ def persist_delivery(
     user_summary: str | None = None,
     next_action: str | None = None,
     correlation_id: str | None = None,
+    branch: str | None = None,
+    commit: str | None = None,
+    sweep_count: int | None = None,
 ) -> tuple[Path, bool]:
     primary = profile.delivery_path(seat)  # type: ignore[attr-defined]
     try:
@@ -212,6 +229,9 @@ def persist_delivery(
             user_summary=user_summary,
             next_action=next_action,
             correlation_id=correlation_id,
+            branch=branch,
+            commit=commit,
+            sweep_count=sweep_count,
         )
         return primary, False
     except PermissionError as exc:
@@ -229,6 +249,9 @@ def persist_delivery(
             user_summary=user_summary,
             next_action=next_action,
             correlation_id=correlation_id,
+            branch=branch,
+            commit=commit,
+            sweep_count=sweep_count,
         )
         print(
             f"warn: delivery path {primary} not writable ({exc}); "
@@ -370,6 +393,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--status", default="completed", help="Delivery status.")
     parser.add_argument("--verdict", help="Canonical review verdict.")
     parser.add_argument("--commit", help="Optional commit SHA to include in STATUS.md ack log.")
+    parser.add_argument("--sweep-count", type=int, help="Optional sweep count to record in delivery metadata.")
+    parser.add_argument(
+        "--enforce-planner-self-closeout",
+        nargs="?",
+        const=True,
+        default=True,
+        type=_parse_bool,
+        help="When planner relays to memory, rename incoming builder receipts and write planner/DELIVERY.md first. Use --enforce-planner-self-closeout=false to bypass.",
+    )
     parser.add_argument(
         "--test-policy",
         choices=["UPDATE", "FREEZE", "EXTEND", "N/A"],
@@ -585,6 +617,17 @@ def _validate_base_drift(
         raise SystemExit("base drift is not orthogonal; overlapping files: " + ", ".join(overlap))
 
 
+def _parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(
+        f"invalid boolean value {value!r}; use true/false, yes/no, on/off, or 1/0"
+    )
+
+
 def _validate_completion_receipt(
     receipt: dict[str, object],
     source_dispatch: dict[str, object] | None,
@@ -659,6 +702,12 @@ def main() -> int:
         receipt["base_drift_acknowledged"] = True
     if args.drift_reason is not None:
         receipt["drift_reason"] = args.drift_reason
+    if args.commit is not None:
+        receipt["commit"] = args.commit
+    if args.branch:
+        receipt["branch"] = args.branch
+    if args.sweep_count is not None:
+        receipt["sweep_count"] = args.sweep_count
     source_dispatch_receipt = _load_dispatch_receipt_for_completion(
         profile,
         task_id=args.task_id,
@@ -769,23 +818,39 @@ def main() -> int:
                 "planner delivery with USER_DECISION_NEEDED requires --next-action"
             )
 
+    planner_to_memory = args.source == "planner" and args.target == "memory"
+    if planner_to_memory:
+        if args.enforce_planner_self_closeout:
+            _mark_planner_incoming_consumed(Path(profile.handoff_dir), args.task_id)
+        else:
+            print(
+                "WARNING: bypassing planner self-closeout; .consumed + DELIVERY.md may drift",
+                file=sys.stderr,
+            )
+
     summary = args.summary or f"{args.task_id} completed by {args.source}."
     title = args.title or args.task_id
-    delivery_path, used_fallback_delivery = persist_delivery(
-        profile,
-        seat=args.source,
-        task_id=args.task_id,
-        owner=args.source,
-        target=args.target,
-        title=title,
-        summary=summary,
-        status=args.status,
-        verdict=args.verdict,
-        frontstage_disposition=args.frontstage_disposition,
-        user_summary=args.user_summary,
-        next_action=args.next_action,
-        correlation_id=correlation_id,
-    )
+    delivery_path = profile.delivery_path(args.source)
+    used_fallback_delivery = False
+    if not planner_to_memory or args.enforce_planner_self_closeout:
+        delivery_path, used_fallback_delivery = persist_delivery(
+            profile,
+            seat=args.source,
+            task_id=args.task_id,
+            owner=args.source,
+            target=args.target,
+            title=title,
+            summary=summary,
+            status=args.status,
+            verdict=args.verdict,
+            frontstage_disposition=args.frontstage_disposition,
+            user_summary=args.user_summary,
+            next_action=args.next_action,
+            correlation_id=correlation_id,
+            branch=args.branch if planner_to_memory else None,
+            commit=args.commit if planner_to_memory else None,
+            sweep_count=args.sweep_count if planner_to_memory else None,
+        )
     source_todo_path = complete_source_queue_if_possible(
         profile,
         seat=args.source,
