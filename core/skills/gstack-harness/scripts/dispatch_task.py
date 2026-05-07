@@ -35,6 +35,7 @@ from _common import (
     utc_now_iso,
     write_json,
     write_todo,
+    sanitize_name,
 )
 
 from seat_resolver import resolve_seat_from_profile
@@ -510,6 +511,7 @@ def main() -> int:
         args.skill_refs,
     )
     todo_path = profile.todo_path(args.target)
+    audit_dir = _expanded_handoff_dir(profile) / "audit"
     if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
@@ -716,6 +718,7 @@ def main() -> int:
         hypothesis_counter=finding_counter,
         rca_override=args.rca_override,
         core_ux=args.core_ux,
+        audit_dir=audit_dir,
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
