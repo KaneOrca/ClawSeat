@@ -296,6 +296,7 @@ git 能 bisect。
 | 文档 | 你看到的 |
 |---|---|
 | [`docs/INSTALL.md`](docs/INSTALL.md) | 5 步 install decision tree（你的 AI 会自己读） |
+| [`docs/INSTALL.zh-CN.md`](docs/INSTALL.zh-CN.md) | 5 步 install decision tree（中文） |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | L1/L2/L3 Pyramid + state.db ledger + 三档 templates |
 | [`docs/CANONICAL-FLOW.md`](docs/CANONICAL-FLOW.md) | dispatch / completion / ACK 三件套 |
 | [`docs/OPENCLAW.md`](docs/OPENCLAW.md) | ClawSeat 怎么用 OpenClaw |
