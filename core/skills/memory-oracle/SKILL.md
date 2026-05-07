@@ -113,6 +113,33 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
+## Memory-driven Planner Compaction
+
+This supersedes the old planner compaction note. Memory is the relay
+gate for planner compaction requests.
+
+When memory consumes a planner relay, it MUST:
+
+1. Check the relay text for `[memory: compact-me]` with the helper:
+   `python3 core/skills/memory-oracle/scripts/check_compact_marker.py --relay-text-file <path>`
+2. If the marker is present, inspect planner idleness before compacting:
+   `tmux capture-pane -t install-planner-claude -p | tail -8`
+   The tail must show the prompt and no active thinking/spinner state.
+3. If the planner is idle, send `/compact` back via
+   `send-and-verify.sh --project install planner "/compact"`.
+4. Append an observability line to `STATUS.md` after the compact is sent.
+
+Fallback when the marker is absent:
+
+- Check how many closed waves have happened since the last compact with
+  `python3 core/skills/memory-oracle/scripts/wave_count_since_compact.py --status-file ~/.agents/tasks/install/STATUS.md --threshold 5`
+- When the helper reports `triggered=true`, run the same idle gate and compact
+  flow as above.
+- When the helper reports `triggered=false`, do nothing.
+
+Memory-driven compaction is the primary planner path; the watchdog is backup
+only for non-planner seats.
+
 ## Brief Schema (user_facing)
 
 For user-facing changes, set `user_facing: true` in the brief frontmatter and

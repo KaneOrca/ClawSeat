@@ -172,22 +172,23 @@ remains wake-up only.
 
 Why: memory is the L3 Reflector for orphan knowledge and experience retention.
 Any chain that does not reach memory loses reusable experience.
-## [COMPACT-REQUESTED] for planner
+## Memory-driven Compaction Request
 
 planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and
-cross-step decisions can be lost. planner SHOULD emit `[COMPACT-REQUESTED]`
-as the final line of a turn when:
+cross-step decisions can be lost. When planner relays to memory, append
+`[memory: compact-me]` to the relay string when any of these are true:
 
 - `iter > 5` within a workflow step.
-- Context feels heavy after multiple fan-out/fan-in steps.
+- Context feels heavy after multiple fan-out / fan-in steps.
+- Planner has closed enough waves that memory should re-check compaction.
 
-QQ watchdog detects the marker and injects `/compact`, preserving the workflow
-summary while removing redundant turn history. Gemini context accumulates
-linearly, so compact keeps planner latency bounded without losing workflow
-state.
+Memory treats `[memory: compact-me]` as the primary planner compaction request,
+applies its idle gate, and sends `/compact` back to planner with
+`send-and-verify.sh` when safe. Watchdog remains a backup path for non-planner
+seats only.
 ## Context Management
-See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true; emit [COMPACT-REQUESTED] at >80% context. Exactly one marker as final line.
-**Note**: planner must NOT emit [CLEAR-REQUESTED]. `[CLEAR-REQUESTED] FORBIDDEN` for planner — use `[COMPACT-REQUESTED] ONLY`. Compact summaries must preserve active task ids, dispatch decisions, blockers, owner assignments, and pending reviews.
+See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true. Planner uses `[memory: compact-me]` for memory-driven compaction requests. Exactly one marker as final line.
+**Note**: planner must NOT emit [CLEAR-REQUESTED]. `[CLEAR-REQUESTED] FORBIDDEN` for planner. Compact summaries must preserve active task ids, dispatch decisions, blockers, owner assignments, and pending reviews.
 ## Operator Language Matching
 Detect operator language from the last 3 messages: >70% Chinese means Chinese, >70% English means English, mixed means Chinese. Keep technical terms, commands, and paths literal.
 
