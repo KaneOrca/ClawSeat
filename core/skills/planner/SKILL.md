@@ -141,28 +141,11 @@ or `complete_handoff.py`, planner MUST within the same turn:
 4. Relay to memory with the canonical closeout helper:
    `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify`
    Use the canonical verdict from step 2. `send-and-verify.sh` is wake-up only and may follow the durable receipt when a separate nudge is needed; it is not the primary relay path.
-
 Why: if planner forms a verdict but idles waiting for user input, memory does
 not know the task is ready and the planner-to-memory chain breaks.
 
-Planner self-closeout note: see §Self-closeout on memory relay for the atomic
-builder→planner receipt consumption and planner/DELIVERY.md rewrite that
-happens before the memory relay.
-
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
-canonical relay; still update `planner/DELIVERY.md` as authoritative status.
-## Self-closeout on memory relay
-
-When `complete_handoff.py` runs with `--source planner --target memory`, it
-atomically:
-
-1. renames incoming `<task_id>__*__planner.json` receipts to `.json.consumed`
-2. writes `planner/DELIVERY.md` with commit, branch, sweep count, and the
-   one-line summary extracted from builder DELIVERY
-3. persists the planner→memory receipt after the delivery write
-
-Escape hatch: `--enforce-planner-self-closeout=false` skips the rename and
-planner/DELIVERY write, so `.consumed` and DELIVERY.md may drift.
+canonical relay; still update `planner/DELIVERY.md` as authoritative status. Planner self-closeout protocol: see [`core/references/planner-self-closeout-protocol.md`](../../references/planner-self-closeout-protocol.md).
 ### Chain End Relay to Memory (双入口都适用, 2026-04-30 BK)
 
 Regardless of whether the chain started through memory-entry or planner-entry,

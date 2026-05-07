@@ -7,7 +7,8 @@ from pathlib import Path
 from textwrap import dedent
 
 
-SCRIPT = Path("/Users/ywf/coding/ClawSeat/core/skills/gstack-harness/scripts/complete_handoff.py")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "complete_handoff.py"
 
 
 def _git(repo: Path, *args: str) -> str:
