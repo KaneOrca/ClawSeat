@@ -411,6 +411,11 @@ def parse_args() -> argparse.Namespace:
         help="Short frontstage instruction, especially when a user decision is needed.",
     )
     parser.add_argument(
+        "--allow-branch-mismatch",
+        action="store_true",
+        help="Bypass branch lock validation when a deliberate worktree mismatch is expected.",
+    )
+    parser.add_argument(
         "--enforce-planner-self-closeout",
         nargs="?",
         const=True,
@@ -482,6 +487,32 @@ def _load_dispatch_receipt_for_completion(
         if isinstance(payload, dict) and payload.get("kind") == "dispatch":
             return payload
     return None
+
+
+def _validate_branch_lock(
+    receipt: dict[str, object],
+    dispatch_receipt: dict[str, object] | None,
+    *,
+    source: str,
+    target: str,
+    allow_branch_mismatch: bool = False,
+) -> None:
+    if not source.startswith("builder") or not target.startswith("planner"):
+        return
+    if not isinstance(dispatch_receipt, dict):
+        return
+    expected_branch = dispatch_receipt.get("expected_branch")
+    if not isinstance(expected_branch, str) or not expected_branch:
+        return
+    actual_branch = receipt.get("branch_tip")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        return
+    if actual_branch == expected_branch:
+        return
+    if allow_branch_mismatch:
+        print("WARNING: bypassing branch lock; worktree drift risk", file=sys.stderr)
+        return
+    raise SystemExit(f"BOUNCE: branch mismatch — expected {expected_branch} got {actual_branch}")
 
 
 def _git_main_ref(repo_root: Path) -> str | None:
@@ -653,6 +684,14 @@ def main() -> int:
                 verb="consumed",
             )
         return 0
+
+    _validate_branch_lock(
+        receipt,
+        source_dispatch_receipt,
+        source=args.source,
+        target=args.target,
+        allow_branch_mismatch=args.allow_branch_mismatch,
+    )
 
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
         raise SystemExit(
