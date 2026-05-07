@@ -94,3 +94,7 @@ JSON receipt fields above.
 ## DF completion receipt additions
 - `base_drift_acknowledged` - optional boolean completion receipt field for intentional current-main drift.
 - `drift_reason` - optional JSON string capturing `drift_from`, `drift_to`, and `orthogonal_files_verified`.
+
+## DF dispatch receipt additions
+- `finding_id` - optional string identifying the finding/hypothesis bucket for a dispatch.
+- `hypothesis_counter` - optional integer count of dispatch attempts recorded for that `finding_id`.

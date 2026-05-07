@@ -645,6 +645,8 @@ def main() -> int:
         receipt["pr_number"] = args.pr_number
     if args.ci_conclusion is not None:
         receipt["ci_conclusion"] = args.ci_conclusion
+    if args.core_ux_gate is not None:
+        receipt["core_ux_gate"] = args.core_ux_gate
     if args.base_drift_acknowledged:
         receipt["base_drift_acknowledged"] = True
     if args.drift_reason is not None:
@@ -655,7 +657,7 @@ def main() -> int:
         source=args.source,
     )
     if not args.ack_only:
-        _validate_completion_receipt(receipt, source_dispatch_receipt)
+        _validate_completion_receipt(receipt, source_dispatch_receipt, core_ux_gate=args.core_ux_gate)
         _validate_base_drift(
             receipt,
             getattr(profile, "repo_root", None),
@@ -701,6 +703,7 @@ def main() -> int:
             verdict=args.verdict,
             commit=args.commit,
             test_policy=receipt_test_policy,
+            audit_dir=profile.handoff_dir / "audit",
         )
         print(ack_line)
         print(f"receipt: {receipt_path}")
@@ -978,6 +981,7 @@ def main() -> int:
         verdict=args.verdict,
         commit=args.commit,
         test_policy=receipt_test_policy,
+        audit_dir=profile.handoff_dir / "audit",
     )
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")

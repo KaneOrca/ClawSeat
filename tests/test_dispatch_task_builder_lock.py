@@ -7,7 +7,8 @@ from pathlib import Path
 from tests.test_complete_handoff import _dispatch, _write_profile
 
 
-DISPATCH_SCRIPT = Path("/Users/ywf/coding/ClawSeat/core/skills/gstack-harness/scripts/dispatch_task.py")
+ROOT = Path(__file__).resolve().parents[1]
+DISPATCH_SCRIPT = ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "dispatch_task.py"
 
 
 def _init_repo(tmp_path: Path) -> Path:

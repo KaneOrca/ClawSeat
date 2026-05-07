@@ -9,7 +9,8 @@ from pathlib import Path
 from tests.test_complete_handoff import _dispatch, _write_profile
 
 
-COMPLETE_SCRIPT = Path("/Users/ywf/coding/ClawSeat/core/skills/gstack-harness/scripts/complete_handoff.py")
+ROOT = Path(__file__).resolve().parents[1]
+COMPLETE_SCRIPT = ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "complete_handoff.py"
 
 
 def _init_repo(tmp_path: Path) -> Path:

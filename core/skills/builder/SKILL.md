@@ -36,3 +36,7 @@ Use `complete_handoff.py --branch <name>` to auto-fill `branch_base` + `branch_t
 - `complete_handoff.py` now accepts `--base-drift-acknowledged` and `--drift-reason` for intentional completion on an older dispatch base.
 - When `branch_base` differs from current `main`, supply a JSON `drift_reason` with `drift_from`, `drift_to`, and `orthogonal_files_verified`.
 - If the branch is already aligned with current `main`, the script warns and ignores the acknowledgement flag.
+
+## Core UX gate note
+- `core_ux_gate` is still mandatory on core_ux closeouts; do not swallow a PASS relay or normalize it away.
+- `SWALLOW PASS DENIED` means the closure must surface `core_ux_gate` explicitly instead of claiming success through omission.

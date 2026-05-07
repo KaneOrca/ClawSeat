@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import re
@@ -69,6 +70,22 @@ def _outstanding_builder_dispatch_task_id(handoff_dir: Path | str) -> str | None
         if not completion_path.exists():
             return task_id
     return None
+
+
+def _finding_hypothesis_counter(handoff_dir: Path | str, finding_id: str) -> int:
+    handoff_dir = Path(handoff_dir)
+    if not handoff_dir.exists():
+        return 1
+    suffix = "__planner__builder.json"
+    count = 0
+    for receipt_path in sorted(handoff_dir.glob(f"*{suffix}")):
+        try:
+            payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 best-effort scan
+            continue
+        if isinstance(payload, dict) and payload.get("finding_id") == finding_id:
+            count += 1
+    return count + 1
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
@@ -327,6 +344,12 @@ def parse_args() -> argparse.Namespace:
         help="Bypass the serial builder dispatch lock.",
     )
     parser.add_argument("--task-id", required=True, help="Task id.")
+    parser.add_argument("--finding-id", help="Optional finding id for hypothesis-fix tracking.")
+    parser.add_argument(
+        "--rca-override",
+        action="store_true",
+        help="Suppress the hypothesis counter warning when intentionally re-dispatching a finding.",
+    )
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
     parser.add_argument(
@@ -519,6 +542,19 @@ def main() -> int:
         "notified_at": None,
         "notify_message": None,
     }
+    if getattr(args, "finding_id", None):
+        finding_id = str(args.finding_id)
+        hypothesis_counter = _finding_hypothesis_counter(profile.handoff_dir, finding_id)
+        receipt["finding_id"] = finding_id
+        receipt["hypothesis_counter"] = hypothesis_counter
+        if hypothesis_counter > 1 and not getattr(args, "rca_override", False):
+            print(
+                f"warn: hypothesis counter {hypothesis_counter} exceeded for finding_id={finding_id}; "
+                "pass --rca-override to suppress",
+                file=sys.stderr,
+            )
+        if getattr(args, "rca_override", False):
+            receipt["rca_override"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
     if do_notify:
@@ -623,6 +659,7 @@ def main() -> int:
         task_id=args.task_id,
         target=args.target,
         test_policy=args.test_policy,
+        audit_dir=profile.handoff_dir / "audit",
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
