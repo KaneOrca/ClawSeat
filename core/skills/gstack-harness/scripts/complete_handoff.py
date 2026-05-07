@@ -593,6 +593,8 @@ def _validate_completion_receipt(
         if isinstance(source_dispatch, dict)
         else None
     )
+    if isinstance(source_dispatch, dict) and source_dispatch.get("core_ux") and not receipt.get("core_ux_gate"):
+        raise SystemExit("core_ux_gate is required for core_ux steps")
     if not isinstance(expected_base, str) or not expected_base:
         return
 
@@ -662,7 +664,7 @@ def main() -> int:
         source=args.source,
     )
     if not args.ack_only:
-        _validate_completion_receipt(receipt, source_dispatch_receipt, core_ux_gate=args.core_ux_gate)
+        _validate_completion_receipt(receipt, source_dispatch_receipt)
         _validate_base_drift(
             receipt,
             getattr(profile, "repo_root", None),

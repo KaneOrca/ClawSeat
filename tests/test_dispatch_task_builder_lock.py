@@ -36,7 +36,7 @@ def _dispatch_with_force(profile: Path, task_id: str, *, force_parallel_builder:
         str(profile),
         "--source",
         "planner",
-        "--target-role",
+        "--target",
         "builder",
         "--task-id",
         task_id,
