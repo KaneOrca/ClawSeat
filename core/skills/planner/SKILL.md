@@ -186,6 +186,7 @@ Memory treats `[memory: compact-me]` as the primary planner compaction request,
 applies its idle gate, and sends `/compact` back to planner with
 `send-and-verify.sh` when safe. Watchdog remains a backup path for non-planner
 seats only.
+Legacy COMPACT wording is deprecated; planner now uses `[memory: compact-me]`.
 ## Context Management
 See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true. Planner uses `[memory: compact-me]` for memory-driven compaction requests. Exactly one marker as final line.
 **Note**: planner must NOT emit [CLEAR-REQUESTED]. `[CLEAR-REQUESTED] FORBIDDEN` for planner. Compact summaries must preserve active task ids, dispatch decisions, blockers, owner assignments, and pending reviews.

@@ -114,40 +114,15 @@ Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
 ## Memory-driven Planner Compaction
+This supersedes the old planner compaction note. Memory is the relay gate for planner compaction requests.
 
-This supersedes the old planner compaction note. Memory is the relay
-gate for planner compaction requests.
+When memory sees `[memory: compact-me]`, it MUST check planner idleness with `tmux capture-pane -t install-planner-claude -p | tail -8`, send `/compact` back via `send-and-verify.sh --project install planner "/compact"` if idle, and append one observability line to `STATUS.md`.
 
-When memory consumes a planner relay, it MUST:
-
-1. Check the relay text for `[memory: compact-me]` with the helper:
-   `python3 core/skills/memory-oracle/scripts/check_compact_marker.py --relay-text-file <path>`
-2. If the marker is present, inspect planner idleness before compacting:
-   `tmux capture-pane -t install-planner-claude -p | tail -8`
-   The tail must show the prompt and no active thinking/spinner state.
-3. If the planner is idle, send `/compact` back via
-   `send-and-verify.sh --project install planner "/compact"`.
-4. Append an observability line to `STATUS.md` after the compact is sent.
-
-Fallback when the marker is absent:
-
-- Check how many closed waves have happened since the last compact with
-  `python3 core/skills/memory-oracle/scripts/wave_count_since_compact.py --status-file ~/.agents/tasks/install/STATUS.md --threshold 5`
-- When the helper reports `triggered=true`, run the same idle gate and compact
-  flow as above.
-- When the helper reports `triggered=false`, do nothing.
-
-Memory-driven compaction is the primary planner path; the watchdog is backup
-only for non-planner seats.
+If the marker is absent, call `python3 core/skills/memory-oracle/scripts/wave_count_since_compact.py --status-file ~/.agents/tasks/install/STATUS.md --threshold 5`; when it reports `triggered=true`, run the same idle gate and compact flow, otherwise do nothing. Memory-driven compaction is the primary planner path; the watchdog is backup only for non-planner seats.
 
 ## Brief Schema (user_facing)
 
-For user-facing changes, set `user_facing: true` in the brief frontmatter and
-include:
-
-- `product_acceptance_criteria:` as a markdown checkbox list (5-minute verifiable
-  items)
-- `product_acceptance_criteria` is REQUIRED when `user_facing: true`
+For user-facing changes, set `user_facing: true` in the brief frontmatter and include `product_acceptance_criteria:` as a markdown checkbox list; it is REQUIRED when `user_facing: true`.
 
 If dispatching the same finding repeatedly, add `rca_override: true` only with
 explicit operator approval.
@@ -173,9 +148,7 @@ send-and-verify.sh --project <p> planner \
   "[<task_id>] workflow.md ready, brief: <path>"
 ```
 
-Why: `workflow.md` is the chain canonical state file. It enables patrol step
-monitoring, `notify_on_done: [memory]` routing, planner SWALLOW fallback
-decisions, and cross-seat dependency tracking.
+Why: `workflow.md` is the chain canonical state file; it enables patrol step monitoring, `notify_on_done: [memory]` routing, planner SWALLOW fallback decisions, and cross-seat dependency tracking.
 
 **禁止短路**: `send-and-verify.sh --project <p> planner "<inline brief>"`
 before workflow.md exists skips canonical state. Use send-and-verify only as
