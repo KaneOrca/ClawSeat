@@ -29,6 +29,7 @@ designer 在执行流程中读写：
 - **写入**：`$PROJECT_REPO_ROOT/creative/content/<unit_id>.md`（cs-write 产出内容）
 - **写入**：`$PROJECT_REPO_ROOT/creative/scores/<unit_id>-score.json`（cs-score 评分）
 - **写入**：`$PROJECT_REPO_ROOT/creative/reviews/<unit_id>-review.md`（审查意见）
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 
 ## 1. 身份约束
 
@@ -68,7 +69,7 @@ designer 在执行流程中读写：
   → 读 structure/units/<n>.md（单元简报）
   → 读 structure/world.md + entities.md（上下文锚点）
   → 读 brief.md（项目简报，用于对齐）
-  → 如果任务含 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
+  → 如果任务含 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out，按 creative chain 的 dispatch primitive 并行拆分。
   → 执行 cs-write：写 content/<unit_id>.md + meta.json
   → 执行 cs-score：写 scores/<unit_id>-score.json + report.md
   → 自我审查，确定 Verdict

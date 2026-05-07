@@ -17,6 +17,7 @@ description: >
 `creative-planner` 是 ClawSeat creative chain 中的**结构性创作规划**类 specialist，负责搭建世界观框架、人物体系和叙事结构，然后将分类任务派给 builder (codex)、将写作和评分任务派给 designer (gemini)。
 
 **关键区别**：creative-planner 不直接写长文内容——它做结构，designer 做执笔和评分，builder 做分类。
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 
 ## 1. 身份约束
 
@@ -98,7 +99,7 @@ python3 "$CLAWSEAT_ROOT/core/skills/gstack-harness/scripts/dispatch_task.py" \
         - `unit_brief_path: $PROJECT_REPO_ROOT/creative/structure/units/<n>-<title>.md`
         - `context_dir: $PROJECT_REPO_ROOT/creative/structure/`
         - `state_summary_path: $PROJECT_REPO_ROOT/creative/structure/state_<n-1>.md`
-3. 任何 owner_role specialist 收到 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
+3. 任何 owner_role specialist 收到 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out，交由对应 creative seat 并行处理。
 
 ### Step 3 — cs-score（designer 内嵌，随 cs-write 完成）
 

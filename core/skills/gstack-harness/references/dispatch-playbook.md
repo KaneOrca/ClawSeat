@@ -60,11 +60,10 @@ Template line to include in the objective or task body:
 > "This task has <N> independent sub-parts (Part A: <scope>; Part B: <scope>
 > [...]). Fan them out to sub-agents using your agent-dispatch primitive
 > (Claude `Agent` tool, Codex subagent, Gemini subagent). Serialize only the
-> final cross-check and single DELIVERY write-up. See
-> [references/sub-agent-fan-out.md] for the full pattern."
+> final cross-check and single DELIVERY write-up. The full pattern is
+> summarized in this playbook."
 
-See [Sub-agent fan-out](sub-agent-fan-out.md) for the trigger rules and
-anti-patterns.
+See this playbook for the trigger rules and anti-patterns.
 
 ## Specialist -> planner completion
 

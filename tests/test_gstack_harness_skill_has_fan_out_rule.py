@@ -12,8 +12,8 @@ def test_skill_md_has_fan_out_design_rule() -> None:
     assert "Sub-agent fan-out is the default" in skill_text, (
         "SKILL.md must contain the canonical Design-rule sentence so every seat loading this skill sees it"
     )
-    assert "sub-agent-fan-out.md" in skill_text, (
-        "SKILL.md must link to the reference doc (so Load-by-task trigger resolves)"
+    assert "seat-ownership.md" in skill_text, (
+        "SKILL.md must surface the seat-ownership cross-link for the harness ownership boundary"
     )
 
 

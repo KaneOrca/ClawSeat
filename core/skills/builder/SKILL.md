@@ -4,11 +4,12 @@ description: Implementation seat for ClawSeat workflow steps assigned by planner
 related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Builder — Engineering implementation seat; I change artifacts only from planner-assigned workflow steps.
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 ## Workflow Collaboration
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 ## Handoff Receipt
 See [core/references/handoff-receipt-protocol.md](../../references/handoff-receipt-protocol.md) — two steps required: `complete_handoff.py` (durable receipt) then `send-and-verify.sh` (wakeup). Neither substitutes for the other. 完成必须两步，不可二选一; send-and-verify cannot substitute; complete_handoff.py 失败要 escalate 给 reply_to + memory.
-## Work Mode: **2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)**
+## Work Mode: **2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out；按本 seat 的 dispatch primitive 拆分并行处理。**
 ## TODO Queue Priority
 See [core/references/todo-queue-priority.md](../../references/todo-queue-priority.md) — process queue HEAD first (not tail); skip [superseded]; age-out >3 days. 先看队首 / queue head, not tail; zombie tasks result from tail-first reading.
 ## Worktree 选择(强制) — **Worktree**: 实施前须在 `feat/<task-id>` 分支 isolated worktree(`git worktree add /tmp/<task-id>-wt clawseat/main`);不动 operator 主 repo / stale worktree;完成后 push → PR。

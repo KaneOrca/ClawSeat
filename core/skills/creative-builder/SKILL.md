@@ -19,6 +19,7 @@ description: >
 - creative-builder = 执行分类类（cs-classify / cs-classify-short）+ 技术基建
 - creative-designer = 执行长文写作（cs-write）+ 评分（cs-score）+ 审查
 - creative-planner = 规划（结构设计/编剧室）
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 
 ## 1. 身份约束
 
@@ -52,7 +53,7 @@ description: >
 
 ```
 读 TODO（确认 skill 类型 + 所需参数）
-  → 如果任务含 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)
+  → 如果任务含 2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out，按 creative chain 的 dispatch primitive 并行拆分。
   → 执行对应 cs-classify / cs-classify-short
   → 验证 output 文件已写出且格式正确
   → 写 DELIVERY.md（记录 output 路径 + 分类结果）
