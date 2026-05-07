@@ -111,7 +111,12 @@ def _prepare_repo(tmp_path: Path, *, feature_file: str, main_file: str) -> tuple
     _commit(repo, feature_file, "feature\n", "feature")
     profile, _handoffs, _tasks = _write_profile(tmp_path, repo)
 
-    first = _dispatch(profile, "task-1")
+    first = _dispatch(
+        profile,
+        "task-1",
+        expected_branch="feature",
+        expected_worktree="/tmp/feature-wt",
+    )
     assert first.returncode == 0
 
     subprocess.run(["git", "-C", str(repo), "checkout", "-q", "main"], check=True)

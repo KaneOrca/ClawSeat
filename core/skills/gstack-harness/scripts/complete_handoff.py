@@ -32,6 +32,7 @@ from _common import (
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     notify,
+    normalize_role,
     require_success,
     resolve_notify,
     send_feishu_user_message,
@@ -429,6 +430,11 @@ def parse_args() -> argparse.Namespace:
         "--drift-reason",
         help="JSON drift rationale with drift_from, drift_to, and orthogonal_files_verified.",
     )
+    parser.add_argument(
+        "--allow-branch-mismatch",
+        action="store_true",
+        help="Bypass builder→planner branch lock validation when the branch is intentionally drifting.",
+    )
     add_notify_args(parser)
     return parser.parse_args()
 
@@ -661,6 +667,34 @@ def _validate_completion_receipt(
         )
 
 
+def _validate_branch_lock(
+    receipt: dict[str, object],
+    source_dispatch: dict[str, object] | None,
+    *,
+    source: str,
+    target: str,
+    allow_branch_mismatch: bool = False,
+) -> None:
+    if normalize_role(source) != "builder" or normalize_role(target) != "planner":
+        return
+    if not isinstance(source_dispatch, dict):
+        return
+    expected_branch = source_dispatch.get("expected_branch")
+    if not isinstance(expected_branch, str) or not expected_branch:
+        return
+    actual_branch = receipt.get("branch") or receipt.get("branch_tip")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        return
+    if actual_branch == expected_branch:
+        return
+    if allow_branch_mismatch:
+        print("WARNING: bypassing branch lock; worktree drift risk", file=sys.stderr)
+        return
+    raise SystemExit(
+        f"BOUNCE: branch mismatch — expected {expected_branch} got {actual_branch}"
+    )
+
+
 def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
@@ -715,6 +749,13 @@ def main() -> int:
     )
     if not args.ack_only:
         _validate_completion_receipt(receipt, source_dispatch_receipt)
+        _validate_branch_lock(
+            receipt,
+            source_dispatch_receipt,
+            source=args.source,
+            target=args.target,
+            allow_branch_mismatch=args.allow_branch_mismatch,
+        )
         _validate_base_drift(
             receipt,
             getattr(profile, "repo_root", None),

@@ -164,6 +164,24 @@ def _git_main_tip(repo_root: Path | str | None) -> str | None:
     )
     return None
 
+
+def _dispatch_lock_metadata(
+    *,
+    task_id: str,
+    target_role: str,
+    expected_branch: str | None,
+    expected_worktree: str | None,
+) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    if target_role == "builder":
+        expected_branch = expected_branch or f"feat/{task_id}"
+        expected_worktree = expected_worktree or f"/tmp/{task_id}-wt"
+    if expected_branch:
+        fields["expected_branch"] = expected_branch
+    if expected_worktree:
+        fields["expected_worktree_path"] = expected_worktree
+    return fields
+
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
     "eng-review": {
@@ -412,6 +430,14 @@ def parse_args() -> argparse.Namespace:
             "See TOOLS/dispatch.md for the user-intent → key mapping."
         ),
     )
+    parser.add_argument(
+        "--expected-branch",
+        help="Expected feature branch for builder pickup verification (defaults to feat/<task-id> for builder targets).",
+    )
+    parser.add_argument(
+        "--expected-worktree",
+        help="Expected isolated worktree path for builder pickup verification (defaults to /tmp/<task-id>-wt for builder targets).",
+    )
     return parser.parse_args()
 
 
@@ -516,7 +542,7 @@ def main() -> int:
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
     reply_to = args.reply_to or args.source
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
-    target_role = normalize_role(profile.seat_roles.get(args.target, ""))
+    target_role = normalize_role(role_hint or profile.seat_roles.get(args.target, ""))
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     append_task_to_queue(
         todo_path,
@@ -579,6 +605,14 @@ def main() -> int:
             receipt["rca_override"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
+    receipt.update(
+        _dispatch_lock_metadata(
+            task_id=args.task_id,
+            target_role=target_role,
+            expected_branch=args.expected_branch,
+            expected_worktree=args.expected_worktree,
+        )
+    )
     if do_notify:
         message = build_notify_message(
             args.target,
