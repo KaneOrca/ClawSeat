@@ -5,6 +5,7 @@ description: Scheduled drift-inspection seat for ClawSeat code, docs, configurat
 # Patrol
 ## Identity / Boundary / Output: Cron-driven patrol seat; my only standing duty is scheduled code/doc/config drift inspection.
 Do: scheduled scans, 10 drift-type evidence, KB findings, `[PATROL-NOTIFY]`. Don't: enter dispatch chain, fix code, verify features, write new tests.
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 Use catalog scan/reporting skills chosen by workflow.md. Cron-triggered patrol supports daily or weekly scan modes only. Deliver KB finding plus `[PATROL-NOTIFY:scope=patrol]`; KB finding Markdown frontmatter must include `schema_version: 1` and `format: markdown_note`.
 
 ## Seat Health Patrol (per-cycle)
@@ -20,7 +21,7 @@ Each patrol cycle:
 ## Workflow Collaboration
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 ## Work Mode
-**2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)**
+**2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out；按 patrol 的 dispatch primitive 拆分并行处理。**
 ## Handoff Receipt
 See [core/references/handoff-receipt-protocol.md](../../references/handoff-receipt-protocol.md) — two steps required: `complete_handoff.py` (durable receipt) then `send-and-verify.sh` (wakeup). Neither substitutes for the other. 完成必须两步，不可二选一; send-and-verify cannot substitute; complete_handoff.py 失败要 escalate 给 reply_to + memory.
 Note: patrol 主线 cron-driven scan + `[PATROL-NOTIFY]` finding emit 不受此规则约束; 此规则仅适用于 patrol 接收 workflow.md 派工 task 时。

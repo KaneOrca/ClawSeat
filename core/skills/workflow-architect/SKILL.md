@@ -9,6 +9,7 @@ planner-exclusive: true
 ---
 
 # Workflow Architect
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 
 ## 职责边界
 
@@ -50,15 +51,15 @@ brief 格式来自 `clawseat-intake` 的 `summary_contract`。
 
 ### Phase 2 — 映射原子能力
 
-读取 [references/atomic-capabilities.md](references/atomic-capabilities.md)。
+直接对照项目内嵌的 seat / skill / tool 能力表完成映射。
 
-将每个 `workflow_step` 映射到对应的 seat / skill / tool：
+将每个 `workflow_step` 映射到对应的 seat / skill / tool，并记录 executor 和 skill：
 - 找到匹配能力 → 记录 `executor` 和 `skill`
 - 无法映射 → 标记为 `UNKNOWN`，在 spec 的 `unknown_steps` 中注明「需用户决策」
 
 ### Phase 3 — 生成 workflow spec
 
-读取 [references/workflow-spec-schema.md](references/workflow-spec-schema.md) 获取完整 schema 和示例。
+生成 YAML spec 时确保包含 workflow_id、steps、reuse_goal、unknown_steps，并按内嵌 schema 组织字段。
 
 输出 YAML spec，包含：
 - `workflow_id`（slug 格式，如 `video-production-pipeline-v1`）

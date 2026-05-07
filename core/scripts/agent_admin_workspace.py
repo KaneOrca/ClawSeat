@@ -382,7 +382,7 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
         "",
         "## Fan-out Default (LL6)",
         "- tasks with 2+ independent sub-goals (disjoint files / disjoint tests / disjoint research lanes / multi-part) must fan-out via parallel sub-agents",
-        "- see `core/skills/gstack-harness/references/sub-agent-fan-out.md`",
+        "- fan out independent sub-goals via the seat dispatch primitive; only serialize the final cross-check / delivery step",
     ]
     if engineer.role == "frontstage-supervisor":
         lines.extend(

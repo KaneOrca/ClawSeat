@@ -18,6 +18,7 @@ superseded_by: creative-designer
 # Creative Patrol
 
 For new projects, use `creative-designer`. `creative-patrol` is retained for historical reference only.
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 
 `creative-patrol` was the passive scoring specialist in the ClawSeat creative chain. It is no longer dispatched in new workflows. All scoring (cs-score) and review capabilities now live in `creative-designer`.
 

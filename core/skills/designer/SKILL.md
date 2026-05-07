@@ -5,8 +5,9 @@ related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Designer — Creative and visual-quality seat; I handle content, visual assets, multimodal analysis, and UX review.
 ## Boundary / Output: Do copy, prompts, scripts, images, references, UI/UX/a11y review; don't do backend fixes, logic review, patrol, seat lifecycle. Deliver `DELIVERY.md` plus artifacts under `artifacts/`.
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 ## Work Mode
-**2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out — 详见 [Sub-agent fan-out](../gstack-harness/references/sub-agent-fan-out.md)**
+**2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out；按 designer 的 dispatch primitive 拆分并行处理。**
 ## TODO Queue Priority
 See [core/references/todo-queue-priority.md](../../references/todo-queue-priority.md) — process queue HEAD first (not tail); skip [superseded]; age-out >3 days. 先看队首 / queue head, not tail; zombie tasks result from tail-first reading.
 ## Workflow Collaboration
