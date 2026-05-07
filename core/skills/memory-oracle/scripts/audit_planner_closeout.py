@@ -38,7 +38,7 @@ def _delivery_task_id(delivery_path: Path) -> str | None:
             _, _, value = stripped.partition(":")
             value = value.strip()
             return value or None
-        return stripped
+        continue
     return None
 
 
@@ -55,12 +55,6 @@ def main() -> int:
     handoff_dir = _expand_path(getattr(profile, "handoff_dir"))  # type: ignore[arg-type]
     if handoff_dir is None:
         raise SystemExit("profile missing handoff_dir")
-    planner_workspace_dir = _expand_path(getattr(profile, "planner_workspace_dir", None))
-    if planner_workspace_dir is None:
-        workspace_root = _expand_path(getattr(profile, "workspace_root"))  # type: ignore[arg-type]
-        if workspace_root is None:
-            raise SystemExit("profile missing workspace_root")
-        planner_workspace_dir = workspace_root / "planner"
 
     task_key = sanitize_name(args.task_id)
     errors: list[str] = []
@@ -73,7 +67,7 @@ def main() -> int:
     if not receipt_path.is_file():
         errors.append(f"planner→memory receipt missing: {receipt_path}")
 
-    delivery_path = planner_workspace_dir / "DELIVERY.md"
+    delivery_path = Path(profile.delivery_path("planner"))  # type: ignore[attr-defined]
     actual_task_id = _delivery_task_id(delivery_path)
     if actual_task_id is None:
         errors.append(f"planner DELIVERY.md missing: {delivery_path}")
