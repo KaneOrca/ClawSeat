@@ -33,7 +33,7 @@ def _init_git_repo(tmp_path: Path) -> Path:
     (repo / "README.md").write_text("main\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-m", "main", "-q"], check=True)
-    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-B", "main"], check=True)
 
     main_sha = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"],
@@ -109,6 +109,10 @@ def _dispatch(profile: Path, task_id: str, *, no_notify: bool = True) -> subproc
         "--objective", "run",
         "--test-policy", "UPDATE",
         "--reply-to", "planner",
+        "--expected-branch",
+        "feat/CX-test",
+        "--expected-worktree",
+        "/tmp/CX-test-wt",
     ]
     if no_notify:
         args.append("--no-notify")
@@ -132,6 +136,10 @@ def _dispatch_with_handoff_fields(
         "--objective", "run",
         "--test-policy", "UPDATE",
         "--reply-to", "planner",
+        "--expected-branch",
+        "feat/CX-test",
+        "--expected-worktree",
+        "/tmp/CX-test-wt",
     ]
     if core_ux:
         args.append("--core-ux")

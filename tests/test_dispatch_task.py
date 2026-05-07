@@ -83,7 +83,7 @@ def _init_repo(repo_root: Path) -> str:
         ["git", "-C", str(repo_root), "commit", "-m", "init", "-q"],
         check=True,
     )
-    subprocess.run(["git", "-C", str(repo_root), "checkout", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "checkout", "-q", "-B", "main"], check=True)
     head = subprocess.run(
         ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
         check=True,
