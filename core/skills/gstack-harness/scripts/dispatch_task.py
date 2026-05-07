@@ -345,6 +345,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--finding-id", help="Optional finding id for hypothesis-fix tracking.")
+    parser.add_argument("--core-ux", action="store_true", help="Mark the dispatch as core UX.")
     parser.add_argument(
         "--rca-override",
         action="store_true",
@@ -497,7 +498,7 @@ def main() -> int:
             if not same_finding_retry:
                 if args.force_parallel_builder:
                     print(
-                        "WARNING: bypassing serial builder dispatch lock; multi-dispatch wakeup collapse risk",
+                        "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
                         file=sys.stderr,
                     )
                 else:
@@ -557,6 +558,8 @@ def main() -> int:
         "notify_message": None,
         "rca_override": None,
     }
+    if args.core_ux:
+        receipt["core_ux"] = True
     if getattr(args, "finding_id", None):
         finding_id = str(args.finding_id)
         hypothesis_counter = _finding_hypothesis_counter(profile.handoff_dir, finding_id)
