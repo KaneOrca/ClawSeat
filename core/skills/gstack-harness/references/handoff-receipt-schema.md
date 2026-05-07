@@ -33,6 +33,11 @@ Optional fields:
 - `notified_at`
 - `notify_message`
 - `feishu_group_broadcast`
+- `finding_id`
+- `hypothesis_fix_counter`
+- `hypothesis_fix_counter_exceeded`
+- `rca_override`
+- `core_ux`
 
 ## 2. Completion receipt
 
@@ -75,6 +80,12 @@ Common optional fields:
 - `notify_message`
 - `feishu_delegation_report`
 - `feishu_group_broadcast`
+- `branch`
+- `commit`
+- `sweep_count`
+- `core_ux_gate`
+- `base_drift_acknowledged`
+- `drift_reason`
 
 Optional fields:
 

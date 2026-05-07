@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import re
@@ -25,6 +24,7 @@ from _common import (
     assert_target_not_memory,
     broadcast_feishu_group_message,
     build_notify_message,
+    load_json,
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     normalize_role,
@@ -36,6 +36,7 @@ from _common import (
     utc_now_iso,
     write_json,
     write_todo,
+    sanitize_name,
 )
 
 from seat_resolver import resolve_seat_from_profile
@@ -52,40 +53,6 @@ def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
         re.MULTILINE,
     ))
 
-
-
-def _outstanding_builder_dispatch_task_id(handoff_dir: Path | str) -> str | None:
-    handoff_dir = Path(handoff_dir)
-    if not handoff_dir.exists():
-        return None
-    suffix = "__planner__builder.json"
-    for receipt_path in sorted(handoff_dir.glob(f"*{suffix}")):
-        name = receipt_path.name
-        if not name.endswith(suffix):
-            continue
-        task_id = name[: -len(suffix)]
-        if not task_id:
-            continue
-        completion_path = handoff_dir / f"{task_id}__builder__planner.json"
-        if not completion_path.exists():
-            return task_id
-    return None
-
-
-def _finding_hypothesis_counter(handoff_dir: Path | str, finding_id: str) -> int:
-    handoff_dir = Path(handoff_dir)
-    if not handoff_dir.exists():
-        return 0
-    suffix = "__planner__builder.json"
-    count = 0
-    for receipt_path in sorted(handoff_dir.glob(f"*{suffix}")):
-        try:
-            payload = json.loads(receipt_path.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001 best-effort scan
-            continue
-        if isinstance(payload, dict) and payload.get("finding_id") == finding_id:
-            count += 1
-    return count
 
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
@@ -172,15 +139,51 @@ def _dispatch_lock_metadata(
     expected_branch: str | None,
     expected_worktree: str | None,
 ) -> dict[str, str]:
+    if normalize_role(target_role) != "builder" and not expected_branch and not expected_worktree:
+        return {}
     fields: dict[str, str] = {}
-    if target_role == "builder":
-        expected_branch = expected_branch or f"feat/{task_id}"
-        expected_worktree = expected_worktree or f"/tmp/{task_id}-wt"
-    if expected_branch:
-        fields["expected_branch"] = expected_branch
-    if expected_worktree:
-        fields["expected_worktree_path"] = expected_worktree
+    branch = expected_branch or (
+        f"feat/{task_id}" if normalize_role(target_role) == "builder" else None
+    )
+    worktree = expected_worktree or (
+        f"/tmp/{task_id}-wt" if normalize_role(target_role) == "builder" else None
+    )
+    if branch:
+        fields["expected_branch"] = branch
+    if worktree:
+        fields["expected_worktree_path"] = worktree
     return fields
+
+
+def _expanded_handoff_dir(profile: object) -> Path:
+    text = str(getattr(profile, "handoff_dir")).strip()
+    return Path(os.path.expandvars(text)).expanduser().resolve()
+
+
+def _builder_outstanding_task(todo_path: Path) -> str | None:
+    if not todo_path.exists():
+        return None
+    match = re.search(r"^## \[(pending|queued)\] (\S+)", todo_path.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(2) if match else None
+
+
+def _finding_hypothesis_counter(profile: object, *, target: str, finding_id: str) -> int:
+    handoff_dir = _expanded_handoff_dir(profile)
+    count = 0
+    for path in handoff_dir.glob(f"*__*__{sanitize_name(target)}.json"):
+        if not path.is_file():
+            continue
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("kind") != "dispatch":
+            continue
+        if payload.get("target") != target:
+            continue
+        if payload.get("finding_id") != finding_id:
+            continue
+        count += 1
+    return count
 
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
@@ -357,18 +360,30 @@ def parse_args() -> argparse.Namespace:
         help="Pick least-busy live seat with this role from state.db (e.g. 'builder').",
     )
     parser.add_argument(
-        "--force-parallel-builder",
-        action="store_true",
-        help="Bypass the serial builder dispatch lock.",
+        "--expected-branch",
+        help="Expected branch tip for builder worktree lock metadata.",
     )
-    parser.add_argument("--task-id", required=True, help="Task id.")
-    parser.add_argument("--finding-id", help="Optional finding id for hypothesis-fix tracking.")
-    parser.add_argument("--core-ux", action="store_true", help="Mark the dispatch as core UX.")
+    parser.add_argument(
+        "--expected-worktree",
+        help="Expected worktree path for builder lock metadata.",
+    )
+    parser.add_argument("--finding-id", help="Optional finding bucket id for hypothesis retries.")
     parser.add_argument(
         "--rca-override",
         action="store_true",
-        help="Suppress the hypothesis counter warning when intentionally re-dispatching a finding.",
+        help="Bypass hypothesis retry warning when the finding has already exceeded the fix counter.",
     )
+    parser.add_argument(
+        "--core-ux",
+        action="store_true",
+        help="Mark the dispatch as core UX and require an explicit core UX gate on closeout.",
+    )
+    parser.add_argument(
+        "--force-parallel-builder",
+        action="store_true",
+        help="Bypass the builder serial dispatch lock for an intentional parallel wave.",
+    )
+    parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
     parser.add_argument(
@@ -429,14 +444,6 @@ def parse_args() -> argparse.Namespace:
             "Valid keys: " + ", ".join(sorted(INTENT_MAP.keys())) + ". "
             "See TOOLS/dispatch.md for the user-intent → key mapping."
         ),
-    )
-    parser.add_argument(
-        "--expected-branch",
-        help="Expected feature branch for builder pickup verification (defaults to feat/<task-id> for builder targets).",
-    )
-    parser.add_argument(
-        "--expected-worktree",
-        help="Expected isolated worktree path for builder pickup verification (defaults to /tmp/<task-id>-wt for builder targets).",
     )
     return parser.parse_args()
 
@@ -505,45 +512,44 @@ def main() -> int:
         args.skill_refs,
     )
     todo_path = profile.todo_path(args.target)
-    if normalize_role(profile.seat_roles.get(args.target, "")) == "builder" and args.source == "planner":
-        outstanding_builder_task_id = _outstanding_builder_dispatch_task_id(profile.handoff_dir)
-        if outstanding_builder_task_id:
-            outstanding_receipt_path = profile.handoff_path(
-                outstanding_builder_task_id,
-                args.source,
-                args.target,
-            )
-            outstanding_finding_id = None
-            try:
-                outstanding_payload = json.loads(outstanding_receipt_path.read_text(encoding="utf-8"))
-                if isinstance(outstanding_payload, dict):
-                    outstanding_finding_id = outstanding_payload.get("finding_id")
-            except Exception:  # noqa: BLE001 best-effort guard
-                outstanding_finding_id = None
-            same_finding_retry = bool(args.finding_id and outstanding_finding_id == args.finding_id)
-            if not same_finding_retry:
-                if args.force_parallel_builder:
-                    print(
-                        "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(
-                        f"BLOCKED: builder dispatch outstanding ({outstanding_builder_task_id}); awaiting __builder__planner.json",
-                        file=sys.stderr,
-                    )
-                    return 2
+    audit_dir = _expanded_handoff_dir(profile) / "audit"
     if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
             file=sys.stderr,
         )
         return 2
+    source_role = normalize_role(profile.seat_roles.get(args.source, ""))
+    target_role = normalize_role(profile.seat_roles.get(args.target, ""))
+    if target_role == "builder" and not args.finding_id:
+        outstanding_task = _builder_outstanding_task(todo_path)
+        if outstanding_task and outstanding_task != args.task_id:
+            if args.force_parallel_builder:
+                print(
+                    "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"BLOCKED: builder dispatch outstanding ({outstanding_task}); "
+                    "awaiting __builder__planner.json",
+                    file=sys.stderr,
+                )
+                return 2
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
     reply_to = args.reply_to or args.source
-    source_role = normalize_role(profile.seat_roles.get(args.source, ""))
-    target_role = normalize_role(role_hint or profile.seat_roles.get(args.target, ""))
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
+    finding_counter = None
+    finding_exceeded = False
+    if args.finding_id:
+        finding_counter = _finding_hypothesis_counter(profile, target=args.target, finding_id=args.finding_id)
+        finding_exceeded = finding_counter >= 3
+        if finding_exceeded and not args.rca_override:
+            print(
+                f"warning: hypothesis_fix_counter exceeded for finding_id={args.finding_id} "
+                f"(counter={finding_counter}); use --rca-override to continue",
+                file=sys.stderr,
+            )
     append_task_to_queue(
         todo_path,
         task_id=args.task_id,
@@ -558,6 +564,11 @@ def main() -> int:
         review_required=args.review_required,
         correlation_id=correlation_id,
         test_policy=args.test_policy,
+        core_ux=args.core_ux,
+        finding_id=args.finding_id,
+        hypothesis_fix_counter=finding_counter,
+        hypothesis_fix_counter_exceeded=finding_exceeded,
+        rca_override=True if args.rca_override else None,
     )
     upsert_tasks_row(
         profile.tasks_doc,
@@ -582,27 +593,16 @@ def main() -> int:
         "assigned_at": utc_now_iso(),
         "notified_at": None,
         "notify_message": None,
-        "rca_override": None,
     }
+    if args.finding_id:
+        receipt["finding_id"] = args.finding_id
+        receipt["hypothesis_fix_counter"] = finding_counter
+        receipt["hypothesis_fix_counter_exceeded"] = finding_exceeded
+        receipt["rca_override"] = True if args.rca_override else None
+    elif args.rca_override:
+        receipt["rca_override"] = True
     if args.core_ux:
         receipt["core_ux"] = True
-    if getattr(args, "finding_id", None):
-        finding_id = str(args.finding_id)
-        hypothesis_counter = _finding_hypothesis_counter(profile.handoff_dir, finding_id)
-        hypothesis_counter_exceeded = hypothesis_counter >= 3
-        receipt["finding_id"] = finding_id
-        receipt["hypothesis_fix_counter"] = hypothesis_counter
-        receipt["hypothesis_counter"] = hypothesis_counter
-        receipt["hypothesis_fix_counter_exceeded"] = hypothesis_counter_exceeded
-        receipt["hypothesis_counter_exceeded"] = hypothesis_counter_exceeded
-        if hypothesis_counter_exceeded and not getattr(args, "rca_override", False):
-            print(
-                f"warn: hypothesis_fix_counter exceeded for finding_id={finding_id};",
-                "pass --rca-override to suppress",
-                file=sys.stderr,
-            )
-        if getattr(args, "rca_override", False):
-            receipt["rca_override"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
     receipt.update(
@@ -715,7 +715,11 @@ def main() -> int:
         task_id=args.task_id,
         target=args.target,
         test_policy=args.test_policy,
-        audit_dir=profile.handoff_dir / "audit",
+        finding_id=args.finding_id,
+        hypothesis_counter=finding_counter,
+        rca_override=args.rca_override,
+        core_ux=args.core_ux,
+        audit_dir=audit_dir,
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")

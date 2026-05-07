@@ -32,7 +32,6 @@ from _common import (
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     notify,
-    normalize_role,
     require_success,
     resolve_notify,
     send_feishu_user_message,
@@ -182,20 +181,6 @@ def _seat_fallback_receipt_path(profile: object, seat: str, primary: Path) -> Pa
     return profile.workspace_for(seat) / ".clawseat" / "handoffs" / primary.name  # type: ignore[attr-defined]
 
 
-def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Path]:
-    consumed_paths = sorted(handoffs_dir.glob(f"{task_id}__*__planner.json.consumed"))
-    for path in sorted(handoffs_dir.glob(f"{task_id}__*__planner.json")):
-        consumed = path.with_name(f"{path.name}.consumed")
-        path.replace(consumed)
-        consumed_paths.append(consumed)
-    if not consumed_paths:
-        print(
-            f"info: no incoming builder→planner receipt for task {task_id!r}; skip rename",
-            file=sys.stderr,
-        )
-    return consumed_paths
-
-
 def persist_delivery(
     profile: object,
     *,
@@ -214,6 +199,7 @@ def persist_delivery(
     branch: str | None = None,
     commit: str | None = None,
     sweep_count: int | None = None,
+    core_ux_gate: str | None = None,
 ) -> tuple[Path, bool]:
     primary = profile.delivery_path(seat)  # type: ignore[attr-defined]
     try:
@@ -233,6 +219,7 @@ def persist_delivery(
             branch=branch,
             commit=commit,
             sweep_count=sweep_count,
+            core_ux_gate=core_ux_gate,
         )
         return primary, False
     except PermissionError as exc:
@@ -253,6 +240,7 @@ def persist_delivery(
             branch=branch,
             commit=commit,
             sweep_count=sweep_count,
+            core_ux_gate=core_ux_gate,
         )
         print(
             f"warn: delivery path {primary} not writable ({exc}); "
@@ -355,7 +343,7 @@ def _infer_target_from_dispatch_handoff(
 ) -> str:
     safe_task = sanitize_name(task_id)
     safe_source = sanitize_name(source)
-    handoff_dir = Path(getattr(profile, "handoff_dir"))
+    handoff_dir = _expanded_profile_handoff_dir(profile)
     pattern = f"{safe_task}__*__{safe_source}.json"
     candidates: list[Path] = []
     for path in handoff_dir.glob(pattern):
@@ -375,6 +363,39 @@ def _infer_target_from_dispatch_handoff(
     )
 
 
+def _expanded_profile_handoff_dir(profile: object) -> Path:
+    text = str(getattr(profile, "handoff_dir")).strip()
+    return Path(os.path.expandvars(text)).expanduser().resolve()
+
+
+def _profile_handoff_path(profile: object, task_id: str, source: str, target: str) -> Path:
+    return _expanded_profile_handoff_dir(profile) / (
+        f"{sanitize_name(task_id)}__{sanitize_name(source)}__{sanitize_name(target)}.json"
+    )
+
+
+def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Path]:
+    handoffs_dir = Path(os.path.expandvars(str(handoffs_dir))).expanduser().resolve()
+    pattern = f"{sanitize_name(task_id)}__*__planner.json"
+    def _emit_skip_rename() -> None:
+        message = f"info: skip rename; no incoming planner handoffs found for {task_id} in {handoffs_dir}"
+        print(message)
+        print(message, file=sys.stderr)
+    if not handoffs_dir.exists():
+        _emit_skip_rename()
+        return []
+    candidates = [path for path in handoffs_dir.glob(pattern) if path.is_file()]
+    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    renamed: list[Path] = []
+    for path in candidates:
+        consumed = path.with_suffix(path.suffix + ".consumed")
+        path.replace(consumed)
+        renamed.append(consumed)
+    if not renamed:
+        _emit_skip_rename()
+    return renamed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Complete or consume a harness handoff.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
@@ -383,25 +404,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--branch", help="Feature branch used to auto-fill branch_base/branch_tip.")
     parser.add_argument("--pr-number", help="Pull Request number for closure fields.")
     parser.add_argument("--ci-conclusion", help="CI conclusion marker for closure fields.")
-    parser.add_argument(
-        "--core-ux-gate",
-        choices=["met", "unmet", "n_a"],
-        help="Required when dispatch indicates core_ux=true.",
-    )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", help="Delivery title.")
     parser.add_argument("--summary", help="Delivery summary text.")
     parser.add_argument("--status", default="completed", help="Delivery status.")
     parser.add_argument("--verdict", help="Canonical review verdict.")
     parser.add_argument("--commit", help="Optional commit SHA to include in STATUS.md ack log.")
-    parser.add_argument("--sweep-count", type=int, help="Optional sweep count to record in delivery metadata.")
+    parser.add_argument("--sweep-count", type=int, help="Planner sweep count metadata for DELIVERY.md.")
     parser.add_argument(
-        "--enforce-planner-self-closeout",
-        nargs="?",
-        const=True,
-        default=True,
-        type=_parse_bool,
-        help="When planner relays to memory, rename incoming builder receipts and write planner/DELIVERY.md first. Use --enforce-planner-self-closeout=false to bypass.",
+        "--core-ux-gate",
+        help="Required core UX gate marker when the dispatch receipt marks the step as core UX.",
+    )
+    parser.add_argument(
+        "--base-drift-acknowledged",
+        action="store_true",
+        help="Acknowledge intentional current-main drift for a branch closeout.",
+    )
+    parser.add_argument(
+        "--drift-reason",
+        help="JSON drift reason with drift_from, drift_to, and orthogonal_files_verified.",
     )
     parser.add_argument(
         "--test-policy",
@@ -420,23 +441,37 @@ def parse_args() -> argparse.Namespace:
         "--next-action",
         help="Short frontstage instruction, especially when a user decision is needed.",
     )
-    parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
-    parser.add_argument(
-        "--base-drift-acknowledged",
-        action="store_true",
-        help="Acknowledge that branch_base differs from the current main tip.",
-    )
-    parser.add_argument(
-        "--drift-reason",
-        help="JSON drift rationale with drift_from, drift_to, and orthogonal_files_verified.",
-    )
     parser.add_argument(
         "--allow-branch-mismatch",
         action="store_true",
-        help="Bypass builder→planner branch lock validation when the branch is intentionally drifting.",
+        help="Bypass branch lock validation when a deliberate worktree mismatch is expected.",
     )
+    parser.add_argument(
+        "--enforce-planner-self-closeout",
+        nargs="?",
+        const=True,
+        default=True,
+        type=_parse_bool,
+        help="Mark planner incoming handoffs consumed before closeout (use =false to disable).",
+    )
+    parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
     add_notify_args(parser)
     return parser.parse_args()
+
+
+def _parse_bool(value: str | bool | None) -> bool:
+    if value is None or value is True:
+        return True
+    if value is False:
+        return False
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(
+        "--enforce-planner-self-closeout expects a boolean value (true/false)"
+    )
 
 
 def _receipt_test_policy(
@@ -454,7 +489,7 @@ def _receipt_test_policy(
     if isinstance(value, str) and value:
         return value
     try:
-        reverse = load_json(profile.handoff_path(task_id, target, source))  # type: ignore[attr-defined]
+        reverse = load_json(_profile_handoff_path(profile, task_id, target, source))
     except Exception:  # noqa: BLE001 best-effort status decoration
         reverse = None
     if isinstance(reverse, dict):
@@ -471,7 +506,7 @@ def _load_dispatch_receipt_for_completion(
 ) -> dict[str, object] | None:
     safe_task = sanitize_name(task_id)
     safe_source = sanitize_name(source)
-    handoff_dir = Path(getattr(profile, "handoff_dir"))
+    handoff_dir = _expanded_profile_handoff_dir(profile)
     pattern = f"{safe_task}__*__{safe_source}.json"
     candidates: list[Path] = []
     for path in handoff_dir.glob(pattern):
@@ -483,6 +518,38 @@ def _load_dispatch_receipt_for_completion(
         if isinstance(payload, dict) and payload.get("kind") == "dispatch":
             return payload
     return None
+
+
+def _validate_branch_lock(
+    receipt: dict[str, object],
+    dispatch_receipt: dict[str, object] | None,
+    *,
+    source: str,
+    target: str,
+    allow_branch_mismatch: bool = False,
+) -> None:
+    if not source.startswith("builder") or not target.startswith("planner"):
+        return
+    if not isinstance(dispatch_receipt, dict):
+        return
+    expected_branch = dispatch_receipt.get("expected_branch")
+    if not isinstance(expected_branch, str) or not expected_branch:
+        return
+    actual_branch = receipt.get("branch")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        actual_branch = receipt.get("branch_tip")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        return
+    if re.fullmatch(r"[0-9a-f]{7,64}", actual_branch):
+        return
+    if actual_branch == "main":
+        return
+    if actual_branch == expected_branch:
+        return
+    if allow_branch_mismatch:
+        print("WARNING: bypassing branch lock; worktree drift risk", file=sys.stderr)
+        return
+    raise SystemExit(f"BOUNCE: branch mismatch — expected {expected_branch} got {actual_branch}")
 
 
 def _git_main_ref(repo_root: Path) -> str | None:
@@ -500,6 +567,77 @@ def _git_main_ref(repo_root: Path) -> str | None:
             continue
         return ref
     return None
+
+
+def _git_main_tip_sha(repo_root: Path) -> str | None:
+    main_ref = _git_main_ref(repo_root)
+    if main_ref is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", main_ref],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _git_changed_files(repo_root: Path, left: str, right: str) -> set[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "diff", "--name-only", left, right],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def _validate_base_drift(
+    *,
+    repo_root: Path,
+    branch_base: str,
+    branch_tip: str,
+    expected_base_sha: str | None,
+    base_drift_acknowledged: bool,
+    drift_reason_text: str | None,
+) -> dict[str, object] | None:
+    if not isinstance(expected_base_sha, str) or not expected_base_sha:
+        return None
+    current_main_sha = _git_main_tip_sha(repo_root)
+    if not current_main_sha:
+        return None
+    if current_main_sha == branch_base:
+        if base_drift_acknowledged:
+            print(
+                "warn: base drift acknowledgement ignored; branch already aligned with current main",
+                file=sys.stderr,
+            )
+        return None
+    if not base_drift_acknowledged:
+        raise SystemExit("base drift detected: current main advanced since dispatch")
+    if not drift_reason_text:
+        raise SystemExit("base drift detected: missing --drift-reason")
+    try:
+        drift_reason = json.loads(drift_reason_text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid --drift-reason JSON: {exc}") from exc
+    if not isinstance(drift_reason, dict):
+        raise SystemExit("invalid --drift-reason JSON: expected object")
+    drift_from = drift_reason.get("drift_from")
+    drift_to = drift_reason.get("drift_to")
+    if drift_from != branch_base or drift_to != current_main_sha:
+        raise SystemExit("base drift detected: drift_reason does not match current main transition")
+    if not drift_reason.get("orthogonal_files_verified"):
+        raise SystemExit("base drift detected: orthogonal_files_verified must be true")
+    branch_files = _git_changed_files(repo_root, branch_base, branch_tip)
+    drift_files = _git_changed_files(repo_root, str(drift_from), str(drift_to))
+    if branch_files & drift_files:
+        raise SystemExit("base drift is not orthogonal")
+    return drift_reason
 
 
 def _git_branch_and_base(
@@ -528,112 +666,6 @@ def _git_branch_and_base(
     return branch_base, branch_tip
 
 
-def _git_current_main_tip(repo_root: Path | None) -> str | None:
-    if not repo_root:
-        return None
-    try:
-        main_ref = _git_main_ref(Path(repo_root))
-        if main_ref is None:
-            return None
-        return subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", main_ref],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    except Exception:
-        return None
-
-
-def _gh_pr_files(repo_root: Path, pr_number: str | int) -> set[str]:
-    result = subprocess.run(
-        ["gh", "pr", "view", str(pr_number), "--json", "files"],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(result.stdout or "{}")
-    files = payload.get("files", [])
-    return {
-        entry["path"]
-        for entry in files
-        if isinstance(entry, dict) and isinstance(entry.get("path"), str) and entry["path"]
-    }
-
-
-def _git_diff_name_only(repo_root: Path, drift_from: str, drift_to: str) -> set[str]:
-    result = subprocess.run(
-        ["git", "-C", str(repo_root), "diff", "--name-only", f"{drift_from}..{drift_to}"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
-
-
-def _validate_base_drift(
-    receipt: dict[str, object],
-    repo_root: Path | None,
-    *,
-    pr_number: str | int | None,
-    base_drift_acknowledged: bool,
-    drift_reason: str | None,
-) -> None:
-    branch_base = receipt.get("branch_base")
-    if not isinstance(branch_base, str) or not branch_base:
-        return
-    current_main_tip = _git_current_main_tip(repo_root)
-    if not current_main_tip:
-        return
-    if branch_base == current_main_tip:
-        if base_drift_acknowledged:
-            print(
-                "WARNING: base_drift_acknowledged provided but branch_base already matches current main; ignoring drift acknowledgement.",
-                file=sys.stderr,
-            )
-        return
-    if not base_drift_acknowledged:
-        raise SystemExit(
-            "base drift detected: branch_base does not match current main; pass --base-drift-acknowledged and a valid --drift-reason to continue."
-        )
-    if not drift_reason:
-        raise SystemExit("base drift detected: missing --drift-reason.")
-    try:
-        drift_data = json.loads(drift_reason)
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"invalid drift_reason JSON: {exc}") from exc
-    if not isinstance(drift_data, dict):
-        raise SystemExit("drift_reason must be a JSON object.")
-    drift_from = drift_data.get("drift_from")
-    drift_to = drift_data.get("drift_to")
-    orthogonal_verified = drift_data.get("orthogonal_files_verified")
-    if drift_from != branch_base:
-        raise SystemExit("drift_reason drift_from must match branch_base.")
-    if drift_to != current_main_tip:
-        raise SystemExit("drift_reason drift_to must match current main.")
-    if orthogonal_verified is not True:
-        raise SystemExit("drift_reason must set orthogonal_files_verified true.")
-    if pr_number is None:
-        raise SystemExit("base drift validation requires --pr-number.")
-    drift_files = _git_diff_name_only(repo_root, str(drift_from), str(drift_to))
-    pr_files = _gh_pr_files(repo_root, pr_number)
-    overlap = sorted(drift_files & pr_files)
-    if overlap:
-        raise SystemExit("base drift is not orthogonal; overlapping files: " + ", ".join(overlap))
-
-
-def _parse_bool(value: str) -> bool:
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "t", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "f", "no", "n", "off"}:
-        return False
-    raise argparse.ArgumentTypeError(
-        f"invalid boolean value {value!r}; use true/false, yes/no, on/off, or 1/0"
-    )
-
-
 def _validate_completion_receipt(
     receipt: dict[str, object],
     source_dispatch: dict[str, object] | None,
@@ -643,8 +675,6 @@ def _validate_completion_receipt(
         if isinstance(source_dispatch, dict)
         else None
     )
-    if isinstance(source_dispatch, dict) and source_dispatch.get("core_ux") and not receipt.get("core_ux_gate"):
-        raise SystemExit("core_ux_gate is required for core_ux steps")
     if not isinstance(expected_base, str) or not expected_base:
         return
 
@@ -667,34 +697,6 @@ def _validate_completion_receipt(
         )
 
 
-def _validate_branch_lock(
-    receipt: dict[str, object],
-    source_dispatch: dict[str, object] | None,
-    *,
-    source: str,
-    target: str,
-    allow_branch_mismatch: bool = False,
-) -> None:
-    if normalize_role(source) != "builder" or normalize_role(target) != "planner":
-        return
-    if not isinstance(source_dispatch, dict):
-        return
-    expected_branch = source_dispatch.get("expected_branch")
-    if not isinstance(expected_branch, str) or not expected_branch:
-        return
-    actual_branch = receipt.get("branch") or receipt.get("branch_tip")
-    if not isinstance(actual_branch, str) or not actual_branch:
-        return
-    if actual_branch == expected_branch:
-        return
-    if allow_branch_mismatch:
-        print("WARNING: bypassing branch lock; worktree drift risk", file=sys.stderr)
-        return
-    raise SystemExit(
-        f"BOUNCE: branch mismatch — expected {expected_branch} got {actual_branch}"
-    )
-
-
 def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
@@ -705,7 +707,17 @@ def main() -> int:
             task_id=args.task_id,
             source=args.source,
         )
-    receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
+    if (
+        not args.enforce_planner_self_closeout
+        and args.source in {"planner", "planner-dispatcher"}
+        and args.target == "memory"
+    ):
+        print(
+            "WARNING: bypassing planner self-closeout; .consumed + DELIVERY.md may drift",
+            file=sys.stderr,
+        )
+        return 0
+    receipt_path = _profile_handoff_path(profile, args.task_id, args.source, args.target)
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     receipt = load_json(receipt_path) or {
         "kind": "completion",
@@ -730,39 +742,52 @@ def main() -> int:
         receipt["pr_number"] = args.pr_number
     if args.ci_conclusion is not None:
         receipt["ci_conclusion"] = args.ci_conclusion
-    if args.core_ux_gate is not None:
-        receipt["core_ux_gate"] = args.core_ux_gate
-    if args.base_drift_acknowledged:
-        receipt["base_drift_acknowledged"] = True
-    if args.drift_reason is not None:
-        receipt["drift_reason"] = args.drift_reason
-    if args.commit is not None:
-        receipt["commit"] = args.commit
-    if args.branch:
-        receipt["branch"] = args.branch
-    if args.sweep_count is not None:
-        receipt["sweep_count"] = args.sweep_count
     source_dispatch_receipt = _load_dispatch_receipt_for_completion(
         profile,
         task_id=args.task_id,
         source=args.source,
     )
+    expected_base_sha = (
+        source_dispatch_receipt.get("expected_base_sha")
+        if isinstance(source_dispatch_receipt, dict)
+        else None
+    )
+    if args.branch:
+        repo_root = getattr(profile, "repo_root", None)
+        if not repo_root:
+            raise SystemExit("cannot compute branch closure fields without profile.repo_root")
+        try:
+            branch_base, branch_tip = _git_branch_and_base(Path(repo_root), args.branch)
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+            raise SystemExit(
+                f"failed to auto-compute closure fields for branch {args.branch!r}: {exc}"
+            )
+        receipt["branch"] = args.branch
+        receipt["branch_base"] = branch_base
+        receipt["branch_tip"] = branch_tip
+        if not args.ack_only:
+            drift_reason = _validate_base_drift(
+                repo_root=Path(repo_root),
+                branch_base=branch_base,
+                branch_tip=branch_tip,
+                expected_base_sha=expected_base_sha if isinstance(expected_base_sha, str) else None,
+                base_drift_acknowledged=args.base_drift_acknowledged,
+                drift_reason_text=args.drift_reason,
+            )
+            if drift_reason is not None:
+                receipt["base_drift_acknowledged"] = True
+                receipt["drift_reason"] = args.drift_reason
+    if args.commit is not None:
+        receipt["commit"] = args.commit
+    if args.sweep_count is not None:
+        receipt["sweep_count"] = args.sweep_count
+    if args.core_ux_gate is not None:
+        receipt["core_ux_gate"] = args.core_ux_gate
     if not args.ack_only:
         _validate_completion_receipt(receipt, source_dispatch_receipt)
-        _validate_branch_lock(
-            receipt,
-            source_dispatch_receipt,
-            source=args.source,
-            target=args.target,
-            allow_branch_mismatch=args.allow_branch_mismatch,
-        )
-        _validate_base_drift(
-            receipt,
-            getattr(profile, "repo_root", None),
-            pr_number=args.pr_number,
-            base_drift_acknowledged=args.base_drift_acknowledged,
-            drift_reason=args.drift_reason,
-        )
+        if isinstance(source_dispatch_receipt, dict) and source_dispatch_receipt.get("core_ux"):
+            if not args.core_ux_gate or not args.core_ux_gate.strip():
+                raise SystemExit("core_ux_gate is required for core_ux steps")
 
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
@@ -776,6 +801,16 @@ def main() -> int:
     )
     if receipt_test_policy:
         receipt["test_policy"] = receipt_test_policy
+
+    summary = args.summary or f"{args.task_id} completed by {args.source}."
+    title = args.title or args.task_id
+    receipt["kind"] = "completion"
+    receipt["status"] = args.status
+    receipt["title"] = title
+    receipt["summary"] = summary
+
+    if args.enforce_planner_self_closeout and args.source in {"planner", "planner-dispatcher"}:
+        _mark_planner_incoming_consumed(_expanded_profile_handoff_dir(profile), args.task_id)
 
     if args.ack_only:
         ack_line, ack_path = append_consumed_ack_with_fallback(
@@ -801,7 +836,6 @@ def main() -> int:
             verdict=args.verdict,
             commit=args.commit,
             test_policy=receipt_test_policy,
-            audit_dir=profile.handoff_dir / "audit",
         )
         print(ack_line)
         print(f"receipt: {receipt_path}")
@@ -814,6 +848,14 @@ def main() -> int:
                 verb="consumed",
             )
         return 0
+
+    _validate_branch_lock(
+        receipt,
+        source_dispatch_receipt,
+        source=args.source,
+        target=args.target,
+        allow_branch_mismatch=args.allow_branch_mismatch,
+    )
 
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
         raise SystemExit(
@@ -859,44 +901,30 @@ def main() -> int:
                 "planner delivery with USER_DECISION_NEEDED requires --next-action"
             )
 
-    planner_to_memory = args.source == "planner" and args.target == "memory"
-    if planner_to_memory:
-        if args.enforce_planner_self_closeout:
-            _mark_planner_incoming_consumed(Path(profile.handoff_dir), args.task_id)
-        else:
-            print(
-                "WARNING: bypassing planner self-closeout; .consumed + DELIVERY.md may drift",
-                file=sys.stderr,
-            )
-
-    summary = args.summary or f"{args.task_id} completed by {args.source}."
-    title = args.title or args.task_id
-    delivery_path = profile.delivery_path(args.source)
-    used_fallback_delivery = False
-    if not planner_to_memory or args.enforce_planner_self_closeout:
-        delivery_path, used_fallback_delivery = persist_delivery(
-            profile,
-            seat=args.source,
-            task_id=args.task_id,
-            owner=args.source,
-            target=args.target,
-            title=title,
-            summary=summary,
-            status=args.status,
-            verdict=args.verdict,
-            frontstage_disposition=args.frontstage_disposition,
-            user_summary=args.user_summary,
-            next_action=args.next_action,
-            correlation_id=correlation_id,
-            branch=args.branch if planner_to_memory else None,
-            commit=args.commit if planner_to_memory else None,
-            sweep_count=args.sweep_count if planner_to_memory else None,
-        )
+    delivery_path, used_fallback_delivery = persist_delivery(
+        profile,
+        seat=args.source,
+        task_id=args.task_id,
+        owner=args.source,
+        target=args.target,
+        title=title,
+        summary=summary,
+        status=args.status,
+        verdict=args.verdict,
+        frontstage_disposition=args.frontstage_disposition,
+        user_summary=args.user_summary,
+        next_action=args.next_action,
+        correlation_id=correlation_id,
+        branch=args.branch,
+        commit=args.commit,
+        sweep_count=args.sweep_count,
+        core_ux_gate=args.core_ux_gate,
+    )
     source_todo_path = complete_source_queue_if_possible(
         profile,
         seat=args.source,
         task_id=args.task_id,
-        summary=args.summary or f"completed by {args.source}",
+        summary=summary,
     )
     receipt["delivery_path"] = str(delivery_path)
     receipt["delivered_at"] = utc_now_iso()
@@ -1095,7 +1123,6 @@ def main() -> int:
         verdict=args.verdict,
         commit=args.commit,
         test_policy=receipt_test_policy,
-        audit_dir=profile.handoff_dir / "audit",
     )
     print(f"completed {args.task_id} -> {args.target}")
     print(f"delivery: {delivery_path}")
