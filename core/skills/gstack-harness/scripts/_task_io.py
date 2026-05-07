@@ -238,6 +238,7 @@ def append_status_dispatch_event(
     finding_id: str | None = None,
     hypothesis_counter: int | None = None,
     rca_override: bool = False,
+    core_ux: bool = False,
     audit_dir: Path | None = None,
     timestamp: str | None = None,
 ) -> bool:
@@ -251,6 +252,8 @@ def append_status_dispatch_event(
         extras.append(f"hypothesis_counter={hypothesis_counter}")
     if rca_override:
         extras.append("rca_override=true")
+    if core_ux:
+        extras.append("core_ux=true")
     if target:
         suffix = f" {' '.join(extras)}" if extras else ""
         line = f"- {ts}: {source} dispatched {task_id} to {target}{suffix}"
@@ -315,6 +318,7 @@ def write_delivery(
     branch: str | None = None,
     commit: str | None = None,
     sweep_count: int | str | None = None,
+    core_ux_gate: str | None = None,
 ) -> None:
     lines = [
         f"task_id: {task_id}",
@@ -347,6 +351,8 @@ def write_delivery(
         lines.extend(["", f"UserSummary: {user_summary.strip()}"])
     if next_action:
         lines.extend(["", f"NextAction: {next_action.strip()}"])
+    if core_ux_gate:
+        lines.extend(["", f"core_ux_gate: {core_ux_gate}"])
     write_text(path, "\n".join(lines))
 
 
@@ -430,6 +436,11 @@ def append_task_to_queue(
     review_required: bool = False,
     correlation_id: str | None = None,
     test_policy: str | None = None,
+    core_ux: bool = False,
+    finding_id: str | None = None,
+    hypothesis_fix_counter: int | None = None,
+    hypothesis_fix_counter_exceeded: bool = False,
+    rca_override: bool | None = None,
 ) -> None:
     existing = read_text(path)
 
@@ -461,6 +472,17 @@ def append_task_to_queue(
         entry_lines.append(f"correlation_id: {correlation_id}")
     if test_policy:
         entry_lines.append(f"test_policy: {test_policy}")
+    if core_ux:
+        entry_lines.append("core_ux: true")
+    if finding_id:
+        entry_lines.append(f"finding_id: {finding_id}")
+    if hypothesis_fix_counter is not None:
+        entry_lines.append(f"hypothesis_fix_counter: {hypothesis_fix_counter}")
+        entry_lines.append(
+            f"hypothesis_fix_counter_exceeded: {'true' if hypothesis_fix_counter_exceeded else 'false'}"
+        )
+    if rca_override is not None:
+        entry_lines.append(f"rca_override: {'true' if rca_override else 'false'}")
     entry_lines += [
         "",
         "### Objective",

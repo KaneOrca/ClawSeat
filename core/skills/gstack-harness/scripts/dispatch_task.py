@@ -152,6 +152,37 @@ def _dispatch_lock_metadata(
         fields["expected_worktree_path"] = worktree
     return fields
 
+
+def _expanded_handoff_dir(profile: object) -> Path:
+    text = str(getattr(profile, "handoff_dir")).strip()
+    return Path(os.path.expandvars(text)).expanduser().resolve()
+
+
+def _builder_outstanding_task(todo_path: Path) -> str | None:
+    if not todo_path.exists():
+        return None
+    match = re.search(r"^## \[(pending|queued)\] (\S+)", todo_path.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(2) if match else None
+
+
+def _finding_hypothesis_counter(profile: object, *, target: str, finding_id: str) -> int:
+    handoff_dir = _expanded_handoff_dir(profile)
+    count = 0
+    for path in handoff_dir.glob(f"*__*__{sanitize_name(target)}.json"):
+        if not path.is_file():
+            continue
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("kind") != "dispatch":
+            continue
+        if payload.get("target") != target:
+            continue
+        if payload.get("finding_id") != finding_id:
+            continue
+        count += 1
+    return count
+
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
     "eng-review": {
@@ -334,6 +365,22 @@ def parse_args() -> argparse.Namespace:
         "--expected-worktree",
         help="Expected worktree path for builder lock metadata.",
     )
+    parser.add_argument("--finding-id", help="Optional finding bucket id for hypothesis retries.")
+    parser.add_argument(
+        "--rca-override",
+        action="store_true",
+        help="Bypass hypothesis retry warning when the finding has already exceeded the fix counter.",
+    )
+    parser.add_argument(
+        "--core-ux",
+        action="store_true",
+        help="Mark the dispatch as core UX and require an explicit core UX gate on closeout.",
+    )
+    parser.add_argument(
+        "--force-parallel-builder",
+        action="store_true",
+        help="Bypass the builder serial dispatch lock for an intentional parallel wave.",
+    )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
@@ -469,11 +516,37 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
-    reply_to = args.reply_to or args.source
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
+    if target_role == "builder":
+        outstanding_task = _builder_outstanding_task(todo_path)
+        if outstanding_task and outstanding_task != args.task_id:
+            if args.force_parallel_builder:
+                print(
+                    "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"BLOCKED: builder dispatch outstanding ({outstanding_task}); "
+                    "awaiting __builder__planner.json",
+                    file=sys.stderr,
+                )
+                return 2
+    expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
+    reply_to = args.reply_to or args.source
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
+    finding_counter = None
+    finding_exceeded = False
+    if args.finding_id:
+        finding_counter = _finding_hypothesis_counter(profile, target=args.target, finding_id=args.finding_id)
+        finding_exceeded = finding_counter >= 3
+        if finding_exceeded and not args.rca_override:
+            print(
+                f"warning: hypothesis_fix_counter exceeded for finding_id={args.finding_id} "
+                f"(counter={finding_counter}); use --rca-override to continue",
+                file=sys.stderr,
+            )
     append_task_to_queue(
         todo_path,
         task_id=args.task_id,
@@ -488,6 +561,11 @@ def main() -> int:
         review_required=args.review_required,
         correlation_id=correlation_id,
         test_policy=args.test_policy,
+        core_ux=args.core_ux,
+        finding_id=args.finding_id,
+        hypothesis_fix_counter=finding_counter,
+        hypothesis_fix_counter_exceeded=finding_exceeded,
+        rca_override=True if args.rca_override else None,
     )
     upsert_tasks_row(
         profile.tasks_doc,
@@ -513,6 +591,15 @@ def main() -> int:
         "notified_at": None,
         "notify_message": None,
     }
+    if args.finding_id:
+        receipt["finding_id"] = args.finding_id
+        receipt["hypothesis_fix_counter"] = finding_counter
+        receipt["hypothesis_fix_counter_exceeded"] = finding_exceeded
+        receipt["rca_override"] = True if args.rca_override else None
+    elif args.rca_override:
+        receipt["rca_override"] = True
+    if args.core_ux:
+        receipt["core_ux"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
     receipt.update(
@@ -625,6 +712,10 @@ def main() -> int:
         task_id=args.task_id,
         target=args.target,
         test_policy=args.test_policy,
+        finding_id=args.finding_id,
+        hypothesis_counter=finding_counter,
+        rca_override=args.rca_override,
+        core_ux=args.core_ux,
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")

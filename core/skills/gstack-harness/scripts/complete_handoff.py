@@ -195,6 +195,10 @@ def persist_delivery(
     user_summary: str | None = None,
     next_action: str | None = None,
     correlation_id: str | None = None,
+    branch: str | None = None,
+    commit: str | None = None,
+    sweep_count: int | None = None,
+    core_ux_gate: str | None = None,
 ) -> tuple[Path, bool]:
     primary = profile.delivery_path(seat)  # type: ignore[attr-defined]
     try:
@@ -211,6 +215,10 @@ def persist_delivery(
             user_summary=user_summary,
             next_action=next_action,
             correlation_id=correlation_id,
+            branch=branch,
+            commit=commit,
+            sweep_count=sweep_count,
+            core_ux_gate=core_ux_gate,
         )
         return primary, False
     except PermissionError as exc:
@@ -228,6 +236,10 @@ def persist_delivery(
             user_summary=user_summary,
             next_action=next_action,
             correlation_id=correlation_id,
+            branch=branch,
+            commit=commit,
+            sweep_count=sweep_count,
+            core_ux_gate=core_ux_gate,
         )
         print(
             f"warn: delivery path {primary} not writable ({exc}); "
@@ -365,7 +377,10 @@ def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Pa
     handoffs_dir = Path(os.path.expandvars(str(handoffs_dir))).expanduser().resolve()
     pattern = f"{sanitize_name(task_id)}__*__planner.json"
     if not handoffs_dir.exists():
-        print(f"info: no incoming planner handoffs found for {task_id} in {handoffs_dir}")
+        print(
+            f"info: skip rename; no incoming planner handoffs found for {task_id} in {handoffs_dir}",
+            file=sys.stderr,
+        )
         return []
     candidates = [path for path in handoffs_dir.glob(pattern) if path.is_file()]
     candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
@@ -375,7 +390,10 @@ def _mark_planner_incoming_consumed(handoffs_dir: Path, task_id: str) -> list[Pa
         path.replace(consumed)
         renamed.append(consumed)
     if not renamed:
-        print(f"info: no incoming planner handoffs found for {task_id} in {handoffs_dir}")
+        print(
+            f"info: skip rename; no incoming planner handoffs found for {task_id} in {handoffs_dir}",
+            file=sys.stderr,
+        )
     return renamed
 
 
@@ -393,6 +411,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--status", default="completed", help="Delivery status.")
     parser.add_argument("--verdict", help="Canonical review verdict.")
     parser.add_argument("--commit", help="Optional commit SHA to include in STATUS.md ack log.")
+    parser.add_argument("--sweep-count", type=int, help="Planner sweep count metadata for DELIVERY.md.")
+    parser.add_argument(
+        "--core-ux-gate",
+        help="Required core UX gate marker when the dispatch receipt marks the step as core UX.",
+    )
+    parser.add_argument(
+        "--base-drift-acknowledged",
+        action="store_true",
+        help="Acknowledge intentional current-main drift for a branch closeout.",
+    )
+    parser.add_argument(
+        "--drift-reason",
+        help="JSON drift reason with drift_from, drift_to, and orthogonal_files_verified.",
+    )
     parser.add_argument(
         "--test-policy",
         choices=["UPDATE", "FREEZE", "EXTEND", "N/A"],
@@ -504,8 +536,14 @@ def _validate_branch_lock(
     expected_branch = dispatch_receipt.get("expected_branch")
     if not isinstance(expected_branch, str) or not expected_branch:
         return
-    actual_branch = receipt.get("branch_tip")
+    actual_branch = receipt.get("branch")
     if not isinstance(actual_branch, str) or not actual_branch:
+        actual_branch = receipt.get("branch_tip")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        return
+    if re.fullmatch(r"[0-9a-f]{7,64}", actual_branch):
+        return
+    if actual_branch == "main":
         return
     if actual_branch == expected_branch:
         return
@@ -530,6 +568,77 @@ def _git_main_ref(repo_root: Path) -> str | None:
             continue
         return ref
     return None
+
+
+def _git_main_tip_sha(repo_root: Path) -> str | None:
+    main_ref = _git_main_ref(repo_root)
+    if main_ref is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", main_ref],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _git_changed_files(repo_root: Path, left: str, right: str) -> set[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "diff", "--name-only", left, right],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def _validate_base_drift(
+    *,
+    repo_root: Path,
+    branch_base: str,
+    branch_tip: str,
+    expected_base_sha: str | None,
+    base_drift_acknowledged: bool,
+    drift_reason_text: str | None,
+) -> dict[str, object] | None:
+    if not isinstance(expected_base_sha, str) or not expected_base_sha:
+        return None
+    current_main_sha = _git_main_tip_sha(repo_root)
+    if not current_main_sha:
+        return None
+    if current_main_sha == branch_base:
+        if base_drift_acknowledged:
+            print(
+                "warn: base drift acknowledgement ignored; branch already aligned with current main",
+                file=sys.stderr,
+            )
+        return None
+    if not base_drift_acknowledged:
+        raise SystemExit("base drift detected: current main advanced since dispatch")
+    if not drift_reason_text:
+        raise SystemExit("base drift detected: missing --drift-reason")
+    try:
+        drift_reason = json.loads(drift_reason_text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid --drift-reason JSON: {exc}") from exc
+    if not isinstance(drift_reason, dict):
+        raise SystemExit("invalid --drift-reason JSON: expected object")
+    drift_from = drift_reason.get("drift_from")
+    drift_to = drift_reason.get("drift_to")
+    if drift_from != branch_base or drift_to != current_main_sha:
+        raise SystemExit("base drift detected: drift_reason does not match current main transition")
+    if not drift_reason.get("orthogonal_files_verified"):
+        raise SystemExit("base drift detected: orthogonal_files_verified must be true")
+    branch_files = _git_changed_files(repo_root, branch_base, branch_tip)
+    drift_files = _git_changed_files(repo_root, str(drift_from), str(drift_to))
+    if branch_files & drift_files:
+        raise SystemExit("base drift is not orthogonal")
+    return drift_reason
 
 
 def _git_branch_and_base(
@@ -599,6 +708,16 @@ def main() -> int:
             task_id=args.task_id,
             source=args.source,
         )
+    if (
+        not args.enforce_planner_self_closeout
+        and args.source in {"planner", "planner-dispatcher"}
+        and args.target == "memory"
+    ):
+        print(
+            "WARNING: bypassing planner self-closeout; .consumed + DELIVERY.md may drift",
+            file=sys.stderr,
+        )
+        return 0
     receipt_path = _profile_handoff_path(profile, args.task_id, args.source, args.target)
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
     receipt = load_json(receipt_path) or {
@@ -629,8 +748,47 @@ def main() -> int:
         task_id=args.task_id,
         source=args.source,
     )
+    expected_base_sha = (
+        source_dispatch_receipt.get("expected_base_sha")
+        if isinstance(source_dispatch_receipt, dict)
+        else None
+    )
+    if args.branch:
+        repo_root = getattr(profile, "repo_root", None)
+        if not repo_root:
+            raise SystemExit("cannot compute branch closure fields without profile.repo_root")
+        try:
+            branch_base, branch_tip = _git_branch_and_base(Path(repo_root), args.branch)
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+            raise SystemExit(
+                f"failed to auto-compute closure fields for branch {args.branch!r}: {exc}"
+            )
+        receipt["branch"] = args.branch
+        receipt["branch_base"] = branch_base
+        receipt["branch_tip"] = branch_tip
+        if not args.ack_only:
+            drift_reason = _validate_base_drift(
+                repo_root=Path(repo_root),
+                branch_base=branch_base,
+                branch_tip=branch_tip,
+                expected_base_sha=expected_base_sha if isinstance(expected_base_sha, str) else None,
+                base_drift_acknowledged=args.base_drift_acknowledged,
+                drift_reason_text=args.drift_reason,
+            )
+            if drift_reason is not None:
+                receipt["base_drift_acknowledged"] = True
+                receipt["drift_reason"] = args.drift_reason
+    if args.commit is not None:
+        receipt["commit"] = args.commit
+    if args.sweep_count is not None:
+        receipt["sweep_count"] = args.sweep_count
+    if args.core_ux_gate is not None:
+        receipt["core_ux_gate"] = args.core_ux_gate
     if not args.ack_only:
         _validate_completion_receipt(receipt, source_dispatch_receipt)
+        if isinstance(source_dispatch_receipt, dict) and source_dispatch_receipt.get("core_ux"):
+            if not args.core_ux_gate or not args.core_ux_gate.strip():
+                raise SystemExit("core_ux_gate is required for core_ux steps")
 
     source_role = profile.seat_roles.get(args.source, "")
     target_role = profile.seat_roles.get(args.target, "")
@@ -644,6 +802,13 @@ def main() -> int:
     )
     if receipt_test_policy:
         receipt["test_policy"] = receipt_test_policy
+
+    summary = args.summary or f"{args.task_id} completed by {args.source}."
+    title = args.title or args.task_id
+    receipt["kind"] = "completion"
+    receipt["status"] = args.status
+    receipt["title"] = title
+    receipt["summary"] = summary
 
     if args.enforce_planner_self_closeout and args.source in {"planner", "planner-dispatcher"}:
         _mark_planner_incoming_consumed(_expanded_profile_handoff_dir(profile), args.task_id)
@@ -737,8 +902,6 @@ def main() -> int:
                 "planner delivery with USER_DECISION_NEEDED requires --next-action"
             )
 
-    summary = args.summary or f"{args.task_id} completed by {args.source}."
-    title = args.title or args.task_id
     delivery_path, used_fallback_delivery = persist_delivery(
         profile,
         seat=args.source,
@@ -753,12 +916,16 @@ def main() -> int:
         user_summary=args.user_summary,
         next_action=args.next_action,
         correlation_id=correlation_id,
+        branch=args.branch,
+        commit=args.commit,
+        sweep_count=args.sweep_count,
+        core_ux_gate=args.core_ux_gate,
     )
     source_todo_path = complete_source_queue_if_possible(
         profile,
         seat=args.source,
         task_id=args.task_id,
-        summary=args.summary or f"completed by {args.source}",
+        summary=summary,
     )
     receipt["delivery_path"] = str(delivery_path)
     receipt["delivered_at"] = utc_now_iso()
