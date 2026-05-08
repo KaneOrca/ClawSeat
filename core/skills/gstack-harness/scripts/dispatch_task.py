@@ -160,6 +160,11 @@ def _expanded_handoff_dir(profile: object) -> Path:
     return Path(os.path.expandvars(text)).expanduser().resolve()
 
 
+def _expanded_tasks_dir(profile: object) -> Path:
+    text = str(getattr(profile, "tasks_root")).strip()
+    return Path(os.path.expandvars(text)).expanduser().resolve()
+
+
 def _builder_outstanding_task(todo_path: Path) -> str | None:
     if not todo_path.exists():
         return None
@@ -184,6 +189,166 @@ def _finding_hypothesis_counter(profile: object, *, target: str, finding_id: str
             continue
         count += 1
     return count
+
+
+def _latest_consumed_completion_receipt(profile: object, target: str) -> tuple[str | None, Path | None]:
+    handoff_dir = _expanded_handoff_dir(profile)
+    pattern = f"*__{sanitize_name(target)}__planner.json.consumed"
+    candidates = [path for path in handoff_dir.glob(pattern) if path.is_file()]
+    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates:
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("kind") != "completion":
+            continue
+        if payload.get("source") != target or payload.get("target") != "planner":
+            continue
+        task_id = str(payload.get("task_id") or path.name.split("__", 1)[0]).strip() or None
+        return task_id, path
+    return None, None
+
+
+def _clear_audit_script_path() -> Path:
+    return Path(__file__).resolve().with_name("audit_clear_before_dispatch.py")
+
+
+def _clear_audit_finding_path(profile: object, task_id: str) -> Path:
+    timestamp = utc_now_iso().split("+", 1)[0].replace(":", "-")
+    project = sanitize_name(str(getattr(profile, "project_name")))
+    finding_dir = _expanded_tasks_dir(profile) / "finding"
+    return finding_dir / f"{project}-finding-{timestamp}-clear-violation-{sanitize_name(task_id)}.md"
+
+
+def _write_clear_audit_finding(
+    *,
+    profile: object,
+    task_id: str,
+    source: str,
+    target: str,
+    prev_task: str | None,
+    receipt_path: Path,
+    delivery_path: Path,
+    audit_result: subprocess.CompletedProcess[str],
+    warning_text: str,
+) -> Path:
+    finding_path = _clear_audit_finding_path(profile, task_id)
+    finding_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_stderr = (audit_result.stderr or "").strip() or "<empty>"
+    audit_stdout = (audit_result.stdout or "").strip() or "<empty>"
+    content = (
+        "---\n"
+        "kind: finding\n"
+        f"project: {profile.project_name}\n"
+        f"task_id: {task_id}\n"
+        "seat: planner\n"
+        f"source: {source}\n"
+        f"target: {target}\n"
+        "status: open\n"
+        f"title: clear-before-dispatch violation for {task_id}\n"
+        f"ts: {utc_now_iso()}\n"
+        f"detail: Planner dispatched {target} without /clear after gate 1 + gate 3 passed.\n"
+        "---\n"
+        "\n"
+        "# Evidence\n"
+        "\n"
+        f"- warning: {warning_text}\n"
+        f"- prev_task: {prev_task or '<none>'}\n"
+        f"- receipt: {receipt_path}\n"
+        f"- delivery: {delivery_path}\n"
+        f"- audit_script: {_clear_audit_script_path()}\n"
+        f"- audit_exit: {audit_result.returncode}\n"
+        "\n"
+        "## Audit stderr\n"
+        "\n"
+        "```text\n"
+        f"{audit_stderr}\n"
+        "```\n"
+        "\n"
+        "## Audit stdout\n"
+        "\n"
+        "```text\n"
+        f"{audit_stdout}\n"
+        "```\n"
+    )
+    finding_path.write_text(content, encoding="utf-8")
+    return finding_path
+
+
+def _send_clear_audit_warning(profile: object, warning_text: str) -> None:
+    try:
+        result = notify(profile, "planner", warning_text)
+    except Exception as exc:  # noqa: BLE001 - best-effort side channel
+        print(f"warn: clear audit planner notify failed: {exc}", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        print(f"warn: clear audit planner notify failed: {detail}", file=sys.stderr)
+
+
+def _run_clear_audit_hook(
+    *,
+    profile: object,
+    source_role: str,
+    target_role: str,
+    task_id: str,
+    source: str,
+    target: str,
+    notify_sent: bool,
+) -> None:
+    if source_role != "planner" or target_role == "planner" or not notify_sent:
+        return
+    prev_task, receipt_marker = _latest_consumed_completion_receipt(profile, target)
+    if receipt_marker is None:
+        return
+    delivery_path = profile.delivery_path(target)
+    if not delivery_path.exists():
+        return
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(_clear_audit_script_path()),
+                "--profile",
+                str(profile.profile_path),
+                "--task-id",
+                task_id,
+                "--target",
+                target,
+            ],
+            cwd=str(profile.repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - hook must not block dispatch
+        print(f"warn: clear audit hook failed for {task_id}: {exc}", file=sys.stderr)
+        return
+    if result.returncode == 1:
+        warning_text = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or f"[CLEAR-AUDIT-WARNING] task_id={task_id} target={target} prev_task={prev_task or '<none>'}"
+        )
+        if "[CLEAR-AUDIT-WARNING]" not in warning_text:
+            warning_text = f"[CLEAR-AUDIT-WARNING] {warning_text}"
+        finding_path = _write_clear_audit_finding(
+            profile=profile,
+            task_id=task_id,
+            source=source,
+            target=target,
+            prev_task=prev_task,
+            receipt_path=receipt_marker,
+            delivery_path=delivery_path,
+            audit_result=result,
+            warning_text=warning_text,
+        )
+        print(warning_text, file=sys.stderr)
+        _send_clear_audit_warning(profile, f"{warning_text} finding={finding_path}")
+        return
+    if result.returncode not in {0, 2}:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        print(f"warn: clear audit helper failed for {task_id}: {detail}", file=sys.stderr)
 
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
@@ -698,6 +863,9 @@ def main() -> int:
                 "status": "skipped",
                 "reason": f"target_kind_{resolution.kind}",
             }
+        notify_success = bool(receipt.get("notified_at"))
+    else:
+        notify_success = False
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     write_json(receipt_path, receipt)
     _write_dispatch_to_ledger(
@@ -724,6 +892,16 @@ def main() -> int:
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
     print(f"receipt: {receipt_path}")
+    if notify_success and source_role == "planner" and target_role != "planner":
+        _run_clear_audit_hook(
+            profile=profile,
+            source_role=source_role,
+            target_role=target_role,
+            task_id=args.task_id,
+            source=args.source,
+            target=args.target,
+            notify_sent=notify_success,
+        )
     if _should_announce_planner_event(args.source, args.target, profile=profile):
         _try_announce_planner_event(
             project=profile.project_name,
