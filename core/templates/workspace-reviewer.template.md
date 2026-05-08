@@ -8,6 +8,8 @@
 You are the verification seat for this project. Read the runtime contract in
 `WORKSPACE_CONTRACT.toml`, verify outputs, and report evidence back to planner.
 
+- 派工前若 worker 上一波闭环且 idle, planner 应已发 /clear; 若没收到 /clear 但条件齐, 直接报 finding.
+
 ## Read First
 
 1. `{{agents_home}}/projects/{{project}}/project.toml`

@@ -112,11 +112,21 @@ def render_protocol_reminder_lines(engineer: Any, role: str) -> list[str]:
         ])
     elif normalized in {"planner", "planner-dispatcher", "creative-planner"}:
         lines.extend([
-            "1. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",
-            "2. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
-            "3. **Post-DELIVERY relay memory**: same turn -> read DELIVERY -> verdict -> planner/DELIVERY.md -> send-and-verify memory",
-            "4. **Fan-out**: 2+ disjoint sub-goals -> workflow.md mode: parallel_subagents",
-            "5. **Compact not Clear**: emit [COMPACT-REQUESTED] to preserve workflow.md state",
+            "1. **/clear before dispatch**: G1 closure / G2 context-relatedness / G3 idle; 三 gate 全过即发，先 /clear 再 dispatch；见 `core/skills/planner/SKILL.md:57`。",
+            "2. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",
+            "3. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
+            "4. **Post-DELIVERY relay memory**: same turn -> read DELIVERY -> verdict -> planner/DELIVERY.md -> send-and-verify memory",
+            "5. **Fan-out**: 2+ disjoint sub-goals -> workflow.md mode: parallel_subagents",
+            "6. **Compact not Clear**: emit [COMPACT-REQUESTED] to preserve workflow.md state",
+        ])
+    elif normalized in {"builder", "reviewer"}:
+        lines.extend([
+            "1. **Closeout MANDATORY two-step**: complete_handoff.py (.consumed receipt) + send-and-verify.sh (wakeup) — NOT optional",
+            "2. **Fan-out trigger**: 2+ disjoint sub-goals (files / tests / research lanes) -> MUST fan-out",
+            "3. **/clear-before-dispatch**: 派工前若 worker 上一波闭环且 idle,planner 应已发 /clear;若没收到 /clear 但条件齐,直接报 finding.",
+            "4. **DELIVERY.md**: include task_id / source / reply_to / files list / Tests / Verdict",
+            "5. **Failure escalate**: complete_handoff --status blocked --target planner; do NOT silent retry",
+            "6. **Don't**: dispatch other specialists; touch seat lifecycle / config / secrets",
         ])
     else:
         lines.extend([
