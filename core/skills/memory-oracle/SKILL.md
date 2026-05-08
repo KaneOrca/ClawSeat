@@ -47,6 +47,11 @@ Memory 被动读取的知识来自各席位 domain KB：
 - 不通过消息协议查询 seat KB；文件路径和字段以 `core/references/federated-kb-schema.md` 为准。
 - 读取后只把综合判断写入 Memory 自己的 orphan KB；不复制原始 seat KB 数据。
 - 如果某个 seat KB 缺失，回答 `not_in_federated_kb`，不要编造。
+- If a task is delivered under `~/.agents/tasks/<project>/peer-deliveries/<peer-id>/`,
+  memory may read the peer `DELIVERY.md` and `receipt.json` to synthesize an
+  orphan KB summary.
+- For peer-deliveries, write only the synthesized result into Memory's own
+  orphan KB; do not copy the raw peer delivery text or receipts.
 
 ## KB 触发点 (v0.8)
 
