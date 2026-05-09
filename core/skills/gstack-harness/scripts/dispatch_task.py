@@ -152,6 +152,30 @@ def _advance_builder_task_branch(
     if not root.exists():
         print(f"warn: repo_root {root} does not exist; skip builder branch ref advance", file=sys.stderr)
         return False
+    checked_out_ref = f"branch refs/heads/{branch}"
+    try:
+        worktree_list = subprocess.run(
+            ["git", "-C", str(root), "worktree", "list", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: failed to inspect worktrees for {branch}; skip builder branch ref advance: {detail}",
+            file=sys.stderr,
+        )
+        return False
+    except FileNotFoundError:
+        print("warn: git not found; skip builder branch ref advance", file=sys.stderr)
+        return False
+    if checked_out_ref in worktree_list:
+        print(
+            f"warn: builder branch {branch} is currently checked out; skip branch ref advance",
+            file=sys.stderr,
+        )
+        return False
     try:
         current = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--verify", branch],
@@ -161,9 +185,6 @@ def _advance_builder_task_branch(
         ).stdout.strip()
     except subprocess.CalledProcessError:
         current = ""
-    except FileNotFoundError:
-        print("warn: git not found; skip builder branch ref advance", file=sys.stderr)
-        return False
     if current == base_sha:
         return True
     try:

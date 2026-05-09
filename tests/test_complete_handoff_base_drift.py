@@ -87,6 +87,8 @@ def _run_complete(
         "task-1",
         "--summary",
         "done",
+        "--user-summary",
+        "done",
         "--branch",
         "feature",
         "--pr-number",

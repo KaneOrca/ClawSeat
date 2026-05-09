@@ -928,6 +928,8 @@ def main() -> int:
         "target": args.target,
     }
     receipt["correlation_id"] = correlation_id
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
     if args.branch:
         repo_root = getattr(profile, "repo_root", None)
         if not repo_root:
@@ -985,8 +987,6 @@ def main() -> int:
         receipt["sweep_count"] = args.sweep_count
     if args.core_ux_gate is not None:
         receipt["core_ux_gate"] = args.core_ux_gate
-    if args.user_summary is not None:
-        receipt["user_summary"] = args.user_summary
     if args.source.startswith("memory") and args.commit is not None:
         receipt["memory_commit"] = args.commit
     if (
