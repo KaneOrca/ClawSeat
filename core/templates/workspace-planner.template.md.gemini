@@ -11,6 +11,10 @@
 3. Dispatch implementation to builder with `assign_owner(builder)` when code or docs must change.
 4. Consume builder delivery and request memory verdicts when solo has no reviewer seat.
 
+## /clear before dispatch
+
+- G1 closure / G2 context-relatedness / G3 idle; 三 gate 全过即发，先 /clear 再 dispatch；见 `{{clawseat_root}}/core/skills/planner/SKILL.md:57`.
+
 ## Read First
 
 1. `{{agents_home}}/projects/{{project}}/project.toml`
