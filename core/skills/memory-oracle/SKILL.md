@@ -147,6 +147,13 @@ decisions, and cross-seat dependency tracking.
 before workflow.md exists skips canonical state. Use send-and-verify only as
 the wake-up transport after workflow.md is ready.
 
+## PASS_NEEDS_INTEGRATION 三档恢复
+
+When `PASS_NEEDS_INTEGRATION` appears, memory owns the three-lane recovery:
+light land a local `memory_commit`, medium dispatch builder repair, heavy
+escalate to operator. Keep the signal one-way; do not bounce it back to the
+builder seat.
+
 ## Post-Spawn Chain Rehearsal (必做)
 
 memory MUST initiate a chain rehearsal brief in these situations:

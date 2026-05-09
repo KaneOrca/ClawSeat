@@ -145,6 +145,7 @@ or `complete_handoff.py`, planner MUST within the same turn:
 Why: if planner forms a verdict but idles waiting for user input, memory does
 not know the task is ready and the planner-to-memory chain breaks.
 PASS 前必填 user_summary,简述本波 operator-visible 进度.
+PASS 前必查 head_contains_commit + user_summary 非空。
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status. Planner self-closeout protocol: see [`core/references/planner-self-closeout-protocol.md`](../../references/planner-self-closeout-protocol.md).
 ### Chain End Relay to Memory (双入口都适用, 2026-04-30 BK)

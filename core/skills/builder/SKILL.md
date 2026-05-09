@@ -13,6 +13,7 @@ See [core/references/handoff-receipt-protocol.md](../../references/handoff-recei
 ## TODO Queue Priority
 See [core/references/todo-queue-priority.md](../../references/todo-queue-priority.md) — process queue HEAD first (not tail); skip [superseded]; age-out >3 days. 先看队首 / queue head, not tail; zombie tasks result from tail-first reading.
 ## Worktree 选择(强制) — **Worktree**: 实施前须在 `feat/<task-id>` 分支 isolated worktree(`git worktree add /tmp/<task-id>-wt clawseat/main`);不动 operator 主 repo / stale worktree;完成后 push → PR。
+- DO lineage repair waves that choose a/c must seed the temporary worktree from memory active HEAD; do not seed from a stale local `main` when the repair path is explicitly lineage-sensitive.
 - Pickup verification: see [`core/references/builder-pickup-verification.md`](../../references/builder-pickup-verification.md) before editing.
 ## Context Management
 See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true; emit [COMPACT-REQUESTED] at >80% context. Exactly one marker as final line.
