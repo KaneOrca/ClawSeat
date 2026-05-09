@@ -9,6 +9,7 @@ import re
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Add core/lib to path so seat_resolver can be imported
@@ -153,6 +154,90 @@ VALID_FRONTSTAGE_DISPOSITIONS = {
     "AUTO_ADVANCE",
     "USER_DECISION_NEEDED",
 }
+
+DO_MERGE_AT = datetime.fromisoformat("2026-05-09T14:55:53+08:00")
+LINEAGE_GRANDFATHER_CUTOFF = DO_MERGE_AT + timedelta(weeks=6)
+LINEAGE_STATUS_VALUES = {
+    "in-lineage",
+    "divergent",
+    "unknown",
+}
+LINEAGE_OPTIONAL_FIELDS = ("memory_commit",)
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    raw = (value or "").strip().strip("\"'")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _receipt_lineage_timestamp(receipt: dict[str, object], receipt_path: Path) -> datetime:
+    for key in ("created_at", "delivered_at", "date"):
+        raw_value = receipt.get(key)
+        if isinstance(raw_value, str):
+            parsed = _parse_iso_datetime(raw_value)
+            if parsed is not None:
+                return parsed
+    try:
+        if receipt_path.exists():
+            return datetime.fromtimestamp(receipt_path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        pass
+    return datetime.now(timezone.utc)
+
+
+def _lineage_missing_fields(receipt: dict[str, object]) -> list[str]:
+    missing: list[str] = []
+
+    user_summary = receipt.get("user_summary")
+    if not isinstance(user_summary, str) or not user_summary.strip():
+        missing.append("user_summary")
+
+    builder_commit = receipt.get("builder_commit")
+    if not isinstance(builder_commit, str) or not builder_commit.strip():
+        missing.append("builder_commit")
+
+    head_contains_commit = receipt.get("head_contains_commit")
+    if not isinstance(head_contains_commit, bool):
+        missing.append("head_contains_commit")
+
+    lineage_status = receipt.get("lineage_status")
+    if not isinstance(lineage_status, str) or lineage_status.strip() not in LINEAGE_STATUS_VALUES:
+        missing.append("lineage_status")
+
+    return missing
+
+
+def _validate_completion_lineage(receipt: dict[str, object], receipt_path: Path) -> None:
+    # Step 1 decision: the lineage schema is canonical in the JSON receipt.
+    # DELIVERY.md remains human-readable and is not the source of truth here.
+    missing = _lineage_missing_fields(receipt)
+    if not missing:
+        return
+
+    receipt_ts = _receipt_lineage_timestamp(receipt, receipt_path)
+    if receipt_ts < LINEAGE_GRANDFATHER_CUTOFF:
+        task_id = receipt.get("task_id", "<unknown>")
+        print(
+            "warn: deprecated completion receipt format for "
+            f"task_id={task_id!r}; missing lineage fields {missing}; "
+            f"grandfather until {LINEAGE_GRANDFATHER_CUTOFF.isoformat()}",
+            file=sys.stderr,
+        )
+        return
+
+    raise SystemExit(
+        "completion receipt missing required lineage fields after grandfather cutoff: "
+        f"{missing} (receipt timestamp {receipt_ts.isoformat()}, "
+        f"cutoff {LINEAGE_GRANDFATHER_CUTOFF.isoformat()})"
+    )
 
 
 def _write_completion_to_ledger(
@@ -856,6 +941,7 @@ def main() -> int:
         target=args.target,
         allow_branch_mismatch=args.allow_branch_mismatch,
     )
+    _validate_completion_lineage(receipt, receipt_path)
 
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
         raise SystemExit(
