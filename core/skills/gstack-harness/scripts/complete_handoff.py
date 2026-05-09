@@ -9,6 +9,7 @@ import re
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Add core/lib to path so seat_resolver can be imported
@@ -153,6 +154,205 @@ VALID_FRONTSTAGE_DISPOSITIONS = {
     "AUTO_ADVANCE",
     "USER_DECISION_NEEDED",
 }
+
+DO_MERGE_AT = datetime.fromisoformat("2026-05-09T14:55:53+08:00")
+LINEAGE_GRANDFATHER_CUTOFF = DO_MERGE_AT + timedelta(weeks=6)
+LINEAGE_STATUS_VALUES = {
+    "in-lineage",
+    "divergent",
+    "unknown",
+}
+PASS_NEEDS_INTEGRATION = "PASS_NEEDS_INTEGRATION"
+LINEAGE_OPTIONAL_FIELDS = ("memory_commit",)
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    raw = (value or "").strip().strip("\"'")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _receipt_lineage_timestamp(receipt: dict[str, object], receipt_path: Path) -> datetime:
+    for key in ("created_at", "delivered_at", "date"):
+        raw_value = receipt.get(key)
+        if isinstance(raw_value, str):
+            parsed = _parse_iso_datetime(raw_value)
+            if parsed is not None:
+                return parsed
+    try:
+        if receipt_path.exists():
+            return datetime.fromtimestamp(receipt_path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        pass
+    return datetime.now(timezone.utc)
+
+
+def _lineage_missing_fields(receipt: dict[str, object]) -> list[str]:
+    missing: list[str] = []
+
+    user_summary = receipt.get("user_summary")
+    if not isinstance(user_summary, str) or not user_summary.strip():
+        missing.append("user_summary")
+
+    builder_commit = receipt.get("builder_commit")
+    if not isinstance(builder_commit, str) or not builder_commit.strip():
+        missing.append("builder_commit")
+
+    head_contains_commit = receipt.get("head_contains_commit")
+    if not isinstance(head_contains_commit, bool):
+        missing.append("head_contains_commit")
+
+    lineage_status = receipt.get("lineage_status")
+    if not isinstance(lineage_status, str) or lineage_status.strip() not in LINEAGE_STATUS_VALUES:
+        missing.append("lineage_status")
+
+    return missing
+
+
+def _validate_completion_lineage(receipt: dict[str, object], receipt_path: Path) -> None:
+    # Step 1 decision: the lineage schema is canonical in the JSON receipt.
+    # DELIVERY.md remains human-readable and is not the source of truth here.
+    missing = _lineage_missing_fields(receipt)
+    if not missing:
+        return
+
+    receipt_ts = _receipt_lineage_timestamp(receipt, receipt_path)
+    if receipt_ts < LINEAGE_GRANDFATHER_CUTOFF:
+        task_id = receipt.get("task_id", "<unknown>")
+        print(
+            "warn: deprecated completion receipt format for "
+            f"task_id={task_id!r}; missing lineage fields {missing}; "
+            f"grandfather until {LINEAGE_GRANDFATHER_CUTOFF.isoformat()}",
+            file=sys.stderr,
+        )
+        return
+
+    raise SystemExit(
+        "completion receipt missing required lineage fields after grandfather cutoff: "
+        f"{missing} (receipt timestamp {receipt_ts.isoformat()}, "
+        f"cutoff {LINEAGE_GRANDFATHER_CUTOFF.isoformat()})"
+    )
+
+
+def _receipt_reported_commit(receipt: dict[str, object]) -> str | None:
+    for key in ("builder_commit", "commit", "branch_tip"):
+        raw_value = receipt.get(key)
+        if isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+    return None
+
+
+def _git_merge_base_is_ancestor(repo_root: Path, reported_commit: str) -> bool | None:
+    if not repo_root.exists():
+        print(f"warn: repo_root {repo_root} does not exist; skip lineage guard", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", reported_commit, "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage guard", file=sys.stderr)
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    detail = (result.stderr or result.stdout or "").strip()
+    print(
+        "warn: merge-base --is-ancestor failed for "
+        f"commit={reported_commit!r} in {repo_root}: {detail or 'unknown git error'}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _annotate_lineage_status(
+    receipt: dict[str, object],
+    *,
+    repo_root: Path | None,
+) -> tuple[str, bool, str | None]:
+    reported_commit = _receipt_reported_commit(receipt)
+    if not reported_commit:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+        return "unknown", False, None
+
+    if repo_root is None:
+        print(
+            "warn: cannot evaluate lineage guard without repo_root; marking unknown",
+            file=sys.stderr,
+        )
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+        return "unknown", False, reported_commit
+
+    contains = _git_merge_base_is_ancestor(repo_root, reported_commit)
+    if contains is True:
+        receipt["head_contains_commit"] = True
+        receipt["lineage_status"] = "in-lineage"
+    elif contains is False:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "divergent"
+    else:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+
+    if not isinstance(receipt.get("builder_commit"), str) or not str(receipt.get("builder_commit") or "").strip():
+        receipt["builder_commit"] = reported_commit
+
+    return str(receipt["lineage_status"]), bool(receipt["head_contains_commit"]), reported_commit
+
+
+def _emit_pass_needs_integration(
+    profile: object,
+    *,
+    task_id: str,
+    source: str,
+    target: str,
+    reported_commit: str,
+    delivery_path: Path,
+    user_summary: str | None,
+) -> None:
+    message_lines = [
+        f"{PASS_NEEDS_INTEGRATION}: task_id={task_id}",
+        f"lineage_status=divergent",
+        f"reported_commit={reported_commit}",
+        f"source={source}",
+        f"target={target}",
+        f"delivery_path={delivery_path}",
+    ]
+    if user_summary:
+        message_lines.append(f"user_summary={user_summary.strip()}")
+    message = "\n".join(message_lines)
+    try:
+        result = notify(profile, "memory", message)
+    except Exception as exc:  # noqa: BLE001 watchdog must not block chain
+        print(
+            f"warn: PASS_NEEDS_INTEGRATION notify raised for task_id={task_id!r}: {exc}",
+            file=sys.stderr,
+        )
+        return
+    if getattr(result, "returncode", 0) != 0:
+        detail = (
+            getattr(result, "stderr", "")
+            or getattr(result, "stdout", "")
+            or f"exit {getattr(result, 'returncode', 'unknown')}"
+        )
+        print(
+            f"warn: PASS_NEEDS_INTEGRATION notify failed for task_id={task_id!r}: "
+            f"{str(detail).strip() or 'unknown notify error'}",
+            file=sys.stderr,
+        )
 
 
 def _write_completion_to_ledger(
@@ -707,6 +907,8 @@ def main() -> int:
             task_id=args.task_id,
             source=args.source,
         )
+    if args.user_summary is not None and not args.user_summary.strip():
+        raise SystemExit("user_summary must not be empty")
     if (
         not args.enforce_planner_self_closeout
         and args.source in {"planner", "planner-dispatcher"}
@@ -726,6 +928,8 @@ def main() -> int:
         "target": args.target,
     }
     receipt["correlation_id"] = correlation_id
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
     if args.branch:
         repo_root = getattr(profile, "repo_root", None)
         if not repo_root:
@@ -783,6 +987,25 @@ def main() -> int:
         receipt["sweep_count"] = args.sweep_count
     if args.core_ux_gate is not None:
         receipt["core_ux_gate"] = args.core_ux_gate
+    if args.source.startswith("memory") and args.commit is not None:
+        receipt["memory_commit"] = args.commit
+    if (
+        not isinstance(receipt.get("builder_commit"), str)
+        or not str(receipt.get("builder_commit") or "").strip()
+    ):
+        fallback_commit = args.commit
+        if not fallback_commit and isinstance(receipt.get("branch_tip"), str):
+            branch_tip = str(receipt.get("branch_tip") or "").strip()
+            if branch_tip:
+                fallback_commit = branch_tip
+        if fallback_commit:
+            receipt["builder_commit"] = fallback_commit
+    repo_root = getattr(profile, "repo_root", None)
+    repo_root_path = Path(str(repo_root)).expanduser().resolve() if repo_root else None
+    lineage_status, head_contains_commit, reported_commit = _annotate_lineage_status(
+        receipt,
+        repo_root=repo_root_path,
+    )
     if not args.ack_only:
         _validate_completion_receipt(receipt, source_dispatch_receipt)
         if isinstance(source_dispatch_receipt, dict) and source_dispatch_receipt.get("core_ux"):
@@ -856,6 +1079,7 @@ def main() -> int:
         target=args.target,
         allow_branch_mismatch=args.allow_branch_mismatch,
     )
+    _validate_completion_lineage(receipt, receipt_path)
 
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
         raise SystemExit(
@@ -894,8 +1118,6 @@ def main() -> int:
                 "planner delivery back to frontstage requires --frontstage-disposition "
                 "with AUTO_ADVANCE or USER_DECISION_NEEDED"
             )
-        if not args.user_summary:
-            raise SystemExit("planner delivery back to frontstage requires --user-summary")
         if args.frontstage_disposition == "USER_DECISION_NEEDED" and not args.next_action:
             raise SystemExit(
                 "planner delivery with USER_DECISION_NEEDED requires --next-action"
@@ -932,8 +1154,9 @@ def main() -> int:
     receipt["used_fallback_delivery"] = used_fallback_delivery
     receipt["verdict"] = args.verdict
     receipt["frontstage_disposition"] = args.frontstage_disposition
-    receipt["user_summary"] = args.user_summary
     receipt["next_action"] = args.next_action
+    receipt["head_contains_commit"] = head_contains_commit
+    receipt["lineage_status"] = lineage_status
     if planner_to_frontstage:
         frontstage_todo = profile.todo_path(args.target)
         append_task_to_queue(
@@ -961,6 +1184,16 @@ def main() -> int:
         )
         receipt["todo_path"] = str(frontstage_todo)
         receipt["assigned_at"] = utc_now_iso()
+    if lineage_status == "divergent" and reported_commit and args.target != "memory":
+        _emit_pass_needs_integration(
+            profile,
+            task_id=args.task_id,
+            source=args.source,
+            target=args.target,
+            reported_commit=reported_commit,
+            delivery_path=delivery_path,
+            user_summary=args.user_summary or args.summary or args.title,
+        )
     # Graceful degrade for external callers (e.g. the ancestor Claude Code
     # running an install via query_memory.py --ask). These callers pass
     # source strings like "memory-client" / "bootstrap-installer" that are
@@ -985,6 +1218,13 @@ def main() -> int:
             target=args.target,
             user_summary=args.user_summary,
         )
+        if lineage_status == "divergent" and reported_commit:
+            message += (
+                "\n\n"
+                f"{PASS_NEEDS_INTEGRATION}: "
+                f"reported_commit={reported_commit} is not an ancestor of HEAD; "
+                "memory has been notified."
+            )
         # Resolve target kind via seat_resolver — determines Feishu vs tmux path.
         resolution = resolve_seat_from_profile(args.target, profile)
         openclaw_koder = planner_to_frontstage and resolution.kind == "openclaw"

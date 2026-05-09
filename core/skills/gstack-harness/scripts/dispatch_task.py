@@ -7,6 +7,7 @@ import subprocess
 import re
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 # Add core/lib to path so seat_resolver can be imported
 _scripts_dir = Path(__file__).parent.resolve()
@@ -94,6 +95,8 @@ def _resolve_gstack_skills_root() -> str:
 
 
 _GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
+DO_MERGE_AT = datetime.fromisoformat("2026-05-09T14:55:53+08:00")
+LINEAGE_GRANDFATHER_CUTOFF = DO_MERGE_AT + timedelta(weeks=6)
 
 
 def _git_main_tip(repo_root: Path | str | None) -> str | None:
@@ -130,6 +133,97 @@ def _git_main_tip(repo_root: Path | str | None) -> str | None:
         file=sys.stderr,
     )
     return None
+
+
+def _advance_builder_task_branch(
+    repo_root: Path | str | None,
+    branch: str | None,
+    base_sha: str | None,
+) -> bool:
+    """Advance a builder task branch to the requested base SHA.
+
+    This is a best-effort repair path. If the branch already points at the
+    requested base, it is left alone. If the repo or git is unavailable, the
+    dispatch still proceeds and the caller can surface the drift later.
+    """
+    if not repo_root or not branch or not base_sha:
+        return False
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip builder branch ref advance", file=sys.stderr)
+        return False
+    checked_out_ref = f"branch refs/heads/{branch}"
+    try:
+        worktree_list = subprocess.run(
+            ["git", "-C", str(root), "worktree", "list", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: failed to inspect worktrees for {branch}; skip builder branch ref advance: {detail}",
+            file=sys.stderr,
+        )
+        return False
+    except FileNotFoundError:
+        print("warn: git not found; skip builder branch ref advance", file=sys.stderr)
+        return False
+    if checked_out_ref in worktree_list:
+        print(
+            f"warn: builder branch {branch} is currently checked out; skip branch ref advance",
+            file=sys.stderr,
+        )
+        return False
+    try:
+        current = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        current = ""
+    if current == base_sha:
+        return True
+    try:
+        subprocess.run(
+            ["git", "-C", str(root), "update-ref", f"refs/heads/{branch}", base_sha],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: failed to advance builder branch ref {branch} -> {base_sha}: {detail}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _validate_user_summary(
+    user_summary: str | None,
+    *,
+    dispatched_at: datetime,
+    task_id: str,
+) -> None:
+    if user_summary is not None and not user_summary.strip():
+        raise SystemExit("user_summary must not be empty")
+    if user_summary is None and dispatched_at >= LINEAGE_GRANDFATHER_CUTOFF:
+        raise SystemExit(
+            "dispatch receipt missing required user_summary after grandfather cutoff: "
+            f"task_id={task_id!r}"
+        )
+    if user_summary is None:
+        print(
+            "warn: deprecated dispatch receipt format for "
+            f"task_id={task_id!r}; missing user_summary; "
+            f"grandfather until {LINEAGE_GRANDFATHER_CUTOFF.isoformat()}",
+            file=sys.stderr,
+        )
 
 
 def _dispatch_lock_metadata(
@@ -552,6 +646,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
     parser.add_argument(
+        "--user-summary",
+        help="Short plain-language summary for operator-visible progress.",
+    )
+    parser.add_argument(
         "--test-policy",
         required=True,
         choices=["UPDATE", "FREEZE", "EXTEND", "N/A"],
@@ -704,6 +802,12 @@ def main() -> int:
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
     reply_to = args.reply_to or args.source
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
+    dispatched_at = datetime.now(timezone.utc).replace(microsecond=0)
+    _validate_user_summary(
+        args.user_summary,
+        dispatched_at=dispatched_at,
+        task_id=args.task_id,
+    )
     finding_counter = None
     finding_exceeded = False
     if args.finding_id:
@@ -715,6 +819,18 @@ def main() -> int:
                 f"(counter={finding_counter}); use --rca-override to continue",
                 file=sys.stderr,
             )
+    dispatch_lock_fields = _dispatch_lock_metadata(
+        task_id=args.task_id,
+        target_role=target_role,
+        expected_branch=args.expected_branch,
+        expected_worktree=args.expected_worktree,
+    )
+    if target_role == "builder" and expected_base_sha:
+        _advance_builder_task_branch(
+            getattr(profile, "repo_root", None),
+            dispatch_lock_fields.get("expected_branch"),
+            expected_base_sha,
+        )
     append_task_to_queue(
         todo_path,
         task_id=args.task_id,
@@ -755,10 +871,12 @@ def main() -> int:
         "reply_to": reply_to,
         "docs_consulted": args.docs_consulted or None,
         "docs_skip_reason": args.docs_skip_reason or None,
-        "assigned_at": utc_now_iso(),
+        "assigned_at": dispatched_at.isoformat(),
         "notified_at": None,
         "notify_message": None,
     }
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
     if args.finding_id:
         receipt["finding_id"] = args.finding_id
         receipt["hypothesis_fix_counter"] = finding_counter
@@ -770,14 +888,7 @@ def main() -> int:
         receipt["core_ux"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
-    receipt.update(
-        _dispatch_lock_metadata(
-            task_id=args.task_id,
-            target_role=target_role,
-            expected_branch=args.expected_branch,
-            expected_worktree=args.expected_worktree,
-        )
-    )
+    receipt.update(dispatch_lock_fields)
     if do_notify:
         message = build_notify_message(
             args.target,

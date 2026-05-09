@@ -71,7 +71,6 @@ Common optional fields:
 - `used_fallback_delivery`
 - `verdict`
 - `frontstage_disposition`
-- `user_summary`
 - `next_action`
 - `todo_path`
 - `assigned_at`
@@ -91,7 +90,28 @@ Optional fields:
 
 - `expected_base_sha`: git rev-parse of `clawseat/main` or `origin/main` captured by `dispatch_task.py` at dispatch time
 
-## 3. Consumed ACK
+## 3. Lineage extension fields
+
+Step 1 keeps the canonical lineage schema in the completion receipt JSON.
+`DELIVERY.md` frontmatter is not the canonical store for these fields in this
+step.
+
+The lineage extension fields are:
+
+- `user_summary`
+- `builder_commit`
+- `memory_commit` (optional)
+- `head_contains_commit` (boolean)
+- `lineage_status` (`in-lineage` | `divergent` | `unknown`)
+
+Grandfather window:
+
+- completion receipts with a timestamp before `2026-06-20T14:55:53+08:00`
+  may omit the lineage extension fields
+- those legacy receipts are accepted with a deprecation warning on stderr
+- receipts at or after the cutoff must include the required lineage fields
+
+## 4. Consumed ACK
 
 The durable ACK trail has two pieces:
 
