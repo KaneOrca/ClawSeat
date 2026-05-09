@@ -95,6 +95,24 @@ materialized_seats = {seats_toml}
     return profile, tasks
 
 
+def _init_git_repo(repo_root: Path) -> str:
+    repo_root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "-C", str(repo_root), "init", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "config", "user.name", "Test User"], check=True)
+    (repo_root / "README.md").write_text("init\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo_root), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "commit", "-q", "-m", "init"], check=True)
+    head = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "-C", str(repo_root), "update-ref", "refs/remotes/clawseat/main", head], check=True)
+    return head
+
+
 def _seed_seats(conn, project: str, seats: list[tuple[str, str, str]]) -> None:
     """Seed (seat_id, role, status) into DB."""
     for seat_id, role, status in seats:
@@ -513,6 +531,20 @@ def test_dynamic_dispatch_writes_to_ledger(tmp_path):
     assert task.status == "dispatched"
     rows = conn.execute("SELECT type FROM events WHERE payload_json LIKE '%DYN-001%'").fetchall()
     assert any(r["type"] == "task.dispatched" for r in rows)
+
+
+def test_dynamic_dispatch_records_lineage_fields(tmp_path):
+    """dispatch_task_dynamic.py writes production lineage fields into receipts."""
+    expected = _init_git_repo(tmp_path)
+    profile, _ = _make_profile(tmp_path)
+    result = _dispatch_dynamic_cmd(profile, target="builder-1", task_id="DYN-LINEAGE")
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads((tmp_path / "handoffs" / "DYN-LINEAGE__planner__builder-1.json").read_text(encoding="utf-8"))
+    assert receipt["expected_base_sha"] == expected
+    assert receipt["builder_commit"] == expected
+    assert receipt["memory_commit"] is None
+    assert receipt["head_contains_commit"] is True
+    assert receipt["lineage_status"] == "in-lineage"
 
 
 def test_dynamic_complete_writes_to_ledger(tmp_path):

@@ -30,6 +30,11 @@ Optional fields:
 - `correlation_id`
 - `docs_consulted`
 - `docs_skip_reason`
+- `user_summary`
+- `builder_commit`
+- `memory_commit`
+- `head_contains_commit`
+- `lineage_status`
 - `notified_at`
 - `notify_message`
 - `feishu_group_broadcast`

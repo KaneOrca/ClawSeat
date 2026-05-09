@@ -135,6 +135,95 @@ def _git_main_tip(repo_root: Path | str | None) -> str | None:
     return None
 
 
+def _git_head_tip(repo_root: Path | str | None) -> str | None:
+    """Return the current HEAD SHA for a repository, if available."""
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip lineage receipt fields", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: cannot read HEAD in {root}; skip lineage receipt fields: {detail}",
+            file=sys.stderr,
+        )
+        return None
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage receipt fields", file=sys.stderr)
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _git_merge_base_is_ancestor(repo_root: Path | str | None, reported_commit: str) -> bool | None:
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip lineage guard", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", reported_commit, "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage guard", file=sys.stderr)
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    detail = (result.stderr or result.stdout or "").strip()
+    print(
+        "warn: merge-base --is-ancestor failed for "
+        f"commit={reported_commit!r} in {root}: {detail or 'unknown git error'}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _populate_lineage_receipt_fields(
+    *,
+    repo_root: Path | str | None,
+    expected_base_sha: str | None,
+    source_role: str,
+) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "builder_commit": None,
+        "memory_commit": None,
+        "head_contains_commit": False,
+        "lineage_status": "unknown",
+    }
+    builder_commit = expected_base_sha.strip() if isinstance(expected_base_sha, str) and expected_base_sha.strip() else None
+    if builder_commit:
+        fields["builder_commit"] = builder_commit
+        contains = _git_merge_base_is_ancestor(repo_root, builder_commit)
+        if contains is True:
+            fields["head_contains_commit"] = True
+            fields["lineage_status"] = "in-lineage"
+        elif contains is False:
+            fields["head_contains_commit"] = False
+            fields["lineage_status"] = "divergent"
+        else:
+            fields["head_contains_commit"] = False
+            fields["lineage_status"] = "unknown"
+    if source_role == "memory":
+        fields["memory_commit"] = _git_head_tip(repo_root)
+    return fields
+
+
 def _advance_builder_task_branch(
     repo_root: Path | str | None,
     branch: str | None,
@@ -888,6 +977,13 @@ def main() -> int:
         receipt["core_ux"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
+    receipt.update(
+        _populate_lineage_receipt_fields(
+            repo_root=getattr(profile, "repo_root", None),
+            expected_base_sha=expected_base_sha,
+            source_role=source_role,
+        )
+    )
     receipt.update(dispatch_lock_fields)
     if do_notify:
         message = build_notify_message(
