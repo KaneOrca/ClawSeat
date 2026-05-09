@@ -19,7 +19,7 @@ def test_install_help_lists_builtin_templates_and_provider_deprecation() -> None
         check=False,
     )
     assert result.returncode == 0
-    assert "clawseat-engineering|clawseat-solo|cartooner-creative" in result.stdout
+    assert "clawseat-engineering|team-creation|clawseat-solo|cartooner-creative" in result.stdout
     assert "--all-api-provider" in result.stdout
     assert "--provider now controls the memory seat only" in result.stdout
 

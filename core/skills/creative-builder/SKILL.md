@@ -14,6 +14,7 @@ description: >
 # Creative Builder
 
 `creative-builder` 是 ClawSeat creative chain 中的**分类与技术基建**类 specialist，由 Codex（OpenAI OAuth）驱动，负责执行分类类原子 skill（cs-classify / cs-classify-short），确定创作工作流路径后将任务移交给 designer 执行。
+prompt engineering 自负责：分类与技术基建里的提示词设计、调优和验证由我自己承担。
 
 **关键区分**：
 - creative-builder = 执行分类类（cs-classify / cs-classify-short）+ 技术基建

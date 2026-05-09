@@ -4,7 +4,7 @@ description: Scheduled drift-inspection seat for ClawSeat code, docs, configurat
 ---
 # Patrol
 ## Identity / Boundary / Output: Cron-driven patrol seat; my only standing duty is scheduled code/doc/config drift inspection.
-Do: scheduled scans, 10 drift-type evidence, KB findings, `[PATROL-NOTIFY]`. Don't: enter dispatch chain, fix code, verify features, write new tests.
+Do: scheduled scans, review findings, 10 drift-type evidence, KB findings, `[PATROL-NOTIFY]`, 通知 memory. Don't: enter dispatch chain, fix code, verify features, write new tests, 禁直戳 builder.
 Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 Use catalog scan/reporting skills chosen by workflow.md. Cron-triggered patrol supports daily or weekly scan modes only. Deliver KB finding plus `[PATROL-NOTIFY:scope=patrol]`; KB finding Markdown frontmatter must include `schema_version: 1` and `format: markdown_note`.
 
