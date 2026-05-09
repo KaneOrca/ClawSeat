@@ -92,9 +92,9 @@ def test_migrate_project_profile_adds_patrol(tmp_path: Path) -> None:
         project_toml_text="\n".join(
             [
                 'name = "qa-gaps"',
-                'template_name = "clawseat-creative"',
-                'engineers = ["memory", "planner", "builder", "designer"]',
-                'monitor_engineers = ["planner", "builder", "designer"]',
+                'template_name = "clawseat-engineering"',
+                'engineers = ["memory", "planner", "builder", "reviewer"]',
+                'monitor_engineers = ["memory", "planner", "builder", "reviewer"]',
                 "monitor_max_panes = 4",
                 "",
                 "[seat_overrides.builder]",
@@ -106,9 +106,9 @@ def test_migrate_project_profile_adds_patrol(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     migrated = tomllib.loads(project_toml.read_text(encoding="utf-8"))
-    assert migrated["engineers"] == ["memory", "planner", "builder", "designer", "patrol"]
-    assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "memory", "patrol"]
-    assert migrated["monitor_max_panes"] == 4
+    assert migrated["engineers"] == ["memory", "planner", "builder", "reviewer", "patrol"]
+    assert migrated["monitor_engineers"] == ["memory", "planner", "builder", "reviewer", "patrol"]
+    assert migrated["monitor_max_panes"] == 5
     assert migrated["seat_overrides"]["builder"]["provider"] == "openai"
     assert migrated["seat_overrides"]["patrol"]["auth_mode"] == "api"
     assert migrated["seat_overrides"]["patrol"]["provider"] == "minimax"
@@ -127,9 +127,9 @@ def test_migrate_project_profile_skips_if_patrol_present(tmp_path: Path) -> None
     original = "\n".join(
         [
             'name = "qa-gaps"',
-            'template_name = "clawseat-creative"',
-            'engineers = ["memory", "planner", "builder", "designer", "patrol"]',
-            'monitor_engineers = ["memory", "planner", "builder", "designer", "patrol"]',
+            'template_name = "clawseat-engineering"',
+            'engineers = ["memory", "planner", "builder", "reviewer", "patrol"]',
+            'monitor_engineers = ["memory", "planner", "builder", "reviewer", "patrol"]',
             "monitor_max_panes = 5",
             "",
             "[seat_overrides.memory]",
@@ -155,10 +155,10 @@ def test_migrate_project_profile_skips_if_patrol_present(tmp_path: Path) -> None
             'model = "MiniMax-M2.7-highspeed"',
             'base_url = "https://api.minimaxi.com/anthropic"',
             "",
-            "[seat_overrides.designer]",
-            'tool = "gemini"',
+            "[seat_overrides.reviewer]",
+            'tool = "claude"',
             'auth_mode = "oauth"',
-            'provider = "google"',
+            'provider = "anthropic"',
             "",
         ]
     )
