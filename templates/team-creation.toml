@@ -1,0 +1,175 @@
+version = 1
+template_name = "team-creation"
+description = "General creative team template for short films, short dramas, and music videos (通用创作团队模板, 适合短片 / 短剧 / MV)."
+
+[window_layout]
+shared_memories_window_title = "clawseat-memories"
+workers_window_title = "clawseat-{PROJECT}-workers"
+
+[window_layout.workers_grid]
+# memory is the orchestrator seat; builder-image is the main image lane,
+# with builder-image-2 / builder-av / patrol filling the side panes.
+left_main_seat = "builder-image"
+left_main_width = "50%"
+right_seats = ["builder-image-2", "builder-av", "patrol"]
+right_fill_order = "col-major"
+
+[defaults]
+home_mode = "real"
+dangerously_skip_permissions = true
+window_mode = "split-2"
+monitor_max_panes = 5
+open_detail_windows = false
+workspace_tools = [
+  "TOOLS/memory.md",
+]
+
+[[engineers]]
+id = "memory"
+display_name = "Memory"
+role = "project-memory"
+window = "memory"
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+monitor = true
+human_facing = true
+active_loop_owner = true
+dispatch_authority = true
+patrol_authority = true
+unblock_authority = true
+escalation_authority = true
+remind_active_loop_owner = false
+review_authority = true
+design_authority = true
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-memory/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/clawseat-decision-escalation/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md",
+]
+role_details = [
+  "creative memory hub; owns script/story coordination, dispatch, receipts, and cross-seat state",
+  "keeps the team moving without blocking builder-image, builder-av, or patrol",
+]
+
+[[engineers]]
+id = "builder-image"
+display_name = "builder-image"
+role = "builder-image"
+window = "workers"
+window_pane = "left-main"
+tool = "codex"
+auth_mode = "oauth"
+provider = "openai"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "OpenAI/Codex image lane; prompt engineering and image artifact delivery are self-owned",
+  "primary pane for image work and the first seat memory dispatches for visual output",
+]
+
+[[engineers]]
+id = "builder-image-2"
+display_name = "builder-image-2"
+role = "builder-image-2"
+window = "workers"
+window_pane = "top-right"
+tool = "codex"
+auth_mode = "oauth"
+provider = "openai"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "parallel OpenAI/Codex image lane; produces independent output and keeps work isolated",
+  "secondary pane for concurrent image work when memory expands capacity",
+]
+
+[[engineers]]
+id = "builder-av"
+display_name = "builder-av"
+role = "builder-av"
+window = "workers"
+window_pane = "middle-right"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+base_url = "https://api.minimaxi.com/anthropic"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = false
+review_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "MiniMax audio/video lane; prompt engineering is self-owned",
+  "handles TTS, music, and video API work and returns media artifact paths plus API evidence",
+]
+
+[[engineers]]
+id = "patrol"
+display_name = "patrol"
+role = "patrol"
+window = "workers"
+window_pane = "bottom-right"
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+base_url = "https://api.minimaxi.com/anthropic"
+monitor = true
+human_facing = false
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = true
+unblock_authority = false
+escalation_authority = false
+remind_active_loop_owner = true
+review_authority = false
+design_authority = false
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/patrol/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "review + progress-tracking seat; watches for drift and notifies memory",
+  "does not directly poke builder-image or builder-av; all escalations are one-way to memory",
+]
