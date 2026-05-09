@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from dynamic_common import (
     load_profile,
     notify,
     preferred_planner_seat,
+    normalize_role,
     require_success,
     resolve_notify,
     utc_now_iso,
@@ -61,6 +63,96 @@ def _write_dispatch_to_ledger(
                          task_id=task_id, source=source, target=target)
     except Exception as exc:
         print(f"warn: state.db unavailable, skipping ledger write: {exc}", file=sys.stderr)
+
+
+def _git_main_tip(repo_root: Path | str | None) -> str | None:
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        return None
+    for ref in ("clawseat/main", "origin/main"):
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", ref],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            continue
+        sha = result.stdout.strip()
+        if sha:
+            return sha
+    return None
+
+
+def _git_head_tip(repo_root: Path | str | None) -> str | None:
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _git_merge_base_is_ancestor(repo_root: Path | str | None, reported_commit: str) -> bool | None:
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", reported_commit, "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    return None
+
+
+def _populate_lineage_receipt_fields(
+    *,
+    repo_root: Path | str | None,
+    expected_base_sha: str | None,
+    source_role: str,
+) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "builder_commit": None,
+        "memory_commit": None,
+        "head_contains_commit": False,
+        "lineage_status": "unknown",
+    }
+    builder_commit = expected_base_sha.strip() if isinstance(expected_base_sha, str) and expected_base_sha.strip() else None
+    if builder_commit:
+        fields["builder_commit"] = builder_commit
+        contains = _git_merge_base_is_ancestor(repo_root, builder_commit)
+        if contains is True:
+            fields["head_contains_commit"] = True
+            fields["lineage_status"] = "in-lineage"
+        elif contains is False:
+            fields["head_contains_commit"] = False
+            fields["lineage_status"] = "divergent"
+    if normalize_role(source_role) == "memory":
+        fields["memory_commit"] = _git_head_tip(repo_root)
+    return fields
 
 
 def parse_args() -> argparse.Namespace:
@@ -128,8 +220,10 @@ def main() -> int:
     if profile is None:
         profile = load_profile(args.profile)
     source = args.source or preferred_planner_seat(profile)
+    source_role = normalize_role(profile.seat_roles.get(source, ""))
     todo_path = profile.todo_path(args.target)
     reply_to = args.reply_to or source
+    expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
     write_todo(
         todo_path,
         task_id=args.task_id,
@@ -168,6 +262,15 @@ def main() -> int:
         "notified_at": None,
         "notify_message": None,
     }
+    if expected_base_sha:
+        receipt["expected_base_sha"] = expected_base_sha
+    receipt.update(
+        _populate_lineage_receipt_fields(
+            repo_root=getattr(profile, "repo_root", None),
+            expected_base_sha=expected_base_sha,
+            source_role=source_role,
+        )
+    )
     if do_notify:
         message = build_notify_message(
             profile.project_name,

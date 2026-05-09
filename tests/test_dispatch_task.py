@@ -1,4 +1,4 @@
-"""CX: dispatch_task records optional expected_base_sha for completion validation."""
+"""CX: dispatch_task records expected_base_sha and lineage receipt fields."""
 
 from __future__ import annotations
 
@@ -69,6 +69,55 @@ materialized_seats = [\"planner\", \"builder\"]
     return profile, handoffs
 
 
+def _write_profile_with_memory(tmp_path: Path, repo_root: Path) -> tuple[Path, Path]:
+    tasks = tmp_path / "tasks"
+    handoffs = tmp_path / "handoffs"
+    workspaces = tmp_path / "workspaces"
+    tasks.mkdir()
+    (tasks / "planner").mkdir()
+    (tasks / "builder").mkdir()
+    (tasks / "memory").mkdir()
+    handoffs.mkdir()
+    workspaces.mkdir()
+    profile = tmp_path / "profile.toml"
+    profile.write_text(
+        f"""\
+version = 1
+profile_name = \"test-profile\"
+project_name = \"test\"
+template_name = \"gstack-harness\"
+repo_root = \"{repo_root}\"
+tasks_root = \"{tasks}\"
+workspace_root = \"{workspaces}\"
+handoff_dir = \"{handoffs}\"
+project_doc = \"{tasks}/PROJECT.md\"
+tasks_doc = \"{tasks}/TASKS.md\"
+status_doc = \"{tasks}/STATUS.md\"
+send_script = \"/bin/echo\"
+status_script = \"/bin/echo\"
+patrol_script = \"/bin/echo\"
+agent_admin = \"/bin/echo\"
+heartbeat_receipt = \"{workspaces}/koder/HEARTBEAT_RECEIPT.toml\"
+heartbeat_transport = \"tmux\"
+default_notify_target = \"planner\"
+heartbeat_owner = \"koder\"
+heartbeat_seats = []
+active_loop_owner = \"memory\"
+seats = [\"planner\", \"builder\", \"memory\"]
+
+[seat_roles]
+planner = \"planner-dispatcher\"
+builder = \"builder\"
+memory = \"memory\"
+
+[dynamic_roster]
+materialized_seats = [\"planner\", \"builder\", \"memory\"]
+""",
+        encoding="utf-8",
+    )
+    return profile, handoffs
+
+
 def _init_repo(repo_root: Path) -> str:
     repo_root.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "-C", str(repo_root), "init", "-q"], check=True)
@@ -110,14 +159,16 @@ def _dispatch(
     profile: Path,
     task_id: str,
     *,
+    source: str = "planner",
     finding_id: str | None = None,
     rca_override: bool = False,
     core_ux: bool = False,
+    target: str = "builder",
 ) -> subprocess.CompletedProcess[str]:
     args = [
         "--profile", str(profile),
-        "--source", "planner",
-        "--target", "builder",
+        "--source", source,
+        "--target", target,
         "--task-id", task_id,
         "--title", f"test {task_id}",
         "--objective", "run",
@@ -145,6 +196,10 @@ def test_dispatch_records_expected_base_sha_when_git_main_known(tmp_path: Path) 
     receipt = handoffs / "TASK-BASE-1__planner__builder.json"
     payload = json.loads(receipt.read_text(encoding="utf-8"))
     assert payload["expected_base_sha"] == expected
+    assert payload["builder_commit"] == expected
+    assert payload["memory_commit"] is None
+    assert payload["head_contains_commit"] is True
+    assert payload["lineage_status"] == "in-lineage"
 
 
 def test_builder_dispatch_advances_task_branch_ref_to_current_main(tmp_path: Path) -> None:
@@ -182,6 +237,27 @@ def test_dispatch_skips_expected_base_sha_when_git_main_missing(tmp_path: Path) 
     receipt = handoffs / "TASK-BASE-2__planner__builder.json"
     payload = json.loads(receipt.read_text(encoding="utf-8"))
     assert "expected_base_sha" not in payload
+    assert payload["builder_commit"] is None
+    assert payload["memory_commit"] is None
+    assert payload["head_contains_commit"] is False
+    assert payload["lineage_status"] == "unknown"
+
+
+def test_dispatch_records_memory_commit_for_memory_source(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    expected = _init_repo(repo_root)
+    profile, handoffs = _write_profile_with_memory(tmp_path, repo_root)
+
+    result = _dispatch(profile, "TASK-MEM-1", source="memory")
+    assert result.returncode == 0, result.stderr
+
+    receipt = handoffs / "TASK-MEM-1__memory__builder.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    assert payload["expected_base_sha"] == expected
+    assert payload["builder_commit"] == expected
+    assert payload["memory_commit"] == expected
+    assert payload["head_contains_commit"] is True
+    assert payload["lineage_status"] == "in-lineage"
 
 
 def test_dispatch_records_finding_id_and_counter(tmp_path: Path) -> None:
