@@ -162,6 +162,7 @@ LINEAGE_STATUS_VALUES = {
     "divergent",
     "unknown",
 }
+PASS_NEEDS_INTEGRATION = "PASS_NEEDS_INTEGRATION"
 LINEAGE_OPTIONAL_FIELDS = ("memory_commit",)
 
 
@@ -238,6 +239,120 @@ def _validate_completion_lineage(receipt: dict[str, object], receipt_path: Path)
         f"{missing} (receipt timestamp {receipt_ts.isoformat()}, "
         f"cutoff {LINEAGE_GRANDFATHER_CUTOFF.isoformat()})"
     )
+
+
+def _receipt_reported_commit(receipt: dict[str, object]) -> str | None:
+    for key in ("builder_commit", "commit", "branch_tip"):
+        raw_value = receipt.get(key)
+        if isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+    return None
+
+
+def _git_merge_base_is_ancestor(repo_root: Path, reported_commit: str) -> bool | None:
+    if not repo_root.exists():
+        print(f"warn: repo_root {repo_root} does not exist; skip lineage guard", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", reported_commit, "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage guard", file=sys.stderr)
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    detail = (result.stderr or result.stdout or "").strip()
+    print(
+        "warn: merge-base --is-ancestor failed for "
+        f"commit={reported_commit!r} in {repo_root}: {detail or 'unknown git error'}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _annotate_lineage_status(
+    receipt: dict[str, object],
+    *,
+    repo_root: Path | None,
+) -> tuple[str, bool, str | None]:
+    reported_commit = _receipt_reported_commit(receipt)
+    if not reported_commit:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+        return "unknown", False, None
+
+    if repo_root is None:
+        print(
+            "warn: cannot evaluate lineage guard without repo_root; marking unknown",
+            file=sys.stderr,
+        )
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+        return "unknown", False, reported_commit
+
+    contains = _git_merge_base_is_ancestor(repo_root, reported_commit)
+    if contains is True:
+        receipt["head_contains_commit"] = True
+        receipt["lineage_status"] = "in-lineage"
+    elif contains is False:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "divergent"
+    else:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+
+    if not isinstance(receipt.get("builder_commit"), str) or not str(receipt.get("builder_commit") or "").strip():
+        receipt["builder_commit"] = reported_commit
+
+    return str(receipt["lineage_status"]), bool(receipt["head_contains_commit"]), reported_commit
+
+
+def _emit_pass_needs_integration(
+    profile: object,
+    *,
+    task_id: str,
+    source: str,
+    target: str,
+    reported_commit: str,
+    delivery_path: Path,
+    user_summary: str | None,
+) -> None:
+    message_lines = [
+        f"{PASS_NEEDS_INTEGRATION}: task_id={task_id}",
+        f"lineage_status=divergent",
+        f"reported_commit={reported_commit}",
+        f"source={source}",
+        f"target={target}",
+        f"delivery_path={delivery_path}",
+    ]
+    if user_summary:
+        message_lines.append(f"user_summary={user_summary.strip()}")
+    message = "\n".join(message_lines)
+    try:
+        result = notify(profile, "memory", message)
+    except Exception as exc:  # noqa: BLE001 watchdog must not block chain
+        print(
+            f"warn: PASS_NEEDS_INTEGRATION notify raised for task_id={task_id!r}: {exc}",
+            file=sys.stderr,
+        )
+        return
+    if getattr(result, "returncode", 0) != 0:
+        detail = (
+            getattr(result, "stderr", "")
+            or getattr(result, "stdout", "")
+            or f"exit {getattr(result, 'returncode', 'unknown')}"
+        )
+        print(
+            f"warn: PASS_NEEDS_INTEGRATION notify failed for task_id={task_id!r}: "
+            f"{str(detail).strip() or 'unknown notify error'}",
+            file=sys.stderr,
+        )
 
 
 def _write_completion_to_ledger(
@@ -870,6 +985,27 @@ def main() -> int:
         receipt["sweep_count"] = args.sweep_count
     if args.core_ux_gate is not None:
         receipt["core_ux_gate"] = args.core_ux_gate
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
+    if args.source.startswith("memory") and args.commit is not None:
+        receipt["memory_commit"] = args.commit
+    if (
+        not isinstance(receipt.get("builder_commit"), str)
+        or not str(receipt.get("builder_commit") or "").strip()
+    ):
+        fallback_commit = args.commit
+        if not fallback_commit and isinstance(receipt.get("branch_tip"), str):
+            branch_tip = str(receipt.get("branch_tip") or "").strip()
+            if branch_tip:
+                fallback_commit = branch_tip
+        if fallback_commit:
+            receipt["builder_commit"] = fallback_commit
+    repo_root = getattr(profile, "repo_root", None)
+    repo_root_path = Path(str(repo_root)).expanduser().resolve() if repo_root else None
+    lineage_status, head_contains_commit, reported_commit = _annotate_lineage_status(
+        receipt,
+        repo_root=repo_root_path,
+    )
     if not args.ack_only:
         _validate_completion_receipt(receipt, source_dispatch_receipt)
         if isinstance(source_dispatch_receipt, dict) and source_dispatch_receipt.get("core_ux"):
@@ -1018,9 +1154,9 @@ def main() -> int:
     receipt["used_fallback_delivery"] = used_fallback_delivery
     receipt["verdict"] = args.verdict
     receipt["frontstage_disposition"] = args.frontstage_disposition
-    if args.user_summary is not None:
-        receipt["user_summary"] = args.user_summary
     receipt["next_action"] = args.next_action
+    receipt["head_contains_commit"] = head_contains_commit
+    receipt["lineage_status"] = lineage_status
     if planner_to_frontstage:
         frontstage_todo = profile.todo_path(args.target)
         append_task_to_queue(
@@ -1048,6 +1184,16 @@ def main() -> int:
         )
         receipt["todo_path"] = str(frontstage_todo)
         receipt["assigned_at"] = utc_now_iso()
+    if lineage_status == "divergent" and reported_commit and args.target != "memory":
+        _emit_pass_needs_integration(
+            profile,
+            task_id=args.task_id,
+            source=args.source,
+            target=args.target,
+            reported_commit=reported_commit,
+            delivery_path=delivery_path,
+            user_summary=args.user_summary or args.summary or args.title,
+        )
     # Graceful degrade for external callers (e.g. the ancestor Claude Code
     # running an install via query_memory.py --ask). These callers pass
     # source strings like "memory-client" / "bootstrap-installer" that are
@@ -1072,6 +1218,13 @@ def main() -> int:
             target=args.target,
             user_summary=args.user_summary,
         )
+        if lineage_status == "divergent" and reported_commit:
+            message += (
+                "\n\n"
+                f"{PASS_NEEDS_INTEGRATION}: "
+                f"reported_commit={reported_commit} is not an ancestor of HEAD; "
+                "memory has been notified."
+            )
         # Resolve target kind via seat_resolver — determines Feishu vs tmux path.
         resolution = resolve_seat_from_profile(args.target, profile)
         openclaw_koder = planner_to_frontstage and resolution.kind == "openclaw"
