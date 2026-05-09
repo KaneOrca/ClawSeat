@@ -97,6 +97,15 @@ def _init_repo(repo_root: Path) -> str:
     return head
 
 
+def _rev_parse(repo_root: Path, ref: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", ref],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 def _dispatch(
     profile: Path,
     task_id: str,
@@ -136,6 +145,33 @@ def test_dispatch_records_expected_base_sha_when_git_main_known(tmp_path: Path) 
     receipt = handoffs / "TASK-BASE-1__planner__builder.json"
     payload = json.loads(receipt.read_text(encoding="utf-8"))
     assert payload["expected_base_sha"] == expected
+
+
+def test_builder_dispatch_advances_task_branch_ref_to_current_main(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    initial = _init_repo(repo_root)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "checkout", "-q", "-b", "feat/TASK-BRANCH", initial],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo_root), "checkout", "-q", "main"], check=True)
+    (repo_root / "README.md").write_text("main v2\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo_root), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "commit", "-m", "advance main", "-q"], check=True)
+    expected = _rev_parse(repo_root, "HEAD")
+    subprocess.run(
+        ["git", "-C", str(repo_root), "update-ref", "refs/remotes/clawseat/main", expected],
+        check=True,
+    )
+    profile, handoffs = _write_profile(tmp_path, repo_root)
+
+    result = _dispatch(profile, "TASK-BRANCH")
+    assert result.returncode == 0, result.stderr
+
+    receipt = handoffs / "TASK-BRANCH__planner__builder.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    assert payload["expected_base_sha"] == expected
+    assert _rev_parse(repo_root, "feat/TASK-BRANCH") == expected
 
 
 def test_dispatch_skips_expected_base_sha_when_git_main_missing(tmp_path: Path) -> None:

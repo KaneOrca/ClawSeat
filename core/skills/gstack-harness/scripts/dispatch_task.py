@@ -135,6 +135,54 @@ def _git_main_tip(repo_root: Path | str | None) -> str | None:
     return None
 
 
+def _advance_builder_task_branch(
+    repo_root: Path | str | None,
+    branch: str | None,
+    base_sha: str | None,
+) -> bool:
+    """Advance a builder task branch to the requested base SHA.
+
+    This is a best-effort repair path. If the branch already points at the
+    requested base, it is left alone. If the repo or git is unavailable, the
+    dispatch still proceeds and the caller can surface the drift later.
+    """
+    if not repo_root or not branch or not base_sha:
+        return False
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip builder branch ref advance", file=sys.stderr)
+        return False
+    try:
+        current = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        current = ""
+    except FileNotFoundError:
+        print("warn: git not found; skip builder branch ref advance", file=sys.stderr)
+        return False
+    if current == base_sha:
+        return True
+    try:
+        subprocess.run(
+            ["git", "-C", str(root), "update-ref", f"refs/heads/{branch}", base_sha],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: failed to advance builder branch ref {branch} -> {base_sha}: {detail}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def _validate_user_summary(
     user_summary: str | None,
     *,
@@ -750,6 +798,18 @@ def main() -> int:
                 f"(counter={finding_counter}); use --rca-override to continue",
                 file=sys.stderr,
             )
+    dispatch_lock_fields = _dispatch_lock_metadata(
+        task_id=args.task_id,
+        target_role=target_role,
+        expected_branch=args.expected_branch,
+        expected_worktree=args.expected_worktree,
+    )
+    if target_role == "builder" and expected_base_sha:
+        _advance_builder_task_branch(
+            getattr(profile, "repo_root", None),
+            dispatch_lock_fields.get("expected_branch"),
+            expected_base_sha,
+        )
     append_task_to_queue(
         todo_path,
         task_id=args.task_id,
@@ -807,14 +867,7 @@ def main() -> int:
         receipt["core_ux"] = True
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
-    receipt.update(
-        _dispatch_lock_metadata(
-            task_id=args.task_id,
-            target_role=target_role,
-            expected_branch=args.expected_branch,
-            expected_worktree=args.expected_worktree,
-        )
-    )
+    receipt.update(dispatch_lock_fields)
     if do_notify:
         message = build_notify_message(
             args.target,
