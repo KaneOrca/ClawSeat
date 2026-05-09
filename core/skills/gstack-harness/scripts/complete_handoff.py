@@ -792,6 +792,8 @@ def main() -> int:
             task_id=args.task_id,
             source=args.source,
         )
+    if args.user_summary is not None and not args.user_summary.strip():
+        raise SystemExit("user_summary must not be empty")
     if (
         not args.enforce_planner_self_closeout
         and args.source in {"planner", "planner-dispatcher"}
@@ -980,8 +982,6 @@ def main() -> int:
                 "planner delivery back to frontstage requires --frontstage-disposition "
                 "with AUTO_ADVANCE or USER_DECISION_NEEDED"
             )
-        if not args.user_summary:
-            raise SystemExit("planner delivery back to frontstage requires --user-summary")
         if args.frontstage_disposition == "USER_DECISION_NEEDED" and not args.next_action:
             raise SystemExit(
                 "planner delivery with USER_DECISION_NEEDED requires --next-action"
@@ -1018,7 +1018,8 @@ def main() -> int:
     receipt["used_fallback_delivery"] = used_fallback_delivery
     receipt["verdict"] = args.verdict
     receipt["frontstage_disposition"] = args.frontstage_disposition
-    receipt["user_summary"] = args.user_summary
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
     receipt["next_action"] = args.next_action
     if planner_to_frontstage:
         frontstage_todo = profile.todo_path(args.target)

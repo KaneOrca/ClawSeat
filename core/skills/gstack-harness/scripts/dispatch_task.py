@@ -7,6 +7,7 @@ import subprocess
 import re
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 # Add core/lib to path so seat_resolver can be imported
 _scripts_dir = Path(__file__).parent.resolve()
@@ -94,6 +95,8 @@ def _resolve_gstack_skills_root() -> str:
 
 
 _GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
+DO_MERGE_AT = datetime.fromisoformat("2026-05-09T14:55:53+08:00")
+LINEAGE_GRANDFATHER_CUTOFF = DO_MERGE_AT + timedelta(weeks=6)
 
 
 def _git_main_tip(repo_root: Path | str | None) -> str | None:
@@ -130,6 +133,28 @@ def _git_main_tip(repo_root: Path | str | None) -> str | None:
         file=sys.stderr,
     )
     return None
+
+
+def _validate_user_summary(
+    user_summary: str | None,
+    *,
+    dispatched_at: datetime,
+    task_id: str,
+) -> None:
+    if user_summary is not None and not user_summary.strip():
+        raise SystemExit("user_summary must not be empty")
+    if user_summary is None and dispatched_at >= LINEAGE_GRANDFATHER_CUTOFF:
+        raise SystemExit(
+            "dispatch receipt missing required user_summary after grandfather cutoff: "
+            f"task_id={task_id!r}"
+        )
+    if user_summary is None:
+        print(
+            "warn: deprecated dispatch receipt format for "
+            f"task_id={task_id!r}; missing user_summary; "
+            f"grandfather until {LINEAGE_GRANDFATHER_CUTOFF.isoformat()}",
+            file=sys.stderr,
+        )
 
 
 def _dispatch_lock_metadata(
@@ -552,6 +577,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
     parser.add_argument(
+        "--user-summary",
+        help="Short plain-language summary for operator-visible progress.",
+    )
+    parser.add_argument(
         "--test-policy",
         required=True,
         choices=["UPDATE", "FREEZE", "EXTEND", "N/A"],
@@ -704,6 +733,12 @@ def main() -> int:
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
     reply_to = args.reply_to or args.source
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
+    dispatched_at = datetime.now(timezone.utc).replace(microsecond=0)
+    _validate_user_summary(
+        args.user_summary,
+        dispatched_at=dispatched_at,
+        task_id=args.task_id,
+    )
     finding_counter = None
     finding_exceeded = False
     if args.finding_id:
@@ -755,10 +790,12 @@ def main() -> int:
         "reply_to": reply_to,
         "docs_consulted": args.docs_consulted or None,
         "docs_skip_reason": args.docs_skip_reason or None,
-        "assigned_at": utc_now_iso(),
+        "assigned_at": dispatched_at.isoformat(),
         "notified_at": None,
         "notify_message": None,
     }
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
     if args.finding_id:
         receipt["finding_id"] = args.finding_id
         receipt["hypothesis_fix_counter"] = finding_counter
