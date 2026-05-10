@@ -181,27 +181,58 @@ def write_brief(
 
 
 def resolve_seat_session(project_id: str, seat_id: str) -> str | None:
-    """Look up a seat's canonical tmux session name from ~/.agents/sessions/.
+    """Look up a seat's canonical tmux session name.
 
-    Used by dispatch_brief / spawn_lane wakeup paths. Returns None when no
-    session record exists (e.g., during tests with mocked HOME) — callers
-    should treat that as "skip wakeup, just write durable file".
+    Used by dispatch_brief / spawn_lane / deposit_asset wakeup paths.
+    Returns None when no session record exists (e.g., tests with mocked
+    HOME) — callers treat that as "skip wakeup, just write durable file".
+
+    Resolution order for the agents root:
+      1. $CLAWSEAT_AGENTS_ROOT (explicit override; tests / future per-host)
+      2. $AGENTS_ROOT (set by core/launchers/agent-launcher.sh inside seat
+         sandbox HOME — points at the operator's REAL_HOME/.agents)
+      3. $CLAWSEAT_REAL_HOME / .agents (legacy override)
+      4. $AGENT_HOME / .agents (also set by agent-launcher)
+      5. ~/.agents (last-resort; only correct when running from the
+         operator's real shell, not from inside a seat sandbox)
     """
-    real_home = Path(os.environ.get("CLAWSEAT_REAL_HOME") or os.path.expanduser("~"))
-    path = real_home / ".agents" / "sessions" / project_id / seat_id / "session.toml"
-    if not path.exists():
-        return None
+    candidates: list[Path] = []
+    explicit = os.environ.get("CLAWSEAT_AGENTS_ROOT", "").strip()
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    agents_root = os.environ.get("AGENTS_ROOT", "").strip()
+    if agents_root:
+        candidates.append(Path(agents_root).expanduser())
+    real_home = os.environ.get("CLAWSEAT_REAL_HOME", "").strip()
+    if real_home:
+        candidates.append(Path(real_home).expanduser() / ".agents")
+    agent_home = os.environ.get("AGENT_HOME", "").strip()
+    if agent_home:
+        candidates.append(Path(agent_home).expanduser() / ".agents")
+    candidates.append(Path(os.path.expanduser("~")) / ".agents")
+
     try:
         import tomllib
     except ModuleNotFoundError:  # pragma: no cover
         import tomli as tomllib  # type: ignore[no-redef]
-    try:
-        with path.open("rb") as fh:
-            data = tomllib.load(fh)
-    except Exception:
-        return None
-    session = data.get("session")
-    return str(session) if session else None
+    seen: set[str] = set()
+    for root in candidates:
+        key = str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        path = root / "sessions" / project_id / seat_id / "session.toml"
+        if not path.exists():
+            continue
+        try:
+            with path.open("rb") as fh:
+                data = tomllib.load(fh)
+        except Exception:
+            continue
+        session = data.get("session")
+        if session:
+            return str(session)
+    return None
 
 
 def send_wakeup(
