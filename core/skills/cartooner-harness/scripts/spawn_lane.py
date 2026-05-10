@@ -111,10 +111,15 @@ def main(argv: list[str] | None = None) -> int:
     target_session = args.target_session.strip() or (
         common.resolve_seat_session(args.project, args.seat) or ""
     )
+    # Wakeup MUST name --project explicitly (audit finding #8): receiver
+    # LLMs otherwise drift to their session-bound default project and
+    # deposit assets in the wrong PROJECT_INDEX.
     wakeup_message = (
-        f"[{args.actor}] lane_spawned: {lane_id} seat={args.seat} "
-        f"count={args.count} shot={args.shot_id or '-'}; "
-        f"read lanes/{lane_id}.toml then deposit_asset.py × {args.count}"
+        f"[{args.actor}] lane_spawned: {lane_id} project={args.project} "
+        f"seat={args.seat} count={args.count} shot={args.shot_id or '-'}; "
+        f"read ~/.cartooner/projects/{args.project}/lanes/{lane_id}.toml "
+        f"then deposit_asset.py --project {args.project} --lane-id {lane_id} "
+        f"× {args.count} candidates"
     )
     wakeup = common.send_wakeup(
         args.project,

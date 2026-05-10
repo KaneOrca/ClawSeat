@@ -139,6 +139,12 @@ def main(argv: list[str] | None = None) -> int:
 
     frontmatter: dict = {
         "id": brief_id,
+        # project is canonical here — the receiver MUST use this exact
+        # project_id when calling deposit_asset / deliver_brief / etc.
+        # Prevents project context drift (audit finding #8): without an
+        # explicit anchor the receiver's LLM falls back to its own
+        # session-bound default project.
+        "project": args.project,
         "created_at": now,
         "source": "memory" if args.triggered_by != "user_direct" else f"user_direct:{args.actor}",
         "target": args.target,
@@ -161,9 +167,15 @@ def main(argv: list[str] | None = None) -> int:
     target_session = args.target_session.strip() or (
         common.resolve_seat_session(args.project, args.target) or ""
     )
+    # Wakeup message MUST name the project explicitly (audit finding #8).
+    # Without --project in the wakeup, the receiver's LLM tends to fall
+    # back to its own session-bound default project and deposit assets
+    # in the wrong PROJECT_INDEX.
     wakeup_message = (
-        f"[memory] brief_dispatched: {brief_id} intent={args.intent} "
-        f"target={args.target}; read briefs/{brief_id}.toml"
+        f"[memory] brief_dispatched: {brief_id} project={args.project} "
+        f"intent={args.intent} target={args.target}; "
+        f"read ~/.cartooner/projects/{args.project}/briefs/{brief_id}.toml. "
+        f"All downstream protocol calls MUST pass --project {args.project}."
     )
     wakeup = common.send_wakeup(
         args.project,

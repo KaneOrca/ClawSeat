@@ -93,6 +93,17 @@ def main(argv: list[str] | None = None) -> int:
     if brief is None:
         common.fail_closed(f"brief TOML missing or malformed: briefs/{args.brief_id}.toml")
 
+    # Audit finding #8: brief frontmatter carries the canonical project.
+    # If the caller passed a different --project, fail-closed: the
+    # receiver is delivering against the wrong project's index.
+    fm_project = brief.get("project")
+    if fm_project and fm_project != args.project:
+        common.fail_closed(
+            f"--project {args.project!r} disagrees with brief frontmatter "
+            f"project={fm_project!r} for {args.brief_id}. "
+            f"Receiver must use the brief's canonical project."
+        )
+
     now = common.now_iso()
     output_size_chars = 0
     file_size = 0
@@ -157,14 +168,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.fail:
         msg = (
-            f"[{args.actor}] brief_failed: {args.brief_id} reason="
+            f"[{args.actor}] brief_failed: {args.brief_id} "
+            f"project={args.project} reason="
             f"{(args.reason or 'unspecified')[:120]}"
         )
     else:
         summary_part = f" summary={args.summary[:80]!r}" if args.summary else ""
         msg = (
             f"[{args.actor}] brief_delivered: {args.brief_id} "
-            f"path={output_path_str}{summary_part}; read briefs/{args.brief_id}.toml"
+            f"project={args.project} path={output_path_str}{summary_part}; "
+            f"read ~/.cartooner/projects/{args.project}/briefs/{args.brief_id}.toml"
         )
     wakeup = common.send_wakeup(
         args.project,

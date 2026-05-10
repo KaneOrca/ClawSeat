@@ -182,8 +182,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         wakeup_message = (
             f"[{args.actor}] lane_completed: {args.lane_id} "
+            f"project={args.project} "
             f"({len(lane['result']['candidates'])} {args.asset_type} candidates ready); "
-            f"run pick_winner.py --round-id <id> --candidates <comma-list>"
+            f"run pick_winner.py --project {args.project} --round-id <id> "
+            f"--candidates <comma-list>"
         )
         wakeup = common.send_wakeup(
             args.project,
