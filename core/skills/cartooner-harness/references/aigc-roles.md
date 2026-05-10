@@ -54,7 +54,9 @@ Auto-mode behavior:
   AND model provides aesthetic_score
 - All auto decisions logged for undo
 
-Tool: `claude / oauth (anthropic)` — coordination + decision logic.
+Tool: `claude / minimax-api` — coordination + decision logic.
+MiniMax chosen for high-frequency long-session work without the OAuth
+quota pressure that the writer / builder seats need for craft work.
 
 ## `writer` — Story Specialist
 
@@ -193,7 +195,7 @@ Tool: `claude / minimax-api` — cheap, monitoring-grade. No creative work.
 
 | Seat | Tool / Provider | Why this exact choice |
 |---|---|---|
-| memory | claude / oauth | Best instruction-following for coordination + complex state logic |
+| memory | claude / minimax-api | High-frequency long-session coordination; MiniMax avoids OAuth quota pressure that writer / builder need |
 | writer | claude / oauth | Strongest Chinese literary quality; long-form narrative coherence |
 | builder-image | codex / oauth | Strong gpt-image-2 prompt synthesis; multimodal prompt vocabulary |
 | **builder-av** | **gemini / oauth** | **Only LLM with YouTube ingestion**; required for reference-learning subagent. Worker seat (Gemini's weaker tool-use is not a bottleneck) |

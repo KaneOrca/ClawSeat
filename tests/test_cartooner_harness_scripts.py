@@ -2306,3 +2306,198 @@ def test_e2e_memory_dispatches_writer_brief_then_av_lane(
     assert "brief_dispatched" in events
     assert "brief_delivered" in events
     assert "lane_spawned" in events
+
+
+# ── audit hardening (post-2026-05-11 review) ───────────────────────────
+
+
+def test_dispatch_brief_rejects_lateral_seat_dispatch(cartooner_env):
+    """Hub-and-spoke: writer cannot dispatch a brief to builder-av directly."""
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "builder-av",
+        "--intent", "shot_list_revision",
+        "--body", "shot 5 → wide-shot",
+        "--actor", "writer",
+        "--triggered-by", "user_direct",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "hub-and-spoke" in (res.stderr or "")
+
+
+def test_patrol_authorization_cross_field_brief_dispatched(
+    cartooner_env, cartooner_root
+):
+    """A brief_dispatched with non-memory actor without triggered_by=user_direct
+    is a hub-and-spoke violation that patrol must detect."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "brief_dispatched",
+            "actor": "writer",
+            "triggered_by": "memory_dispatch",
+            "brief_id": "brief-fake",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "hub-and-spoke" in res.stdout
+
+
+def test_patrol_authorization_accepts_user_direct_self_dispatch(
+    cartooner_env, cartooner_root
+):
+    """A brief_dispatched with non-memory actor BUT triggered_by=user_direct is OK."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "brief_dispatched",
+            "actor": "builder-image",
+            "triggered_by": "user_direct",
+            "brief_id": "brief-fake",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 0
+    assert "clean" in res.stdout
+
+
+def test_parse_brief_handles_delivered_result_block(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """A delivered brief's body must NOT include the appended +++ result block."""
+    brief_id = _dispatch_brief_helper(cartooner_env, target="writer", intent="narrative")
+    deliverable = tmp_path / "narrative.md"
+    deliverable.write_text("# Real body content\n\nLine 2\n", encoding="utf-8")
+    r = _run(
+        "deliver_brief.py",
+        "--project", "demo", "--brief-id", brief_id,
+        "--actor", "writer", "--output-path", str(deliverable),
+        "--summary", "v1",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert r.returncode == 0, r.stderr
+
+    # Now parse the brief file via _common.parse_brief and assert clean body.
+    sys_path = str(_SCRIPTS)
+    code = (
+        f"import sys; sys.path.insert(0, {sys_path!r}); "
+        f"import _common as c; "
+        f"raw = open({str(_REPO / cartooner_env['CARTOONER_ROOT'])!r} + "
+        f"  '/projects/demo/briefs/{brief_id}.toml').read(); "
+        f"r = c.parse_brief(raw); "
+        f"assert r is not None; "
+        f"assert '+++ result' not in r['body'], 'body leaked result block: ' + r['body'][:200]; "
+        f"assert r['state'] == 'delivered'; "
+        f"assert '_result' in r and r['_result'].get('output_path'); "
+        f"print('OK')"
+    )
+    res = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        env={**os.environ, **cartooner_env},
+    )
+    assert res.returncode == 0, res.stderr
+    assert "OK" in res.stdout
+
+
+def test_render_asset_tree_shows_briefs_and_subagents(
+    cartooner_env, cartooner_root
+):
+    """render_asset_tree must surface briefs + subagents (pull-fallback path)."""
+    # 1. dispatch a brief
+    _dispatch_brief_helper(cartooner_env, target="writer", intent="narrative")
+    # 2. spawn a subagent
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-av",
+        "--subagent-type", "reference_learning",
+        "--inputs", '{"reference_url": "https://youtube.com/x"}',
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    sa_id = res.stdout.strip()
+
+    # 3. render
+    res = _run("render_asset_tree.py", "--project", "demo", env=cartooner_env)
+    assert res.returncode == 0, res.stderr
+    assert "briefs:" in res.stdout
+    assert "target=writer" in res.stdout
+    assert "intent=narrative" in res.stdout
+    assert "subagents:" in res.stdout
+    assert sa_id in res.stdout
+    assert "type=reference_learning" in res.stdout
+
+
+def test_skeleton_creates_briefs_and_assets_text_dirs(cartooner_env, cartooner_root):
+    """ensure_project_skeleton must create briefs/, subagents/, and assets/texts/ dirs."""
+    _ = _dispatch_brief_helper(cartooner_env)
+    project_root = cartooner_root / "projects" / "demo"
+    for sub in ("briefs", "subagents", "assets/texts", "iterations", "escalations"):
+        assert (project_root / sub).is_dir(), f"missing {sub}"
+
+
+def test_patrol_sla_catches_stale_brief(cartooner_env, cartooner_root):
+    """Briefs in 'open' state older than threshold must trigger an SLA alert."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({
+            "project_id": "demo", "version": 1, "automation_mode": "manual",
+            "lanes": {}, "assets": {}, "tournaments": {},
+            "briefs": {
+                "brief-stale": {
+                    "id": "brief-stale", "state": "open",
+                    "created_at": "2020-01-01T00:00:00.000+00:00",
+                    "target": "writer", "intent": "narrative",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    res = _run(
+        "patrol_pipeline_sla.py", "--project", "demo",
+        "--check", "sla", env=cartooner_env,
+    )
+    assert res.returncode == 2
+    assert "brief_id=brief-stale" in res.stdout
+
+
+def test_report_to_memory_accepts_shot_list_authored(cartooner_env, cartooner_root):
+    """shot_list_authored is now a valid event (mirrors shot_list_revised)."""
+    res = _run(
+        "report_to_memory.py",
+        "--project", "demo",
+        "--event", "shot_list_authored",
+        "--seat", "builder-av",
+        "--triggered-by", "memory",
+        "--intent", "draft v1 of shot_list",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    log = (cartooner_root / "projects" / "demo" / "generation_log.jsonl").read_text()
+    last = json.loads(log.strip().splitlines()[-1])
+    assert last["event"] == "shot_list_authored"

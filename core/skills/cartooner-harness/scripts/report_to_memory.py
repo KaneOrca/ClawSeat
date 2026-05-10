@@ -34,6 +34,7 @@ import _common as common  # noqa: E402
 VALID_EVENTS = (
     "user_direct_request",
     "lane_completed",
+    "shot_list_authored",
     "shot_list_revised",
     "subagent_started",
     "subagent_completed",

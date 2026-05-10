@@ -117,17 +117,19 @@ distilled, audit-able, and re-usable across shots.
 
 ## Routing user feedback (`iterate_prompt.py`)
 
-User feedback determines which layer is mutated:
+User feedback determines which layer is mutated. `iterate_prompt.py`
+accepts `--layer L1|L2|L3`; the L2a (narrative) vs L2b (shot list) split
+is captured by `--target narrative_outline` vs `--target shot_list`:
 
-| User feedback | Layer to mutate | Target seat | Cache impact |
-|---|---|---|---|
-| "Wrong target audience" | L1 — vision_spec / brief | memory edits, may re-collaborate with user | Full re-plan |
-| "Wrong concept entirely" | L1 — style_bible | memory + user | Style bible v2 |
-| "Shot 3 dialogue wrong" | L2a — narrative | writer revises narrative_outline | writer context only |
-| "Shot 5 should be wide instead of close-up" | L2b — shot list | builder-av revises shot_list | builder-av context only |
-| "All 4 candidates too bright" | L3 — image prompt | builder-image (root-cause subagent → adjust prompt → re-spawn) | builder-image lane only |
-| "BGM too fast" | L3 — audio prompt | builder-av (root-cause subagent → adjust prompt → re-spawn) | builder-av lane only |
-| "Want longer / shorter shot" | L2b — shot_list duration field | builder-av | builder-av context |
+| User feedback | --layer | --target | Target seat | Cache impact |
+|---|---|---|---|---|
+| "Wrong target audience" | L1 | brief / vision_spec | memory edits, may re-collaborate with user | Full re-plan |
+| "Wrong concept entirely" | L1 | style_bible | memory + user | Style bible v2 |
+| "Shot 3 dialogue wrong" | L2 | narrative_outline | writer revises narrative_outline | writer context only |
+| "Shot 5 should be wide instead of close-up" | L2 | shot_list | builder-av revises shot_list | builder-av context only |
+| "All 4 candidates too bright" | L3 | lane | builder-image (root-cause subagent → adjust prompt → re-spawn) | builder-image lane only |
+| "BGM too fast" | L3 | lane | builder-av (root-cause subagent → adjust prompt → re-spawn) | builder-av lane only |
+| "Want longer / shorter shot" | L2 | shot_list | builder-av | builder-av context |
 
 Memory classifies feedback heuristically. Two safeguards:
 

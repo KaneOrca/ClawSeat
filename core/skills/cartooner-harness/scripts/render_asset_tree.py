@@ -130,6 +130,8 @@ def _build_tree(
         "tournaments": dict(index.get("tournaments") or {}),
         "iterations": dict(index.get("iterations") or {}),
         "escalations": dict(index.get("escalations") or {}),
+        "briefs": dict(index.get("briefs") or {}),
+        "subagents": dict(index.get("subagents") or {}),
     }
 
 
@@ -180,6 +182,27 @@ def _render_text(tree: dict[str, Any]) -> list[str]:
         out.append("  escalations:")
         for eid, e in tree["escalations"].items():
             out.append(f"    {eid} [{e.get('status', '?')}] trigger={e.get('trigger')}")
+
+    if tree["briefs"]:
+        out.append("")
+        out.append("  briefs:")
+        for bid, b in tree["briefs"].items():
+            target = b.get("target", "?")
+            intent = b.get("intent", "?")
+            state = b.get("state", "?")
+            actor = b.get("actor", "?")
+            out.append(
+                f"    {bid} [{state}] target={target} intent={intent} actor={actor}"
+            )
+
+    if tree["subagents"]:
+        out.append("")
+        out.append("  subagents:")
+        for sid, s in tree["subagents"].items():
+            out.append(
+                f"    {sid} [{s.get('state', '?')}] type={s.get('type', '?')} "
+                f"caller={s.get('caller', '?')}"
+            )
 
     return out
 

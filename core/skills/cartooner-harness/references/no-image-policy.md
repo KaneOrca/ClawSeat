@@ -129,20 +129,29 @@ These design patterns are explicitly forbidden by this policy:
 | `writer` viewing reference images while drafting `script.md` | Writer is text-only |
 | Showing memory a thumbnail "just to update its understanding" | Even thumbnails are tokens; memory does not need to know what assets look like |
 
-## How to validate compliance
+## How compliance is enforced
 
-Run `patrol_pipeline_sla.py --check no-image-policy` periodically. It
-inspects:
+The no-image-policy is enforced through three independent layers, each
+catching a different failure mode:
 
-- `memory` session transcripts for any vision-input markers (should be 0)
-- `writer` session transcripts for any vision-input markers (should be 0)
-- `builder-image` / `builder-av` main-thread transcripts (vision-input
-  markers must only appear inside subagent context boundaries)
-- `generation_log.jsonl` for any base64 image data (should be 0 — paths only)
+1. **Prose** — every seat's role contract (in `AGENTS.md` / `CLAUDE.md`)
+   states the rule explicitly, so the LLM self-restrains.
+2. **Gate** — `seat_gate.{mjs,py}` at every cartooner-* skill CLI entry
+   blocks unauthorized seats from invoking image / video / audio
+   generation skills (see [`seat-authorization-enforcement.md`](seat-authorization-enforcement.md)).
+3. **Audit** — `patrol_pipeline_sla.py --check authorization` scans
+   `generation_log.jsonl` for events whose actor is outside the authorized
+   list (e.g., `memory` calling `cartooner-audio.generate_song.mjs`).
+   Append-only log + actor allowlist makes any violation forensic.
 
-A violation triggers a critical alert to user. The protocol's value
-proposition (long-running, cache-friendly, scalable creative projects)
-collapses if this policy is not enforced.
+A patrol-detected violation triggers `seat_authorization_violation`,
+which (in auto mode) flips memory back to manual and escalates to the
+user. The protocol's value proposition (long-running, cache-friendly,
+scalable creative projects) collapses if this policy is not enforced.
+
+Patrol does not currently inspect session transcripts for vision-input
+markers — that capability lives outside the protocol scripts. The gate
++ audit layers are the authoritative enforcement surfaces.
 
 ## What the user explicitly authorized
 

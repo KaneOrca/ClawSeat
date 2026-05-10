@@ -61,26 +61,28 @@ execution. Choice depends on operation duration:
 
 ```bash
 report_to_memory.py \
+  --project <project-id> \
   --event user_direct_request \
-  --triggered_by user \
+  --triggered-by user \
   --intent "再来 4 张更暗的, low-key lighting" \
   --seat builder-image \
   --action spawn_lane \
-  --supersedes lane-img-042                      # optional, when this user-direct replaces a pending lane
-  --child_lanes lane-img-045                     # optional, lanes spawned as a result
+  --supersedes lane-img-042 \
+  --child-lane lane-img-045
 ```
 
 For subagent-using actions (root-cause / reference-learning):
 
 ```bash
 report_to_memory.py \
+  --project <project-id> \
   --event user_direct_request \
-  --triggered_by user \
+  --triggered-by user \
   --intent "ingest Wong Kar-wai for shot reference" \
   --seat builder-av \
   --action spawn_subagent \
-  --subagent_type reference_learning \
-  --subagent_inputs '{"url": "...", "focus": "shot rhythm"}'
+  --subagent-type reference_learning \
+  --subagent-inputs '{"url": "...", "focus": "shot rhythm"}'
 ```
 
 ### Fail-closed semantics
@@ -154,17 +156,19 @@ memory returns error and the seat aborts (fail-closed).
 ↓
 builder-image:
   1. report_to_memory.py --event user_direct_request \
+       --triggered-by user --seat builder-image \
        --intent "all 4 too bright" --action spawn_subagent \
-       --subagent_type root_cause
-  2. spawn root-cause subagent (isolated context):
+       --subagent-type root_cause
+  2. spawn root-cause subagent (use spawn_subagent.py for the v2 hardened
+     contract; subagent runs in isolated context):
      - vision input: 4 candidate paths
      - subagent analyzes brightness pattern
      - returns text root-cause report
   3. main thread receives text only
   4. adjust L3 prompt based on text report
-  5. spawn_lane re-spawn (a new lane, with parent_lane = lane-img-042,
-     triggered_by = user_direct)
-  6. report_to_memory.py --event lane_completed --child_lane <new-id>
+  5. spawn_lane re-spawn (a new lane, with parent-lane = lane-img-042,
+     triggered-by = user_direct, actor = builder-image)
+  6. report_to_memory.py --event lane_completed --child-lane <new-id>
 ↓
 memory: updates PROJECT_INDEX, generation_log carries full provenance
 ```
@@ -178,9 +182,10 @@ memory: updates PROJECT_INDEX, generation_log carries full provenance
 ↓
 builder-av:
   1. report_to_memory.py --event user_direct_request \
+       --triggered-by user --seat builder-av \
        --intent "learn from WKW ITMFL for shot rhythm" \
-       --action spawn_subagent --subagent_type reference_learning \
-       --subagent_inputs '{"url": "...", "focus": "shot rhythm"}'
+       --action spawn_subagent --subagent-type reference_learning \
+       --subagent-inputs '{"url": "...", "focus": "shot rhythm"}'
   2. spawn reference-learning subagent (isolated, Gemini):
      - YouTube URL ingest
      - subagent extracts shot rhythm patterns
@@ -229,7 +234,9 @@ In both cases:
 
 [builder-image, before executing]
 report_to_memory.py \
+  --project <project-id> \
   --event user_direct_request \
+  --triggered-by user \
   --intent "ignore latest lane, 6 wide shots, gpt-image-2, golden hour" \
   --seat builder-image \
   --action spawn_lane \
@@ -242,16 +249,27 @@ report_to_memory.py \
 - returns OK to builder-image
 
 [builder-image]
-spawn_lane.py --self --count 6 \
+spawn_lane.py \
+  --project <project-id> \
+  --seat builder-image \
+  --actor builder-image \
+  --triggered-by user_direct \
+  --count 6 \
   --shot-id shot-1 \
-  --override-model gpt-image-2 \
-  --override-style-aspect "golden hour" \
-  --triggered_by user_direct \
-  --parent_lane lane-img-042
+  --parent-lane lane-img-042 \
+  --prompt "wide shot, gpt-image-2, golden hour"
+# (model + style aspect are inlined in --prompt; spawn_lane has no
+#  --override-model / --override-style-aspect flags. The seat decides
+#  the L3 syntax when it processes the lane.)
 
 [builder-image, after generation]
 deposit_asset.py × 6 (img-051 ... img-056) — model_metadata + file_metadata only
-report_to_memory.py --event lane_completed --child_lane lane-img-051
+report_to_memory.py \
+  --project <project-id> \
+  --event lane_completed \
+  --triggered-by user \
+  --seat builder-image \
+  --child-lane lane-img-051
 
 [memory]
 - updates PROJECT_INDEX

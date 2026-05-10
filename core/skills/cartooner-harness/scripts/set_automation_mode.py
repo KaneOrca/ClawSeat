@@ -57,6 +57,8 @@ VALID_ESCALATE_TRIGGERS = (
     "tournament_ready_no_auto_pick_strategy",
     "user_direct_received",
     "seat_authorization_violation",
+    "vision_spec_violation",
+    "subagent_failure",
 )
 
 

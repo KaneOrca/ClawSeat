@@ -11,35 +11,39 @@ model-provided numeric scores (when configured).
 
 ## Mode toggle
 
-`set_automation_mode.py --mode manual|auto [--strategy <name>]
-[--escalate-on <conditions>]`
+`set_automation_mode.py --mode manual|auto [--pick-strategy <name>]
+[--escalate-on <comma-list>]`
 
-Stored in `~/.cartooner/projects/<id>/automation.toml`:
+Stored inside `PROJECT_INDEX.json` (no separate `automation.toml`):
 
-```toml
-[mode]
-current = "manual"   # or "auto"
-since = "2026-05-10T15:30:00Z"
-last_actor = "user"  # who flipped the switch
-
-[auto_strategy]
-pick_strategy = "escalate-always"   # default; see options below
-budget_token_cap = 200000
-budget_wall_clock_minutes = 60
-escalate_on = [
-  "lane_failure",
-  "sla_breach",
-  "phase_transition",
-  "budget_exhausted",
-  "tournament_ready_no_auto_pick_strategy",
-  "user_direct_received",
-  "seat_authorization_violation",
-]
-
-[audit]
-log_all_auto_decisions = true
-require_undo_window_minutes = 30
+```json
+{
+  "automation_mode": "manual",
+  "automation_config": {
+    "mode": "manual",
+    "set_at": "2026-05-10T15:30:00Z",
+    "set_by": "user",
+    "triggered_by": null,
+    "pick_strategy": "escalate-always",
+    "escalate_on": [
+      "lane_failure",
+      "sla_breach",
+      "phase_transition",
+      "budget_exhausted",
+      "tournament_ready_no_auto_pick_strategy",
+      "user_direct_received",
+      "seat_authorization_violation",
+      "vision_spec_violation",
+      "subagent_failure"
+    ]
+  }
+}
 ```
+
+`pick_strategy` and `escalate_on` are only present when mode is `auto`.
+Budget and undo-window settings are not yet implemented at the script
+level — when added they will land alongside `automation_config`, not in
+a separate file.
 
 ## Manual mode (default)
 
@@ -111,7 +115,7 @@ qualifying candidate, fallback is **always** escalate to user.
 | `user_direct_received` | User addressed any seat directly | Auto-flip to manual; user is back |
 | `vision_spec_violation` | Auto action would violate `vision_spec.md` rule (e.g., trying to enter image phase before script lock) | Spec guardrail |
 | `subagent_failure` | Root-cause or reference-learning subagent errored or returned malformed report | Cannot proceed without subagent output |
-| `seat_authorization_violation` | `patrol_pipeline_sla.py --audit-skill-authorization` detected a seat invoking a skill outside its authorized list (per Skill Authorization Matrix in cartooner-harness/SKILL.md) | Out-of-protocol behavior; user must investigate cause (drift / hallucination / config bug) before continuing |
+| `seat_authorization_violation` | `patrol_pipeline_sla.py --check authorization` detected a seat invoking a skill outside its authorized list (per Skill Authorization Matrix in cartooner-harness/SKILL.md) | Out-of-protocol behavior; user must investigate cause (drift / hallucination / config bug) before continuing |
 
 User may add custom triggers in `escalate_on`. Removing default triggers
 requires `--force-escalate-policy` (we do not silently allow risky
@@ -155,23 +159,21 @@ Note: `reasoning` here is **memory's text reasoning** about its own
 mechanical rule application, not visual judgment. It explains the rule
 applied, not what the image looks like.
 
-## Undo
+## Undo (planned, not yet implemented)
 
-User can undo any auto decision:
+A future `undo_auto_decision.py` will let user revert any auto decision:
 
-`undo_auto_decision.py --event-id <id>`
-
-Effect:
 - The pick (or transition / spawn) is reverted
 - Tournament state is restored to "awaiting pick"
 - All downstream work that depended on the reverted decision is marked
   `superseded` (downstream lanes / assets / next-phase spawns)
 - User is prompted to make the decision manually
 
-If `require_undo_window_minutes` has elapsed:
-- Undo returns an error explaining the cascade impact (downstream assets
-  that would need to be redone)
-- User can confirm with `--force-undo` or abandon
+For v1 the workflow is: user calls
+`report_to_memory.py --supersedes <lane-id>` for the in-flight artifact
+they want to redo, then re-spawns the lane with adjusted prompt. The
+audit trail already supports the supersession; only the convenience
+wrapper is pending.
 
 ## Auto mode in practice
 
@@ -216,8 +218,8 @@ spawn_lane builder-av (STAGE 1) → shot_list.toml v1
 "shot 5 改 wide-shot"
 
 [memory, manual mode] (auto-flipped because user_direct_received)
-iterate_prompt --layer L2b --target-seat builder-av \
-  --feedback "shot-5 change to wide-shot" --shot-id shot-5
+iterate_prompt.py --layer L2 --target shot_list --parent-shot shot-5 \
+  --feedback "shot-5 change to wide-shot"
 
 [builder-av revises shot_list v2]
 [user approves shot_list v2]

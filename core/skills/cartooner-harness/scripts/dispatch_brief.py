@@ -108,6 +108,17 @@ def main(argv: list[str] | None = None) -> int:
             f"--triggered-by user_direct requires --actor to be the seat that "
             f"received the user direct (writer / builder-image / builder-av); got {args.actor!r}"
         )
+    # Hub-and-spoke (communication-protocol.md §7): non-memory dispatchers
+    # may only self-dispatch (target == actor). Lateral dispatch
+    # (writer → builder-av etc.) is forbidden — it must round-trip through
+    # memory so the project's single source of truth stays informed.
+    if args.actor != "memory" and args.target != args.actor:
+        common.fail_closed(
+            f"hub-and-spoke violation: non-memory actor {args.actor!r} may "
+            f"only self-dispatch (target must equal actor); got "
+            f"target={args.target!r}. Lateral seat-to-seat dispatch is "
+            f"forbidden — route through memory instead."
+        )
 
     common.ensure_project_skeleton(args.project)
     index = common.load_project_index(args.project)

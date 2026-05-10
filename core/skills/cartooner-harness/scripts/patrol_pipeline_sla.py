@@ -63,12 +63,18 @@ EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
     "user_direct_request": {"user"},
     "lane_completed": {"user", "memory", "patrol", "builder-image", "builder-av", "writer"},
     "shot_list_revised": {"user", "memory", "writer", "builder-av"},
+    "shot_list_authored": {"user", "memory", "writer", "builder-av"},
     "subagent_started": {"builder-image", "builder-av"},
     "subagent_spawned": {"builder-image", "builder-av"},
     "subagent_completed": {"builder-image", "builder-av"},
     "subagent_failed": {"builder-image", "builder-av"},
-    # cross-seat dispatch protocol (communication-protocol.md §6)
-    "brief_dispatched": {"memory"},          # only memory dispatches; user-direct self-dispatch logs as actor=<seat> + triggered_by=user_direct
+    # cross-seat dispatch protocol (communication-protocol.md §6).
+    # brief_dispatched normally has actor=memory, but user-direct
+    # self-dispatch sets actor=<seat> + triggered_by=user_direct (enforced
+    # by dispatch_brief.py to also require target == actor). Patrol's
+    # actor allowlist is the union; refining cross-condition rules belongs
+    # in a separate brief-specific check.
+    "brief_dispatched": {"memory", "writer", "builder-image", "builder-av"},
     "brief_delivered": {"writer", "builder-image", "builder-av"},
     "brief_failed": {"writer", "builder-image", "builder-av"},
 }
@@ -142,19 +148,21 @@ def _check_sla(
     anomalies: list[dict[str, Any]] = []
     now = datetime.now(tz=None).astimezone()
 
-    for lane_id, lane in (index.get("lanes") or {}).items():
-        state = lane.get("state")
-        if state not in ("spawned", "generating"):
-            continue
-        created = lane.get("created_at")
+    def _age_check(
+        kind: str,
+        item_id: str,
+        created: str | None,
+        state: str,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
         if not created:
             anomalies.append({
                 "check": "sla",
                 "severity": "warn",
-                "lane_id": lane_id,
-                "reason": "lane has no created_at; cannot age-check",
+                f"{kind}_id": item_id,
+                "reason": f"{kind} has no created_at; cannot age-check",
             })
-            continue
+            return
         try:
             ts = datetime.fromisoformat(created)
             if ts.tzinfo is None:
@@ -163,23 +171,50 @@ def _check_sla(
             anomalies.append({
                 "check": "sla",
                 "severity": "warn",
-                "lane_id": lane_id,
-                "reason": f"lane has invalid created_at: {created!r}",
+                f"{kind}_id": item_id,
+                "reason": f"{kind} has invalid created_at: {created!r}",
             })
-            continue
-
+            return
         age_mins = (now - ts).total_seconds() / 60.0
         if age_mins > threshold_mins:
-            anomalies.append({
+            entry: dict[str, Any] = {
                 "check": "sla",
                 "severity": "alert",
-                "lane_id": lane_id,
+                f"{kind}_id": item_id,
                 "state": state,
                 "age_mins": round(age_mins, 1),
                 "threshold_mins": threshold_mins,
-                "reason": f"lane stuck in state={state} for {age_mins:.1f} min "
+                "reason": f"{kind} stuck in state={state} for {age_mins:.1f} min "
                           f"(> threshold {threshold_mins} min)",
-            })
+            }
+            if extra:
+                entry.update(extra)
+            anomalies.append(entry)
+
+    for lane_id, lane in (index.get("lanes") or {}).items():
+        state = lane.get("state")
+        if state not in ("spawned", "generating"):
+            continue
+        _age_check("lane", lane_id, lane.get("created_at"), state)
+
+    for brief_id, brief in (index.get("briefs") or {}).items():
+        state = brief.get("state")
+        if state != "open":
+            continue
+        _age_check("brief", brief_id, brief.get("created_at"), state, extra={
+            "target": brief.get("target"),
+            "intent": brief.get("intent"),
+        })
+
+    for sa_id, sa in (index.get("subagents") or {}).items():
+        state = sa.get("state")
+        if state != "spawned":
+            continue
+        _age_check("subagent", sa_id, sa.get("spawned_at"), state, extra={
+            "caller": sa.get("caller"),
+            "subagent_type": sa.get("type"),
+        })
+
     return anomalies
 
 
@@ -291,6 +326,23 @@ def _check_authorization(project: str) -> list[dict[str, Any]]:
                         "reason": f"actor {actor!r} not authorized for asset_type "
                                   f"{asset_type!r}",
                     })
+
+            # Hub-and-spoke cross-field check (communication-protocol.md §7):
+            # brief_dispatched with non-memory actor is only legitimate when
+            # triggered_by=user_direct (Producer override per §8). Anything
+            # else is a lateral seat-to-seat dispatch and a protocol breach.
+            if ev_name == "brief_dispatched" and actor and actor != "memory":
+                if event.get("triggered_by") != "user_direct":
+                    anomalies.append({
+                        "check": "authorization",
+                        "severity": "alert",
+                        "line": line_no,
+                        "event": ev_name,
+                        "actor": actor,
+                        "reason": f"non-memory actor {actor!r} dispatched a brief "
+                                  f"without --triggered-by user_direct "
+                                  f"(hub-and-spoke violation)",
+                    })
     return anomalies
 
 
@@ -311,7 +363,7 @@ def _render_text(report: dict[str, Any]) -> list[str]:
         sev = a.get("severity", "?")
         reason = a.get("reason", "?")
         loc_bits: list[str] = []
-        for k in ("lane_id", "asset_id", "line", "event", "actor"):
+        for k in ("lane_id", "asset_id", "brief_id", "subagent_id", "line", "event", "actor"):
             v = a.get(k)
             if v is not None:
                 loc_bits.append(f"{k}={v}")

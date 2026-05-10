@@ -66,7 +66,12 @@ def ensure_project_skeleton(project_id: str) -> Path:
         "assets/images",
         "assets/videos",
         "assets/audios",
+        "assets/texts",
+        "briefs",
+        "subagents",
         "tournaments",
+        "iterations",
+        "escalations",
         "references_learned",
     ):
         (root / sub).mkdir(parents=True, exist_ok=True)
@@ -143,7 +148,12 @@ def load_brief(project_id: str, brief_id: str) -> dict[str, Any] | None:
 
 
 def parse_brief(raw: str) -> dict[str, Any] | None:
-    """Parse a brief frontmatter+body file into {**frontmatter, body: <md>}."""
+    """Parse a brief frontmatter+body file into {**frontmatter, body: <md>}.
+
+    Supports an optional appended `+++ result\\n<TOML>\\n+++` block written
+    by `deliver_brief.py`; that block is stripped from the body and exposed
+    on the returned dict as `_result` (parsed TOML or {} on parse error).
+    """
     marker = "+++"
     if not raw.startswith(marker):
         return None
@@ -151,7 +161,28 @@ def parse_brief(raw: str) -> dict[str, Any] | None:
     if end < 0:
         return None
     fm_text = raw[len(marker):end].strip()
-    body = raw[end + len("\n" + marker):].lstrip("\n")
+    rest = raw[end + len("\n" + marker):]
+    # Strip a trailing result block if present:
+    #   <body>\n+++ result\n<resfm>\n+++\n
+    body = rest
+    result_payload: dict[str, Any] = {}
+    res_marker = "\n+++ result\n"
+    res_idx = rest.find(res_marker)
+    if res_idx >= 0:
+        body = rest[:res_idx]
+        tail = rest[res_idx + len(res_marker):]
+        end_res = tail.find("\n+++")
+        if end_res >= 0:
+            res_text = tail[:end_res].strip()
+            try:
+                import tomllib as _tl
+            except ModuleNotFoundError:  # pragma: no cover
+                import tomli as _tl  # type: ignore[no-redef]
+            try:
+                result_payload = _tl.loads(res_text)
+            except Exception:
+                result_payload = {}
+    body = body.lstrip("\n").rstrip("\n")
     try:
         import tomllib
     except ModuleNotFoundError:  # pragma: no cover
@@ -161,6 +192,8 @@ def parse_brief(raw: str) -> dict[str, Any] | None:
     except Exception:
         return None
     fm["body"] = body
+    if result_payload:
+        fm["_result"] = result_payload
     return fm
 
 

@@ -165,23 +165,28 @@ These enums map to Seedance 2.0 mode parameters. See
    - Determine shot count and duration distribution
    - Per-shot: shot_type, camera_motion, mood, key_elements, etc.
 6. Author shot_list.toml
-7. report_to_memory.py --event shot_list_authored --version v1
+7. report_to_memory.py --event shot_list_authored --triggered-by memory --seat builder-av
 8. memory verifies: total duration, schema, narrative_ref, character refs
 9. memory escalates to user for review
 10. user approves → shot_list.toml frozen at v1
     user rejects → builder-av iterates per user feedback (L2b mutation)
 ```
 
-## Iteration on shot_list (L2b feedback)
+## Iteration on shot_list (L2 feedback, target=shot_list)
 
 When user gives feedback on shot_list ("shot 5 should be wide instead of
-close-up"), `iterate_prompt.py` routes to L2b:
+close-up"), `iterate_prompt.py` routes at layer L2 with `--target shot_list`:
 
 ```
-iterate_prompt --layer L2b --target-seat builder-av \
-  --feedback "shot-5 change to wide-shot" \
-  --shot-id shot-5
+iterate_prompt.py --project <project-id> \
+  --layer L2 \
+  --target shot_list \
+  --parent-shot shot-5 \
+  --feedback "shot-5 change to wide-shot"
 ```
+
+(L1 / L2 / L3 are the layer enums; the L2a [narrative] vs L2b [shot list]
+split documented in `3-layer-prompt-model.md` is captured by `--target`.)
 
 builder-av:
 1. Reads current shot_list.toml
