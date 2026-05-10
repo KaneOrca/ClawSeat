@@ -2610,6 +2610,66 @@ def test_spawn_subagent_rejects_traversal_subagent_id(cartooner_env):
     assert "--subagent-id" in res.stderr
 
 
+# ── update_project_index file lock (audit finding #3) ─────────────────
+
+
+def test_update_project_index_concurrent_writers_no_loss(cartooner_env, cartooner_root):
+    """Two parallel spawn_lane calls must not race-drop a lane from the index.
+
+    Without flock, both spawn_lane subprocesses load the same baseline,
+    each adds its own lane in-memory, both write — last writer wins,
+    one lane disappears from PROJECT_INDEX even though its TOML is on
+    disk. This test fires N parallel spawns and asserts ALL land in the
+    index.
+    """
+    import concurrent.futures
+    n = 10
+    def _spawn(i):
+        return _run(
+            "spawn_lane.py",
+            "--project", "demo",
+            "--seat", "builder-image",
+            "--count", "2",
+            "--prompt", f"parallel-{i}",
+            "--shot-id", f"shot-{i}",
+            "--skip-wakeup",
+            env=cartooner_env,
+        )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n) as ex:
+        results = list(ex.map(_spawn, range(n)))
+    for r in results:
+        assert r.returncode == 0, r.stderr
+    lane_ids = sorted(r.stdout.strip() for r in results)
+    assert len(lane_ids) == n
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text())
+    indexed = sorted(index.get("lanes", {}).keys())
+    missing = [lid for lid in lane_ids if lid not in indexed]
+    assert not missing, (
+        f"file lock failed — {len(missing)} lanes lost from PROJECT_INDEX: {missing}"
+    )
+    # Every lane file is on disk (write_lane is per-lane, not contended)
+    for lid in lane_ids:
+        assert (project_root / "lanes" / f"{lid}.toml").is_file()
+
+
+def test_update_project_index_mutator_can_return_new_dict(cartooner_env, cartooner_root):
+    """mutator may either mutate-in-place (return None) or return a new dict."""
+    import sys, subprocess
+    code = (
+        f"import sys; sys.path.insert(0, '{_SCRIPTS}'); "
+        f"import _common as c; "
+        f"c.update_project_index('demo', lambda i: dict(i, marker='in-place')); "
+        f"print(c.load_project_index('demo')['marker'])"
+    )
+    res = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        env={**os.environ, **cartooner_env},
+    )
+    assert res.returncode == 0, res.stderr
+    assert "in-place" in res.stdout
+
+
 # ── pick_winner trust-aware pick_method (audit finding #4) ─────────────
 
 

@@ -96,16 +96,17 @@ def main(argv: list[str] | None = None) -> int:
     }
     common.write_lane(args.project, lane_id, lane_data)
 
-    index = common.load_project_index(args.project)
-    index.setdefault("lanes", {})[lane_id] = {
-        "state": "spawned",
-        "seat": args.seat,
-        "count": args.count,
-        "shot_id": args.shot_id or None,
-        "triggered_by": args.triggered_by,
-        "created_at": now,
-    }
-    common.write_project_index(args.project, index)
+    def _add_lane(index):
+        index.setdefault("lanes", {})[lane_id] = {
+            "state": "spawned",
+            "seat": args.seat,
+            "count": args.count,
+            "shot_id": args.shot_id or None,
+            "triggered_by": args.triggered_by,
+            "created_at": now,
+        }
+        return index
+    common.update_project_index(args.project, _add_lane)
 
     target_session = args.target_session.strip() or (
         common.resolve_seat_session(args.project, args.seat) or ""

@@ -106,6 +106,49 @@ def write_project_index(project_id: str, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def update_project_index(project_id: str, mutator):
+    """Atomic read-modify-write on PROJECT_INDEX.json under exclusive lock.
+
+    Audit finding #3: spawn_lane / deposit_asset / pick_winner /
+    iterate_prompt / etc. all do load_project_index → mutate → write.
+    Without a lock, two concurrent calls (memory's parallel
+    subprocess.run) could race: both load same baseline, each adds its
+    own lane/asset, last writer wins → one record silently dropped from
+    the index (lane file on disk is intact but orphaned).
+
+    `mutator(index)` receives the freshly-loaded dict and may mutate
+    in-place or return a new dict; the result is written under the lock.
+
+    Lock file lives next to the index; flock is released by the kernel
+    even if the process crashes, so no manual unlock-on-error needed.
+    """
+    ensure_project_skeleton(project_id)
+    path = project_root(project_id) / "PROJECT_INDEX.json"
+    lock_path = path.with_suffix(".json.lock")
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover — non-POSIX (Windows)
+        # Without flock we cannot guarantee atomicity; degrade to plain
+        # read-modify-write and warn loudly. Producer should rerun on a
+        # POSIX host for correctness-critical operations.
+        index = load_project_index(project_id)
+        result = mutator(index)
+        index_to_write = result if result is not None else index
+        write_project_index(project_id, index_to_write)
+        return index_to_write
+
+    with open(lock_path, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            index = load_project_index(project_id)
+            result = mutator(index)
+            index_to_write = result if result is not None else index
+            write_project_index(project_id, index_to_write)
+            return index_to_write
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 def append_generation_log(project_id: str, event: dict[str, Any]) -> None:
     ensure_project_skeleton(project_id)
     path = project_root(project_id) / "generation_log.jsonl"
