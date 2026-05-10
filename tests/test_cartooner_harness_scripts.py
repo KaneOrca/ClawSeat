@@ -559,6 +559,7 @@ def test_pick_winner_manual_records_pick_and_marks_lane(cartooner_env, cartooner
         "--candidates", "img-001,img-002,img-003,img-004",
         "--strategy", "manual",
         "--picked", "img-002",
+        "--pick-method", "external_signed_token",
         "--reason", "best mood for shot-1",
         env=cartooner_env,
     )
@@ -587,6 +588,7 @@ def test_pick_winner_reject_all_records_no_winner(cartooner_env, cartooner_root,
         "--candidates", "img-001,img-002",
         "--strategy", "manual",
         "--reject-all",
+        "--pick-method", "external_signed_token",
         env=cartooner_env,
     )
     assert res.returncode == 0, res.stderr
@@ -713,6 +715,7 @@ def test_pick_winner_idempotent_same_winner_re_call(cartooner_env, cartooner_roo
         "--candidates", "img-1,img-2",
         "--strategy", "manual",
         "--picked", "img-1",
+        "--pick-method", "external_signed_token",
     ]
     r1 = _run("pick_winner.py", *common_args, env=cartooner_env)
     assert r1.returncode == 0
@@ -729,6 +732,7 @@ def test_pick_winner_rejects_change_winner_after_pick(cartooner_env, tmp_path):
         "--candidates", "img-1,img-2",
         "--strategy", "manual",
         "--picked", "img-1",
+        "--pick-method", "external_signed_token",
         env=cartooner_env,
     )
     assert r1.returncode == 0
@@ -739,6 +743,7 @@ def test_pick_winner_rejects_change_winner_after_pick(cartooner_env, tmp_path):
         "--candidates", "img-1,img-2",
         "--strategy", "manual",
         "--picked", "img-2",  # different winner
+        "--pick-method", "external_signed_token",
         env=cartooner_env,
     )
     assert r2.returncode != 0
@@ -877,6 +882,7 @@ def test_full_lifecycle_with_iteration(cartooner_env, cartooner_root, tmp_path):
         "--candidates", "a,b,c,d",
         "--strategy", "manual",
         "--picked", "b",
+        "--pick-method", "external_signed_token",
         env=cartooner_env,
     )
     assert r.returncode == 0
@@ -1322,6 +1328,7 @@ def test_render_asset_tree_includes_tournaments_iterations_escalations(
                               asset_ids=("a", "b"))
     _run("pick_winner.py", "--project", "demo", "--round-id", "shot-1-r1",
          "--candidates", "a,b", "--strategy", "manual", "--picked", "a",
+         "--pick-method", "external_signed_token",
          env=cartooner_env)
     _run("iterate_prompt.py", "--project", "demo", "--layer", "L3",
          "--feedback", "deeper shadow", "--parent-lane", lane,
@@ -1547,6 +1554,7 @@ def test_e2e_auto_mode_escalation_flips_to_manual(cartooner_env, cartooner_root,
 
     pick2 = _run("pick_winner.py", "--project", "demo", "--round-id", "shot-1-r1",
                  "--candidates", "a,b", "--strategy", "manual", "--picked", "a",
+                 "--pick-method", "external_signed_token",
                  env=cartooner_env)
     assert pick2.returncode == 0
 
@@ -2188,6 +2196,7 @@ def test_writer_lane_multi_candidate(cartooner_env, cartooner_root, tmp_path):
         "--candidates", "h1,h2,h3,h4",
         "--strategy", "manual",
         "--picked", "h2",
+        "--pick-method", "external_signed_token",
         env=cartooner_env,
     )
     assert pick.returncode == 0
@@ -2599,6 +2608,98 @@ def test_spawn_subagent_rejects_traversal_subagent_id(cartooner_env):
     )
     assert res.returncode != 0
     assert "--subagent-id" in res.stderr
+
+
+# ── pick_winner trust-aware pick_method (audit finding #4) ─────────────
+
+
+def test_pick_winner_requires_pick_method_when_picker_user(cartooner_env, tmp_path):
+    """--picker user without --pick-method must fail-closed."""
+    _spawn_and_deposit(cartooner_env, tmp_path, asset_ids=("img-1", "img-2"))
+    res = _run(
+        "pick_winner.py",
+        "--project", "demo",
+        "--round-id", "shot-1-r1",
+        "--candidates", "img-1,img-2",
+        "--strategy", "manual",
+        "--picked", "img-1",
+        # no --pick-method
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--pick-method is REQUIRED" in res.stderr
+
+
+def test_pick_winner_records_pick_method_in_log(cartooner_env, cartooner_root, tmp_path):
+    _spawn_and_deposit(cartooner_env, tmp_path, asset_ids=("img-1", "img-2"))
+    res = _run(
+        "pick_winner.py",
+        "--project", "demo",
+        "--round-id", "shot-1-r1",
+        "--candidates", "img-1,img-2",
+        "--strategy", "manual",
+        "--picked", "img-1",
+        "--pick-method", "native_ask_user_question",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    log = (cartooner_root / "projects" / "demo" / "generation_log.jsonl").read_text()
+    last = json.loads(log.strip().splitlines()[-1])
+    assert last["event"] == "pick_winner"
+    assert last["pick_method"] == "native_ask_user_question"
+    # tournament TOML also captures it
+    rec = json.loads((cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text())
+    assert rec["tournaments"]["shot-1-r1"]["pick_method"] == "native_ask_user_question"
+
+
+def test_patrol_warns_on_native_ask_user_question_pick(cartooner_env, cartooner_root):
+    """Weak-trust pick_method=native_ask_user_question with picker=user → patrol warn."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "pick_winner",
+            "actor": "user",
+            "pick_method": "native_ask_user_question",
+            "round_id": "r-x",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "trust depends on session attachment" in res.stdout
+
+
+def test_patrol_alerts_on_missing_pick_method(cartooner_env, cartooner_root):
+    """Legacy log entry with actor=user but no pick_method → alert (broken trust chain)."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "pick_winner",
+            "actor": "user",
+            "round_id": "r-y",
+            # no pick_method field — legacy entry
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "trust chain broken" in res.stdout
 
 
 def test_dispatch_brief_target_session_override(cartooner_env, cartooner_root):

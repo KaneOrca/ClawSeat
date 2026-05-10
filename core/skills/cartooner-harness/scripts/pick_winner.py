@@ -43,6 +43,17 @@ VALID_STRATEGIES = (
     "random-from-passing",
 )
 VALID_PICKERS = ("user", "memory_acting_director")
+VALID_PICK_METHODS = (
+    # Trust-aware pick provenance, surfaced after 2026-05-11 audit finding
+    # #4 (cross-session AskUserQuestion answered by non-producer entity).
+    # Without this field, pick_winner records actor=user and an audit
+    # reader cannot tell whether the producer truly attested or whether
+    # some autopilot / sandbox default supplied the answer.
+    "external_signed_token",      # producer ack via send-and-verify or out-of-band signature; strongest trust
+    "native_ask_user_question",   # native UI in the calling seat's tool (Claude Code AskUserQuestion / Codex prompt) — TRUST DEPENDS ON SESSION ATTACHMENT
+    "memory_default_no_ack",      # memory autopicked because no producer was reachable; weakest trust, must be flagged
+    "auto_strategy",              # one of model-metadata-rank / first-passing / random-from-passing fired with no producer in the loop
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -61,6 +72,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="(model-metadata-rank) min aesthetic_score threshold; below = no auto-pick")
     p.add_argument("--picker", default="user", choices=VALID_PICKERS,
                    help="user (manual) or memory_acting_director (auto mode)")
+    p.add_argument("--pick-method", default="", choices=("",) + VALID_PICK_METHODS,
+                   help="Trust-aware provenance of how the pick was reached. "
+                        "REQUIRED when --picker user (audit needs to know "
+                        "whether the producer truly attested or whether a "
+                        "tool-level UI / autopilot supplied the answer). "
+                        "Memory-driven auto picks default to 'auto_strategy'.")
     p.add_argument("--reason", default="",
                    help="Optional human-readable reason for the pick")
     return p.parse_args(argv)
@@ -81,6 +98,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.reject_all and args.picked:
         common.fail_closed("--reject-all and --picked are mutually exclusive")
+
+    # Resolve trust-aware pick_method (audit finding #4):
+    # picker=user without explicit pick_method is now ambiguous, because
+    # native_ask_user_question may be answered by an autopilot rather
+    # than the actual producer. Force the caller to be explicit so the
+    # generation_log carries the trust signal forward.
+    pick_method = args.pick_method
+    if not pick_method:
+        if args.strategy == "manual" and args.picker == "user":
+            common.fail_closed(
+                "--pick-method is REQUIRED when --picker user "
+                "(audit finding #4). Choose one of: "
+                f"{', '.join(VALID_PICK_METHODS)}"
+            )
+        if args.strategy == "manual" and args.picker == "memory_acting_director":
+            pick_method = "memory_default_no_ack"
+        else:
+            pick_method = "auto_strategy"
 
     common.ensure_project_skeleton(args.project)
     index = common.load_project_index(args.project)
@@ -128,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         "rejected_all": bool(args.reject_all),
         "strategy": args.strategy,
         "picker": args.picker,
+        "pick_method": pick_method,
         "reason": args.reason,
         "decided_at": now,
     }
@@ -165,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
         "rejected_all": bool(args.reject_all),
         "strategy": args.strategy,
         "actor": args.picker,
+        "pick_method": pick_method,
         "reason": args.reason or None,
     })
 

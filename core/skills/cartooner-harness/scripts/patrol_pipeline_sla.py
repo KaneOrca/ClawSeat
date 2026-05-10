@@ -343,6 +343,34 @@ def _check_authorization(project: str) -> list[dict[str, Any]]:
                                   f"without --triggered-by user_direct "
                                   f"(hub-and-spoke violation)",
                     })
+
+            # pick_winner trust-chain check (audit finding #4):
+            # actor=user with weak pick_method is suspicious — the producer
+            # may not have actually attested. Surface as warning so audit
+            # readers can investigate (and so memory cannot silently pass
+            # off autopilot answers as producer decisions).
+            if ev_name == "pick_winner" and actor == "user":
+                pm = event.get("pick_method")
+                if pm in (None, "memory_default_no_ack", "auto_strategy"):
+                    anomalies.append({
+                        "check": "authorization",
+                        "severity": "alert",
+                        "line": line_no,
+                        "event": ev_name,
+                        "actor": actor,
+                        "reason": f"actor=user with pick_method={pm!r}; "
+                                  f"trust chain broken (producer did not attest)",
+                    })
+                elif pm == "native_ask_user_question":
+                    anomalies.append({
+                        "check": "authorization",
+                        "severity": "warn",
+                        "line": line_no,
+                        "event": ev_name,
+                        "actor": actor,
+                        "reason": "actor=user with pick_method=native_ask_user_question; "
+                                  "trust depends on session attachment (verify producer truly answered)",
+                    })
     return anomalies
 
 
