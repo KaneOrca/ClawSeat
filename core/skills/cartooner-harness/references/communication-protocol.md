@@ -67,13 +67,15 @@ for the producer to choose among, use spawn_lane. Otherwise dispatch_brief.
 ```toml
 +++
 id = "brief-<8 hex>"
+project = "clawseat-anime-test"  # canonical anchor (#8); receiver MUST pass --project = this
 created_at = "<iso>"
 source = "memory"               # always; cross-seat lateral is forbidden
 target = "writer"               # writer | builder-image | builder-av
 intent = "lyric"                # high-level: narrative | lyric | copy | shot_list_revision | reference_learning | dna | other
 parent_lane = ""                # optional, when brief is part of a lane iteration
 parent_shot = ""                # optional, shot_list join key
-deliverable_path = "narrative_outline.md"  # relative to project root
+deliverable_paths = ["narrative_outline.md"]  # list; each path relative to project root
+dispatch_session = "cartooner-video-memory-claude"  # dispatcher's tmux session (#9); deliver_brief uses for return-wakeup
 state = "open"                  # open | delivered | failed | cancelled
 +++
 
@@ -81,6 +83,24 @@ state = "open"                  # open | delivered | failed | cancelled
 
 (markdown body — full instructions, references, constraints, acceptance criteria)
 ```
+
+**Multi-deliverable briefs** (audit finding #9, 2026-05-11): `deliverable_paths`
+is a list. Pass `--deliverable-path` once per file when calling
+`dispatch_brief.py`; the receiver delivers all expected files via repeated
+`--output-path` on `deliver_brief.py`. The receiver script enforces basename
+coverage: missing any expected file is a fail-closed protocol error. Use
+this for tightly-coupled small text deliverables (a workflow comprehension
+note + a sample premise; a narrative + its outline header; etc.). For
+N-candidate parallel work where the producer picks among options, still
+use `spawn_lane` instead.
+
+**dispatch_session** (audit finding #9): the dispatcher's tmux session name,
+captured at brief-write time so `deliver_brief.py` can wake the actual
+dispatcher pane on return — even when memory's tmux is bound to a
+different project than `--project` (cross-project dispatches like
+clawseat-anime-test driven by memory in cartooner-video). dispatch_brief
+auto-detects from `$TMUX` + `tmux display-message -p '#S'`; pass
+`--dispatch-session` explicitly to override.
 
 Parse: split on `+++` markers (frontmatter style, Hugo / Zola convention).
 The TOML fields are `tomllib`-parseable; the body is plain markdown for
@@ -105,9 +125,12 @@ human reading.
 5. reads briefs/<id>.toml frontmatter + body
 6. executes (writes deliverable to deliverable_path)
 7. subprocess.run([deliver_brief.py, ...]):
-     - validates output file exists + is non-empty UTF-8 (text-only constraint)
-     - flips brief state=delivered + writes result.{output_path, output_size_chars}
+     - validates each --output-path file exists + is non-empty UTF-8 (text-only constraint)
+     - if brief.deliverable_paths set: enforces basename coverage (missing any expected file is fail-closed)
+     - flips brief state=delivered + writes result.outputs = [{path, output_size_chars, file_size}, ...]
+       (plus back-compat single-output fields output_path / output_size_chars / file_size mirroring outputs[0])
      - appends generation_log event=brief_delivered
+     - resolves wakeup target: --target-session arg → brief.dispatch_session → resolve_seat_session(project, "memory")
      - invokes send-and-verify.sh back to memory pane
 
 [memory]
@@ -194,7 +217,7 @@ paths. No silent backchannel.
 | writer → builder-av direct dispatch | breaks memory's SSOT (Q4: hub-and-spoke required) |
 | Patrol mutation dispatch | patrol is read-only Asset Guardian |
 | Brief without source=memory (except after user_direct report) | breaks dispatcher invariant |
-| Multi-deliverable brief (`deliverable_path` is a list) | use spawn_lane for cardinality > 1 |
+| Multi-deliverable brief used as cheap parallelism | use spawn_lane when producer picks among N candidates; deliverable_paths is for *required* coupled text outputs only |
 | Brief body containing image bytes / base64 | text-only constraint; subagent path for vision |
 
 Patrol audits violations by scanning `generation_log.jsonl` for

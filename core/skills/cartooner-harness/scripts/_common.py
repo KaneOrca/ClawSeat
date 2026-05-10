@@ -369,11 +369,41 @@ def _send_and_verify_path() -> Path | None:
     return None
 
 
+def detect_tmux_session() -> str | None:
+    """Autodetect the current tmux session name (best-effort).
+
+    Used by dispatch_brief.py so the dispatching seat doesn't have to
+    remember its own tmux session — we capture it for the wakeup return
+    path (deliver_brief uses it as the default --target-session).
+
+    Returns the session name string, or None if we are not in tmux or
+    the lookup fails. Never raises.
+    """
+    if not os.environ.get("TMUX"):
+        return None
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "#S"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    name = (result.stdout or "").strip()
+    return name or None
+
+
 def serialize_toml(data: dict[str, Any]) -> str:
     """Minimal TOML serializer for our flat-with-one-section lane schema.
 
-    Supports str / int / float / bool / list[str] / nested table (one level).
-    Skips keys whose value is None (to keep TOML clean).
+    Supports str / int / float / bool / list[str] / list[dict] (array-of-tables) /
+    nested table (one level). Skips keys whose value is None (to keep TOML
+    clean).
     """
     top: list[str] = []
     sections: list[str] = []
@@ -386,6 +416,17 @@ def serialize_toml(data: dict[str, Any]) -> str:
                 if sub_value is None:
                     continue
                 sections.append(_kv_line(sub_key, sub_value))
+            continue
+        # list[dict] → TOML array-of-tables; lets us emit
+        # `outputs = [{path,...}, ...]` as repeated [[outputs]] sections
+        # for human readability while round-tripping cleanly through tomllib.
+        if isinstance(value, list) and value and all(isinstance(v, dict) for v in value):
+            for entry in value:
+                sections.append(f"\n[[{key}]]")
+                for sub_key, sub_value in entry.items():
+                    if sub_value is None:
+                        continue
+                    sections.append(_kv_line(sub_key, sub_value))
             continue
         top.append(_kv_line(key, value))
     return "\n".join(top + sections) + "\n"

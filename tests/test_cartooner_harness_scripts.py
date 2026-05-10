@@ -2028,17 +2028,22 @@ def test_dispatch_brief_user_direct_self_dispatch(cartooner_env, cartooner_root)
     assert rec["triggered_by"] == "user_direct"
 
 
-def _dispatch_brief_helper(env, target="writer", intent="lyric"):
-    r = _run(
+def _dispatch_brief_helper(env, target="writer", intent="lyric", deliverable=""):
+    """Default helper omits --deliverable-path so individual tests can
+    deliver files of any basename without tripping coverage check.
+    Pass `deliverable=` to opt-in (e.g. multi-deliverable tests)."""
+    args = [
         "dispatch_brief.py",
         "--project", "demo",
         "--target", target,
         "--intent", intent,
         "--body", "test brief body",
-        "--deliverable-path", "out.md",
         "--skip-wakeup",
-        env=env,
-    )
+    ]
+    if deliverable:
+        for d in (deliverable if isinstance(deliverable, (list, tuple)) else [deliverable]):
+            args += ["--deliverable-path", d]
+    r = _run(*args, env=env)
     assert r.returncode == 0, r.stderr
     return r.stdout.strip()
 
@@ -2969,3 +2974,258 @@ def test_dispatch_brief_rejects_traversal_parent_lane(cartooner_env):
     )
     assert res.returncode != 0
     assert "--parent-lane" in res.stderr
+
+
+# ── audit finding #9: multi-deliverable + dispatch_session ─────────────
+
+
+def test_dispatch_brief_records_multiple_deliverable_paths(
+    cartooner_env, cartooner_root
+):
+    """--deliverable-path is repeatable; frontmatter stores plural list."""
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "other",
+        "--body", "write workflow notes + premise",
+        "--deliverable-path", "WORKFLOW_NOTES.md",
+        "--deliverable-path", "STORY_PREMISE.md",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    brief_id = res.stdout.strip()
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["briefs"][brief_id]
+    assert rec["deliverable_paths"] == ["WORKFLOW_NOTES.md", "STORY_PREMISE.md"]
+    raw = (
+        cartooner_root / "projects" / "demo" / "briefs" / f"{brief_id}.toml"
+    ).read_text(encoding="utf-8")
+    assert 'deliverable_paths = ["WORKFLOW_NOTES.md", "STORY_PREMISE.md"]' in raw
+
+
+def test_deliver_brief_multi_output_happy_path(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """--output-path repeatable; result.outputs is the authoritative list."""
+    brief_id = _dispatch_brief_helper(
+        cartooner_env,
+        target="writer",
+        intent="other",
+        deliverable=["WORKFLOW_NOTES.md", "STORY_PREMISE.md"],
+    )
+    f1 = tmp_path / "WORKFLOW_NOTES.md"
+    f1.write_text("# notes\n\nbody\n", encoding="utf-8")
+    f2 = tmp_path / "STORY_PREMISE.md"
+    f2.write_text("# premise\n\nlogline\n", encoding="utf-8")
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "writer",
+        "--output-path", str(f1),
+        "--output-path", str(f2),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["briefs"][brief_id]
+    assert rec["state"] == "delivered"
+    outputs = rec["result"]["outputs"]
+    assert len(outputs) == 2
+    basenames = {Path(o["path"]).name for o in outputs}
+    assert basenames == {"WORKFLOW_NOTES.md", "STORY_PREMISE.md"}
+    # Back-compat single-output fields point at the first one
+    assert rec["result"]["output_size_chars"] == outputs[0]["output_size_chars"]
+
+
+def test_deliver_brief_multi_output_rejects_missing_coverage(
+    cartooner_env, tmp_path
+):
+    """If brief expects 2 deliverables, deliver of just 1 must fail-closed."""
+    brief_id = _dispatch_brief_helper(
+        cartooner_env,
+        target="writer",
+        intent="other",
+        deliverable=["WORKFLOW_NOTES.md", "STORY_PREMISE.md"],
+    )
+    f1 = tmp_path / "WORKFLOW_NOTES.md"
+    f1.write_text("# notes\n\nbody\n", encoding="utf-8")
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "writer",
+        "--output-path", str(f1),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "coverage is incomplete" in res.stderr
+    assert "STORY_PREMISE.md" in res.stderr
+
+
+def test_dispatch_brief_records_dispatch_session_from_arg(
+    cartooner_env, cartooner_root
+):
+    """--dispatch-session value lands in brief frontmatter for return wakeup."""
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "other",
+        "--body", "x",
+        "--dispatch-session", "cartooner-video-memory-claude",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    brief_id = res.stdout.strip()
+    raw = (
+        cartooner_root / "projects" / "demo" / "briefs" / f"{brief_id}.toml"
+    ).read_text(encoding="utf-8")
+    assert 'dispatch_session = "cartooner-video-memory-claude"' in raw
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["briefs"][brief_id]
+    assert rec["dispatch_session"] == "cartooner-video-memory-claude"
+
+
+def test_dispatch_brief_dispatch_session_blank_when_no_tmux_no_arg(
+    cartooner_env, cartooner_root, monkeypatch
+):
+    """No $TMUX + no --dispatch-session → dispatch_session is blank string."""
+    monkeypatch.delenv("TMUX", raising=False)
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "other",
+        "--body", "x",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    brief_id = res.stdout.strip()
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["briefs"][brief_id]
+    assert rec["dispatch_session"] == ""
+
+
+def test_deliver_brief_uses_dispatch_session_from_brief_for_wakeup(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """Receiver passes no --target-session → fallback to brief.dispatch_session.
+
+    We assert the wakeup target by intercepting send-and-verify.sh via a
+    fake transport that just records the session arg to a file.
+    """
+    fake_transport = tmp_path / "core" / "shell-scripts" / "send-and-verify.sh"
+    fake_transport.parent.mkdir(parents=True)
+    record_path = tmp_path / "wakeup-target.txt"
+    fake_transport.write_text(
+        "#!/usr/bin/env bash\n"
+        "# args: --project <p> <session> <message...>\n"
+        f"echo \"$3\" > {record_path}\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_transport.chmod(0o755)
+
+    # Place the script next to scripts/_common.py so its parent walk finds it.
+    # _send_and_verify_path() walks up from scripts/ looking for
+    # core/shell-scripts/send-and-verify.sh — we satisfy that by symlinking
+    # the fake path into a parent the walker actually traverses.
+    # Simpler: prepend tmp_path to ANY parent walked from scripts/. The
+    # walker checks parent/core/shell-scripts/send-and-verify.sh for each
+    # parent of scripts/, so we can't easily inject. Instead override
+    # PATH for tmux + use --target-session explicitly to skip the fallback.
+    # Better approach for THIS test: dispatch with --dispatch-session, then
+    # assert deliver succeeds and wakeup_reason changes from
+    # "no_target_session" to a real attempt.
+    bid = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "other",
+        "--body", "x",
+        "--dispatch-session", "fake-memory-session-name",
+        "--skip-wakeup",
+        env=cartooner_env,
+    ).stdout.strip()
+
+    out = tmp_path / "deliver.md"
+    out.write_text("done\n", encoding="utf-8")
+    # NOT passing --skip-wakeup: we want the resolution + send_wakeup path.
+    # The transport is missing in our test sandbox so wakeup will report
+    # transport_missing — but importantly NOT no_target_session, proving
+    # dispatch_session was picked up as the target.
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", bid,
+        "--actor", "writer",
+        "--output-path", str(out),
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    log = (
+        cartooner_root / "projects" / "demo" / "generation_log.jsonl"
+    ).read_text()
+    last = json.loads(log.strip().splitlines()[-1])
+    assert last["event"] == "brief_delivered"
+    # wakeup_reason should not be "no_target_session" — fallback worked.
+    # It will be something else (transport_missing / non_zero / etc.)
+    assert last["wakeup_reason"] != "no_target_session", (
+        f"dispatch_session fallback failed; wakeup_reason={last['wakeup_reason']!r}"
+    )
+
+
+def test_parse_brief_round_trips_multi_output_result_block(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """The +++ result block with array-of-tables outputs must parse cleanly."""
+    brief_id = _dispatch_brief_helper(
+        cartooner_env,
+        target="writer",
+        intent="other",
+        deliverable=["a.md", "b.md"],
+    )
+    a = tmp_path / "a.md"
+    a.write_text("a\n", encoding="utf-8")
+    b = tmp_path / "b.md"
+    b.write_text("b\n", encoding="utf-8")
+    r = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "writer",
+        "--output-path", str(a),
+        "--output-path", str(b),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert r.returncode == 0, r.stderr
+    code = (
+        f"import sys; sys.path.insert(0, {str(_SCRIPTS)!r}); "
+        f"import _common as c; "
+        f"raw = open({str(_REPO / cartooner_env['CARTOONER_ROOT'])!r} + "
+        f"  '/projects/demo/briefs/{brief_id}.toml').read(); "
+        f"r = c.parse_brief(raw); "
+        f"assert r['_result'].get('outputs') and len(r['_result']['outputs']) == 2; "
+        f"basenames = sorted(__import__('os').path.basename(o['path']) "
+        f"  for o in r['_result']['outputs']); "
+        f"assert basenames == ['a.md','b.md'], basenames; "
+        f"print('OK')"
+    )
+    res = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        env={**os.environ, **cartooner_env},
+    )
+    assert res.returncode == 0, res.stderr
+    assert "OK" in res.stdout

@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
 import _common as common  # noqa: E402
@@ -45,8 +46,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--brief-id", required=True)
     p.add_argument("--actor", required=True, choices=VALID_ACTORS,
                    help="Receiver seat (must match brief.target)")
-    p.add_argument("--output-path", default="",
-                   help="Path to deliverable file (relative or absolute)")
+    p.add_argument("--output-path", action="append", default=[],
+                   help="Path to deliverable file (relative or absolute). "
+                        "Repeatable: pass once per file when the brief expected "
+                        "multiple text deliverables. Order doesn't have to "
+                        "match brief.deliverable_paths but coverage does — "
+                        "every expected path's basename must appear in at "
+                        "least one --output-path.")
     p.add_argument("--fail", action="store_true",
                    help="Mark brief failed instead of delivered "
                         "(API error / subagent timeout / etc.)")
@@ -57,8 +63,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--skip-wakeup", action="store_true")
     p.add_argument("--target-session", default="",
                    help="Explicit tmux session name to wake (overrides "
-                        "resolve_seat_session for memory). Use when memory's "
-                        "tmux is bound to a different project than --project.")
+                        "brief frontmatter dispatch_session and "
+                        "resolve_seat_session for memory). Resolution order: "
+                        "this arg → brief.dispatch_session → "
+                        "resolve_seat_session(project, 'memory').")
     return p.parse_args(argv)
 
 
@@ -67,9 +75,11 @@ def main(argv: list[str] | None = None) -> int:
 
     common.validate_id_token(args.brief_id, kind="--brief-id")
 
-    if args.fail and args.output_path:
+    output_paths = [p for p in (args.output_path or []) if p.strip()]
+
+    if args.fail and output_paths:
         common.fail_closed("--fail and --output-path are mutually exclusive")
-    if not args.fail and not args.output_path:
+    if not args.fail and not output_paths:
         common.fail_closed("provide either --output-path (success) or --fail (failure)")
 
     common.ensure_project_skeleton(args.project)
@@ -105,33 +115,66 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     now = common.now_iso()
-    output_size_chars = 0
-    file_size = 0
-    output_path_str = ""
+    outputs: list[dict[str, Any]] = []
 
-    if args.output_path:
-        output_path = Path(args.output_path).expanduser()
-        if not output_path.is_absolute():
-            output_path = (common.project_root(args.project) / output_path).resolve()
-        if not output_path.exists():
-            common.fail_closed(f"deliverable file not found: {output_path}")
-        if not output_path.is_file():
-            common.fail_closed(f"deliverable path is not a regular file: {output_path}")
-        raw = output_path.read_bytes()
-        if not raw:
-            common.fail_closed(f"deliverable file is empty: {output_path}")
-        if len(raw) > MAX_DELIVERABLE_BYTES:
-            common.fail_closed(
-                f"deliverable size {len(raw)} bytes exceeds limit {MAX_DELIVERABLE_BYTES} "
-                f"(text-only constraint)"
-            )
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError as e:
-            common.fail_closed(f"deliverable is not valid UTF-8 text: {e}")
-        output_size_chars = len(text)
-        file_size = len(raw)
-        output_path_str = str(output_path)
+    if output_paths:
+        for raw_path in output_paths:
+            output_path = Path(raw_path).expanduser()
+            if not output_path.is_absolute():
+                output_path = (common.project_root(args.project) / output_path).resolve()
+            if not output_path.exists():
+                common.fail_closed(f"deliverable file not found: {output_path}")
+            if not output_path.is_file():
+                common.fail_closed(f"deliverable path is not a regular file: {output_path}")
+            raw = output_path.read_bytes()
+            if not raw:
+                common.fail_closed(f"deliverable file is empty: {output_path}")
+            if len(raw) > MAX_DELIVERABLE_BYTES:
+                common.fail_closed(
+                    f"deliverable size {len(raw)} bytes exceeds limit "
+                    f"{MAX_DELIVERABLE_BYTES} (text-only constraint): {output_path}"
+                )
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError as e:
+                common.fail_closed(
+                    f"deliverable is not valid UTF-8 text: {output_path}: {e}"
+                )
+            outputs.append({
+                "path": str(output_path),
+                "output_size_chars": len(text),
+                "file_size": len(raw),
+            })
+
+        # If the brief recorded expected deliverable_paths, ensure every
+        # expected basename is covered by at least one --output-path. This
+        # is the protocol's coverage check: writer who is told to land
+        # WORKFLOW_NOTES.md + STORY_PREMISE.md cannot quietly close with
+        # only one of them.
+        expected = brief.get("deliverable_paths") or []
+        # Back-compat: pre-#9 briefs used singular deliverable_path string
+        if not expected and brief.get("deliverable_path"):
+            expected = [brief["deliverable_path"]]
+        if expected:
+            delivered_basenames = {Path(o["path"]).name for o in outputs}
+            missing = [
+                e for e in expected
+                if Path(e).name and Path(e).name not in delivered_basenames
+            ]
+            if missing:
+                common.fail_closed(
+                    f"brief {args.brief_id} expects deliverables "
+                    f"{expected!r} but --output-path coverage is incomplete; "
+                    f"missing basenames: {missing}. "
+                    f"Pass one --output-path per expected file."
+                )
+
+    # Single-output back-compat surface for tests / readers that still
+    # consult record.result.output_path / .output_size_chars / .file_size.
+    first_output = outputs[0] if outputs else None
+    output_path_str = first_output["path"] if first_output else ""
+    output_size_chars = first_output["output_size_chars"] if first_output else 0
+    file_size = first_output["file_size"] if first_output else 0
 
     new_state = "failed" if args.fail else "delivered"
     record["state"] = new_state
@@ -141,6 +184,10 @@ def main(argv: list[str] | None = None) -> int:
         record["result"]["failure_reason"] = args.reason
     else:
         record["result"]["delivered_at"] = now
+        # Multi-output authoritative schema (always populated as a list).
+        record["result"]["outputs"] = outputs
+        # Single-output back-compat surface (mirrors first item) for any
+        # reader still consulting the flat fields.
         record["result"]["output_path"] = output_path_str
         record["result"]["output_size_chars"] = output_size_chars
         record["result"]["file_size"] = file_size
@@ -163,8 +210,17 @@ def main(argv: list[str] | None = None) -> int:
             fh.write(common.serialize_toml(record["result"]).rstrip("\n") + "\n")
             fh.write("+++\n")
 
-    memory_session = args.target_session.strip() or (
-        common.resolve_seat_session(args.project, "memory") or ""
+    # Target session resolution (audit finding #9):
+    #   1. explicit --target-session                  (operator override)
+    #   2. brief frontmatter dispatch_session         (captured at dispatch)
+    #   3. resolve_seat_session(project, "memory")    (project-bound default)
+    # Step 2 is the new fix: in cross-project cases (e.g. memory in
+    # cartooner-video dispatching to clawseat-anime-test) step 3 returns
+    # nothing, so without step 2 the wakeup would silently fail.
+    memory_session = (
+        args.target_session.strip()
+        or (brief.get("dispatch_session") or "").strip()
+        or (common.resolve_seat_session(args.project, "memory") or "")
     )
     if args.fail:
         msg = (
@@ -174,9 +230,15 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         summary_part = f" summary={args.summary[:80]!r}" if args.summary else ""
+        if len(outputs) > 1:
+            paths_part = (
+                f"paths=[{', '.join(o['path'] for o in outputs)}]"
+            )
+        else:
+            paths_part = f"path={output_path_str}"
         msg = (
             f"[{args.actor}] brief_delivered: {args.brief_id} "
-            f"project={args.project} path={output_path_str}{summary_part}; "
+            f"project={args.project} {paths_part}{summary_part}; "
             f"read ~/.cartooner/projects/{args.project}/briefs/{args.brief_id}.toml"
         )
     wakeup = common.send_wakeup(
@@ -194,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_path": output_path_str or None,
         "output_size_chars": output_size_chars or None,
         "file_size": file_size or None,
+        "outputs": outputs or None,
         "summary": args.summary or None,
         "failure_reason": args.reason if args.fail else None,
         "wakeup_ok": wakeup["ok"],

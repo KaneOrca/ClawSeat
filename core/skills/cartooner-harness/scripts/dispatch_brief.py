@@ -67,9 +67,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--body-file", default="",
                    help="Path to a markdown file used as brief body "
                         "(takes precedence over --body)")
-    p.add_argument("--deliverable-path", default="",
+    p.add_argument("--deliverable-path", action="append", default=[],
                    help="Relative path under project root where receiver should "
-                        "land the deliverable (e.g. narrative_outline.md)")
+                        "land the deliverable (e.g. narrative_outline.md). "
+                        "Repeatable: pass once per file when the brief expects "
+                        "multiple text deliverables (e.g. WORKFLOW_NOTES.md + "
+                        "STORY_PREMISE.md). Stored as deliverable_paths list "
+                        "in the brief frontmatter.")
     p.add_argument("--parent-lane", default="")
     p.add_argument("--parent-shot", default="")
     p.add_argument("--triggered-by", default="memory_dispatch", choices=VALID_TRIGGERS)
@@ -82,6 +86,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Explicit tmux session name to wake (overrides "
                         "resolve_seat_session). Use when target seat's tmux "
                         "is bound to a different project than --project.")
+    p.add_argument("--dispatch-session", default="",
+                   help="Tmux session name of the dispatching seat (memory). "
+                       "Captured in brief frontmatter so deliver_brief can wake "
+                       "back the actual dispatcher session even when it's "
+                       "bound to a different project than --project. Defaults "
+                       "to the current tmux session (auto-detected via "
+                       "$TMUX + `tmux display-message`); pass explicitly when "
+                       "calling from outside tmux or when auto-detection picks "
+                       "the wrong window.")
     return p.parse_args(argv)
 
 
@@ -137,6 +150,18 @@ def main(argv: list[str] | None = None) -> int:
     brief_id = make_brief_id()
     now = common.now_iso()
 
+    # Normalize --deliverable-path (now action="append"). Strip empties so
+    # callers passing `--deliverable-path ""` don't poison the list.
+    deliverable_paths = [p for p in (args.deliverable_path or []) if p.strip()]
+
+    # Audit finding #9: capture dispatcher's tmux session in frontmatter so
+    # the receiver's deliver_brief can wake memory back even when memory's
+    # tmux is bound to a different project than the brief's --project.
+    # Auto-detect from $TMUX when --dispatch-session not given.
+    dispatch_session = args.dispatch_session.strip() or (
+        common.detect_tmux_session() or ""
+    )
+
     frontmatter: dict = {
         "id": brief_id,
         # project is canonical here — the receiver MUST use this exact
@@ -151,7 +176,8 @@ def main(argv: list[str] | None = None) -> int:
         "intent": args.intent,
         "parent_lane": args.parent_lane,
         "parent_shot": args.parent_shot,
-        "deliverable_path": args.deliverable_path,
+        "deliverable_paths": deliverable_paths,
+        "dispatch_session": dispatch_session,
         "triggered_by": args.triggered_by,
         "actor": args.actor,
         "state": "open",
@@ -170,10 +196,15 @@ def main(argv: list[str] | None = None) -> int:
     # Wakeup message MUST name the project explicitly (audit finding #8).
     # Without --project in the wakeup, the receiver's LLM tends to fall
     # back to its own session-bound default project and deposit assets
-    # in the wrong PROJECT_INDEX.
+    # in the wrong PROJECT_INDEX. Also surfaces deliverable_paths so the
+    # receiver doesn't have to grep the body for file names.
+    paths_hint = (
+        f" deliverables=[{', '.join(deliverable_paths)}]"
+        if deliverable_paths else ""
+    )
     wakeup_message = (
         f"[memory] brief_dispatched: {brief_id} project={args.project} "
-        f"intent={args.intent} target={args.target}; "
+        f"intent={args.intent} target={args.target}{paths_hint}; "
         f"read ~/.cartooner/projects/{args.project}/briefs/{brief_id}.toml. "
         f"All downstream protocol calls MUST pass --project {args.project}."
     )
@@ -193,7 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         "triggered_by": args.triggered_by,
         "parent_lane": args.parent_lane or None,
         "parent_shot": args.parent_shot or None,
-        "deliverable_path": args.deliverable_path or None,
+        "deliverable_paths": deliverable_paths or None,
+        "dispatch_session": dispatch_session or None,
         "wakeup_ok": wakeup["ok"],
         "wakeup_reason": wakeup["reason"],
     })
