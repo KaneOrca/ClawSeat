@@ -6,9 +6,7 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 _SKILLS = [
     "builder",
-    "creative-builder",
     "designer",
-    "creative-designer",
     "patrol",
     "reviewer",
 ]

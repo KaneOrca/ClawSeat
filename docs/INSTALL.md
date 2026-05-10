@@ -72,13 +72,13 @@ empty Enter accepts the default, and `详` gives a short explanation of roughly
 
 ### Step 1 — Template Decision
 
-**WHAT**: choose `cartooner-creative`, `clawseat-engineering`, or `clawseat-solo`. Use
+**WHAT**: choose `clawseat-engineering`, `clawseat-creative`, or `clawseat-solo`. Use
 `detect_template_from_name <project>` once the project intent is known. If the intent
-is unclear, default to `cartooner-creative`.
+is unclear, default to `clawseat-engineering`.
 
-**WHY**: Default to `cartooner-creative` because it keeps creative coverage (memory, writer, visual, patrol) without forcing reviewer overhead.
+**WHY**: Default to `clawseat-engineering` because it covers the majority of code-shipping work (memory + planner + builder + reviewer + patrol). For creative work (image / video / audio / storyboard) bound to cartooner skills, choose `clawseat-creative`.
 
-**CONFIRM**: `[回车=默认 / 1 cartooner-creative / 2 engineering / 3 solo / 详 / 取消]`
+**CONFIRM**: `[回车=默认 / 1 engineering / 2 creative / 3 solo / 详 / 取消]`
 
 **ON-FAIL**: if the operator is unsure, give two examples per template and keep the default; if the template file is missing, offer `git status`, `git pull`, or `--force-repo-root <path>`.
 
@@ -362,7 +362,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--project <name>` | Install or reinstall a named ClawSeat project. Defaults to `install`. |
 | `--repo-root <path>` | Set the target project repository used as seat cwd. |
 | `--force-repo-root <path>` | Override the ClawSeat install code root when auto-detecting multiple worktrees is wrong. |
-| `--template <cartooner-creative\|clawseat-engineering\|clawseat-solo>` | Select the roster template. cartooner-creative has 4 seats; engineering has 5; solo has 3. |
+| `--template <clawseat-engineering\|clawseat-creative\|clawseat-solo>` | Select the roster template. clawseat-engineering has 5 seats; clawseat-creative has 5 seats; clawseat-solo has 3. |
 | `--memory-tool <claude\|codex\|gemini>` | Override the primary memory seat tool. Non-Claude tools skip Claude provider selection. |
 | `--memory-model <model>` | Set the memory model when the selected memory tool supports an explicit model. |
 | `--provider <mode\|n>` | Select the memory-seat provider by detected candidate number or mode. |
@@ -380,8 +380,8 @@ bash scripts/install.sh --reset-harness-memory
 
 Available templates:
 
-- `cartooner-creative`: 4-seat creative template (memory + writer + visual + patrol).
-- `clawseat-engineering`: 5-seat engineering template (memory + planner + builder + reviewer + patrol), where reviewer now merges QA + visual review.
+- `clawseat-engineering`: 5-seat engineering template (memory + planner + builder + reviewer + patrol), where reviewer now merges QA + visual review. Bound to gstack skills.
+- `clawseat-creative`: 5-seat cartooner-bound creative team (memory + builder-image + builder-image-2 + builder-av + patrol). Two parallel image lanes plus an audio/video lane; all seats use cartooner skills.
 - `clawseat-solo`: 3-seat collaboration template (memory + builder + planner-gemini), all OAuth, standard brief -> workflow -> dispatch -> verdict cycle.
 
 ### Provider Selection — CLI Flag Mapping
@@ -442,9 +442,10 @@ What `install.sh` does in order:
    ClawSeat worktree, and load the install library modules from
    `scripts/install/lib/`.
 2. Resolve Python ≥3.11 before importing anything that needs `tomllib`.
-3. Resolve the project template and roster. `cartooner-creative` renders
-   `memory, writer, visual, patrol`; `clawseat-engineering` adds `reviewer` between
-   planner and patrol; `clawseat-solo` renders only `memory, builder, planner`.
+3. Resolve the project template and roster. `clawseat-engineering` renders
+   `memory, planner, builder, reviewer, patrol`; `clawseat-creative` renders
+   `memory, builder-image, builder-image-2, builder-av, patrol`; `clawseat-solo`
+   renders only `memory, builder, planner`.
 4. Run legacy path migration and seat liveness reconciliation.
 5. Verify host dependencies and run
    `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`
@@ -534,7 +535,7 @@ Memory executes Phase-A in order:
 | B2-verify-memory | `tmux has-session -t <project>-memory`; relaunch once if dead. | Memory seat alive. |
 | B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
 | B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
-| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`cartooner-creative` uses `writer`, `visual`, `patrol`; `clawseat-engineering` uses `planner`, `builder`, `reviewer`, `patrol`; `clawseat-solo` uses `builder`, `planner`): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
+| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`clawseat-engineering` uses `planner`, `builder`, `reviewer`, `patrol`; `clawseat-creative` uses `builder-image`, `builder-image-2`, `builder-av`, `patrol`; `clawseat-solo` uses `builder`, `planner`): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
 | B5-verify-feishu-binding | Read project binding metadata from `~/.agents/projects/install/project.toml` / `project-local.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
 | B6-smoke | If `feishu_group_id` set, memory triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, memory runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<memory + workers>`. |
@@ -630,7 +631,7 @@ Reversing the overlay: restore from backups in `<workspace>/.backup-koder-overla
 
 ClawSeat supports multiple concurrent projects (sessions prefixed `<project>-<seat>`).
 
-### Create a new project (default cartooner-creative template)
+### Create a new project (default clawseat-engineering template)
 
 ```bash
 bash scripts/install.sh --project <new-name>
@@ -641,23 +642,24 @@ bash scripts/install.sh --project <new-name> --repo-root /path/to/repo
 `install.sh --project` already wires `agent_admin project bootstrap` under the
 hood, so the same lazy-spawn install flow works for additional projects too.
 
-### Create a cartooner-creative project (cartooner-creative template)
+### Create a clawseat-creative project (cartooner-bound creative team)
 
-For fiction, screenplay, or other creative work — uses a 4-seat roster
-(memory / writer:claude / visual:gemini / patrol:claude):
+For image / video / audio / storyboard work bound to cartooner skills — uses a 5-seat roster
+(memory / builder-image x2 / builder-av / patrol):
 
-| Seat | Tool | Role |
-|------|------|------|
-| memory | claude/oauth | lifecycle ops + memory brief management |
-| writer | claude/oauth | deep creative writing and dialog craft |
-| visual | gemini/oauth | visual design, storyboard, concept art |
-| patrol | claude/api | scheduled or on-demand evidence checks |
+| Seat | Tool | Cartooner skills |
+|------|------|------------------|
+| memory | claude/oauth | cartooner (router), cartooner-script-development, cartooner-resource-ops |
+| builder-image | codex/oauth | cartooner-image, cartooner-storyboard, cartooner-design, cartooner-prompt |
+| builder-image-2 | codex/oauth | (mirrors builder-image; for fan-out) |
+| builder-av | claude/minimax-api | cartooner-video, cartooner-audio, cartooner-seedance-cookbook |
+| patrol | claude/minimax-api | cartooner-resource-ops (asset integrity, pipeline SLA) |
 
 ```bash
 # Via install.sh (bootstraps and starts memory):
 bash scripts/install.sh --project myproject \
   --repo-root /path/to/myproject \
-  --template cartooner-creative
+  --template clawseat-creative
 
 # Or directly via agent_admin:
 # 1. Create local config file
@@ -666,9 +668,9 @@ project_name = "myproject"
 repo_root = "/path/to/myproject"
 EOF
 
-# 2. Bootstrap with cartooner-creative template
+# 2. Bootstrap with clawseat-creative template
 agent_admin project bootstrap \
-  --template cartooner-creative \
+  --template clawseat-creative \
   --local /tmp/myproject-local.toml
 
 # 3. Use the new project

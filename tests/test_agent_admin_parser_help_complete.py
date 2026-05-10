@@ -36,6 +36,6 @@ def test_agent_admin_top_level_help_describes_command_groups() -> None:
 def test_agent_admin_template_help_lists_builtin_templates() -> None:
     for args in (("project", "create"), ("project", "bootstrap")):
         output = _help(*args).replace("-\n                        ", "-")
-        for template in ("cartooner-creative", "clawseat-engineering", "clawseat-solo"):
+        for template in ("clawseat-engineering", "clawseat-creative", "clawseat-solo"):
             assert template in output
         assert "Template name/path" in output or "Project roster template" in output

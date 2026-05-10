@@ -90,10 +90,10 @@ def _load_role_skill_content(
 
     Returns (role_name, body_without_frontmatter) or None when no role
     mapping exists or the SKILL.md file is missing. Resolution order:
-      1. role_hint (e.g. "creative-builder") when the seat's template role
-         differs from its generic seat-id (e.g. "builder").  If the hint's
-         SKILL.md exists it takes precedence so creative/engineering template
-         seats load the right contract.
+      1. role_hint (e.g. "builder-image") when the seat's template role
+         differs from its generic seat-id (e.g. "builder"). If the hint's
+         SKILL.md exists it takes precedence so creative-template lane seats
+         load the right contract.
       2. seat_skill_mapping.role_skill_for_seat(seat_id) — handles suffixed
          ids like `builder-1 -> builder` and `memory -> memory-oracle`.
     YAML frontmatter (leading `---` block) is stripped so the embedded

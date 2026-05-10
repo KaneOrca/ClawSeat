@@ -49,13 +49,6 @@ def test_template_engineering_accepted(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_template_team_creation_accepted(tmp_path: Path) -> None:
-    """--template team-creation exits 0 in dry-run."""
-    result = _run(["--project", "testproj", "--template", "team-creation", "--dry-run"], tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert "CLAWSEAT_TEMPLATE_NAME=team-creation" in result.stderr
-
-
 def test_template_invalid_dies_exit_2(tmp_path: Path) -> None:
     """--template bad_value exits 2 with INVALID_TEMPLATE error code."""
     result = _run(["--project", "testproj", "--template", "bad_value", "--dry-run"], tmp_path)

@@ -31,20 +31,18 @@ _prompt_i18n_get() {
 
 prompt_template_for_choice() {
   case "${1:-1}" in
-    ""|1) printf '%s\n' "clawseat-creative" ;;
-    2) printf '%s\n' "clawseat-engineering" ;;
+    ""|1) printf '%s\n' "clawseat-engineering" ;;
+    2) printf '%s\n' "clawseat-creative" ;;
     3) printf '%s\n' "clawseat-solo" ;;
-    4) printf '%s\n' "cartooner-creative" ;;
     *) return 1 ;;
   esac
 }
 
 prompt_placeholder_for_template() {
   case "$1" in
-    clawseat-creative)    printf '%s\n' "e.g. cartooner, artistic-tool" ;;
     clawseat-engineering) printf '%s\n' "e.g. coding-project, webapp" ;;
+    clawseat-creative)    printf '%s\n' "e.g. cartooner-project, creative-campaign" ;;
     clawseat-solo)        printf '%s\n' "e.g. minimal-solo, creative-side-project" ;;
-    cartooner-creative)    printf '%s\n' "e.g. carto-project, cartooner-campaign" ;;
     *)                    printf '%s\n' "e.g. myproject, experiment-01" ;;
   esac
 }
@@ -1171,7 +1169,7 @@ tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(
     PENDING_SEATS_HUMAN=sys.argv[8],
     PRIMARY_SESSION_NAME=sys.argv[9],
 )
-tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-creative")
+tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-engineering")
 out = Path(sys.argv[2]); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(tmpl, encoding="utf-8")
 PY
     chmod 600 "$BRIEF_PATH" || die 30 BRIEF_CHMOD_FAILED "unable to chmod $BRIEF_PATH"

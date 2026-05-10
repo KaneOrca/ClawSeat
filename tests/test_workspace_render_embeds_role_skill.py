@@ -100,20 +100,20 @@ def test_load_role_skill_content_handles_suffixed_seat_id(tmp_path: Path) -> Non
 
 
 def test_load_role_skill_content_role_hint_overrides_seat_id_mapping(tmp_path: Path) -> None:
-    """role_hint wins over seat-id mapping (creative template: builder seat → creative-builder skill)."""
-    # Set up both the generic and the creative-specific skill
+    """role_hint wins over seat-id mapping (template lane: builder seat → builder-image skill)."""
+    # Set up both the generic and the lane-specific skill
     (tmp_path / "core" / "skills" / "builder").mkdir(parents=True)
     (tmp_path / "core" / "skills" / "builder" / "SKILL.md").write_text("# Builder (engineering)\n", encoding="utf-8")
-    (tmp_path / "core" / "skills" / "creative-builder").mkdir(parents=True)
-    (tmp_path / "core" / "skills" / "creative-builder" / "SKILL.md").write_text(
-        "---\nname: creative-builder\n---\n# Creative Builder\n\ncreative skill body\n",
+    (tmp_path / "core" / "skills" / "builder-image").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "builder-image" / "SKILL.md").write_text(
+        "---\nname: builder-image\n---\n# Builder Image\n\nimage lane skill body\n",
         encoding="utf-8",
     )
-    info = agent_admin_template._load_role_skill_content(tmp_path, "builder", role_hint="creative-builder")
+    info = agent_admin_template._load_role_skill_content(tmp_path, "builder", role_hint="builder-image")
     assert info is not None
     role, body = info
-    assert role == "creative-builder", f"expected creative-builder, got {role!r}"
-    assert "creative skill body" in body
+    assert role == "builder-image", f"expected builder-image, got {role!r}"
+    assert "image lane skill body" in body
     assert "engineering" not in body
 
 
@@ -121,8 +121,8 @@ def test_load_role_skill_content_role_hint_falls_back_when_skill_missing(tmp_pat
     """When role_hint SKILL.md doesn't exist, falls back to seat-id mapping."""
     (tmp_path / "core" / "skills" / "builder").mkdir(parents=True)
     (tmp_path / "core" / "skills" / "builder" / "SKILL.md").write_text("# Builder fallback\n", encoding="utf-8")
-    # no creative-builder dir
-    info = agent_admin_template._load_role_skill_content(tmp_path, "builder", role_hint="creative-builder")
+    # no builder-image dir
+    info = agent_admin_template._load_role_skill_content(tmp_path, "builder", role_hint="builder-image")
     assert info is not None
     role, body = info
     assert role == "builder"
@@ -173,54 +173,6 @@ def test_real_repo_role_skills_load_for_canonical_seats(seat_id: str, expected_r
     assert len(body) > 100, f"{expected_role} SKILL.md should not be an empty stub"
     # A rendered role skill must not leak its frontmatter
     assert not body.startswith("---\n"), f"{expected_role} SKILL.md frontmatter not stripped"
-
-
-@pytest.mark.parametrize(
-    ("seat_id", "role_hint", "expected_role", "expected_marker"),
-    [
-        ("builder", "creative-builder", "creative-builder", "cs-classify"),
-        ("designer", "creative-designer", "creative-designer", "cs-score"),
-        ("planner", "creative-planner", "creative-planner", "cs-structure"),
-    ],
-)
-def test_real_repo_creative_seats_load_correct_skill_via_role_hint(
-    seat_id: str, role_hint: str, expected_role: str, expected_marker: str
-) -> None:
-    """Creative template seats (builder/designer/planner) must load their
-    creative-* SKILL.md when the template role is passed as role_hint."""
-    info = agent_admin_template._load_role_skill_content(_REPO, seat_id, role_hint=role_hint)
-    assert info is not None, f"creative seat {seat_id!r} with role_hint={role_hint!r} should resolve"
-    role, body = info
-    assert role == expected_role, f"expected {expected_role!r}, got {role!r}"
-    assert expected_marker in body, f"{expected_role} SKILL.md should mention {expected_marker!r}"
-    assert not body.startswith("---\n"), "frontmatter must be stripped"
-
-
-def test_real_repo_creative_designer_skill_covers_write_and_score() -> None:
-    """creative-designer now executes cs-write AND cs-score — both must appear in its SKILL.md body."""
-    info = agent_admin_template._load_role_skill_content(_REPO, "designer", role_hint="creative-designer")
-    assert info is not None
-    _, body = info
-    assert "cs-write" in body, "creative-designer SKILL.md must mention cs-write (designer executes writing)"
-    assert "cs-score" in body, "creative-designer SKILL.md must mention cs-score (designer executes scoring)"
-
-
-def test_real_repo_creative_builder_skill_has_classify_not_write() -> None:
-    """creative-builder owns classification only — cs-write must not appear as an execution claim."""
-    info = agent_admin_template._load_role_skill_content(_REPO, "builder", role_hint="creative-builder")
-    assert info is not None
-    _, body = info
-    assert "cs-classify" in body, "creative-builder SKILL.md must mention cs-classify"
-    # Verify builder doesn't positively claim cs-write execution (negation phrases like
-    # "不执行 cs-write" are expected; positive execution claims are the bug to catch).
-    lines_claiming_write = [
-        ln for ln in body.splitlines()
-        if "cs-write" in ln and "不执行" not in ln and "designer" not in ln
-        and "Anti" not in ln and "自己执行" not in ln and "cs-score" not in ln
-    ]
-    assert not lines_claiming_write, (
-        f"creative-builder SKILL.md should not positively claim cs-write execution: {lines_claiming_write}"
-    )
 
 
 def test_real_repo_role_skill_section_for_patrol_includes_contract_marker() -> None:

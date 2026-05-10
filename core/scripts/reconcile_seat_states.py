@@ -76,13 +76,6 @@ def _normalise_role(role: str, seat_id: str) -> str:
             file=sys.stderr,
         )
         role = role.removeprefix("minimal-")
-    if role.startswith("creative-"):
-        print(
-            f"warn: deprecated role namespace in session metadata mapped from {role} -> {role.removeprefix('creative-')} "
-            f"for seat={seat_id}",
-            file=sys.stderr,
-        )
-        role = role.removeprefix("creative-")
     if role.startswith("code-"):
         role = role.removeprefix("code-")
     role = {

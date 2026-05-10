@@ -10,7 +10,6 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
-_CREATIVE_TEMPLATE = _REPO / "templates" / "clawseat-creative.toml"
 _ENGINEERING_TEMPLATE = _REPO / "templates" / "clawseat-engineering.toml"
 
 
@@ -42,16 +41,10 @@ def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.Complet
 
 
 def test_install_profile_includes_patrol() -> None:
-    if not _CREATIVE_TEMPLATE.exists():
-        pytest.skip("clawseat-creative template deleted; patrol coverage is verified by the dry-run test")
-    creative = _CREATIVE_TEMPLATE.read_text(encoding="utf-8")
     engineering = _ENGINEERING_TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'id = "patrol"' in creative
-    assert 'role = "patrol"' in creative
-    assert 'right_seats = ["builder", "patrol", "designer"]' in creative
-    assert "monitor_max_panes = 4" in creative
-    assert "monitor_max_panes = 6" in engineering
+    assert 'id = "patrol"' in engineering
+    assert 'role = "patrol"' in engineering
 
 
 def test_install_sh_invokes_install_patrol_hook(tmp_path: Path) -> None:

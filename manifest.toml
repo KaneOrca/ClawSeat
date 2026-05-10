@@ -28,6 +28,7 @@ optional = [
 
 [templates]
 clawseat-engineering = "templates/clawseat-engineering.toml"
+clawseat-creative = { path = "templates/clawseat-creative.toml", description = "Cartooner-bound 5-seat creative team: memory + 2 image lanes + 1 av lane + patrol" }
 clawseat-solo = { path = "templates/clawseat-solo.toml", description = "Minimal 3-seat collaboration, all OAuth top models, planner-gemini dispatch cycle" }
 
 [entrypoints]

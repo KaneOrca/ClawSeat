@@ -92,8 +92,7 @@
 - `core/skills/clawseat-koder/SKILL.md`
 - `core/skills/planner/SKILL.md` — 提到 ancestor 的部分
 - `core/skills/reviewer/SKILL.md` / `qa/SKILL.md` / `designer/SKILL.md`
-- `core/skills/cs/SKILL.md` / `cs-structure/SKILL.md`
-- `core/skills/creative-planner/SKILL.md`
+- `core/skills/cs/SKILL.md`
 - `core/skills/gstack-harness/SKILL.md` + `scripts/_common.py` + `scripts/_utils.py` + `scripts/complete_handoff.py`
 
 **文档**:
@@ -132,7 +131,7 @@
 
 ## E. [DONE-fully] verification roster 漂移（HH 2026-04-29 清扫）
 
-**v2 决议**: minimal = template-driven；engineering/creative 模板可以保留更多 specialist。verification seat 的唯一 canonical id 是 `patrol`；旧 verification-seat 别名于 2026-04-29 移除。
+**v2 决议**: minimal = template-driven；engineering 模板可以保留更多 specialist。verification seat 的唯一 canonical id 是 `patrol`；旧 verification-seat 别名于 2026-04-29 移除。
 
 **2026-04-29 已落地**:
 - `core/scripts/patrol_alias.py` 删除；`agent_admin_resolve.py` 不再做 verification-seat alias resolve。

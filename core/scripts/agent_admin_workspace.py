@@ -110,7 +110,7 @@ def render_protocol_reminder_lines(engineer: Any, role: str) -> list[str]:
             "4. **Privacy**: network queries -> clawseat-privacy check first; no PII/secret/token in KB",
             "5. **Don't**: dispatch specialist directly (use planner); no code / config / seat lifecycle",
         ])
-    elif normalized in {"planner", "planner-dispatcher", "creative-planner"}:
+    elif normalized in {"planner", "planner-dispatcher"}:
         lines.extend([
             "1. **/clear before dispatch**: G1 closure / G2 context-relatedness / G3 idle; 三 gate 全过即发，先 /clear 再 dispatch；见 `core/skills/planner/SKILL.md:57`。",
             "2. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",

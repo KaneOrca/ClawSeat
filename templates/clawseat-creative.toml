@@ -1,6 +1,8 @@
 version = 1
-template_name = "team-creation"
-description = "General creative team template for short films, short dramas, and music videos (通用创作团队模板, 适合短片 / 短剧 / MV)."
+template_name = "clawseat-creative"
+description = "Cartooner-bound 5-seat creative team: memory orchestrates 2 image lanes + 1 av lane + patrol; all seats use cartooner skills for image / video / audio / storyboard / design / prompt domains."
+# graceful-fallback: cartooner-* skills are external installs at ~/.agents/skills/cartooner-*; seats degrade gracefully when absent.
+# protocol-note: this template currently uses gstack-harness as a stub protocol layer; the planned `cartooner-harness` (lane / deposit / pick / iterate primitives) will replace it once implemented.
 
 [window_layout]
 shared_memories_window_title = "clawseat-memories"
@@ -20,6 +22,18 @@ dangerously_skip_permissions = true
 window_mode = "split-2"
 monitor_max_panes = 5
 open_detail_windows = false
+declared_skills = [
+  "cartooner",
+  "cartooner-image",
+  "cartooner-video",
+  "cartooner-audio",
+  "cartooner-storyboard",
+  "cartooner-design",
+  "cartooner-prompt",
+  "cartooner-script-development",
+  "cartooner-resource-ops",
+  "cartooner-seedance-cookbook",
+]
 workspace_tools = [
   "TOOLS/memory.md",
 ]
@@ -48,10 +62,14 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md",
+  "~/.agents/skills/cartooner/SKILL.md",
+  "~/.agents/skills/cartooner-script-development/SKILL.md",
+  "~/.agents/skills/cartooner-resource-ops/SKILL.md",
 ]
 role_details = [
-  "creative memory hub; owns script/story coordination, dispatch, receipts, and cross-seat state",
-  "keeps the team moving without blocking builder-image, builder-av, or patrol",
+  "creative memory hub; coordinates lanes via dispatch, owns brief / style bible / character DNA",
+  "uses cartooner router for high-level intent (CREATE / RE-RUN / MODIFY / DERIVE / MANAGE)",
+  "owns script ideation (cartooner-script-development) and project-level resource coordination",
 ]
 
 [[engineers]]
@@ -77,10 +95,17 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.agents/skills/cartooner-image/SKILL.md",
+  "~/.agents/skills/cartooner-storyboard/SKILL.md",
+  "~/.agents/skills/cartooner-design/SKILL.md",
+  "~/.agents/skills/cartooner-prompt/SKILL.md",
+  "~/.agents/skills/nano-banana/SKILL.md",
+  "~/.agents/skills/gpt-image-2/SKILL.md",
 ]
 role_details = [
-  "OpenAI/Codex image lane; prompt engineering and image artifact delivery are self-owned",
-  "primary pane for image work and the first seat memory dispatches for visual output",
+  "primary image lane: cartooner-image / cartooner-storyboard / cartooner-design",
+  "executes single image, multi-panel storyboard, character design via cartooner skills",
+  "fallback to nano-banana / gpt-image-2 when cartooner pipeline insufficient",
 ]
 
 [[engineers]]
@@ -106,10 +131,16 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.agents/skills/cartooner-image/SKILL.md",
+  "~/.agents/skills/cartooner-storyboard/SKILL.md",
+  "~/.agents/skills/cartooner-design/SKILL.md",
+  "~/.agents/skills/cartooner-prompt/SKILL.md",
+  "~/.agents/skills/nano-banana/SKILL.md",
+  "~/.agents/skills/gpt-image-2/SKILL.md",
 ]
 role_details = [
-  "parallel OpenAI/Codex image lane; produces independent output and keeps work isolated",
-  "secondary pane for concurrent image work when memory expands capacity",
+  "parallel image lane (mirrors builder-image); for fan-out when memory needs concurrent generation",
+  "produces independent output isolated from builder-image; both write to project asset tree",
 ]
 
 [[engineers]]
@@ -137,10 +168,15 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.agents/skills/cartooner-video/SKILL.md",
+  "~/.agents/skills/cartooner-audio/SKILL.md",
+  "~/.agents/skills/cartooner-prompt/SKILL.md",
+  "~/.agents/skills/cartooner-seedance-cookbook/SKILL.md",
 ]
 role_details = [
-  "MiniMax audio/video lane; prompt engineering is self-owned",
-  "handles TTS, music, and video API work and returns media artifact paths plus API evidence",
+  "audio/video lane: cartooner-video (Seedance i2v / t2v) + cartooner-audio (BGM / TTS)",
+  "uses cartooner-seedance-cookbook for tested video prompt recipes",
+  "returns media artifact paths plus generation log to memory",
 ]
 
 [[engineers]]
@@ -168,8 +204,10 @@ skills = [
   "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/patrol/SKILL.md",
   "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "~/.agents/skills/cartooner-resource-ops/SKILL.md",
 ]
 role_details = [
-  "review + progress-tracking seat; watches for drift and notifies memory",
-  "does not directly poke builder-image or builder-av; all escalations are one-way to memory",
+  "creative patrol: verify cartooner pipeline output integrity (PROJECT_INDEX.json, asset tree)",
+  "scheduled cartooner skill SLA smoke test (nb2/nbp/seedance/MiniMax)",
+  "alerts memory when service degraded or asset references broken",
 ]

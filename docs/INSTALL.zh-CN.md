@@ -38,8 +38,8 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 
 | 模板 | Seat 数 | 定位 |
 |------|---------|------|
-| `cartooner-creative` | 4 | 创意类：memory + writer + visual + patrol |
-| `clawseat-engineering` | 5 | 工程类：creative 基础上增加 reviewer，承担 QA + 视觉审查 |
+| `clawseat-engineering` | 5 | 工程类：memory + planner + builder + reviewer + patrol，绑 gstack skill |
+| `clawseat-creative` | 5 | 创意类（绑 cartooner skill）：memory + builder-image x2 + builder-av + patrol |
 | `clawseat-solo` | 3 | 极简协作，全 OAuth：memory + builder + planner-gemini |
 
 为什么使用 `install.sh`，而不是直接用 `agent_admin` 或 `agent-launcher.sh`：
@@ -77,12 +77,12 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 
 ### 步骤 1 — Template Decision
 
-**WHAT**：选择 `cartooner-creative`、`clawseat-engineering` 或 `clawseat-solo`。知道项目意图后用
-`detect_template_from_name <project>`；如意图不清晰，默认 `cartooner-creative`。
+**WHAT**：选择 `clawseat-engineering`、`clawseat-creative` 或 `clawseat-solo`。知道项目意图后用
+`detect_template_from_name <project>`；如意图不清晰，默认 `clawseat-engineering`。
 
-**WHY default**：默认 `cartooner-creative`，因为它同时保留 memory、writer、visual、patrol 的创意链路，不额外引入 reviewer 开销。
+**WHY default**：默认 `clawseat-engineering`，因为它覆盖大多数 code-shipping 工作（memory + planner + builder + reviewer + patrol）。如果做图片 / 视频 / 音频 / 分镜这类绑 cartooner skill 的创作工作，选 `clawseat-creative`。
 
-**CONFIRM**：`[回车=默认 / 1 cartooner-creative / 2 engineering / 3 solo / 详 / 取消]`
+**CONFIRM**：`[回车=默认 / 1 engineering / 2 creative / 3 solo / 详 / 取消]`
 
 **ON-FAIL**：operator 不确定时，每个模板给两个例子并保留默认；模板文件缺失时，提供 `git status`、`git pull` 或 `--force-repo-root <path>`。
 
@@ -278,7 +278,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--project <name>` | 安装或重装指定 ClawSeat project。默认 `install`。 |
 | `--repo-root <path>` | 设置 seat cwd 使用的目标项目仓库。 |
 | `--force-repo-root <path>` | 多 worktree 自动选择错误时，强制指定 ClawSeat install code root。 |
-| `--template <cartooner-creative\|clawseat-engineering\|clawseat-solo>` | 选择 roster template。cartooner-creative 4 seats；engineering 5 seats；solo 3 seats。 |
+| `--template <clawseat-engineering\|clawseat-creative\|clawseat-solo>` | 选择 roster template。clawseat-engineering 5 seats；clawseat-creative 5 seats；clawseat-solo 3 seats。 |
 | `--memory-tool <claude\|codex\|gemini>` | 覆盖 primary memory seat tool。非 Claude tool 会跳过 Claude provider selection。 |
 | `--memory-model <model>` | 当 memory tool 支持显式 model 时设置 memory model。 |
 | `--provider <mode\|n>` | 通过 detected candidate number 或 mode 选择 memory-seat provider。 |
@@ -383,7 +383,7 @@ tmux capture-pane -t <session> -p -S - -E -
 
 1. Parse flags，解析 real user HOME，必要时选择 freshest ClawSeat worktree，并加载 `scripts/install/lib/`。
 2. 在 import `tomllib` 之前解析 Python >= 3.11。
-3. 解析 project template 和 roster：`cartooner-creative` -> `memory, writer, visual, patrol`；`clawseat-engineering` 增加 `reviewer`；`clawseat-solo` 只有 `memory, builder, planner`。
+3. 解析 project template 和 roster：`clawseat-engineering` -> `memory, planner, builder, reviewer, patrol`；`clawseat-creative` -> `memory, builder-image, builder-image-2, builder-av, patrol`（绑 cartooner skill）；`clawseat-solo` -> `memory, builder, planner`。
 4. 运行 legacy path migration 和 seat liveness reconciliation。
 5. 验证 host deps 并运行 `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`，
    生成 `machine/{credentials,network,openclaw,github,current_context}.json`。
@@ -461,12 +461,12 @@ bash scripts/apply-koder-overlay.sh
 bash scripts/install.sh --project <new-name> --provider minimax
 ```
 
-创建 cartooner-creative project：
+创建 clawseat-creative project（绑 cartooner skill 的 5-seat 创作团队）：
 
 ```bash
 bash scripts/install.sh \
   --project mycreative \
-  --template cartooner-creative \
+  --template clawseat-creative \
   --provider oauth
 ```
 
@@ -483,7 +483,7 @@ bash scripts/install.sh \
 
 ```bash
 python3 core/scripts/agent_admin.py project bootstrap \
-  --template cartooner-creative \
+  --template clawseat-engineering \
   --local ~/.agents/tasks/myproject/project-local.toml
 
 python3 core/scripts/agent_admin.py project use myproject

@@ -25,7 +25,7 @@ import agent_admin as aa  # noqa: E402
 from agent_admin_commands import CommandHandlers  # noqa: E402
 
 
-_TEMPLATE = _REPO / "templates" / "team-creation.toml"
+_TEMPLATE = _REPO / "templates" / "clawseat-creative.toml"
 _INSTALL = _REPO / "scripts" / "install.sh"
 _EXPECTED_SEATS = [
     "memory",
@@ -63,14 +63,14 @@ def _load_template() -> dict:
         return tomllib.load(handle)
 
 
-def _team_creation_project(name: str = "team-demo") -> SimpleNamespace:
+def _clawseat_creative_project(name: str = "team-demo") -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
         repo_root=str(_REPO),
         monitor_session=f"{name}-memory",
         engineers=list(_EXPECTED_SEATS),
         monitor_engineers=list(_EXPECTED_SEATS),
-        template_name="team-creation",
+        template_name="clawseat-creative",
         declared_skills=["TOOLS/memory.md"],
         seat_overrides={},
         window_mode="split-2",
@@ -106,14 +106,14 @@ def _isolate_store_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
 
-def _team_creation_context(
+def _clawseat_creative_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
     project_name: str = "team-demo",
 ) -> tuple[SimpleNamespace, dict[str, aa.Engineer], list[str], list[dict[str, object]]]:
     _isolate_store_paths(tmp_path, monkeypatch)
-    project = _team_creation_project(project_name)
+    project = _clawseat_creative_project(project_name)
     context = aa.project_template_context(project)
     assert context is not None
     profiles, engineer_order, optional_skills = context
@@ -146,11 +146,11 @@ def _render_agents_md(
     return rendered["AGENTS.md"]
 
 
-def test_team_creation_template_schema_has_five_seats() -> None:
+def test_clawseat_creative_template_schema_has_five_seats() -> None:
     data = _load_template()
 
     assert data["version"] == 1
-    assert data["template_name"] == "team-creation"
+    assert data["template_name"] == "clawseat-creative"
     assert data["defaults"]["window_mode"] == "split-2"
     assert data["defaults"]["monitor_max_panes"] == 5
     assert data["defaults"]["workspace_tools"] == ["TOOLS/memory.md"]
@@ -163,11 +163,52 @@ def test_team_creation_template_schema_has_five_seats() -> None:
     assert data["engineers"][4]["patrol_authority"] is True
 
 
-def test_team_creation_project_template_context_loads_five_profiles(
+def test_clawseat_creative_template_declared_skills_include_cartooner_core() -> None:
+    """clawseat-creative is cartooner-bound — declared_skills must include the core cartooner family."""
+    data = _load_template()
+    declared = data["defaults"]["declared_skills"]
+    assert isinstance(declared, list)
+    for required in (
+        "cartooner",
+        "cartooner-image",
+        "cartooner-video",
+        "cartooner-audio",
+        "cartooner-storyboard",
+        "cartooner-design",
+        "cartooner-prompt",
+    ):
+        assert required in declared, f"missing required cartooner skill in declared_skills: {required}"
+
+
+def test_clawseat_creative_seats_bind_cartooner_skills() -> None:
+    """Each non-memory worker seat must reference at least one cartooner-* skill."""
+    data = _load_template()
+    seat_skills = {engineer["id"]: engineer.get("skills", []) for engineer in data["engineers"]}
+
+    image_skills = seat_skills["builder-image"]
+    assert any("cartooner-image" in s for s in image_skills)
+    assert any("cartooner-storyboard" in s for s in image_skills)
+    assert any("cartooner-design" in s for s in image_skills)
+    assert any("cartooner-prompt" in s for s in image_skills)
+
+    av_skills = seat_skills["builder-av"]
+    assert any("cartooner-video" in s for s in av_skills)
+    assert any("cartooner-audio" in s for s in av_skills)
+    assert any("cartooner-prompt" in s for s in av_skills)
+
+    patrol_skills = seat_skills["patrol"]
+    assert any("cartooner-resource-ops" in s for s in patrol_skills)
+
+    memory_skills = seat_skills["memory"]
+    assert any("cartooner/SKILL.md" in s for s in memory_skills), "memory must load cartooner router"
+    assert any("cartooner-script-development" in s for s in memory_skills)
+
+
+def test_clawseat_creative_project_template_context_loads_five_profiles(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project, profiles, engineer_order, optional_skills = _team_creation_context(tmp_path, monkeypatch)
+    project, profiles, engineer_order, optional_skills = _clawseat_creative_context(tmp_path, monkeypatch)
 
     assert list(profiles) == _EXPECTED_SEATS
     assert engineer_order == _EXPECTED_SEATS
@@ -177,7 +218,7 @@ def test_team_creation_project_template_context_loads_five_profiles(
     assert profiles["builder-av"].default_auth_mode == "api"
     assert profiles["builder-av"].default_provider == "minimax"
     assert profiles["patrol"].patrol_authority is True
-    assert project.template_name == "team-creation"
+    assert project.template_name == "clawseat-creative"
 
 
 @pytest.mark.parametrize(
@@ -190,7 +231,7 @@ def test_team_creation_project_template_context_loads_five_profiles(
         pytest.param("patrol", "Role: `patrol`", "core/skills/patrol/SKILL.md", "Cron-driven patrol seat", id="patrol"),
     ],
 )
-def test_team_creation_rendered_workspace_embeds_role_contract(
+def test_clawseat_creative_rendered_workspace_embeds_role_contract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     seat_id: str,
@@ -198,7 +239,7 @@ def test_team_creation_rendered_workspace_embeds_role_contract(
     expected_skill_path: str,
     expected_marker: str,
 ) -> None:
-    project, profiles, engineer_order, _optional_skills = _team_creation_context(tmp_path, monkeypatch)
+    project, profiles, engineer_order, _optional_skills = _clawseat_creative_context(tmp_path, monkeypatch)
 
     agents_md = _render_agents_md(seat_id, project, profiles, engineer_order)
     assert expected_role_fragment in agents_md
@@ -207,16 +248,16 @@ def test_team_creation_rendered_workspace_embeds_role_contract(
     assert expected_marker in agents_md
 
 
-def test_team_creation_install_sh_dry_run_accepts_template(tmp_path: Path) -> None:
+def test_clawseat_creative_install_sh_dry_run_accepts_template(tmp_path: Path) -> None:
     home = tmp_path / "home"
     result = subprocess.run(
         [
             "bash",
             str(_INSTALL),
             "--project",
-            "team-creation-smoke",
+            "clawseat-creative-smoke",
             "--template",
-            "team-creation",
+            "clawseat-creative",
             "--dry-run",
         ],
         capture_output=True,
@@ -233,16 +274,16 @@ def test_team_creation_install_sh_dry_run_accepts_template(tmp_path: Path) -> No
 
     assert result.returncode == 0, result.stderr
     combined = result.stdout + result.stderr
-    assert "CLAWSEAT_TEMPLATE_NAME=team-creation" in combined
-    assert "team-creation" in combined
+    assert "CLAWSEAT_TEMPLATE_NAME=clawseat-creative" in combined
+    assert "clawseat-creative" in combined
     assert "INVALID_TEMPLATE" not in combined
 
 
-def test_team_creation_batch_start_engineer_accepts_all_five_seats(
+def test_clawseat_creative_batch_start_engineer_accepts_all_five_seats(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project, profiles, _engineer_order, _optional_skills = _team_creation_context(tmp_path, monkeypatch)
+    project, profiles, _engineer_order, _optional_skills = _clawseat_creative_context(tmp_path, monkeypatch)
     monkeypatch.setattr(CommandHandlers, "_require_dispatch_authority", lambda self, action: None)
 
     started: list[tuple[str, bool]] = []
@@ -302,6 +343,3 @@ def test_patrol_skill_requires_memory_notifications_and_no_direct_builder_pokes(
     assert "禁直戳 builder" in text
 
 
-def test_builder_skill_says_prompt_engineering_is_self_owned() -> None:
-    text = (_REPO / "core" / "skills" / "builder" / "SKILL.md").read_text(encoding="utf-8")
-    assert "prompt engineering 自负责" in text

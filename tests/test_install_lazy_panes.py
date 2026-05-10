@@ -42,7 +42,7 @@ def test_install_dry_run_only_launches_memory_and_uses_lazy_wait_panes(tmp_path:
             "--project",
             "spawn49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "minimax",
         ],
@@ -64,8 +64,8 @@ def test_install_dry_run_only_launches_memory_and_uses_lazy_wait_panes(tmp_path:
     assert output.count("agent-launcher.sh") == 1
     assert "spawn49-memory-claude" in output
     assert "machine-memory-claude" not in output
-    assert "project bootstrap --template clawseat-creative --local" in output
-    for seat in ("planner", "builder", "patrol", "designer"):
+    assert "project bootstrap --template clawseat-engineering --local" in output
+    for seat in ("planner", "builder", "reviewer", "patrol"):
         assert f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}" in output
 
 
@@ -81,7 +81,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             "--project",
             "spawn49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "minimax",
         ],
@@ -111,7 +111,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             "project",
             "bootstrap",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--local",
             str(home / ".agents" / "tasks" / "spawn49" / "project-local.toml"),
         ],
@@ -128,7 +128,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     local_text = (
         home / ".agents" / "tasks" / "spawn49" / "project-local.toml"
     ).read_text(encoding="utf-8")
-    assert 'seat_order = ["memory", "planner", "builder", "patrol", "designer"]' in local_text
+    assert 'seat_order = ["memory", "planner", "builder", "reviewer", "patrol"]' in local_text
     assert 'session_name = "spawn49-memory-claude"' in local_text
     assert local_text.count("[[overrides]]") == 5
     assert 'provider = "deepseek"' in local_text
@@ -140,7 +140,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     grid_payload = payloads[0]
     assert grid_payload["title"] == "clawseat-spawn49-workers"
     commands = {pane["label"]: pane["command"] for pane in grid_payload["panes"]}
-    for seat in ("planner", "builder", "patrol", "designer"):
+    for seat in ("planner", "builder", "reviewer", "patrol"):
         assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}"
 
     planner_secret = home / ".agents" / "secrets" / "claude" / "deepseek" / "planner.env"
@@ -188,7 +188,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "custom49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--base-url",
             "https://custom.api.invalid/v1",
             "--api-key",
@@ -313,7 +313,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "mini49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "minimax",
             "--api-key",
@@ -384,7 +384,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "console49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "anthropic_console",
             "--api-key",

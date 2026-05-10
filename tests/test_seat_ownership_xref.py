@@ -10,10 +10,6 @@ SEAT_SKILLS = [
     ROOT / "core/skills/reviewer/SKILL.md",
     ROOT / "core/skills/designer/SKILL.md",
     ROOT / "core/skills/patrol/SKILL.md",
-    ROOT / "core/skills/creative-builder/SKILL.md",
-    ROOT / "core/skills/creative-designer/SKILL.md",
-    ROOT / "core/skills/creative-patrol/SKILL.md",
-    ROOT / "core/skills/creative-planner/SKILL.md",
     ROOT / "core/skills/gstack-harness/SKILL.md",
     ROOT / "core/skills/workflow-architect/SKILL.md",
 ]

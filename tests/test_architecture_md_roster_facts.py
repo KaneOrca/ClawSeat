@@ -31,13 +31,14 @@ def test_architecture_project_template_roster_matches_templates() -> None:
             assert seat in joined, f"{name} missing seat {seat}"
 
 
-def test_architecture_template_roster_contains_bv4_templates() -> None:
+def test_architecture_template_roster_contains_three_templates() -> None:
     arch = ARCH.read_text(encoding="utf-8")
     template_section = arch.split("### Project Templates", 1)[1].split("### Solo Template", 1)[0]
-    assert "`cartooner-creative`" in template_section
     assert "`clawseat-engineering`" in template_section
+    assert "`clawseat-creative`" in template_section
     assert "`clawseat-solo`" in template_section
-    assert "`clawseat-creative`" not in template_section
+    assert "`cartooner-creative`" not in template_section
+    assert "`team-creation`" not in template_section
 
 
 def test_architecture_engineering_row_is_five_seats_with_reviewer_authority() -> None:

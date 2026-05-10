@@ -55,10 +55,10 @@ def test_project_create_generates_complete_project_toml(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     data = _load_toml(home / ".agents" / "projects" / "lotus-radar" / "project.toml")
-    assert data["template_name"] == "cartooner-creative"
+    assert data["template_name"] == "clawseat-engineering"
     assert data["window_mode"] == "split-2"
-    assert data["monitor_max_panes"] == 4
-    assert data["engineers"] == ["memory", "writer", "visual", "patrol"]
+    assert data["monitor_max_panes"] == 5
+    assert data["engineers"] == ["memory", "planner", "builder", "reviewer", "patrol"]
     assert data["monitor_engineers"] == data["engineers"]
     assert set(data["seat_overrides"]) == set(data["engineers"])
 

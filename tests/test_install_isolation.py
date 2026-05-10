@@ -44,85 +44,6 @@ def _fake_install_root(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     (root / "core" / "templates").mkdir(parents=True, exist_ok=True)
     shutil.copytree(_REPO / "templates", root / "templates", dirs_exist_ok=True)
     shutil.copytree(_REPO / "scripts" / "install", root / "scripts" / "install", dirs_exist_ok=True)
-    (root / "templates" / "clawseat-creative.toml").write_text(
-        textwrap.dedent(
-            """
-            version = 1
-            template_name = "clawseat-creative"
-            description = "Creative v2 roster: memory, planner, builder, patrol, and designer."
-
-            [window_layout]
-            shared_memories_window_title = "clawseat-memories"
-            workers_window_title = "clawseat-{PROJECT}-workers"
-
-            [window_layout.workers_grid]
-            left_main_seat = "planner"
-            left_main_width = "50%"
-            right_seats = ["builder", "patrol", "designer"]
-            right_fill_order = "col-major"
-
-            [defaults]
-            home_mode = "real"
-            dangerously_skip_permissions = true
-            window_mode = "split-2"
-            monitor_max_panes = 4
-            open_detail_windows = false
-            workspace_tools = [
-              "TOOLS/memory.md",
-            ]
-
-            [[engineers]]
-            id = "memory"
-            display_name = "Memory"
-            role = "project-memory"
-            tool = "claude"
-            auth_mode = "oauth"
-            provider = "anthropic"
-            monitor = true
-
-            [[engineers]]
-            id = "planner"
-            display_name = "planner"
-            role = "creative-planner"
-            tool = "claude"
-            auth_mode = "api"
-            provider = "deepseek"
-            model = "deepseek-v4-pro[1M]"
-            monitor = true
-
-            [[engineers]]
-            id = "builder"
-            display_name = "builder"
-            role = "creative-builder"
-            tool = "codex"
-            auth_mode = "oauth"
-            provider = "openai"
-            monitor = true
-
-            [[engineers]]
-            id = "patrol"
-            display_name = "patrol"
-            role = "patrol"
-            tool = "claude"
-            auth_mode = "api"
-            provider = "minimax"
-            model = "MiniMax-M2.7-highspeed"
-            base_url = "https://api.minimaxi.com/anthropic"
-            monitor = true
-
-            [[engineers]]
-            id = "designer"
-            display_name = "designer"
-            role = "creative-designer"
-            tool = "gemini"
-            auth_mode = "oauth"
-            provider = "google"
-            monitor = true
-            """
-        ).strip()
-        + "\n",
-        encoding="utf-8",
-    )
     shutil.copy2(_INSTALL, root / "scripts" / "install.sh")
     (root / "scripts" / "install.sh").chmod(0o755)
     shutil.copy2(_WAIT_FOR_SEAT, root / "scripts" / "wait-for-seat.sh")
@@ -538,10 +459,9 @@ def test_install_script_no_direct_tmux_new_session() -> None:
     assert "launch_seat()" in text
 
 
-def test_fake_install_root_includes_creative_alias_and_reconcile_helpers(tmp_path: Path) -> None:
+def test_fake_install_root_includes_reconcile_helpers(tmp_path: Path) -> None:
     root, _home, _launcher_log, _tmux_log, _py_stubs = _fake_install_root(tmp_path)
 
-    assert (root / "templates" / "clawseat-creative.toml").is_file()
     assert (root / "core" / "scripts" / "reconcile_seat_states.py").is_file()
     assert (root / "core" / "scripts" / "migrate_ancestor_paths.py").is_file()
 

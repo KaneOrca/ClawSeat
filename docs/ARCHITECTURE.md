@@ -246,17 +246,16 @@ Recent structural changes:
 - **2026-04 — core/migration/ layer** — houses `*_dynamic.py` scripts that replace the legacy harness scripts for profiles with `[dynamic_roster].enabled = true`. Traffic flows through `core/transport/transport_router.py` so callers never pick the wrong path by hand.
 - **2026-04 — transport/payload consolidation (audit P0/P1)** — `build_notify_payload` extracted into `_task_io.py`, rendering/validation for codex provider config moved into a typed `CodexProviderConfig` dataclass, shells/*/adapter_shim.py collapsed onto `_shim_base.py`.
 - **2026-04 — install.sh enhancements** — `--repo-root` flag (FR-7) allows installing a project pointing to a different business repo (separate from the ClawSeat root); `--reset-harness-memory` clears per-seat harness choice history (FR-1 `last-harness.toml` persistence). `CLAWSEAT_FEISHU_ENABLED=0` env var disables all Feishu sends globally (send_delegation_report, planner stop-hook, announce helpers).
-- **2026-04 — project templates** — `--template` flag selects one of four built-in rosters: `cartooner-creative` (4-seat), `clawseat-engineering` (5-seat with reviewer), `team-creation` (5-seat creative team), or `clawseat-solo` (3-seat). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat is carried into `project-local.toml`.
+- **2026-04 — project templates** — `--template` flag selects one of three built-in rosters: `clawseat-engineering` (5-seat with reviewer), `clawseat-creative` (5-seat cartooner-bound creative team), or `clawseat-solo` (3-seat). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat is carried into `project-local.toml`.
 
 ### Project Templates
 
-Four built-in project templates in `templates/`:
+Three built-in project templates in `templates/`:
 
 | Template | Seats | Count | Use case |
 |----------|-------|-------|----------|
-| `cartooner-creative` | memory writer visual patrol | 4 | Creative chain with direct memory/operator collaboration |
-| `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review) |
-| `team-creation` | memory builder-image builder-image-2 builder-av patrol | 5 | General creative team for short films, short dramas, and MV production |
+| `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review); seats use gstack-harness protocol + gstack skills |
+| `clawseat-creative` | memory builder-image builder-image-2 builder-av patrol | 5 | Cartooner-bound creative team (image lanes + av lane) for short films, short dramas, MV; seats use cartooner skills (image / video / audio / storyboard / design / prompt) |
 | `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
 
 ### Solo Template (Minimal 3-Seat)
@@ -273,13 +272,14 @@ No reviewer, patrol, or designer seats. Memory delegates orchestration to planne
 builder self-reviews; memory issues final verdict. All seats use OAuth - no API
 keys required.
 
-**Cartooner template seat responsibilities:**
-- `writer` (claude/oauth): deep creative writing and dialog craft on memory handoff
-- `visual` (gemini/oauth): storyboard, concept art, visual direction
-- `patrol` (claude/minimax): scheduled or memory-requested evidence collection; reports without modifying project state
-- `designer` row is intentionally not part of `cartooner-creative`; creative output is coordinated through memory + writer + visual.
+**Creative template seat responsibilities** (`clawseat-creative`):
+- `memory` (claude/oauth): orchestrates lanes; uses cartooner router + cartooner-script-development for high-level intent
+- `builder-image` (codex/oauth): primary image lane; uses cartooner-image, cartooner-storyboard, cartooner-design, cartooner-prompt
+- `builder-image-2` (codex/oauth): parallel image lane for fan-out
+- `builder-av` (claude/minimax): audio/video lane; uses cartooner-video, cartooner-audio, cartooner-seedance-cookbook
+- `patrol` (claude/minimax): pipeline SLA + asset integrity; uses cartooner-resource-ops
 
-**Capability skill layer** (`core/skills/cs-*/`): tool-agnostic interface contracts (WHAT, not HOW). cs-classify routes long-form vs short-form; cs-structure runs the Hollywood Writers Room (Agent Teams); cs-write executes long-form content; cs-score applies rubric-based scoring. Workflow composition is the planner's responsibility, not the skills'.
+> Note: the creative template is expected to migrate from gstack-harness to a dedicated `cartooner-harness` protocol layer (planned, not yet implemented). The creative workflow's primitives (lane / deposit / pick / iterate) differ structurally from the engineering chain's (dispatch / handoff / ack), so the protocol layers are intentionally split.
 
 Still outside ClawSeat by design:
 
