@@ -19,5 +19,8 @@
   "cartooner-audio": ["builder-av"],
   "cartooner-prompt": ["builder-av"],
   "cartooner-seedance-cookbook": ["builder-av"],
-  "cartooner-brand-logo-animation": ["builder-av"]
+  "cartooner-brand-logo-animation": ["builder-av"],
+
+  "remotion-video-production": ["builder-av"],
+  "remotion-delegation": ["builder-av"]
 }

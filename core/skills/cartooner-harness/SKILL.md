@@ -160,7 +160,7 @@ violation that `patrol` audits via `generation_log.jsonl`.
 | **memory** | `cartooner-harness`, `cartooner` (router), `cartooner-resource-ops` | Any image/video/audio skill (no-image-policy); `cartooner-script-development` (writer's domain); `viral-copywriter`; any L3 prompt skill |
 | **writer** | `cartooner-harness`, `cartooner-script-development`, `viral-copywriter` | Any `cartooner-image / -video / -audio` skill (text-only seat); any model-prompt skill (no L3 work); no PROJECT_INDEX writes |
 | **builder-image** | `cartooner-harness`, `cartooner-image`, `cartooner-storyboard`, `cartooner-design`, `nano-banana`, `gpt-image-2` | `cartooner-prompt` (video-side, builder-av's domain); `cartooner-video / -audio` (av); `cartooner-script-development` (writer's) |
-| **builder-av** | `cartooner-harness`, `cartooner-video`, `cartooner-audio`, `cartooner-prompt`, `cartooner-seedance-cookbook`, `cartooner-brand-logo-animation` | `cartooner-image / -storyboard / -design` (image lane); `cartooner-script-development` (writer's) |
+| **builder-av** | `cartooner-harness`, `cartooner-video`, `cartooner-audio`, `cartooner-prompt`, `cartooner-seedance-cookbook`, `cartooner-brand-logo-animation`, `remotion-video-production`, `remotion-delegation` | `cartooner-image / -storyboard / -design` (image lane); `cartooner-script-development` (writer's) |
 | **patrol** | `cartooner-harness`, `cartooner-resource-ops` | **Any generation skill** (read-only seat); never deposit any asset; never `pick_winner.py` (no decision authority) |
 
 ### Why these boundaries matter
