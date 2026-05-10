@@ -105,7 +105,7 @@ finishing-a-development-branch / subagent-driven-development。
 | 模板 | seat | 适合 | 卖点 |
 |---|---|---|---|
 | **`clawseat-solo`** | memory(claude) + builder(codex) + planner(gemini) | 想用三家大厂 OAuth 跑闭环的人 | **零 API key**——三家 free quota 全用上 |
-| `clawseat-creative` | memory + builder-image x2 + builder-av + patrol | 创作链（图片 / 视频 / 音频 / 分镜） | 绑 cartooner skill；2 图像 lane + 1 音视频 lane |
+| `clawseat-creative` | memory + writer + builder-image + builder-av + patrol | 创作链（图片 / 视频 / 音频 / 分镜） | 绑 cartooner skill；cartooner-harness 协议层 |
 | `clawseat-engineering` | memory + planner + builder + reviewer + patrol | 工程链（brief→plan→code→review→merge） | 绑 gstack skill；有 reviewer 守 diff |
 
 > `solo` 是大多数人该选的——OAuth-only，无 key 泄露面，跑得动 80% 的活。

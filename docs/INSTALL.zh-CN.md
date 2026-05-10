@@ -39,7 +39,7 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 | 模板 | Seat 数 | 定位 |
 |------|---------|------|
 | `clawseat-engineering` | 5 | 工程类：memory + planner + builder + reviewer + patrol，绑 gstack skill |
-| `clawseat-creative` | 5 | 创意类（绑 cartooner skill）：memory + builder-image x2 + builder-av + patrol |
+| `clawseat-creative` | 5 | 创意类（绑 cartooner skill）：memory + writer + builder-image + builder-av + patrol |
 | `clawseat-solo` | 3 | 极简协作，全 OAuth：memory + builder + planner-gemini |
 
 为什么使用 `install.sh`，而不是直接用 `agent_admin` 或 `agent-launcher.sh`：
@@ -383,7 +383,7 @@ tmux capture-pane -t <session> -p -S - -E -
 
 1. Parse flags，解析 real user HOME，必要时选择 freshest ClawSeat worktree，并加载 `scripts/install/lib/`。
 2. 在 import `tomllib` 之前解析 Python >= 3.11。
-3. 解析 project template 和 roster：`clawseat-engineering` -> `memory, planner, builder, reviewer, patrol`；`clawseat-creative` -> `memory, builder-image, builder-image-2, builder-av, patrol`（绑 cartooner skill）；`clawseat-solo` -> `memory, builder, planner`。
+3. 解析 project template 和 roster：`clawseat-engineering` -> `memory, planner, builder, reviewer, patrol`；`clawseat-creative` -> `memory, writer, builder-image, builder-av, patrol`（绑 cartooner skill）；`clawseat-solo` -> `memory, builder, planner`。
 4. 运行 legacy path migration 和 seat liveness reconciliation。
 5. 验证 host deps 并运行 `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`，
    生成 `machine/{credentials,network,openclaw,github,current_context}.json`。

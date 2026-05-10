@@ -64,4 +64,4 @@ def test_project_bootstrap_supports_repo_root_single_file_template(tmp_path: Pat
     assert len(engineer_tomls) == 5
     assert {
         path.parent.name for path in session_tomls
-    } == {"memory", "builder-image", "builder-image-2", "builder-av", "patrol"}
+    } == {"memory", "writer", "builder-image", "builder-av", "patrol"}

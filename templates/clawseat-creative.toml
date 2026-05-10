@@ -1,19 +1,17 @@
 version = 1
 template_name = "clawseat-creative"
-description = "Cartooner-bound 5-seat creative team: memory orchestrates 2 image lanes + 1 av lane + patrol; all seats use cartooner skills for image / video / audio / storyboard / design / prompt domains."
+description = "Cartooner-bound 5-seat creative team: memory (Vision Steward) + writer (Story Specialist) + builder-image (Image Specialist) + builder-av (AV Cinematographer, Gemini for YouTube reference learning) + patrol (Asset Guardian). All seats follow no-image-policy: only user views assets in main thread; seats use isolated subagents for any vision input. Protocol layer: cartooner-harness."
 # graceful-fallback: cartooner-* skills are external installs at ~/.agents/skills/cartooner-*; seats degrade gracefully when absent.
-# protocol-note: this template currently uses gstack-harness as a stub protocol layer; the planned `cartooner-harness` (lane / deposit / pick / iterate primitives) will replace it once implemented.
+# protocol-note: This template requires cartooner-harness for lane / deposit / pick / iterate primitives. gstack-harness is loaded only for runtime infrastructure (sandbox HOME / launcher), not as the dispatch protocol.
 
 [window_layout]
 shared_memories_window_title = "clawseat-memories"
 workers_window_title = "clawseat-{PROJECT}-workers"
 
 [window_layout.workers_grid]
-# memory is the orchestrator seat; builder-image is the main image lane,
-# with builder-image-2 / builder-av / patrol filling the side panes.
-left_main_seat = "builder-image"
+left_main_seat = "writer"
 left_main_width = "50%"
-right_seats = ["builder-image-2", "builder-av", "patrol"]
+right_seats = ["builder-image", "builder-av", "patrol"]
 right_fill_order = "col-major"
 
 [defaults]
@@ -44,8 +42,10 @@ display_name = "Memory"
 role = "project-memory"
 window = "memory"
 tool = "claude"
-auth_mode = "oauth"
-provider = "anthropic"
+auth_mode = "api"
+provider = "minimax"
+model = "MiniMax-M2.7-highspeed"
+base_url = "https://api.minimaxi.com/anthropic"
 monitor = true
 human_facing = true
 active_loop_owner = true
@@ -57,30 +57,30 @@ remind_active_loop_owner = false
 review_authority = true
 design_authority = true
 skills = [
-  "{CLAWSEAT_ROOT}/core/skills/clawseat-memory/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/clawseat-decision-escalation/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/memory-oracle/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cartooner-harness/SKILL.md",
   "~/.agents/skills/cartooner/SKILL.md",
-  "~/.agents/skills/cartooner-script-development/SKILL.md",
   "~/.agents/skills/cartooner-resource-ops/SKILL.md",
 ]
 role_details = [
-  "creative memory hub; coordinates lanes via dispatch, owns brief / style bible / character DNA",
-  "uses cartooner router for high-level intent (CREATE / RE-RUN / MODIFY / DERIVE / MANAGE)",
-  "owns script ideation (cartooner-script-development) and project-level resource coordination",
+  "Vision Steward: maintains PROJECT_INDEX, generation_log, style_bible compliance via metadata only",
+  "no-image-policy: never views any asset content (image / video / audio)",
+  "manual mode: line producer + DIT + script supervisor — coordinates lanes, escalates picks to user",
+  "auto mode: process-automation engine — escalates ALL aesthetic decisions to user (default pick_strategy = escalate-always)",
+  "owns intent layer (L1): brief.md, vision_spec.md, style_bible.md authoring with user collaboration",
+  "uses cartooner router for high-level intent classification (CREATE / RE-RUN / MODIFY / DERIVE / MANAGE)",
+  "AUTHORIZED skills: cartooner-harness, cartooner (router), cartooner-resource-ops",
+  "FORBIDDEN: any image/video/audio skill (no-image-policy); cartooner-script-development (writer's domain); viral-copywriter; any L3 prompt skill",
 ]
 
 [[engineers]]
-id = "builder-image"
-display_name = "builder-image"
-role = "builder-image"
+id = "writer"
+display_name = "Writer"
+role = "screenwriter"
 window = "workers"
 window_pane = "left-main"
-tool = "codex"
+tool = "claude"
 auth_mode = "oauth"
-provider = "openai"
+provider = "anthropic"
 monitor = true
 human_facing = false
 active_loop_owner = false
@@ -92,26 +92,23 @@ remind_active_loop_owner = false
 review_authority = false
 design_authority = false
 skills = [
-  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
-  "~/.agents/skills/cartooner-image/SKILL.md",
-  "~/.agents/skills/cartooner-storyboard/SKILL.md",
-  "~/.agents/skills/cartooner-design/SKILL.md",
-  "~/.agents/skills/cartooner-prompt/SKILL.md",
-  "~/.agents/skills/nano-banana/SKILL.md",
-  "~/.agents/skills/gpt-image-2/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cartooner-harness/SKILL.md",
+  "~/.agents/skills/cartooner-script-development/SKILL.md",
+  "~/.agents/skills/viral-copywriter/SKILL.md",
 ]
 role_details = [
-  "primary image lane: cartooner-image / cartooner-storyboard / cartooner-design",
-  "executes single image, multi-panel storyboard, character design via cartooner skills",
-  "fallback to nano-banana / gpt-image-2 when cartooner pipeline insufficient",
+  "Story Specialist (pure literary): writes narrative_outline.md (scenes / dialogue / emotional arcs / character beats / world-building)",
+  "no-image-policy: never views any asset content; pure text-only seat",
+  "does NOT write shot lists, camera decisions, or model prompts (those belong to builder-av and builder-image respectively)",
+  "Claude OAuth chosen for strongest literary / Chinese narrative quality",
+  "AUTHORIZED skills: cartooner-harness, cartooner-script-development, viral-copywriter",
+  "FORBIDDEN: any cartooner-image / -video / -audio skill (text-only seat); any model-prompt skill (no L3 work); no PROJECT_INDEX writes",
 ]
 
 [[engineers]]
-id = "builder-image-2"
-display_name = "builder-image-2"
-role = "builder-image-2"
+id = "builder-image"
+display_name = "Image Specialist"
+role = "builder-image"
 window = "workers"
 window_pane = "top-right"
 tool = "codex"
@@ -128,32 +125,31 @@ remind_active_loop_owner = false
 review_authority = false
 design_authority = false
 skills = [
-  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cartooner-harness/SKILL.md",
   "~/.agents/skills/cartooner-image/SKILL.md",
   "~/.agents/skills/cartooner-storyboard/SKILL.md",
   "~/.agents/skills/cartooner-design/SKILL.md",
-  "~/.agents/skills/cartooner-prompt/SKILL.md",
   "~/.agents/skills/nano-banana/SKILL.md",
   "~/.agents/skills/gpt-image-2/SKILL.md",
 ]
 role_details = [
-  "parallel image lane (mirrors builder-image); for fan-out when memory needs concurrent generation",
-  "produces independent output isolated from builder-image; both write to project asset tree",
+  "Image Specialist (DP + Production Designer): reads shot_list.toml + style_bible + character_dna; translates each shot into model-specific image prompt; runs cartooner-image / -storyboard / -design",
+  "no-image-policy: main thread does NOT view generated images; only root-cause subagent (user-feedback triggered) may view, with isolated context discarded after",
+  "owns L3 image prompt translation: nb2 / nbp / gpt-image-2 / MiniMax-image vocabulary",
+  "deposits assets with model_metadata + file_metadata only (no LLM self-eval)",
+  "AUTHORIZED skills: cartooner-harness, cartooner-image, cartooner-storyboard, cartooner-design, nano-banana, gpt-image-2",
+  "FORBIDDEN: cartooner-prompt (video-side, builder-av's domain); cartooner-video / -audio (av lane); cartooner-script-development (writer's domain)",
 ]
 
 [[engineers]]
 id = "builder-av"
-display_name = "builder-av"
+display_name = "AV Cinematographer"
 role = "builder-av"
 window = "workers"
 window_pane = "middle-right"
-tool = "claude"
-auth_mode = "api"
-provider = "minimax"
-model = "MiniMax-M2.7-highspeed"
-base_url = "https://api.minimaxi.com/anthropic"
+tool = "gemini"
+auth_mode = "oauth"
+provider = "google"
 monitor = true
 human_facing = false
 active_loop_owner = false
@@ -165,23 +161,26 @@ remind_active_loop_owner = false
 review_authority = false
 design_authority = false
 skills = [
-  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/builder/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cartooner-harness/SKILL.md",
   "~/.agents/skills/cartooner-video/SKILL.md",
   "~/.agents/skills/cartooner-audio/SKILL.md",
   "~/.agents/skills/cartooner-prompt/SKILL.md",
   "~/.agents/skills/cartooner-seedance-cookbook/SKILL.md",
 ]
 role_details = [
-  "audio/video lane: cartooner-video (Seedance i2v / t2v) + cartooner-audio (BGM / TTS)",
-  "uses cartooner-seedance-cookbook for tested video prompt recipes",
-  "returns media artifact paths plus generation log to memory",
+  "AV Cinematographer (DP + Composer + Editor + Storyboard Artist): owns shot decomposition AND av generation",
+  "STAGE 1 shot_list authoring: reads writer's narrative_outline.md + style_bible; produces shot_list.toml with shot_type / duration / camera_motion / mood / cross-modal join keys",
+  "STAGE 2 av generation: reads shot_list + picked images; translates per-shot to Seedance / MiniMax video and music prompts; runs cartooner-video / -audio",
+  "GEMINI chosen for ONE killer feature: YouTube ingestion via reference-learning subagent — can ingest master cinematographers' work (e.g., Wong Kar-wai, Tarkovsky) for shot reference, output text shot-analysis report, discard subagent context",
+  "no-image-policy: main thread does NOT view generated videos/audio; 2 subagent types: (a) root-cause subagent (user feedback), (b) reference-learning subagent (YouTube/external reference ingestion)",
+  "owns Seedance 2.0 13-mode vocabulary, time segmentation, ref image semantics; loads cartooner-seedance-cookbook (50 recipes + 47 technique atoms)",
+  "AUTHORIZED skills: cartooner-harness, cartooner-video, cartooner-audio, cartooner-prompt, cartooner-seedance-cookbook",
+  "FORBIDDEN: cartooner-image / -storyboard / -design (image lane, builder-image's domain); cartooner-script-development (writer's domain)",
 ]
 
 [[engineers]]
 id = "patrol"
-display_name = "patrol"
+display_name = "Asset Guardian"
 role = "patrol"
 window = "workers"
 window_pane = "bottom-right"
@@ -201,13 +200,16 @@ remind_active_loop_owner = true
 review_authority = false
 design_authority = false
 skills = [
-  "{CLAWSEAT_ROOT}/core/skills/gstack-harness/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/patrol/SKILL.md",
-  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/cartooner-harness/SKILL.md",
   "~/.agents/skills/cartooner-resource-ops/SKILL.md",
 ]
 role_details = [
-  "creative patrol: verify cartooner pipeline output integrity (PROJECT_INDEX.json, asset tree)",
-  "scheduled cartooner skill SLA smoke test (nb2/nbp/seedance/MiniMax)",
-  "alerts memory when service degraded or asset references broken",
+  "Asset Guardian (Data Wrangler): file-level integrity checks only — PROJECT_INDEX.json schema, asset file exists / size / hash, lane state machine consistency",
+  "no-image-policy: NEVER reads asset content (no thumbnails, no spot-checks); file metadata only",
+  "monitors cartooner pipeline SLA (nb2/nbp/seedance/MiniMax) by sampling api_status logs in generation_log.jsonl",
+  "alerts memory on pipeline degradation, missing assets, schema drift; never modifies any asset",
+  "user direct allowed for read-only queries (status / SLA / index integrity); mutate instructions rejected — patrol redirects user to builder-* for any asset modification",
+  "audits seat skill authorization: scans generation_log.jsonl for {seat, skill_invoked} pairs outside the Skill Authorization Matrix; alerts memory on violation",
+  "AUTHORIZED skills: cartooner-harness, cartooner-resource-ops",
+  "FORBIDDEN: ANY generation skill (read-only seat); never deposit any asset; never pick_winner.py (no decision authority)",
 ]

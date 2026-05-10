@@ -256,7 +256,7 @@ Non-TTY environments (agent-launcher sandbox, CI, detached agent sessions) must 
 
 Templates (--template):
   clawseat-engineering   5-seat engineering flow (memory + planner + builder + reviewer + patrol), gstack-bound
-  clawseat-creative      5-seat cartooner-bound creative team (memory + builder-image + builder-image-2 + builder-av + patrol)
+  clawseat-creative      5-seat cartooner-bound creative team (memory + writer + builder-image + builder-av + patrol)
   clawseat-solo          3-seat minimal flow (memory + builder + planner), all OAuth
 EOF
         exit 0

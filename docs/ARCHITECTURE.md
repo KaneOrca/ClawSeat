@@ -255,7 +255,7 @@ Three built-in project templates in `templates/`:
 | Template | Seats | Count | Use case |
 |----------|-------|-------|----------|
 | `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review); seats use gstack-harness protocol + gstack skills |
-| `clawseat-creative` | memory builder-image builder-image-2 builder-av patrol | 5 | Cartooner-bound creative team (image lanes + av lane) for short films, short dramas, MV; seats use cartooner skills (image / video / audio / storyboard / design / prompt) |
+| `clawseat-creative` | memory writer builder-image builder-av patrol | 5 | Cartooner-bound creative team for short films, short dramas, MV; seats use cartooner skills (image / video / audio / storyboard / design / prompt); cartooner-harness protocol layer |
 | `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
 
 ### Solo Template (Minimal 3-Seat)
@@ -272,14 +272,14 @@ No reviewer, patrol, or designer seats. Memory delegates orchestration to planne
 builder self-reviews; memory issues final verdict. All seats use OAuth - no API
 keys required.
 
-**Creative template seat responsibilities** (`clawseat-creative`):
-- `memory` (claude/oauth): orchestrates lanes; uses cartooner router + cartooner-script-development for high-level intent
-- `builder-image` (codex/oauth): primary image lane; uses cartooner-image, cartooner-storyboard, cartooner-design, cartooner-prompt
-- `builder-image-2` (codex/oauth): parallel image lane for fan-out
-- `builder-av` (claude/minimax): audio/video lane; uses cartooner-video, cartooner-audio, cartooner-seedance-cookbook
-- `patrol` (claude/minimax): pipeline SLA + asset integrity; uses cartooner-resource-ops
+**Creative template seat responsibilities** (`clawseat-creative`, cartooner-harness-bound):
+- `memory` (claude/minimax-api, **Vision Steward**): no-image-policy; maintains PROJECT_INDEX / generation_log via metadata only; coordinates lanes; escalates aesthetic decisions to user. MiniMax chosen for high-frequency long-session work without OAuth quota pressure.
+- `writer` (claude/oauth, **Story Specialist**): pure literary — narrative_outline.md (scenes / dialogue / character beats); never writes shot lists or prompts. Claude OAuth chosen for strongest Chinese narrative quality.
+- `builder-image` (codex/oauth, **Image Specialist**): reads shot_list.toml + style_bible; translates each shot into model-specific image prompt; runs cartooner-image / -storyboard / -design with nano-banana / gpt-image-2 fallback.
+- `builder-av` (gemini/oauth, **AV Cinematographer**): owns shot_list authoring AND av generation. Gemini chosen for one killer feature: YouTube ingestion via reference-learning subagent (master cinematographer reference learning).
+- `patrol` (claude/minimax-api, **Asset Guardian**): file-level integrity only — PROJECT_INDEX schema, asset existence / size / hash, cartooner pipeline SLA monitoring; never reads asset content.
 
-> Note: the creative template is expected to migrate from gstack-harness to a dedicated `cartooner-harness` protocol layer (planned, not yet implemented). The creative workflow's primitives (lane / deposit / pick / iterate) differ structurally from the engineering chain's (dispatch / handoff / ack), so the protocol layers are intentionally split.
+> The creative template uses `cartooner-harness` (not `gstack-harness`) as its protocol layer. The creative workflow's primitives (lane / deposit / pick / iterate) differ structurally from the engineering chain's (dispatch / handoff / ack), so the protocol layers are intentionally split. See `core/skills/cartooner-harness/SKILL.md`.
 
 Still outside ClawSeat by design:
 

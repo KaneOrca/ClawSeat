@@ -381,7 +381,7 @@ bash scripts/install.sh --reset-harness-memory
 Available templates:
 
 - `clawseat-engineering`: 5-seat engineering template (memory + planner + builder + reviewer + patrol), where reviewer now merges QA + visual review. Bound to gstack skills.
-- `clawseat-creative`: 5-seat cartooner-bound creative team (memory + builder-image + builder-image-2 + builder-av + patrol). Two parallel image lanes plus an audio/video lane; all seats use cartooner skills.
+- `clawseat-creative`: 5-seat cartooner-bound creative team (memory + writer + builder-image + builder-av + patrol). Vision Steward + Story Specialist + Image Specialist + AV Cinematographer (Gemini for YouTube reference learning) + Asset Guardian; all seats use cartooner skills via cartooner-harness protocol layer.
 - `clawseat-solo`: 3-seat collaboration template (memory + builder + planner-gemini), all OAuth, standard brief -> workflow -> dispatch -> verdict cycle.
 
 ### Provider Selection — CLI Flag Mapping
@@ -444,7 +444,7 @@ What `install.sh` does in order:
 2. Resolve Python ≥3.11 before importing anything that needs `tomllib`.
 3. Resolve the project template and roster. `clawseat-engineering` renders
    `memory, planner, builder, reviewer, patrol`; `clawseat-creative` renders
-   `memory, builder-image, builder-image-2, builder-av, patrol`; `clawseat-solo`
+   `memory, writer, builder-image, builder-av, patrol`; `clawseat-solo`
    renders only `memory, builder, planner`.
 4. Run legacy path migration and seat liveness reconciliation.
 5. Verify host dependencies and run
@@ -535,7 +535,7 @@ Memory executes Phase-A in order:
 | B2-verify-memory | `tmux has-session -t <project>-memory`; relaunch once if dead. | Memory seat alive. |
 | B2.5-bootstrap-tenants | `python3 core/scripts/bootstrap_machine_tenants.py ~/.agents/memory/` — populates `~/.clawseat/machine.toml [openclaw_tenants.*]` from `machine/openclaw.json.agents`. | `list_openclaw_tenants()` returns non-empty (if OpenClaw installed). |
 | B3-verify-openclaw-binding | Read `~/.openclaw/workspace.toml` if present. | Project field matches or step is skipped with warning. |
-| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`clawseat-engineering` uses `planner`, `builder`, `reviewer`, `patrol`; `clawseat-creative` uses `builder-image`, `builder-image-2`, `builder-av`, `patrol`; `clawseat-solo` uses `builder`, `planner`): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
+| B3.5-launch-engineers | **Interactive, one-by-one**. For each worker from the selected template (`clawseat-engineering` uses `planner`, `builder`, `reviewer`, `patrol`; `clawseat-creative` uses `writer`, `builder-image`, `builder-av`, `patrol`; `clawseat-solo` uses `builder`, `planner`): ask operator for provider (default: claude-code + MiniMax), optionally `session switch-harness`, then `session start-engineer`, wait ≤15s for `tmux has-session`, and confirm the waiting pane auto-attached before moving on. | Each `install-<seat>` is alive and attached. |
 | B5-verify-feishu-binding | Read project binding metadata from `~/.agents/projects/install/project.toml` / `project-local.toml`. | `feishu_group_id` present *or* operator explicitly skips (CLI-only mode). |
 | B6-smoke | If `feishu_group_id` set, memory triggers planner to do one broadcast turn → `lark-cli` broadcasts a structured summary to the group. If skipped, memory runs CLI-only smoke (writes a test file, verifies via grep). | Smoke result recorded in `STATUS.md`. |
 | B7-write-status-ready | Write `~/.agents/tasks/install/STATUS.md`. | `phase=ready`, `providers=<memory + workers>`. |
@@ -645,15 +645,15 @@ hood, so the same lazy-spawn install flow works for additional projects too.
 ### Create a clawseat-creative project (cartooner-bound creative team)
 
 For image / video / audio / storyboard work bound to cartooner skills — uses a 5-seat roster
-(memory / builder-image x2 / builder-av / patrol):
+(memory / writer / builder-image / builder-av / patrol):
 
 | Seat | Tool | Cartooner skills |
 |------|------|------------------|
-| memory | claude/oauth | cartooner (router), cartooner-script-development, cartooner-resource-ops |
-| builder-image | codex/oauth | cartooner-image, cartooner-storyboard, cartooner-design, cartooner-prompt |
-| builder-image-2 | codex/oauth | (mirrors builder-image; for fan-out) |
-| builder-av | claude/minimax-api | cartooner-video, cartooner-audio, cartooner-seedance-cookbook |
-| patrol | claude/minimax-api | cartooner-resource-ops (asset integrity, pipeline SLA) |
+| memory (Vision Steward) | claude/minimax-api | cartooner (router), cartooner-resource-ops |
+| writer (Story Specialist) | claude/oauth | cartooner-script-development, viral-copywriter |
+| builder-image (Image Specialist) | codex/oauth | cartooner-image, cartooner-storyboard, cartooner-design, nano-banana, gpt-image-2 |
+| builder-av (AV Cinematographer) | gemini/oauth | cartooner-video, cartooner-audio, cartooner-prompt, cartooner-seedance-cookbook (Gemini for YouTube reference learning) |
+| patrol (Asset Guardian) | claude/minimax-api | cartooner-resource-ops (asset integrity, pipeline SLA) |
 
 ```bash
 # Via install.sh (bootstraps and starts memory):

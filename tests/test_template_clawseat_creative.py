@@ -29,8 +29,8 @@ _TEMPLATE = _REPO / "templates" / "clawseat-creative.toml"
 _INSTALL = _REPO / "scripts" / "install.sh"
 _EXPECTED_SEATS = [
     "memory",
+    "writer",
     "builder-image",
-    "builder-image-2",
     "builder-av",
     "patrol",
 ]
@@ -154,12 +154,14 @@ def test_clawseat_creative_template_schema_has_five_seats() -> None:
     assert data["defaults"]["window_mode"] == "split-2"
     assert data["defaults"]["monitor_max_panes"] == 5
     assert data["defaults"]["workspace_tools"] == ["TOOLS/memory.md"]
-    assert data["window_layout"]["workers_grid"]["left_main_seat"] == "builder-image"
-    assert data["window_layout"]["workers_grid"]["right_seats"] == ["builder-image-2", "builder-av", "patrol"]
+    assert data["window_layout"]["workers_grid"]["left_main_seat"] == "writer"
+    assert data["window_layout"]["workers_grid"]["right_seats"] == ["builder-image", "builder-av", "patrol"]
     assert [engineer["id"] for engineer in data["engineers"]] == _EXPECTED_SEATS
     assert data["engineers"][0]["role"] == "project-memory"
-    assert data["engineers"][1]["tool"] == "codex"
-    assert data["engineers"][3]["provider"] == "minimax"
+    assert data["engineers"][1]["tool"] == "claude"      # writer
+    assert data["engineers"][2]["tool"] == "codex"       # builder-image
+    assert data["engineers"][3]["tool"] == "gemini"      # builder-av
+    assert data["engineers"][3]["provider"] == "google"  # gemini oauth for YouTube reference learning
     assert data["engineers"][4]["patrol_authority"] is True
 
 
@@ -181,27 +183,46 @@ def test_clawseat_creative_template_declared_skills_include_cartooner_core() -> 
 
 
 def test_clawseat_creative_seats_bind_cartooner_skills() -> None:
-    """Each non-memory worker seat must reference at least one cartooner-* skill."""
+    """Each seat references only the cartooner-* skills relevant to its craft (no skill bloat)."""
     data = _load_template()
     seat_skills = {engineer["id"]: engineer.get("skills", []) for engineer in data["engineers"]}
 
+    # builder-image: cartooner image family + nano-banana / gpt-image-2 fallback;
+    # cartooner-prompt is NOT installed here (it's video-prompt focused)
     image_skills = seat_skills["builder-image"]
     assert any("cartooner-image" in s for s in image_skills)
     assert any("cartooner-storyboard" in s for s in image_skills)
     assert any("cartooner-design" in s for s in image_skills)
-    assert any("cartooner-prompt" in s for s in image_skills)
+    assert any("nano-banana" in s for s in image_skills)
+    assert any("gpt-image-2" in s for s in image_skills)
+    assert not any("cartooner-prompt" in s for s in image_skills), \
+        "cartooner-prompt is video-side; should not be installed on builder-image"
 
+    # builder-av: video + audio + Seedance cookbook + cartooner-prompt
     av_skills = seat_skills["builder-av"]
     assert any("cartooner-video" in s for s in av_skills)
     assert any("cartooner-audio" in s for s in av_skills)
     assert any("cartooner-prompt" in s for s in av_skills)
+    assert any("cartooner-seedance-cookbook" in s for s in av_skills)
 
+    # patrol: minimal — only cartooner-harness + cartooner-resource-ops
     patrol_skills = seat_skills["patrol"]
     assert any("cartooner-resource-ops" in s for s in patrol_skills)
+    assert len(patrol_skills) == 2, "patrol stays minimal — no gstack patrol/tmux-basics"
 
+    # memory: router + resource-ops; does NOT install clawseat-memory or memory-oracle
     memory_skills = seat_skills["memory"]
     assert any("cartooner/SKILL.md" in s for s in memory_skills), "memory must load cartooner router"
-    assert any("cartooner-script-development" in s for s in memory_skills)
+    assert any("cartooner-resource-ops" in s for s in memory_skills)
+    assert not any("clawseat-memory" in s for s in memory_skills), \
+        "clawseat-memory is engineering-bound; cartooner-harness self-contains memory behaviors"
+    assert not any("memory-oracle" in s for s in memory_skills), \
+        "memory-oracle (cross-project) is not needed in cartooner v1"
+
+    # writer: pure literary — cartooner-script-development + viral-copywriter
+    writer_skills = seat_skills["writer"]
+    assert any("cartooner-script-development" in s for s in writer_skills)
+    assert any("viral-copywriter" in s for s in writer_skills)
 
 
 def test_clawseat_creative_project_template_context_loads_five_profiles(
@@ -214,9 +235,16 @@ def test_clawseat_creative_project_template_context_loads_five_profiles(
     assert engineer_order == _EXPECTED_SEATS
     assert isinstance(optional_skills, list)
     assert profiles["memory"].role == "project-memory"
+    assert profiles["memory"].default_tool == "claude"
+    assert profiles["memory"].default_auth_mode == "api"
+    assert profiles["memory"].default_provider == "minimax"
+    assert profiles["writer"].default_tool == "claude"
+    assert profiles["writer"].default_auth_mode == "oauth"
     assert profiles["builder-image"].default_tool == "codex"
-    assert profiles["builder-av"].default_auth_mode == "api"
-    assert profiles["builder-av"].default_provider == "minimax"
+    assert profiles["builder-image"].default_auth_mode == "oauth"
+    assert profiles["builder-av"].default_tool == "gemini"
+    assert profiles["builder-av"].default_auth_mode == "oauth"
+    assert profiles["builder-av"].default_provider == "google"
     assert profiles["patrol"].patrol_authority is True
     assert project.template_name == "clawseat-creative"
 
@@ -224,10 +252,13 @@ def test_clawseat_creative_project_template_context_loads_five_profiles(
 @pytest.mark.parametrize(
     ("seat_id", "expected_role_fragment", "expected_skill_path", "expected_marker"),
     [
+        # memory still maps to memory-oracle skill via legacy SEAT_SKILL_MAP
         pytest.param("memory", "project-memory", "core/skills/memory-oracle/SKILL.md", "orphan knowledge holder", id="memory"),
-        pytest.param("builder-image", "Role: `builder-image`", "core/skills/builder/SKILL.md", "planner-assigned workflow steps", id="builder-image"),
-        pytest.param("builder-image-2", "Role: `builder-image-2`", "core/skills/builder/SKILL.md", "planner-assigned workflow steps", id="builder-image-2"),
-        pytest.param("builder-av", "Role: `builder-av`", "core/skills/builder/SKILL.md", "planner-assigned workflow steps", id="builder-av"),
+        # creative seats map to cartooner-harness/SKILL.md (cartooner-bound boundary)
+        pytest.param("writer", "Role: `screenwriter`", "core/skills/cartooner-harness/SKILL.md", "Story Specialist", id="writer"),
+        pytest.param("builder-image", "Role: `builder-image`", "core/skills/cartooner-harness/SKILL.md", "Image Specialist", id="builder-image"),
+        pytest.param("builder-av", "Role: `builder-av`", "core/skills/cartooner-harness/SKILL.md", "AV Cinematographer", id="builder-av"),
+        # patrol stays on its gstack patrol skill — covers both engineering and creative templates
         pytest.param("patrol", "Role: `patrol`", "core/skills/patrol/SKILL.md", "Cron-driven patrol seat", id="patrol"),
     ],
 )

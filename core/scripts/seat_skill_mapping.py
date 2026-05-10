@@ -10,6 +10,7 @@ SHARED_SKILLS: Final[tuple[str, ...]] = (
     "tmux-basics",
 )
 SEAT_SKILL_MAP: Final[dict[str, str]] = {
+    # engineering / solo template seats (gstack-bound)
     "ancestor": "clawseat-ancestor",
     "planner": "planner",
     "memory": "memory-oracle",
@@ -17,6 +18,12 @@ SEAT_SKILL_MAP: Final[dict[str, str]] = {
     "reviewer": "reviewer",
     "patrol": "patrol",
     "designer": "designer",
+    # clawseat-creative template seats (cartooner-harness-bound)
+    # Full hyphenated id checked first by seat_skill_key, so these win
+    # over the prefix-fallback (e.g. "builder-image" -> "builder").
+    "writer": "cartooner-harness",
+    "builder-image": "cartooner-harness",
+    "builder-av": "cartooner-harness",
 }
 
 
