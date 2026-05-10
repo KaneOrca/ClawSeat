@@ -216,6 +216,32 @@ class ResolveHandlers:
             for stale in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
                 env.pop(stale, None)
 
+        # Shared skill-level secrets (audit finding #6, 2026-05-11):
+        # ClawSeat's secret_file is auth-tied (auth_mode=api/oauth_token only).
+        # Skills like cartooner-image / cartooner-audio / cartooner-video etc.
+        # need provider keys (MINIMAX_API_KEY, etc.) regardless of the seat's
+        # auth mode. Without injection, builder-image (codex/oauth/chatgpt)
+        # had no MINIMAX_API_KEY in sandbox env and was forced to source the
+        # cartooner repo's .env as a workaround — sandbox isolation breach.
+        #
+        # Convention: any .env file under ~/.agents/secrets/shared/ is
+        # sourced into every seat's sandbox env. Operators put skill-level
+        # provider keys there once; all seats inherit. Override path via
+        # CLAWSEAT_SHARED_SECRETS_DIR.
+        shared_secrets_dir = Path(
+            os.environ.get("CLAWSEAT_SHARED_SECRETS_DIR")
+            or shared_agent_home / ".agents" / "secrets" / "shared"
+        )
+        if shared_secrets_dir.is_dir():
+            for env_file in sorted(shared_secrets_dir.glob("*.env")):
+                try:
+                    shared_env = self.hooks.parse_env_file(env_file)
+                except Exception:
+                    continue
+                for key, value in shared_env.items():
+                    if key not in env:  # auth-tied keys win over shared
+                        env[key] = value
+
         return binary, env
 
     def default_launch_args(self, session: Any) -> list[str]:
