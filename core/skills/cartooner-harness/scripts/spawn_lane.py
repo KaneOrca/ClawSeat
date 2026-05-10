@@ -58,6 +58,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Calling seat id (defaults to memory)")
     p.add_argument("--skip-wakeup", action="store_true",
                    help="Skip tmux wakeup (tests / dry runs)")
+    p.add_argument("--target-session", default="",
+                   help="Explicit tmux session name to wake (overrides "
+                        "resolve_seat_session). Use when target seat's tmux "
+                        "is bound to a different project than --project.")
     return p.parse_args(argv)
 
 
@@ -103,7 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     }
     common.write_project_index(args.project, index)
 
-    target_session = common.resolve_seat_session(args.project, args.seat) or ""
+    target_session = args.target_session.strip() or (
+        common.resolve_seat_session(args.project, args.seat) or ""
+    )
     wakeup_message = (
         f"[{args.actor}] lane_spawned: {lane_id} seat={args.seat} "
         f"count={args.count} shot={args.shot_id or '-'}; "

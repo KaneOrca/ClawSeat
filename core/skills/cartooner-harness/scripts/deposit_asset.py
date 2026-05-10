@@ -73,6 +73,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Set lane state=deposited (final candidate landed)")
     p.add_argument("--skip-wakeup", action="store_true",
                    help="Skip tmux wakeup of memory pane on final deposit")
+    p.add_argument("--target-session", default="",
+                   help="Explicit memory tmux session name (overrides "
+                        "resolve_seat_session). Use when memory's tmux is "
+                        "bound to a different project than --project.")
     return p.parse_args(argv)
 
 
@@ -173,7 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     wakeup_ok = None
     wakeup_reason = None
     if final:
-        memory_session = common.resolve_seat_session(args.project, "memory") or ""
+        memory_session = args.target_session.strip() or (
+            common.resolve_seat_session(args.project, "memory") or ""
+        )
         wakeup_message = (
             f"[{args.actor}] lane_completed: {args.lane_id} "
             f"({len(lane['result']['candidates'])} {args.asset_type} candidates ready); "

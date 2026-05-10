@@ -55,6 +55,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--summary", default="",
                    help="Optional one-line summary of the deliverable for memory's pane")
     p.add_argument("--skip-wakeup", action="store_true")
+    p.add_argument("--target-session", default="",
+                   help="Explicit tmux session name to wake (overrides "
+                        "resolve_seat_session for memory). Use when memory's "
+                        "tmux is bound to a different project than --project.")
     return p.parse_args(argv)
 
 
@@ -148,7 +152,9 @@ def main(argv: list[str] | None = None) -> int:
             fh.write(common.serialize_toml(record["result"]).rstrip("\n") + "\n")
             fh.write("+++\n")
 
-    memory_session = common.resolve_seat_session(args.project, "memory") or ""
+    memory_session = args.target_session.strip() or (
+        common.resolve_seat_session(args.project, "memory") or ""
+    )
     if args.fail:
         msg = (
             f"[{args.actor}] brief_failed: {args.brief_id} reason="

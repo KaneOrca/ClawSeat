@@ -78,6 +78,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         "set this to the seat itself)")
     p.add_argument("--skip-wakeup", action="store_true",
                    help="Skip tmux wakeup (tests / dry runs)")
+    p.add_argument("--target-session", default="",
+                   help="Explicit tmux session name to wake (overrides "
+                        "resolve_seat_session). Use when target seat's tmux "
+                        "is bound to a different project than --project.")
     return p.parse_args(argv)
 
 
@@ -154,7 +158,9 @@ def main(argv: list[str] | None = None) -> int:
     index.setdefault("briefs", {})[brief_id] = index_record
     common.write_project_index(args.project, index)
 
-    target_session = common.resolve_seat_session(args.project, args.target) or ""
+    target_session = args.target_session.strip() or (
+        common.resolve_seat_session(args.project, args.target) or ""
+    )
     wakeup_message = (
         f"[memory] brief_dispatched: {brief_id} intent={args.intent} "
         f"target={args.target}; read briefs/{brief_id}.toml"

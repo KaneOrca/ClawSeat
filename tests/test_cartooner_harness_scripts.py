@@ -2601,6 +2601,54 @@ def test_spawn_subagent_rejects_traversal_subagent_id(cartooner_env):
     assert "--subagent-id" in res.stderr
 
 
+def test_dispatch_brief_target_session_override(cartooner_env, cartooner_root):
+    """--target-session bypasses resolve_seat_session (cross-project transport)."""
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "narrative",
+        "--body", "test override",
+        "--target-session", "some-other-project-writer-claude",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    # When skip-wakeup is set, override is unused but argparse must accept it.
+
+
+def test_deliver_brief_target_session_override(cartooner_env, cartooner_root, tmp_path):
+    """--target-session on deliver_brief overrides memory session lookup."""
+    brief_id = _dispatch_brief_helper(cartooner_env, target="writer", intent="narrative")
+    deliverable = tmp_path / "out.md"
+    deliverable.write_text("done\n", encoding="utf-8")
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "writer",
+        "--output-path", str(deliverable),
+        "--target-session", "cross-project-memory-claude",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+
+
+def test_spawn_lane_target_session_override(cartooner_env):
+    res = _run(
+        "spawn_lane.py",
+        "--project", "demo",
+        "--seat", "builder-image",
+        "--count", "1",
+        "--prompt", "x",
+        "--target-session", "explicit-target",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+
+
 def test_dispatch_brief_rejects_traversal_parent_lane(cartooner_env):
     res = _run(
         "dispatch_brief.py",
