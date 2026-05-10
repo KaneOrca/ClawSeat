@@ -2495,6 +2495,95 @@ def test_patrol_sla_catches_stale_brief(cartooner_env, cartooner_root):
     assert "brief_id=brief-stale" in res.stdout
 
 
+# ── memory_internal_note (audit finding #1) ────────────────────────────
+
+
+def test_memory_internal_note_records_with_proper_schema(cartooner_env, cartooner_root):
+    """memory_internal_note emits valid event/actor schema, never role/action."""
+    res = _run(
+        "report_to_memory.py",
+        "--project", "demo",
+        "--event", "memory_internal_note",
+        "--seat", "memory",
+        "--triggered-by", "memory",
+        "--note", "anchor files written: brief.md / vision_spec.md / style_bible.md",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    log = (cartooner_root / "projects" / "demo" / "generation_log.jsonl").read_text()
+    last = json.loads(log.strip().splitlines()[-1])
+    assert last["event"] == "memory_internal_note"
+    assert last["actor"] == "memory"  # NOT "role"
+    assert "role" not in last
+    assert "action" not in last or last.get("action") == ""
+    assert "anchor files written" in last["note"]
+
+
+def test_memory_internal_note_requires_note_text(cartooner_env):
+    """Empty --note for memory_internal_note must fail-closed."""
+    res = _run(
+        "report_to_memory.py",
+        "--project", "demo",
+        "--event", "memory_internal_note",
+        "--seat", "memory",
+        "--triggered-by", "memory",
+        # no --note
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--note is required" in res.stderr
+
+
+def test_patrol_accepts_memory_internal_note(cartooner_env, cartooner_root):
+    """Patrol must accept memory_internal_note from memory actor without alert."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "memory_internal_note",
+            "actor": "memory",
+            "note": "drafted vision_spec.md v1",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 0
+    assert "clean" in res.stdout
+
+
+def test_patrol_alerts_on_memory_internal_note_from_wrong_actor(
+    cartooner_env, cartooner_root
+):
+    """Non-memory actor on memory_internal_note → patrol alert."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "memory_internal_note",
+            "actor": "writer",  # writer cannot use this channel
+            "note": "writer should not be writing internal notes",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "actor 'writer' not authorized" in res.stdout
+
+
 def test_report_to_memory_accepts_shot_list_authored(cartooner_env, cartooner_root):
     """shot_list_authored is now a valid event (mirrors shot_list_revised)."""
     res = _run(

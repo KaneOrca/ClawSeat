@@ -39,6 +39,13 @@ VALID_EVENTS = (
     "subagent_started",
     "subagent_completed",
     "subagent_failed",
+    # audit finding #1 (2026-05-11): memory needs a sanctioned channel
+    # for internal coordination notes (anchor files written, receiver
+    # notified via send-and-verify, brief drafted, etc.) — without it,
+    # memory was bypassing the protocol and appending raw role/action
+    # entries directly to generation_log.jsonl, breaking the schema
+    # patrol depends on.
+    "memory_internal_note",
 )
 VALID_TRIGGERS = ("user", "memory", "patrol")
 VALID_SUBAGENT_TYPES = ("", "root_cause", "reference_learning")
@@ -63,6 +70,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--subagent-inputs", default="{}", help="JSON object")
     p.add_argument("--subagent-output-path", default="",
                    help="Path to subagent's text report (no images)")
+    p.add_argument("--note", default="",
+                   help="(memory_internal_note) free-form coordination note: "
+                        "files anchored, receivers notified, briefs drafted, "
+                        "or any other memory-internal action that doesn't "
+                        "fit the typed events. Captured in generation_log so "
+                        "patrol audit + producer review can see what memory did.")
     return p.parse_args(argv)
 
 
@@ -102,6 +115,14 @@ def main(argv: list[str] | None = None) -> int:
         index["automation_flipped_reason"] = "user_direct_received"
         auto_flipped = True
 
+    # memory_internal_note requires --note (it's the entire payload)
+    if args.event == "memory_internal_note" and not args.note.strip():
+        common.fail_closed(
+            "--note is required for --event memory_internal_note "
+            "(this event is the sanctioned channel for memory's free-form "
+            "coordination notes; an empty note defeats the purpose)"
+        )
+
     common.write_project_index(args.project, index)
 
     common.append_generation_log(args.project, {
@@ -117,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         "subagent_inputs": subagent_inputs or None,
         "subagent_output_path": args.subagent_output_path or None,
         "auto_to_manual_flip": auto_flipped or None,
+        "note": args.note or None,
     })
 
     return 0

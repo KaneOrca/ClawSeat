@@ -64,6 +64,11 @@ EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
     "lane_completed": {"user", "memory", "patrol", "builder-image", "builder-av", "writer"},
     "shot_list_revised": {"user", "memory", "writer", "builder-av"},
     "shot_list_authored": {"user", "memory", "writer", "builder-av"},
+    # memory_internal_note (audit finding #1) — sanctioned free-form
+    # coordination channel; only memory-side actors. Patrol previously
+    # had to flag any non-protocol log entry as anomalous; this gives
+    # memory a typed home so its honest internal notes don't trip audit.
+    "memory_internal_note": {"memory", "memory_acting_director"},
     "subagent_started": {"builder-image", "builder-av"},
     "subagent_spawned": {"builder-image", "builder-av"},
     "subagent_completed": {"builder-image", "builder-av"},
