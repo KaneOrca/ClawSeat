@@ -246,16 +246,17 @@ Recent structural changes:
 - **2026-04 — core/migration/ layer** — houses `*_dynamic.py` scripts that replace the legacy harness scripts for profiles with `[dynamic_roster].enabled = true`. Traffic flows through `core/transport/transport_router.py` so callers never pick the wrong path by hand.
 - **2026-04 — transport/payload consolidation (audit P0/P1)** — `build_notify_payload` extracted into `_task_io.py`, rendering/validation for codex provider config moved into a typed `CodexProviderConfig` dataclass, shells/*/adapter_shim.py collapsed onto `_shim_base.py`.
 - **2026-04 — install.sh enhancements** — `--repo-root` flag (FR-7) allows installing a project pointing to a different business repo (separate from the ClawSeat root); `--reset-harness-memory` clears per-seat harness choice history (FR-1 `last-harness.toml` persistence). `CLAWSEAT_FEISHU_ENABLED=0` env var disables all Feishu sends globally (send_delegation_report, planner stop-hook, announce helpers).
-- **2026-04 — project templates** — `--template` flag selects one of three built-in rosters: `cartooner-creative` (4-seat), `clawseat-engineering` (5-seat with reviewer), or `clawseat-solo` (3-seat). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat is carried into `project-local.toml`.
+- **2026-04 — project templates** — `--template` flag selects one of four built-in rosters: `cartooner-creative` (4-seat), `clawseat-engineering` (5-seat with reviewer), `team-creation` (5-seat creative team), or `clawseat-solo` (3-seat). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat is carried into `project-local.toml`.
 
 ### Project Templates
 
-Three built-in project templates in `templates/`:
+Four built-in project templates in `templates/`:
 
 | Template | Seats | Count | Use case |
 |----------|-------|-------|----------|
 | `cartooner-creative` | memory writer visual patrol | 4 | Creative chain with direct memory/operator collaboration |
 | `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review) |
+| `team-creation` | memory builder-image builder-image-2 builder-av patrol | 5 | General creative team for short films, short dramas, and MV production |
 | `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
 
 ### Solo Template (Minimal 3-Seat)

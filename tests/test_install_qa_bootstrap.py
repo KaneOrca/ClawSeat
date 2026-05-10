@@ -59,7 +59,7 @@ def test_install_sh_invokes_install_patrol_hook(tmp_path: Path) -> None:
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, combined
-    assert "PENDING_SEATS=(planner builder reviewer patrol designer)" in combined
+    assert "PENDING_SEATS=(planner builder reviewer patrol)" in combined
     assert "Step 7.6: install patrol hook + patrol cron" in combined
     assert "engineer create patrol qa-bootstrap --no-monitor" in combined
     assert "install_patrol_hook.py --workspace" in combined

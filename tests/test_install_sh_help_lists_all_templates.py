@@ -25,6 +25,7 @@ def test_install_help_lists_all_templates() -> None:
     assert "5-seat" in output
     assert "clawseat-engineering" in output
     assert "6-seat" in output
+    assert "team-creation" in output
     assert "cartooner-creative" in output
     assert "4-seat" in output
     assert "clawseat-solo" in output

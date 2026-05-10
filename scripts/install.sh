@@ -88,7 +88,7 @@ STATUS_FILE=""
 PROJECT_LOCAL_TOML=""
 PROJECT_RECORD_PATH=""
 AGENTS_TEMPLATES_ROOT="$HOME/.agents/templates"
-CLAWSEAT_TEMPLATE_NAME="clawseat-creative"
+CLAWSEAT_TEMPLATE_NAME="clawseat-engineering"
 BOOTSTRAP_TEMPLATE_DIR=""
 BOOTSTRAP_TEMPLATE_PATH=""
 PENDING_SEATS=(planner builder reviewer patrol designer)
@@ -237,7 +237,7 @@ PY
         exit 0
         ;;
       --help|-h) cat <<'EOF'
-Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|clawseat-solo|cartooner-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]
+Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-creative|clawseat-engineering|team-creation|clawseat-solo|cartooner-creative] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]
 --repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.
 --detect-only prints one JSON environment summary and exits.
 --provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.
@@ -257,6 +257,7 @@ Non-TTY environments (agent-launcher sandbox, CI, detached agent sessions) must 
 Templates (--template):
   clawseat-creative      5-seat creative flow (memory + planner + builder + patrol + designer), OAuth + API mix
   clawseat-engineering   6-seat engineering flow (memory + planner + builder + reviewer + patrol + designer), OAuth + API mix
+  team-creation          5-seat creative team (memory + builder-image + builder-image-2 + builder-av + patrol), MiniMax-only audio/video
   clawseat-solo          3-seat minimal flow (memory + builder + planner), all OAuth
   cartooner-creative     4-seat cartooner flow (memory + writer + visual + patrol), OpenAI+Anthropic+Google + MiniMax API
 EOF
@@ -270,8 +271,8 @@ EOF
   fi
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-engineering|clawseat-creative|clawseat-solo|cartooner-creative) ;;
-    *) die 2 INVALID_TEMPLATE "--template must be clawseat-creative | clawseat-engineering | clawseat-solo | cartooner-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+    clawseat-engineering|clawseat-creative|team-creation|clawseat-solo|cartooner-creative) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-creative | clawseat-engineering | team-creation | clawseat-solo | cartooner-creative, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
   if [[ -n "$MEMORY_TOOL" ]]; then
     case "$MEMORY_TOOL" in
