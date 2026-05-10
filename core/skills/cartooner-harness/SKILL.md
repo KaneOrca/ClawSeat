@@ -175,23 +175,36 @@ violation that `patrol` audits via `generation_log.jsonl`.
   in `generation_log.jsonl`, that is a violation to be alerted, not a
   feature to be tolerated.
 
-### Soft enforcement (v1 strategy)
+### Three-layer enforcement (v1)
 
-cartooner-harness v1 uses **soft enforcement**:
+cartooner-harness v1 enforces the matrix in **three layers**, each
+progressively more structural. Higher layers shouldn't be relied on
+alone; the lower layers are the guarantee. See
+[`references/seat-authorization-enforcement.md`](references/seat-authorization-enforcement.md)
+for the full contract + integration pattern.
 
-1. This authorization matrix is embedded into each seat's `AGENTS.md` via
-   the cartooner-harness/SKILL.md role contract render. The seat sees its
+1. **Prose** (soft, LLM compliance): the matrix is embedded into each
+   seat's `AGENTS.md` via the role contract render. The seat sees its
    own authorized list and self-restrains.
-2. `patrol_pipeline_sla.py --audit-skill-authorization` scans
-   `generation_log.jsonl` for any `{seat, skill_invoked}` pair where
-   `skill_invoked ∉ authorized(seat)`. Violations alert memory; memory
+2. **Audit** (post-hoc, accountability): `patrol_pipeline_sla.py --check
+   authorization` scans `generation_log.jsonl` for events whose actor
+   is not in the authorized seat list. Violations alert memory; memory
    escalates to user (`seat_authorization_violation` is a default
    `escalate_on` trigger).
+3. **Gate** (hard stop, structural): each cartooner-* skill CLI imports
+   [`scripts/seat_gate.mjs`](scripts/seat_gate.mjs) at the top and
+   declares its allowed seats. Reads `$CLAWSEAT_SEAT` (set by
+   `core/launchers/agent-launcher.sh` per session.toml) and exits 2
+   with a structured refusal payload if the seat is not authorized.
+   Memory's bash subprocess fails immediately — no generation, no API
+   call, no asset on disk. SSOT for the matrix mapping lives at
+   [`scripts/seat_authorized_skills.json`](scripts/seat_authorized_skills.json).
 
-Hard physical isolation (per-seat sandbox skill mirror) is **future work**
-documented in `references/skill-isolation-roadmap.md` (not v1). The current
-mirror semantics ship the same `~/.agents/skills/*` to every seat; v1
-relies on the protocol contract + audit, not filesystem-level isolation.
+Hard OS-level filesystem isolation (sandbox-exec / namespace-based) is
+**future work** — sandbox HOME path narrowing alone cannot block
+absolute-path execution of cartooner-* binaries. The gate at each CLI
+entry point is the structural enforcement that cannot be bypassed by
+absolute paths or rationalization.
 
 ## Persistence Layout (replaces ~/.cartooner/_handoff/)
 
