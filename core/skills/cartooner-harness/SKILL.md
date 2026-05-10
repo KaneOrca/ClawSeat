@@ -239,6 +239,62 @@ relies on the protocol contract + audit, not filesystem-level isolation.
 other than user to view asset content or external reference media. Subagent
 context is discarded on return; main thread receives text reports only.
 
+## UI Layer (separate from protocol)
+
+The protocol scripts are **pure backend**: they manage state (PROJECT_INDEX,
+lane TOMLs, generation_log, tournaments, iterations) but never prompt the
+user directly. The UI for collecting user input is the **caller seat's**
+responsibility, and varies by seat's underlying tool:
+
+| Seat (tool) | UI mechanism for user prompts | Example |
+|---|---|---|
+| **memory (Claude Code)** | Native `AskUserQuestion` tool — structured options form | `pick_winner` candidate selection; `iterate_prompt` layer confirmation; `escalate_to_producer` resume / abort |
+| **builder-image (Codex CLI)** | tmux pane direct chat — user types in seat's pane | user-direct: "再来 4 张更暗的" → builder-image acts then `report_to_memory.py` |
+| **builder-av (Gemini CLI)** | tmux pane direct chat | user-direct: "ingest @youtube/wkw for shot rhythm" |
+| **writer (Claude Code)** | Native `AskUserQuestion` (rare; usually memory mediates) | clarifying questions during narrative drafting |
+| **patrol (Claude Code)** | None — read-only seat; queries answered in pane responses, no AskUserQuestion needed | "what's pipeline SLA?" → patrol prints status to pane |
+
+**Caller flow (manual-mode pick_winner)**:
+
+```
+memory (Claude Code, manual mode)
+   ↓ enumerate candidates from PROJECT_INDEX.assets where shot_id == X
+   ↓ AskUserQuestion(
+       question="Pick winner for shot-1:",
+       options=[<candidate metadata + paths>, "Reject all"]
+     )
+   ↓ user selects in Claude Code UI
+   ↓ if user picked one:
+   ↓   subprocess pick_winner.py --picked <id> --strategy manual
+   ↓ else if user "Reject all":
+   ↓   subprocess pick_winner.py --reject-all
+   ↓   AskUserQuestion(question="What's wrong?") → user types feedback
+   ↓   subprocess iterate_prompt.py --layer L3 --feedback "<text>" --parent-lane <id>
+```
+
+**Caller flow (auto-mode pick_winner)**:
+
+```
+memory (Claude Code, auto mode + model-metadata-rank strategy)
+   ↓ enumerate candidates
+   ↓ subprocess pick_winner.py --strategy model-metadata-rank --min-score 0.75
+   ↓ if exits 0:    proceed to next phase
+   ↓ if exits non-zero (no qualifying winner):
+   ↓   subprocess escalate_to_producer.py --trigger tournament_ready_no_auto_pick_strategy
+```
+
+**Why this split matters**:
+
+- **Cross-tool portability**: protocol scripts work the same for memory
+  (Claude Code) and builder-* (Codex / Gemini); only the UI layer varies
+- **Testability**: pure-backend scripts are subprocess-testable without
+  mocking LLM tool calls
+- **Auto/manual symmetry**: same `pick_winner.py` accepts both manual
+  picks (`--picked <id>` from AskUserQuestion result) and auto picks
+  (`--strategy model-metadata-rank` reads from index, no UI)
+- **Audit consistency**: every pick / iterate / escalate writes the same
+  generation_log shape, regardless of UI origin
+
 ## User Direct Channel
 
 (See [`references/user-direct-contract.md`](references/user-direct-contract.md))
