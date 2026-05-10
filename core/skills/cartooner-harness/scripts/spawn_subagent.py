@@ -200,6 +200,7 @@ def _spawn(args: argparse.Namespace) -> int:
 def _complete(args: argparse.Namespace) -> int:
     if not args.subagent_id:
         common.fail_closed("--action complete requires --subagent-id")
+    common.validate_id_token(args.subagent_id, kind="--subagent-id")
     if not args.report_path:
         common.fail_closed("--action complete requires --report-path")
 
@@ -280,6 +281,7 @@ def _complete(args: argparse.Namespace) -> int:
 def _fail(args: argparse.Namespace) -> int:
     if not args.subagent_id:
         common.fail_closed("--action fail requires --subagent-id")
+    common.validate_id_token(args.subagent_id, kind="--subagent-id")
 
     common.ensure_project_skeleton(args.project)
     index = common.load_project_index(args.project)

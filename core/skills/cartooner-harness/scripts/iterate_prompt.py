@@ -94,10 +94,12 @@ def main(argv: list[str] | None = None) -> int:
     common.ensure_project_skeleton(args.project)
     index = common.load_project_index(args.project)
 
-    if args.parent_lane and args.parent_lane not in index.get("lanes", {}):
-        common.fail_closed(
-            f"--parent-lane not in PROJECT_INDEX.lanes: {args.parent_lane}"
-        )
+    if args.parent_lane:
+        common.validate_id_token(args.parent_lane, kind="--parent-lane")
+        if args.parent_lane not in index.get("lanes", {}):
+            common.fail_closed(
+                f"--parent-lane not in PROJECT_INDEX.lanes: {args.parent_lane}"
+            )
 
     iter_id = make_iter_id(args.layer)
     now = common.now_iso()

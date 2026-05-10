@@ -86,14 +86,18 @@ def main(argv: list[str] | None = None) -> int:
     common.ensure_project_skeleton(args.project)
     index = common.load_project_index(args.project)
 
-    if args.parent_lane and args.parent_lane not in index.get("lanes", {}):
-        common.fail_closed(
-            f"--parent-lane not in PROJECT_INDEX.lanes: {args.parent_lane}"
-        )
-    if args.parent_round and args.parent_round not in index.get("tournaments", {}):
-        common.fail_closed(
-            f"--parent-round not in PROJECT_INDEX.tournaments: {args.parent_round}"
-        )
+    if args.parent_lane:
+        common.validate_id_token(args.parent_lane, kind="--parent-lane")
+        if args.parent_lane not in index.get("lanes", {}):
+            common.fail_closed(
+                f"--parent-lane not in PROJECT_INDEX.lanes: {args.parent_lane}"
+            )
+    if args.parent_round:
+        common.validate_id_token(args.parent_round, kind="--parent-round")
+        if args.parent_round not in index.get("tournaments", {}):
+            common.fail_closed(
+                f"--parent-round not in PROJECT_INDEX.tournaments: {args.parent_round}"
+            )
 
     escalation_id = make_escalation_id()
     now = common.now_iso()

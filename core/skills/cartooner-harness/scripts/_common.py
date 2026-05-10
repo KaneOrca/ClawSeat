@@ -411,3 +411,33 @@ def validate_project_id(project_id: str) -> str:
             f"got {project_id!r}"
         )
     return project_id
+
+
+def validate_id_token(token: str, *, kind: str) -> str:
+    """Reject path-like / control-char ids early.
+
+    Defense-in-depth for any user-controlled id that lands in a file
+    path (round_id, lane_id, brief_id, subagent_id, asset_id, etc.).
+    Without this, a malicious or malformed id like `../../../tmp/evil`
+    or `\\x00` would let `tournaments/<id>.toml` write outside the
+    project root or trip filesystem APIs.
+
+    Allowed: alphanumerics, dash, underscore, dot — but dot may NOT
+    appear at the start (no `.hidden`) and `..` is rejected outright.
+    Length capped at 128 bytes.
+    """
+    if not token or not str(token).strip():
+        fail_closed(f"{kind} must be a non-empty token")
+    if len(token) > 128:
+        fail_closed(f"{kind} {token[:32]!r}... exceeds 128 bytes")
+    bad_chars = ("/", "\\", "~", "$", "\n", "\r", "\t", "\0", " ", ":")
+    for ch in bad_chars:
+        if ch in token:
+            fail_closed(
+                f"{kind} must not contain path / control chars; got {token!r}"
+            )
+    if ".." in token:
+        fail_closed(f"{kind} must not contain '..'; got {token!r}")
+    if token.startswith(".") or token.startswith("-"):
+        fail_closed(f"{kind} must not start with '.' or '-'; got {token!r}")
+    return token

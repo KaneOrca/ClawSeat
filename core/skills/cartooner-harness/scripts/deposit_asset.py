@@ -79,6 +79,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    common.validate_id_token(args.lane_id, kind="--lane-id")
+    common.validate_id_token(args.asset_id, kind="--asset-id")
+
     asset_path = Path(args.asset_path).expanduser()
     if not asset_path.exists():
         common.fail_closed(f"asset file not found: {asset_path}")

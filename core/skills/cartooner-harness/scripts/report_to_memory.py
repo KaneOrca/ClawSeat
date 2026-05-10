@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     index = common.load_project_index(args.project)
 
     if args.supersedes:
+        common.validate_id_token(args.supersedes, kind="--supersedes")
         prior = index.setdefault("lanes", {}).get(args.supersedes)
         if prior is None:
             common.fail_closed(f"--supersedes lane not found: {args.supersedes}")

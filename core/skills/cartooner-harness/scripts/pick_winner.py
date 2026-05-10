@@ -69,11 +69,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    common.validate_id_token(args.round_id, kind="--round-id")
+
     candidates = [c.strip() for c in args.candidates.split(",") if c.strip()]
     if not candidates:
         common.fail_closed("--candidates must be non-empty")
     if len(set(candidates)) != len(candidates):
         common.fail_closed(f"--candidates contains duplicates: {candidates}")
+    for c in candidates:
+        common.validate_id_token(c, kind="--candidates element")
 
     if args.reject_all and args.picked:
         common.fail_closed("--reject-all and --picked are mutually exclusive")

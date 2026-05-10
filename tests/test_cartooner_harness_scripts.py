@@ -2501,3 +2501,116 @@ def test_report_to_memory_accepts_shot_list_authored(cartooner_env, cartooner_ro
     log = (cartooner_root / "projects" / "demo" / "generation_log.jsonl").read_text()
     last = json.loads(log.strip().splitlines()[-1])
     assert last["event"] == "shot_list_authored"
+
+
+# ── path-traversal hardening (validate_id_token) ───────────────────────
+
+
+@pytest.mark.parametrize("malicious_id", [
+    "../../../tmp/evil",
+    "/etc/passwd",
+    "round-1\nbacktrack",
+    ".hidden",
+    "-flag",
+    "round id with spaces",
+    "round..bad",
+    "x:colon",
+    "",
+])
+def test_pick_winner_rejects_malicious_round_id(cartooner_env, malicious_id):
+    res = _run(
+        "pick_winner.py",
+        "--project", "demo",
+        "--round-id", malicious_id,
+        "--candidates", "img-1",
+        "--strategy", "manual",
+        "--picked", "img-1",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    # Empty string is caught by argparse-required flag wrapping; others by validate_id_token.
+    assert ("--round-id" in res.stderr) or ("required" in res.stderr.lower())
+
+
+def test_pick_winner_rejects_traversal_in_candidate(cartooner_env, cartooner_root):
+    """Candidate ids land in PROJECT_INDEX.assets keys + tournament records."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({
+            "project_id": "demo", "version": 1, "automation_mode": "manual",
+            "lanes": {}, "assets": {"../../../tmp/evil": {"lane": "lane-x"}},
+            "tournaments": {},
+        }),
+        encoding="utf-8",
+    )
+    res = _run(
+        "pick_winner.py",
+        "--project", "demo",
+        "--round-id", "round-1",
+        "--candidates", "../../../tmp/evil",
+        "--strategy", "manual",
+        "--picked", "../../../tmp/evil",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--candidates element" in res.stderr
+
+
+def test_deposit_asset_rejects_traversal_lane_id(cartooner_env, tmp_path):
+    asset = tmp_path / "img.png"
+    asset.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo",
+        "--lane-id", "../../../tmp/evil",
+        "--asset-id", "img-1",
+        "--asset-path", str(asset),
+        "--actor", "builder-image",
+        "--asset-type", "image",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--lane-id" in res.stderr
+
+
+def test_deliver_brief_rejects_traversal_brief_id(cartooner_env):
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", "../../../tmp/evil",
+        "--actor", "writer",
+        "--fail",
+        "--reason", "test",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--brief-id" in res.stderr
+
+
+def test_spawn_subagent_rejects_traversal_subagent_id(cartooner_env):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "fail",
+        "--subagent-id", "../../../tmp/evil",
+        "--reason", "test",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--subagent-id" in res.stderr
+
+
+def test_dispatch_brief_rejects_traversal_parent_lane(cartooner_env):
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "narrative",
+        "--body", "x",
+        "--parent-lane", "../../../tmp/evil",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--parent-lane" in res.stderr

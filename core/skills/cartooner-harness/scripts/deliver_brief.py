@@ -61,6 +61,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    common.validate_id_token(args.brief_id, kind="--brief-id")
+
     if args.fail and args.output_path:
         common.fail_closed("--fail and --output-path are mutually exclusive")
     if not args.fail and not args.output_path:
