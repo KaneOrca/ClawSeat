@@ -131,12 +131,41 @@ def _load_role_skill_content(
     return _read_skill(role_name)
 
 
+_CARTOONER_TEMPLATE_NAMES = frozenset({"clawseat-creative"})
+_CARTOONER_SHARED_SEATS = frozenset({"memory", "patrol"})
+
+
+def _resolve_cartooner_role_hint(
+    seat_id: str,
+    role_hint: str | None,
+    template_name: str | None,
+) -> str | None:
+    """Override role_hint for memory/patrol when the project is cartooner-bound.
+
+    memory + patrol are seat ids shared between engineering and creative
+    templates. Their global engineer.toml carries the engineering role
+    ('project-memory' / 'qa') so seat_skill_mapping resolves to the
+    engineering role contract (memory-oracle / patrol). For cartooner
+    projects, override to cartooner-harness so the loaded canonical
+    contract matches the protocol the seat actually runs.
+    """
+    template = (template_name or "").strip()
+    if template not in _CARTOONER_TEMPLATE_NAMES:
+        return role_hint
+    normalized = (seat_id or "").strip().lower()
+    if normalized in _CARTOONER_SHARED_SEATS:
+        return "cartooner-harness"
+    return role_hint
+
+
 def _role_skill_section_lines(
     repo_root: Path,
     seat_id: str,
     role_hint: str | None = None,
+    template_name: str | None = None,
 ) -> list[str]:
     """Render the `## Role SKILL (canonical)` block, or [] when no skill."""
+    role_hint = _resolve_cartooner_role_hint(seat_id, role_hint, template_name)
     info = _load_role_skill_content(repo_root, seat_id, role_hint)
     if not info:
         return []
@@ -338,7 +367,7 @@ class TemplateHandlers:
         )
         if engineer.skills:
             codex_lines.extend(["", *self.hooks.render_loaded_skills_lines(engineer, session.engineer_id)])
-        codex_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
+        codex_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or "")))
 
         tasks_root = getattr(project, "tasks_root", f"{repo_root}/.tasks")
         profile_display = getattr(project, "profile_path", "")
@@ -376,7 +405,7 @@ class TemplateHandlers:
         claude_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             claude_lines.extend(["", *dispatch_playbook_lines])
-        claude_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
+        claude_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or "")))
 
         gemini_lines = [
             f"# {session.engineer_id}",
@@ -407,7 +436,7 @@ class TemplateHandlers:
         gemini_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             gemini_lines.extend(["", *dispatch_playbook_lines])
-        gemini_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
+        gemini_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or "")))
 
         workspace_notes_lines = [
             "# Workspace Notes",
@@ -489,7 +518,11 @@ class TemplateHandlers:
         rendered = template_map.get(tool, {})
         if session.engineer_id == "memory":
             memory_reminder_lines = self.hooks.render_protocol_reminder_lines(engineer, engineer.role)
-            is_cartooner_memory = str(engineer.role or "").startswith("cartooner-")
+            template_name_str = str(getattr(project, "template_name", "") or "")
+            is_cartooner_memory = (
+                str(engineer.role or "").startswith("cartooner-")
+                or template_name_str in _CARTOONER_TEMPLATE_NAMES
+            )
             memory_variant = "cartooner" if is_cartooner_memory else ("claude" if tool == "claude" else "gemini")
             memory_doc = self._render_workspace_memory_template(
                 memory_variant,
@@ -500,7 +533,7 @@ class TemplateHandlers:
             memory_doc = _insert_after_first_metadata_block(memory_doc, memory_reminder_lines)
             if not is_cartooner_memory:
                 role_skill = "\n".join(
-                    _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None)
+                    _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or ""))
                 )
                 if role_skill:
                     memory_doc = memory_doc.rstrip() + "\n" + role_skill + "\n"
