@@ -28,6 +28,14 @@ TMUX_COMMAND_RETRIES = 2
 TMUX_COMMAND_TIMEOUT_SECONDS = 8.0
 TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 
+# Stability window for _assert_session_running (audit finding #5).
+# Some agent CLIs (notably codex) can spawn-then-exit within 1-3s of
+# tmux new-session — long enough to pass the immediate post-launch
+# check, short enough to leave a dead pane that tmux GC'd before
+# the operator notices. Re-verify after this window to catch transient
+# launch failures that the immediate check would miss.
+SESSION_STABILITY_WINDOW_SECONDS = 4.0
+
 # ── iTerm integration ─────────────────────────────────────────────────────────
 
 # AppleScript closes the single iTerm session/pane that owns the given tty —

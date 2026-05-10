@@ -21,6 +21,7 @@ from agent_admin_session_base import (
     TMUX_COMMAND_RETRIES,
     TMUX_COMMAND_RETRY_DELAY_SECONDS,
     TMUX_COMMAND_TIMEOUT_SECONDS,
+    SESSION_STABILITY_WINDOW_SECONDS,
     _REPO_ROOT,
     _close_iterm_pane_by_tty,
     _engineer_profile_path,
@@ -216,6 +217,30 @@ class SessionStartLifecycle:
         if output.returncode != 0 or not output.stdout.strip():
             raise SessionStartError(
                 f"{operation} failed for '{session.session}': no active panes detected; state={self._session_window_state(session.session)}"
+            )
+
+        # Stability window (audit finding #5): some agent CLIs spawn-then-exit
+        # within a few seconds of tmux new-session — long enough for the
+        # immediate pane check above to pass, short enough that the operator
+        # finds an empty grid moments later. Re-check after a short pause to
+        # reject flaky launches.
+        time.sleep(SESSION_STABILITY_WINDOW_SECONDS)
+        if not self.hooks.tmux_has_session(session.session):
+            raise SessionStartError(
+                f"{operation} failed for '{session.session}': session died "
+                f"within {SESSION_STABILITY_WINDOW_SECONDS}s stability window "
+                f"(spawn-then-exit). state={self._session_window_state(session.session)}"
+            )
+        recheck = self._run_tmux_with_retry(
+            ["list-panes", "-t", session.session, "-F", "#{pane_id}"],
+            reason=f"{operation} stability re-verify panes for {session.session}",
+            check=False,
+        )
+        if recheck.returncode != 0 or not recheck.stdout.strip():
+            raise SessionStartError(
+                f"{operation} failed for '{session.session}': panes vanished "
+                f"within {SESSION_STABILITY_WINDOW_SECONDS}s stability window. "
+                f"state={self._session_window_state(session.session)}"
             )
 
     def _role_for_session(self, session: Any, project: Any) -> str:
