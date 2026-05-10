@@ -220,24 +220,32 @@ relies on the protocol contract + audit, not filesystem-level isolation.
 
 `~/.cartooner/_handoff/` is removed. cartooner-harness is a clean break.
 
-## Protocol Primitives (10 scripts)
+## Protocol Primitives
 
-| Script | Caller | Effect |
-|---|---|---|
-| `spawn_lane.py` | memory (or seat self-dispatch) | Open N concurrent generation lanes on a target seat |
-| `deposit_asset.py` | builder-* | Persist a generated asset with model_metadata + file_metadata only (no LLM self-eval) |
-| `pick_winner.py` | memory | Expose N candidates to user (or auto-pick when configured); record pick |
-| `iterate_prompt.py` | memory | Route user feedback to L1 / L2 / L3 and re-spawn |
-| `share_style_bible.py` | memory | Push style_bible.md / character_dna.json metadata to lanes |
-| `render_asset_tree.py` | any seat | CLI view: asset tree + active lanes + tournament status |
-| `patrol_pipeline_sla.py` | patrol | Probe pipeline + verify PROJECT_INDEX.json; alert on degradation |
-| `report_to_memory.py` | any seat (mandatory after user-direct) | Notify memory of any user-direct request fail-closed |
-| `set_automation_mode.py` | user | Toggle manual / auto, configure pick_strategy + escalate_on |
-| `spawn_subagent.py` | builder-image / builder-av | Spawn isolated subagent (root-cause / reference-learning); enforce no-image-policy boundary |
+v1 ships 10 backend scripts. `spawn_subagent.py` is documented as v2 work
+(soft-enforcement audit hook); v1 routes subagent lifecycle through
+`report_to_memory.py` events (`subagent_started` / `_completed` / `_failed`).
 
-`spawn_subagent.py` is the **only** sanctioned mechanism for any seat
-other than user to view asset content or external reference media. Subagent
-context is discarded on return; main thread receives text reports only.
+| Script | Status | Caller | Effect |
+|---|---|---|---|
+| `spawn_lane.py` | ✅ v1 | memory (or seat self-dispatch) | Open N concurrent generation lanes on a target seat |
+| `deposit_asset.py` | ✅ v1 | builder-* | Persist a generated asset with model_metadata + file_metadata only (no LLM self-eval) |
+| `pick_winner.py` | ✅ v1 | memory | Record pick from N candidates (caller's UI handles user prompt; supports manual / model-metadata-rank / first-passing / random-from-passing strategies) |
+| `iterate_prompt.py` | ✅ v1 | memory | Record user feedback at L1 / L2 / L3 layer (caller dispatches downstream action) |
+| `share_style_bible.py` | ✅ v1 | memory | Set / get / history the project's style_bible (or character_dna) pointer with versioning |
+| `render_asset_tree.py` | ✅ v1 | any seat | Read-only CLI view: lanes + assets grouped by shot, plus tournaments / iterations / escalations |
+| `patrol_pipeline_sla.py` | ✅ v1 | patrol | SLA + integrity + skill-authorization audit; exits 2 on anomalies |
+| `report_to_memory.py` | ✅ v1 | any seat (mandatory after user-direct) | Notify memory of user-direct request; auto-flips to manual on `user_direct_request` |
+| `set_automation_mode.py` | ✅ v1 | user | Toggle manual / auto; auto requires explicit pick_strategy + (optional) escalate_on triggers |
+| `escalate_to_producer.py` | ✅ v1 | memory (auto mode) | Record escalation; optionally `--auto-flip-to-manual` to atomically flip mode + log trigger |
+| `spawn_subagent.py` | ⏳ v2 | builder-image / builder-av | Will be the only sanctioned mechanism for any seat other than user to view asset content or external reference media. v1 uses report_to_memory subagent events for tracking. |
+
+In v1, subagent invocation happens via the seat's native LLM tooling
+(Claude Code's `Agent`, Codex's subagent, Gemini's subagent); the protocol
+contract requires the seat to call `report_to_memory.py
+--event subagent_started` before, and `--event subagent_completed` after,
+with a path to a text-only report under `references_learned/`. v2
+`spawn_subagent.py` will harden this with id allocation + path validation.
 
 ## UI Layer (separate from protocol)
 

@@ -925,3 +925,634 @@ def test_full_lifecycle_with_iteration(cartooner_env, cartooner_root, tmp_path):
     assert log_events.count("asset_deposited") == 4
     assert "pick_winner" in log_events
     assert "iterate_prompt" in log_events
+
+
+# ── set_automation_mode ──────────────────────────────────────────────
+
+
+def test_set_automation_mode_manual_default(cartooner_env, cartooner_root):
+    res = _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "manual",
+        "--actor", "user",
+        "--triggered-by", "user_request",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == "manual"
+
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["automation_mode"] == "manual"
+    assert index["automation_config"]["mode"] == "manual"
+    assert index["automation_config"]["set_by"] == "user"
+    # manual mode should not carry pick_strategy or escalate_on
+    assert "pick_strategy" not in index["automation_config"]
+
+
+def test_set_automation_mode_auto_requires_pick_strategy(cartooner_env):
+    res = _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--actor", "user",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "pick-strategy" in (res.stderr or "")
+
+
+def test_set_automation_mode_auto_with_strategy_and_triggers(cartooner_env, cartooner_root):
+    res = _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--pick-strategy", "model-metadata-rank",
+        "--escalate-on", "lane_failure,sla_breach,user_direct_received",
+        "--actor", "user",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["automation_mode"] == "auto"
+    assert index["automation_config"]["pick_strategy"] == "model-metadata-rank"
+    assert index["automation_config"]["escalate_on"] == [
+        "lane_failure", "sla_breach", "user_direct_received",
+    ]
+
+
+def test_set_automation_mode_auto_rejects_memory_actor(cartooner_env):
+    res = _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--pick-strategy", "model-metadata-rank",
+        "--actor", "memory_acting_director",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "self-elevate" in (res.stderr or "") or "user" in (res.stderr or "")
+
+
+def test_set_automation_mode_auto_rejects_unknown_strategy(cartooner_env):
+    res = _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--pick-strategy", "ai-overlord-decides",
+        "--actor", "user",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_set_automation_mode_auto_rejects_unknown_trigger(cartooner_env):
+    res = _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--pick-strategy", "model-metadata-rank",
+        "--escalate-on", "lane_failure,fictional_trigger",
+        "--actor", "user",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+# ── escalate_to_producer ─────────────────────────────────────────────
+
+
+def test_escalate_to_producer_records_and_flips_mode(cartooner_env, cartooner_root):
+    # First go to auto mode
+    _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--pick-strategy", "model-metadata-rank",
+        "--actor", "user",
+        env=cartooner_env,
+    )
+    # Then escalate with auto-flip
+    res = _run(
+        "escalate_to_producer.py",
+        "--project", "demo",
+        "--trigger", "tournament_ready_no_auto_pick_strategy",
+        "--auto-flip-to-manual",
+        "--context", "no qualifying winner above 0.75 threshold",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    esc_id = res.stdout.strip()
+    assert esc_id.startswith("esc-")
+
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["automation_mode"] == "manual"
+    assert esc_id in index["escalations"]
+    rec = index["escalations"][esc_id]
+    assert rec["trigger"] == "tournament_ready_no_auto_pick_strategy"
+    assert rec["status"] == "open"
+    assert rec["mode_at_escalation"] == "auto"
+
+    esc_file = project_root / "escalations" / f"{esc_id}.toml"
+    assert esc_file.is_file()
+    text = esc_file.read_text(encoding="utf-8")
+    assert 'trigger = "tournament_ready_no_auto_pick_strategy"' in text
+    assert 'status = "open"' in text
+
+
+def test_escalate_to_producer_without_flip_keeps_mode(cartooner_env, cartooner_root):
+    _run(
+        "set_automation_mode.py",
+        "--project", "demo",
+        "--mode", "auto",
+        "--pick-strategy", "model-metadata-rank",
+        "--actor", "user",
+        env=cartooner_env,
+    )
+    res = _run(
+        "escalate_to_producer.py",
+        "--project", "demo",
+        "--trigger", "phase_transition",
+        "--context", "moving image -> video",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["automation_mode"] == "auto"
+
+
+def test_escalate_to_producer_rejects_unknown_lane(cartooner_env):
+    res = _run(
+        "escalate_to_producer.py",
+        "--project", "demo",
+        "--trigger", "lane_failure",
+        "--parent-lane", "lane-fake-deadbeef",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_escalate_to_producer_rejects_unknown_round(cartooner_env):
+    res = _run(
+        "escalate_to_producer.py",
+        "--project", "demo",
+        "--trigger", "tournament_ready_no_auto_pick_strategy",
+        "--parent-round", "round-fake",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_escalate_to_producer_logs_event_with_trigger(cartooner_env, cartooner_root):
+    res = _run(
+        "escalate_to_producer.py",
+        "--project", "demo",
+        "--trigger", "lane_failure",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    project_root = cartooner_root / "projects" / "demo"
+    log = (project_root / "generation_log.jsonl").read_text(encoding="utf-8").strip()
+    last = json.loads(log.splitlines()[-1])
+    assert last["event"] == "escalate_to_producer"
+    assert last["trigger"] == "lane_failure"
+
+
+# ── share_style_bible ────────────────────────────────────────────────
+
+
+def test_share_style_bible_set_increments_version_and_records_history(
+    cartooner_env, cartooner_root, tmp_path
+):
+    bible_v1 = tmp_path / "bible_v1.md"
+    bible_v1.write_text("# style bible v1", encoding="utf-8")
+    bible_v2 = tmp_path / "bible_v2.md"
+    bible_v2.write_text("# style bible v2 (darker)", encoding="utf-8")
+
+    r1 = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "set",
+        "--bible-path", str(bible_v1),
+        "--note", "first cut",
+        env=cartooner_env,
+    )
+    assert r1.returncode == 0, r1.stderr
+    assert r1.stdout.strip() == "1"
+
+    r2 = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "set",
+        "--bible-path", str(bible_v2),
+        "--note", "darker palette",
+        env=cartooner_env,
+    )
+    assert r2.returncode == 0, r2.stderr
+    assert r2.stdout.strip() == "2"
+
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    sb = index["style_bible"]
+    assert sb["version"] == 2
+    assert sb["path"] == str(bible_v2)
+    assert sb["note"] == "darker palette"
+    assert len(sb["history"]) == 1
+    assert sb["history"][0]["version"] == 1
+    assert sb["history"][0]["path"] == str(bible_v1)
+
+
+def test_share_style_bible_get_returns_current_path(cartooner_env, tmp_path):
+    bible = tmp_path / "bible.md"
+    bible.write_text("# bible", encoding="utf-8")
+    _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "set",
+        "--bible-path", str(bible),
+        env=cartooner_env,
+    )
+    res = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "get",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    assert res.stdout.strip() == str(bible)
+
+
+def test_share_style_bible_get_returns_empty_when_unset(cartooner_env):
+    res = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "get",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    assert res.stdout.strip() == ""
+
+
+def test_share_style_bible_set_rejects_missing_file(cartooner_env, tmp_path):
+    res = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "set",
+        "--bible-path", str(tmp_path / "ghost.md"),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_share_style_bible_set_requires_bible_path(cartooner_env):
+    res = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "set",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_share_style_bible_history_action(cartooner_env, tmp_path):
+    bible_v1 = tmp_path / "v1.md"
+    bible_v1.write_text("v1", encoding="utf-8")
+    bible_v2 = tmp_path / "v2.md"
+    bible_v2.write_text("v2", encoding="utf-8")
+    _run("share_style_bible.py", "--project", "demo", "--action", "set",
+         "--bible-path", str(bible_v1), env=cartooner_env)
+    _run("share_style_bible.py", "--project", "demo", "--action", "set",
+         "--bible-path", str(bible_v2), env=cartooner_env)
+    res = _run("share_style_bible.py", "--project", "demo", "--action", "history",
+               env=cartooner_env)
+    assert res.returncode == 0
+    lines = [l for l in res.stdout.strip().splitlines() if l]
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert rec["version"] == 1
+    assert rec["path"] == str(bible_v1)
+
+
+def test_share_style_bible_character_dna_target(cartooner_env, cartooner_root, tmp_path):
+    dna = tmp_path / "dna.json"
+    dna.write_text('{"name": "test"}', encoding="utf-8")
+    res = _run(
+        "share_style_bible.py",
+        "--project", "demo",
+        "--action", "set",
+        "--target", "character-dna",
+        "--bible-path", str(dna),
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["character_dna"]["path"] == str(dna)
+    assert index["character_dna"]["version"] == 1
+    # style_bible should be untouched
+    assert "style_bible" not in index or not index["style_bible"].get("path")
+
+
+# ── render_asset_tree ────────────────────────────────────────────────
+
+
+def test_render_asset_tree_missing_project_returns_2(cartooner_env):
+    res = _run(
+        "render_asset_tree.py",
+        "--project", "no-such-project",
+        env=cartooner_env,
+    )
+    assert res.returncode == 2
+
+
+def test_render_asset_tree_text_renders_lanes_and_assets(
+    cartooner_env, cartooner_root, tmp_path
+):
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("img-001", "img-002"))
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-2",
+                       asset_ids=("img-003",))
+    res = _run(
+        "render_asset_tree.py",
+        "--project", "demo",
+        "--format", "text",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    out = res.stdout
+    assert "project: demo" in out
+    assert "mode=manual" in out
+    assert "shot-1" in out
+    assert "shot-2" in out
+    assert "img-001" in out
+    assert "img-002" in out
+    assert "img-003" in out
+
+
+def test_render_asset_tree_json_format(cartooner_env, tmp_path):
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a", "b"))
+    res = _run(
+        "render_asset_tree.py",
+        "--project", "demo",
+        "--format", "json",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    payload = json.loads(res.stdout)
+    assert payload["project_id"] == "demo"
+    assert payload["automation_mode"] == "manual"
+    assert "shot-1" in payload["shots"]
+    lanes = payload["shots"]["shot-1"]["lanes"]
+    assert len(lanes) == 1
+    [(_, lane)] = lanes.items()
+    asset_ids = {a["asset_id"] for a in lane["assets"]}
+    assert asset_ids == {"a", "b"}
+
+
+def test_render_asset_tree_includes_tournaments_iterations_escalations(
+    cartooner_env, tmp_path
+):
+    lane = _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                              asset_ids=("a", "b"))
+    _run("pick_winner.py", "--project", "demo", "--round-id", "shot-1-r1",
+         "--candidates", "a,b", "--strategy", "manual", "--picked", "a",
+         env=cartooner_env)
+    _run("iterate_prompt.py", "--project", "demo", "--layer", "L3",
+         "--feedback", "deeper shadow", "--parent-lane", lane,
+         env=cartooner_env)
+    _run("escalate_to_producer.py", "--project", "demo",
+         "--trigger", "phase_transition", env=cartooner_env)
+    res = _run("render_asset_tree.py", "--project", "demo", env=cartooner_env)
+    assert res.returncode == 0
+    out = res.stdout
+    assert "tournaments:" in out
+    assert "iterations:" in out
+    assert "escalations:" in out
+    assert "shot-1-r1" in out
+
+
+def test_render_asset_tree_hides_superseded_by_default(cartooner_env, tmp_path):
+    lane1 = _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                               asset_ids=("a",))
+    # supersede via report_to_memory --supersedes
+    _run("report_to_memory.py", "--project", "demo",
+         "--event", "user_direct_request", "--seat", "memory",
+         "--supersedes", lane1, "--intent", "redo", env=cartooner_env)
+    res = _run("render_asset_tree.py", "--project", "demo", env=cartooner_env)
+    assert res.returncode == 0
+    # superseded lane should be hidden
+    assert lane1 not in res.stdout
+
+    res2 = _run("render_asset_tree.py", "--project", "demo",
+                "--include-superseded", env=cartooner_env)
+    assert res2.returncode == 0
+    assert lane1 in res2.stdout
+
+
+# ── patrol_pipeline_sla ──────────────────────────────────────────────
+
+
+def test_patrol_clean_project_exits_zero(cartooner_env, tmp_path):
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a", "b"))
+    res = _run("patrol_pipeline_sla.py", "--project", "demo", env=cartooner_env)
+    assert res.returncode == 0, res.stderr
+    assert "clean (no anomalies)" in res.stdout
+
+
+def test_patrol_missing_project_returns_1(cartooner_env):
+    res = _run("patrol_pipeline_sla.py", "--project", "ghost", env=cartooner_env)
+    assert res.returncode == 1
+
+
+def test_patrol_integrity_detects_missing_asset_file(
+    cartooner_env, cartooner_root, tmp_path
+):
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a", "b"))
+    # delete one asset file
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    asset_path = Path(index["assets"]["a"]["path"])
+    asset_path.unlink()
+
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "integrity", env=cartooner_env)
+    assert res.returncode == 2
+    assert "asset file missing" in res.stdout
+
+
+def test_patrol_integrity_detects_size_mismatch(
+    cartooner_env, cartooner_root, tmp_path
+):
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a",))
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    asset_path = Path(index["assets"]["a"]["path"])
+    # modify file to change size
+    asset_path.write_bytes(b"different size content")
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "integrity", env=cartooner_env)
+    assert res.returncode == 2
+    assert "size differs" in res.stdout
+
+
+def test_patrol_sla_detects_old_lane(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """Spawn a lane, then mutate created_at to be old; SLA check should flag."""
+    res = _run("spawn_lane.py", "--project", "demo", "--seat", "builder-image",
+               "--count", "1", "--prompt", "x", "--shot-id", "shot-1",
+               env=cartooner_env)
+    assert res.returncode == 0
+    lane_id = res.stdout.strip()
+
+    project_root = cartooner_root / "projects" / "demo"
+    index_path = project_root / "PROJECT_INDEX.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    # forge created_at to 2 hours ago
+    index["lanes"][lane_id]["created_at"] = "2026-05-10T00:00:00.000+00:00"
+    index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "sla", "--sla-threshold-mins", "30",
+               env=cartooner_env)
+    assert res.returncode == 2
+    assert "stuck in state=spawned" in res.stdout
+
+
+def test_patrol_authorization_detects_unauthorized_actor(
+    cartooner_env, cartooner_root
+):
+    """Manually inject a forged log line with an unauthorized actor."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    log_path = project_root / "generation_log.jsonl"
+    log_path.write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "pick_winner",
+            "actor": "patrol",   # patrol cannot pick — violation
+            "round_id": "shot-1-r1",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "not authorized for event" in res.stdout
+    assert "'patrol'" in res.stdout
+
+
+def test_patrol_authorization_detects_asset_type_mismatch(
+    cartooner_env, cartooner_root
+):
+    """builder-image depositing video — protocol violation."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    log_path = project_root / "generation_log.jsonl"
+    log_path.write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "asset_deposited",
+            "actor": "builder-image",
+            "asset_type": "video",   # image seat depositing video — violation
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "not authorized for asset_type" in res.stdout
+
+
+def test_patrol_exit_zero_on_anomaly_flag(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """--exit-zero-on-anomaly suppresses non-zero exit but still reports."""
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a",))
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    Path(index["assets"]["a"]["path"]).unlink()
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "integrity", "--exit-zero-on-anomaly",
+               env=cartooner_env)
+    assert res.returncode == 0
+    assert "asset file missing" in res.stdout
+
+
+def test_patrol_json_format(cartooner_env, tmp_path):
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a",))
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--format", "json", env=cartooner_env)
+    assert res.returncode == 0
+    payload = json.loads(res.stdout)
+    assert payload["project"] == "demo"
+    assert "checks_run" in payload
+    assert "anomalies" in payload
+
+
+# ── e2e: auto mode → escalate → manual flip ──────────────────────────
+
+
+def test_e2e_auto_mode_escalation_flips_to_manual(cartooner_env, cartooner_root, tmp_path):
+    """User starts auto mode, memory hits a wall, escalates, auto-flips to manual."""
+    # 1. user enables auto mode
+    _run("set_automation_mode.py", "--project", "demo", "--mode", "auto",
+         "--pick-strategy", "model-metadata-rank",
+         "--escalate-on", "tournament_ready_no_auto_pick_strategy,lane_failure",
+         "--actor", "user", env=cartooner_env)
+
+    # 2. memory spawns + deposits with NO aesthetic_score (cannot auto-pick)
+    _spawn_and_deposit(cartooner_env, tmp_path, shot_id="shot-1",
+                       asset_ids=("a", "b"))
+
+    # 3. memory tries to auto-pick — fails because no scores
+    pick = _run("pick_winner.py", "--project", "demo", "--round-id", "shot-1-r1",
+                "--candidates", "a,b", "--strategy", "model-metadata-rank",
+                "--picker", "memory_acting_director", env=cartooner_env)
+    assert pick.returncode != 0   # no scores → fail-closed
+
+    # 4. memory escalates to user
+    esc = _run("escalate_to_producer.py", "--project", "demo",
+               "--trigger", "tournament_ready_no_auto_pick_strategy",
+               "--auto-flip-to-manual",
+               "--context", "shot-1-r1: no aesthetic_score on candidates",
+               env=cartooner_env)
+    assert esc.returncode == 0
+
+    # 5. mode is now manual; user can pick
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["automation_mode"] == "manual"
+
+    pick2 = _run("pick_winner.py", "--project", "demo", "--round-id", "shot-1-r1",
+                 "--candidates", "a,b", "--strategy", "manual", "--picked", "a",
+                 env=cartooner_env)
+    assert pick2.returncode == 0
+
+    # 6. log should record the full chain
+    log = (project_root / "generation_log.jsonl").read_text(encoding="utf-8").strip()
+    events = [json.loads(line)["event"] for line in log.splitlines()]
+    assert "set_automation_mode" in events
+    assert "escalate_to_producer" in events
+    assert "pick_winner" in events
