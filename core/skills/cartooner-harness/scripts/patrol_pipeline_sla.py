@@ -64,6 +64,7 @@ EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
     "lane_completed": {"user", "memory", "patrol", "builder-image", "builder-av", "writer"},
     "shot_list_revised": {"user", "memory", "writer", "builder-av"},
     "subagent_started": {"builder-image", "builder-av"},
+    "subagent_spawned": {"builder-image", "builder-av"},
     "subagent_completed": {"builder-image", "builder-av"},
     "subagent_failed": {"builder-image", "builder-av"},
 }

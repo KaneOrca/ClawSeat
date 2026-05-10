@@ -1556,3 +1556,349 @@ def test_e2e_auto_mode_escalation_flips_to_manual(cartooner_env, cartooner_root,
     assert "set_automation_mode" in events
     assert "escalate_to_producer" in events
     assert "pick_winner" in events
+
+
+# ── spawn_subagent ───────────────────────────────────────────────────
+
+
+def test_spawn_subagent_root_cause_happy_path(cartooner_env, cartooner_root):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-image",
+        "--subagent-type", "root_cause",
+        "--inputs", json.dumps({
+            "candidate_ids": ["a", "b", "c", "d"],
+            "user_feedback": "all 4 too bright",
+        }),
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    sa_id = res.stdout.strip()
+    assert sa_id.startswith("sa-rc-")
+
+    project_root = cartooner_root / "projects" / "demo"
+    sa_file = project_root / "subagents" / f"{sa_id}.toml"
+    assert sa_file.is_file()
+    text = sa_file.read_text(encoding="utf-8")
+    assert 'type = "root_cause"' in text
+    assert 'state = "spawned"' in text
+    assert 'caller = "builder-image"' in text
+
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert sa_id in index["subagents"]
+    assert index["subagents"][sa_id]["state"] == "spawned"
+
+
+def test_spawn_subagent_reference_learning_happy_path(cartooner_env):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-av",
+        "--subagent-type", "reference_learning",
+        "--inputs", json.dumps({
+            "reference_url": "https://youtube.com/watch?v=xyz",
+            "focus": "shot rhythm and camera motion",
+        }),
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip().startswith("sa-ref-")
+
+
+def test_spawn_subagent_rejects_unauthorized_seat(cartooner_env):
+    """memory / writer / patrol cannot spawn subagents."""
+    for seat in ("memory", "writer", "patrol"):
+        res = _run(
+            "spawn_subagent.py",
+            "--project", "demo",
+            "--action", "spawn",
+            "--seat", seat,
+            "--subagent-type", "root_cause",
+            "--inputs", json.dumps({
+                "candidate_ids": ["a"], "user_feedback": "x",
+            }),
+            env=cartooner_env,
+        )
+        assert res.returncode != 0, f"seat={seat} should be rejected"
+
+
+def test_spawn_subagent_root_cause_requires_candidate_ids(cartooner_env):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-image",
+        "--subagent-type", "root_cause",
+        "--inputs", json.dumps({"user_feedback": "x"}),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "candidate_ids" in (res.stderr or "")
+
+
+def test_spawn_subagent_root_cause_requires_user_feedback(cartooner_env):
+    """No user_feedback means it's a self-eval — protocol violation."""
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-image",
+        "--subagent-type", "root_cause",
+        "--inputs", json.dumps({"candidate_ids": ["a"]}),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "user_feedback" in (res.stderr or "") or "self-eval" in (res.stderr or "")
+
+
+def test_spawn_subagent_reference_learning_requires_url(cartooner_env):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-av",
+        "--subagent-type", "reference_learning",
+        "--inputs", json.dumps({"focus": "shot rhythm"}),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "reference_url" in (res.stderr or "")
+
+
+def test_spawn_subagent_rejects_bad_json_inputs(cartooner_env):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-image",
+        "--subagent-type", "root_cause",
+        "--inputs", "not json{",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_spawn_subagent_rejects_unknown_round(cartooner_env):
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", "builder-image",
+        "--subagent-type", "root_cause",
+        "--inputs", json.dumps({"candidate_ids": ["a"], "user_feedback": "x"}),
+        "--parent-round", "round-fake",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def _spawn_subagent(env, inputs, *, seat="builder-image", sa_type="root_cause") -> str:
+    r = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "spawn",
+        "--seat", seat,
+        "--subagent-type", sa_type,
+        "--inputs", json.dumps(inputs),
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_spawn_subagent_complete_happy_path(cartooner_env, cartooner_root, tmp_path):
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a", "b"], "user_feedback": "too bright",
+    })
+    report = tmp_path / "report.md"
+    report.write_text("# root-cause findings\n\n- a: highlight blowout\n- b: ambient too high\n",
+                      encoding="utf-8")
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "complete",
+        "--subagent-id", sa_id,
+        "--report-path", str(report),
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == sa_id
+
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    sa = index["subagents"][sa_id]
+    assert sa["state"] == "completed"
+    assert sa["report_path"] == str(report)
+    assert sa["output_size_chars"] > 0
+
+
+def test_spawn_subagent_complete_rejects_missing_report(cartooner_env, tmp_path):
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a"], "user_feedback": "x",
+    })
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "complete",
+        "--subagent-id", sa_id,
+        "--report-path", str(tmp_path / "ghost.md"),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_spawn_subagent_complete_rejects_empty_report(cartooner_env, tmp_path):
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a"], "user_feedback": "x",
+    })
+    empty = tmp_path / "empty.md"
+    empty.write_bytes(b"")
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "complete",
+        "--subagent-id", sa_id,
+        "--report-path", str(empty),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_spawn_subagent_complete_rejects_oversized_report(cartooner_env, tmp_path):
+    """Reports > 1MB suggest binary contamination — fail-closed."""
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a"], "user_feedback": "x",
+    })
+    huge = tmp_path / "huge.md"
+    huge.write_bytes(b"x" * (1_048_577))   # 1MB + 1 byte
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "complete",
+        "--subagent-id", sa_id,
+        "--report-path", str(huge),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "exceeds limit" in (res.stderr or "") or "no-image-policy" in (res.stderr or "")
+
+
+def test_spawn_subagent_complete_rejects_binary_report(cartooner_env, tmp_path):
+    """Binary content (e.g. raw image bytes) violates no-image-policy."""
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a"], "user_feedback": "x",
+    })
+    binary = tmp_path / "bin.md"
+    binary.write_bytes(b"\xff\xfe\x00\x01\x02\x80\x81\xfe")   # invalid utf-8
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "complete",
+        "--subagent-id", sa_id,
+        "--report-path", str(binary),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_spawn_subagent_complete_rejects_unknown_id(cartooner_env, tmp_path):
+    report = tmp_path / "report.md"
+    report.write_text("# x", encoding="utf-8")
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "complete",
+        "--subagent-id", "sa-rc-deadbeef",
+        "--report-path", str(report),
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_spawn_subagent_complete_rejects_already_completed(cartooner_env, tmp_path):
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a"], "user_feedback": "x",
+    })
+    report = tmp_path / "report.md"
+    report.write_text("# x", encoding="utf-8")
+    r1 = _run(
+        "spawn_subagent.py", "--project", "demo", "--action", "complete",
+        "--subagent-id", sa_id, "--report-path", str(report), env=cartooner_env,
+    )
+    assert r1.returncode == 0
+    # second complete should fail
+    r2 = _run(
+        "spawn_subagent.py", "--project", "demo", "--action", "complete",
+        "--subagent-id", sa_id, "--report-path", str(report), env=cartooner_env,
+    )
+    assert r2.returncode != 0
+
+
+def test_spawn_subagent_fail_happy_path(cartooner_env, cartooner_root):
+    sa_id = _spawn_subagent(cartooner_env, {
+        "reference_url": "https://youtube.com/x", "focus": "rhythm",
+    }, seat="builder-av", sa_type="reference_learning")
+    res = _run(
+        "spawn_subagent.py",
+        "--project", "demo",
+        "--action", "fail",
+        "--subagent-id", sa_id,
+        "--reason", "youtube ingestion timed out",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert index["subagents"][sa_id]["state"] == "failed"
+    assert index["subagents"][sa_id]["failure_reason"] == "youtube ingestion timed out"
+
+
+def test_spawn_subagent_fail_rejects_unknown_id(cartooner_env):
+    res = _run(
+        "spawn_subagent.py", "--project", "demo", "--action", "fail",
+        "--subagent-id", "sa-ref-deadbeef", env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_spawn_subagent_log_event_actor_is_caller(cartooner_env, cartooner_root):
+    sa_id = _spawn_subagent(cartooner_env, {
+        "candidate_ids": ["a"], "user_feedback": "x",
+    })
+    project_root = cartooner_root / "projects" / "demo"
+    log = (project_root / "generation_log.jsonl").read_text(encoding="utf-8").strip()
+    last = json.loads(log.splitlines()[-1])
+    assert last["event"] == "subagent_spawned"
+    assert last["actor"] == "builder-image"
+    assert last["subagent_id"] == sa_id
+    assert last["subagent_type"] == "root_cause"
+
+
+def test_patrol_authorization_catches_unauthorized_subagent_spawn(
+    cartooner_env, cartooner_root
+):
+    """memory spawning a subagent is a violation patrol must catch."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "subagent_spawned",
+            "actor": "memory",   # memory cannot spawn — violation
+            "subagent_id": "sa-rc-fake",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "subagent_spawned" in res.stdout
+    assert "'memory'" in res.stdout

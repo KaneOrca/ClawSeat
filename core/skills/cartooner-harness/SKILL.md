@@ -222,9 +222,8 @@ relies on the protocol contract + audit, not filesystem-level isolation.
 
 ## Protocol Primitives
 
-v1 ships 10 backend scripts. `spawn_subagent.py` is documented as v2 work
-(soft-enforcement audit hook); v1 routes subagent lifecycle through
-`report_to_memory.py` events (`subagent_started` / `_completed` / `_failed`).
+v1 ships 11 backend scripts. All protocol primitives are implemented and
+test-covered (88 subprocess tests).
 
 | Script | Status | Caller | Effect |
 |---|---|---|---|
@@ -238,14 +237,27 @@ v1 ships 10 backend scripts. `spawn_subagent.py` is documented as v2 work
 | `report_to_memory.py` | ✅ v1 | any seat (mandatory after user-direct) | Notify memory of user-direct request; auto-flips to manual on `user_direct_request` |
 | `set_automation_mode.py` | ✅ v1 | user | Toggle manual / auto; auto requires explicit pick_strategy + (optional) escalate_on triggers |
 | `escalate_to_producer.py` | ✅ v1 | memory (auto mode) | Record escalation; optionally `--auto-flip-to-manual` to atomically flip mode + log trigger |
-| `spawn_subagent.py` | ⏳ v2 | builder-image / builder-av | Will be the only sanctioned mechanism for any seat other than user to view asset content or external reference media. v1 uses report_to_memory subagent events for tracking. |
+| `spawn_subagent.py` | ✅ v1 | builder-image / builder-av | Allocate / complete / fail an isolated subagent for vision-input analysis. Strict no-image-policy enforcement: text-only report ≤ 1MB, UTF-8 decoded, root_cause requires user_feedback (no self-eval). |
 
-In v1, subagent invocation happens via the seat's native LLM tooling
-(Claude Code's `Agent`, Codex's subagent, Gemini's subagent); the protocol
-contract requires the seat to call `report_to_memory.py
---event subagent_started` before, and `--event subagent_completed` after,
-with a path to a text-only report under `references_learned/`. v2
-`spawn_subagent.py` will harden this with id allocation + path validation.
+`spawn_subagent.py` is the **only** sanctioned mechanism for any seat
+other than user to view asset content or external reference media.
+Subagent context is discarded on return; main thread receives text
+reports only. The script enforces the no-image-policy boundary at the
+protocol layer:
+
+1. Caller seat must be `builder-image` or `builder-av`
+2. Report file must be UTF-8 text (binary fails closed)
+3. Report file must be ≤ 1MB (large reports suggest binary contamination)
+4. `root_cause` subagents require `inputs.user_feedback` (prevents
+   self-evaluation; subagent invocation must be triggered by user input)
+
+The seat invokes its native LLM subagent (Claude Code `Agent` /
+Codex subagent / Gemini subagent) for the actual vision-input call;
+this script handles id allocation + audit + result validation around
+that invocation. `report_to_memory.py` retains its `subagent_started` /
+`subagent_completed` / `subagent_failed` events for the user-direct
+contract, but new code should prefer `spawn_subagent.py` for the
+subagent lifecycle itself.
 
 ## UI Layer (separate from protocol)
 
