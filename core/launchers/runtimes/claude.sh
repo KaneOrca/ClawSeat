@@ -208,7 +208,7 @@ run_claude_runtime() {
   seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
   # Skip Claude onboarding in the isolated HOME. Without this the seat
   # blocks on the welcome + auth pages even when API keys are live in env.
-  prepare_claude_home "$HOME" "$session_name"
+  prepare_claude_home "$HOME" "$session_name" "$workdir"
 
   cd "$workdir"
   echo "────────────────────────────────────────"

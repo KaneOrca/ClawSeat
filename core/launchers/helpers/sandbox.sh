@@ -202,6 +202,7 @@ prepare_claude_home() {
   # sandbox's settings/skills from the seat-specific .claude-template.
   local runtime_home="$1"
   local session_name="${2:-}"
+  local trust_workdir="${3:-}"
   local runtime_claude="$runtime_home/.claude"
   local source_claude="$REAL_HOME/.claude"
   local source_claude_json="$REAL_HOME/.claude.json"
@@ -213,13 +214,16 @@ prepare_claude_home() {
   # The real host file may carry an unfinished onboarding state that forces
   # Claude Code back into the login picker even when API auth env is already
   # present. Keep useful host/runtime fields, but force onboarding complete.
+  # Also pre-trust the seat's workdir so the workspace trust dialog
+  # ("Yes, I trust this folder") doesn't block automated tmux launches —
+  # `--dangerously-skip-permissions` covers runtime perms but NOT this dialog.
   if [[ -f "$runtime_claude_json" && ! -L "$runtime_claude_json" ]]; then
     existing_runtime_claude_json="$runtime_claude_json"
   fi
   if [[ -L "$runtime_claude_json" ]]; then
     rm -f "$runtime_claude_json"
   fi
-  python3 - "$source_claude_json" "$existing_runtime_claude_json" "$runtime_claude_json" <<'PY'
+  python3 - "$source_claude_json" "$existing_runtime_claude_json" "$runtime_claude_json" "$trust_workdir" <<'PY'
 from __future__ import annotations
 
 import json
@@ -229,6 +233,7 @@ from pathlib import Path
 source_path = Path(sys.argv[1])
 existing_runtime_path = Path(sys.argv[2]) if sys.argv[2] else None
 target_path = Path(sys.argv[3])
+trust_workdir = sys.argv[4] if len(sys.argv) > 4 else ""
 data: dict[str, object] = {}
 
 for candidate in (source_path, existing_runtime_path):
@@ -246,6 +251,21 @@ data["hasSeenWelcome"] = True
 version = data.get("lastOnboardingVersion")
 if not isinstance(version, str) or not version.strip():
     data["lastOnboardingVersion"] = "99.99.99"
+
+# Pre-trust the seat's workspace so Claude doesn't block on the
+# "Yes, I trust this folder" dialog — that dialog is independent of
+# --dangerously-skip-permissions and only auto-skips in non-interactive
+# (-p / piped stdout) modes, neither of which applies inside tmux.
+if trust_workdir:
+    projects = data.get("projects")
+    if not isinstance(projects, dict):
+        projects = {}
+    entry = projects.get(trust_workdir)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["hasTrustDialogAccepted"] = True
+    projects[trust_workdir] = entry
+    data["projects"] = projects
 
 target_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 PY
