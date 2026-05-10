@@ -42,6 +42,7 @@ seed_user_tool_dirs() {
     ".gemini"
     ".config/codex"
     ".codex"
+    ".cartooner"
   )
 
   local subpath src tgt backup_base backup_path current_target
