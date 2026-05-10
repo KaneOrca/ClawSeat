@@ -112,6 +112,46 @@ finishing-a-development-branch / subagent-driven-development。
 
 ---
 
+## 两条协议 — 工程 × 创意
+
+```
+gstack-harness     task → dispatch → handoff → ack     commit-centric
+cartooner-harness  lane → deposit → pick → iterate     asset-centric
+```
+
+工程链是 **deterministic** 的——spec 拆任务、builder 实现、reviewer 出
+verdict，每一步都有唯一正确答案。
+
+创意是 **indeterministic** 的——spec 永远不完整，每个 lane 抛出 N 张
+「好但都不对」的候选，user 做最终美学判断。LLM 没有制片人之眼。
+
+`cartooner-harness` 接受这件事，把边界写进协议：
+
+- **no-image-policy** — 只有 user 看 asset；LLM seat 走 isolated subagent
+  间接读视觉，主线程永远 image-free
+- **Vision Steward** — memory 是流程引擎，不是审美裁判；所有美学决策
+  escalate 给 user
+- **Producer-centric** — user 是制片人，可越过 memory 直派任何 seat；任何
+  seat 收到 user-direct 必须 fail-closed 回报
+
+| 创意 seat | tool / auth | 职责 |
+|---|---|---|
+| memory | claude / minimax | Vision Steward — 状态 + 跨 lane 协调 |
+| writer | claude / oauth | Story Specialist — narrative_outline.md（纯文学） |
+| builder-image | codex / oauth | Image Specialist — nano-banana / gpt-image-2 / storyboard |
+| builder-av | gemini / oauth | AV Cinematographer — Seedance / shot list / YouTube 参考学习 |
+| patrol | claude / minimax | Asset Guardian — 文件完整性 + SLA + 越权审计 |
+
+11 个 backend 协议脚本（spawn_lane / deposit_asset / pick_winner /
+iterate_prompt / share_style_bible / patrol_pipeline_sla / spawn_subagent
+…），88 subprocess 单测，零 LLM 美学判断。
+
+[`core/skills/cartooner-harness/SKILL.md`](core/skills/cartooner-harness/SKILL.md)
+
+> **诚实地说出那条边界，让自动化只去自动化能赢的事。**
+
+---
+
 ## 三件事让它不一样
 
 ### 一. 你跟它对话，它就装好了
