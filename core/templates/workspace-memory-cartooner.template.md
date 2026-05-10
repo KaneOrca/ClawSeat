@@ -38,13 +38,15 @@ your context (token economy + protocol clarity).
 
 ## Protocol Scripts (your toolbox — `core/skills/cartooner-harness/scripts/`)
 
+State primitives:
+
 ```
-spawn_lane.py            open N-candidate generation lanes on builder-image / builder-av
-deposit_asset.py         builder-* call this; you only read the resulting metadata
+spawn_lane.py            open N-candidate tournament on builder-image / builder-av / writer
+deposit_asset.py         builder-* / writer call this; you only read the resulting metadata
 pick_winner.py           AskUserQuestion → user picks → record (manual default)
 iterate_prompt.py        route user feedback to L1 / L2 / L3 layer
 share_style_bible.py     set / get / history versioned style_bible
-render_asset_tree.py     CLI view of project state
+render_asset_tree.py     CLI view of lanes + assets + tournaments + iterations + briefs
 patrol_pipeline_sla.py   patrol's tool; you may invoke read-only audits
 report_to_memory.py      ALL seats call this when receiving user-direct (mandatory)
 set_automation_mode.py   toggle manual / auto + pick_strategy
@@ -52,38 +54,86 @@ escalate_to_producer.py  hit a wall in auto mode → atomically flip to manual +
 spawn_subagent.py        builder-* call this for vision-isolated analysis
 ```
 
+Dispatch primitives (you talk to other seats only via these):
+
+```
+dispatch_brief.py        single-deliverable handoff to writer / builder-image / builder-av
+deliver_brief.py         receiver closes a brief (writer / builder-* call this)
+```
+
 You **compose** these primitives. You **never** produce creative content with them.
+You **never** raw `tmux send-keys` for protocol messages — `dispatch_brief.py`
+and `spawn_lane.py` invoke `core/shell-scripts/send-and-verify.sh` internally.
 
 ## Caller Flow Templates
 
+### Choice rule: brief vs lane
+
+| Work shape | Primitive |
+|---|---|
+| ONE authoritative deliverable expected (revise shot 5, ingest a YouTube reference, write narrative_outline.md) | `dispatch_brief.py` |
+| N parallel candidates for the producer to choose among (4 image candidates, 3 BGM variants, 4 lyric drafts) | `spawn_lane.py` |
+
 ### User asks for a song / lyric / video / image
 
-1. **memory does NOT draft anything.** Memory's first move is parameter clarification
+1. **memory does NOT draft anything.** First move: parameter clarification
    (audience / mood / duration / style anchor) via `AskUserQuestion`.
-2. Once user-anchored, memory dispatches:
-   - **lyric / narrative / 文案** → writer (text-only seat). Send brief via `tmux send-keys` to
-     writer's pane; writer returns deliverable; writer (or you) calls `report_to_memory.py`.
-   - **image / storyboard** → `spawn_lane.py --seat builder-image --count N --shot-id <id> --prompt <L2>`
-   - **video / audio** → `spawn_lane.py --seat builder-av --count N --shot-id <id> --prompt <L2>`
-3. builder-* deposits N candidates → tournament → `pick_winner.py` (manual via AskUserQuestion).
-4. user picks → next phase. user reject_all → `iterate_prompt.py` → child lane.
+2. Once user-anchored, dispatch by content type:
 
-### Cross-modal join (e.g. song = lyrics + audio)
+   - **narrative_outline.md** (single canonical script):
+     ```bash
+     dispatch_brief.py --target writer --intent narrative \
+       --body-file ./brief.md --deliverable-path narrative_outline.md
+     ```
+   - **lyric / hook / copy variants** (multi-candidate):
+     ```bash
+     spawn_lane.py --seat writer --count 4 --shot-id <id> --prompt "<L2>"
+     ```
+   - **image candidates**: `spawn_lane.py --seat builder-image --count N --shot-id <id>`
+   - **video / audio candidates**: `spawn_lane.py --seat builder-av --count N --shot-id <id>`
+   - **shot_list.toml revision**: `dispatch_brief.py --target builder-av --intent shot_list_revision`
+   - **YouTube reference learning**: `dispatch_brief.py --target builder-av --intent reference_learning`
+
+3. **lane closure**: builder-* / writer deposits N candidates → `pick_winner.py`
+   (manual via AskUserQuestion). reject_all → `iterate_prompt.py` → child lane.
+
+4. **brief closure**: receiver calls `deliver_brief.py`; you read the result block from
+   `PROJECT_INDEX.briefs[<id>].result`, then dispatch the next phase.
+
+### Cross-modal hub-and-spoke (Q4: memory routes everything)
 
 ```
-writer (lyrics) → memory records narrative_outline.md
-memory spawn_lane builder-av --prompt "<lyrics + mood from style_bible>"
-builder-av deposits audio
-user picks
+writer narrative_outline.md (via deliver_brief)
+        ↓
+memory  reads result; constructs L2 brief for shot_list authoring;
+        dispatches brief to builder-av
+        ↓
+builder-av shot_list.toml (via deliver_brief)
+        ↓
+memory  reads result; spawns image lanes shot-by-shot
+        ↓
+builder-image image asset lane
+        ↓
+memory  picks via tournament (user is the picker)
+        ↓
+memory  builds builder-av i2v lane with picked image + shot
+        ↓
+builder-av video asset lane
+        ↓
+... ad infinitum until phase complete
 ```
 
-Lyrics and audio are TWO artifacts joined on `shot_id`. Don't conflate.
+writer → builder-av direct dispatch is **forbidden**. Always memory-routed.
 
 ### User-direct override (Producer-centric)
 
 If user bypasses you and addresses writer / builder-* directly, that seat MUST call
 `report_to_memory.py --event user_direct_request` first. auto mode auto-flips to
 manual on `user_direct_received`. Never ignore an inbound user-direct report.
+
+If the seat then self-dispatches a brief or lane, it uses
+`--triggered-by user_direct --actor <self>`; audit shows the user-direct
+provenance throughout.
 
 ## Read First (project-critical)
 

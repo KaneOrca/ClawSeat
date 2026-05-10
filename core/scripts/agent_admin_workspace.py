@@ -99,9 +99,17 @@ def render_authority_lines(engineer: Any) -> list[str]:
     return lines
 
 
-def render_protocol_reminder_lines(engineer: Any, role: str) -> list[str]:
+def render_protocol_reminder_lines(
+    engineer: Any,
+    role: str,
+    *,
+    template_name: str = "",
+) -> list[str]:
     lines = ["## ⚠ Protocol Reminder (每轮先读)", ""]
     normalized = (role or getattr(engineer, "role", "") or "").strip()
+    seat_id = (getattr(engineer, "engineer_id", "") or "").strip().lower()
+    if template_name in _CARTOONER_TEMPLATES:
+        return _render_protocol_reminder_cartooner(seat_id)
     if normalized in {"project-memory", "memory-oracle"}:
         lines.extend([
             "1. **Dispatch**: `agent_admin task create` -> workflow.md -> `dispatch_task.py` -> send-and-verify",
@@ -360,10 +368,26 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
     return lines
 
 
-def render_communication_protocol_lines(engineer: Any, project_name: str) -> list[str]:
+_CARTOONER_TEMPLATES = frozenset({"clawseat-creative"})
+
+
+def render_communication_protocol_lines(
+    engineer: Any,
+    project_name: str,
+    *,
+    template_name: str = "",
+) -> list[str]:
+    send_script = str(SEND_AND_VERIFY_SH)
+    # Creative templates branch FIRST — even for "specialist" seats like
+    # patrol (which exists in both engineering and creative templates and
+    # would otherwise short-circuit to the engineering specialist stub).
+    if template_name in _CARTOONER_TEMPLATES:
+        return _render_communication_protocol_cartooner(
+            engineer, project_name, send_script
+        )
+
     if engineer.role in _SPECIALIST_ROLES:
         return ["Read `TOOLS/protocol.md` for full communication protocol."]
-    send_script = str(SEND_AND_VERIFY_SH)
     notify_script = str(HARNESS_SCRIPTS_ROOT / "notify_seat.py")
     planner_seat = (
         preferred_seat_for_role(
@@ -428,6 +452,202 @@ def render_communication_protocol_lines(engineer: Any, project_name: str) -> lis
                 "- if you are reviewing work, include a canonical `Verdict:` field in `DELIVERY.md`",
             ]
         )
+    return lines
+
+
+def _render_protocol_reminder_cartooner(seat_id: str) -> list[str]:
+    """Per-轮 reminder for cartooner-creative seats.
+
+    Mirrors render_protocol_reminder_lines's per-role tailoring but with
+    cartooner-harness primitives (dispatch_brief / spawn_lane / report_to_memory)
+    instead of gstack's complete_handoff / dispatch_task / DELIVERY.md.
+    """
+    lines = ["## ⚠ Protocol Reminder (每轮先读)", ""]
+    seat = (seat_id or "").strip().lower()
+
+    if seat == "memory":
+        lines.extend([
+            "1. **Dispatch**: choose `dispatch_brief.py` (1 deliverable) vs `spawn_lane.py` (N candidates)",
+            "2. **Closure**: read `PROJECT_INDEX.briefs[<id>].state` or `lanes[<id>].state` before next step",
+            "3. **Pick**: aesthetic decisions ALWAYS escalate via `pick_winner.py --strategy manual` + AskUserQuestion",
+            "4. **Vision Steward**: never produce creative content; never view asset content (no-image-policy)",
+            "5. **User-direct**: receiving `report_to_memory --event user_direct_request` auto-flips to manual",
+            "6. **Don't**: raw `tmux send-keys`; lateral writer→builder dispatch (always memory-routed)",
+        ])
+    elif seat == "writer":
+        lines.extend([
+            "1. **Receive**: read `briefs/<id>.toml` (frontmatter + body) or `lanes/<id>.toml`",
+            "2. **Close brief**: `deliver_brief.py --actor writer --output-path <path>` (UTF-8, ≤ 5MB)",
+            "3. **Close lane**: `deposit_asset.py --asset-type text --actor writer` × N (final adds `--all-candidates-deposited`)",
+            "4. **Boundary**: only narrative_outline.md / lyrics / copy / 文案; no shot_list, no model prompts, no asset viewing",
+            "5. **User-direct**: `report_to_memory --event user_direct_request` BEFORE acting",
+            "6. **Don't**: dispatch other seats directly (memory routes everything)",
+        ])
+    elif seat in ("builder-image", "builder-av"):
+        modal = "image (nb / gpt-image-2)" if seat == "builder-image" else "video / audio (Seedance / MiniMax)"
+        lines.extend([
+            "1. **Receive**: brief (single deliverable) or lane (N candidates)",
+            f"2. **Generate**: produce {modal} via cartooner-* skills",
+            "3. **Close**: `deposit_asset.py` per asset (model_metadata + file_metadata only — never self-eval)",
+            "4. **Vision input**: ONLY via `spawn_subagent.py` (root_cause needs user_feedback; reference_learning needs URL)",
+            "5. **User-direct**: `report_to_memory --event user_direct_request` BEFORE acting",
+            "6. **Don't**: view assets in main thread; dispatch other seats; deposit out-of-modal asset_type",
+        ])
+    elif seat == "patrol":
+        lines.extend([
+            "1. **Read-only**: never dispatch, never deposit, never `pick_winner`",
+            "2. **Audits**: `patrol_pipeline_sla.py --check {sla|integrity|authorization|all}`; exit 2 = anomalies",
+            "3. **Findings**: emit `escalate_to_producer.py --trigger sla_breach` only when auto mode + threshold breached",
+            "4. **User-direct**: query OK; mutate returns clear error per user-direct-contract.md",
+            "5. **Don't**: any state mutation; any creative output; any vision input",
+        ])
+    else:
+        lines.extend([
+            "1. **Receive work** via lane / brief; do NOT pull from a non-cartooner queue",
+            "2. **Close** via `deposit_asset.py` or `deliver_brief.py`; never silent",
+            "3. **User-direct** must `report_to_memory --event user_direct_request` BEFORE acting",
+            "4. **Don't**: raw `tmux send-keys`; lateral seat dispatch (memory-routed only)",
+        ])
+    lines.append("")
+    return lines
+
+
+def _render_communication_protocol_cartooner(
+    engineer: Any,
+    project_name: str,
+    send_script: str,
+) -> list[str]:
+    """Communication protocol lines for clawseat-creative seats.
+
+    Mirrors gstack's render structure but with cartooner-harness vocab:
+    lane / brief / deposit / pick / iterate, hub-and-spoke through memory,
+    state lives in ~/.cartooner/projects/<id>/, never raw tmux send-keys.
+    """
+    role = (engineer.role or "").strip().lower()
+    seat_id = (getattr(engineer, "engineer_id", "") or "").strip().lower()
+    is_memory = seat_id == "memory" or role.startswith("project-memory")
+    is_writer = seat_id == "writer" or role == "screenwriter"
+    is_builder_image = seat_id == "builder-image"
+    is_builder_av = seat_id == "builder-av"
+    is_patrol = seat_id == "patrol" or role in ("patrol", "qa")
+
+    lines = [
+        "## Communication Protocol (cartooner-creative)",
+        "",
+        "- spec: `core/skills/cartooner-harness/references/communication-protocol.md`",
+        f"- transport: `{send_script}` (ClawSeat-level, shared with engineering)",
+        "- treat raw `tmux send-keys` as a protocol violation — `dispatch_brief.py` "
+        "and `spawn_lane.py` invoke send-and-verify internally",
+        "- source of truth: `~/.cartooner/projects/<id>/PROJECT_INDEX.json` "
+        "+ `lanes/` + `briefs/` + `tournaments/` + `iterations/` + `escalations/`",
+        "- `~/.cartooner/_handoff/` is REMOVED; ignore any legacy files there",
+        f"- multi-project mode: send-and-verify calls always need `--project {project_name}`",
+    ]
+
+    if is_memory:
+        lines += [
+            "",
+            "## Dispatch (memory → executor seat) — choice rule",
+            "- ONE authoritative deliverable expected → `dispatch_brief.py "
+            "--target <writer|builder-image|builder-av> --intent <intent>`",
+            "- N parallel candidates expected → `spawn_lane.py --seat <writer|"
+            "builder-image|builder-av> --count N --shot-id <id>`",
+            "- writer accepts both: brief for canonical narrative_outline.md / "
+            "shot_list copy revisions; lane for multi-candidate hooks / lyric drafts",
+            "",
+            "## Closure (memory reads back)",
+            "- briefs: `PROJECT_INDEX.briefs[<id>].state == \"delivered\"` "
+            "+ `result.output_path`; receiver invoked `deliver_brief.py`",
+            "- lanes: `PROJECT_INDEX.lanes[<id>].state == \"deposited\"` then "
+            "`pick_winner.py --strategy manual` blocking on `AskUserQuestion`",
+            "",
+            "## Vision Steward discipline",
+            "- you NEVER produce creative content; dispatch writer / builder-* "
+            "via the primitives above",
+            "- aesthetic decisions ALWAYS escalate to user (the Producer); "
+            "default `pick_strategy = escalate-always`",
+            "- auto-pick only allowed under `pick_strategy = model-metadata-rank` "
+            "AND the model API provides a numeric `aesthetic_score`",
+            "- never view asset content (no-image-policy hard rule)",
+        ]
+    elif is_writer:
+        lines += [
+            "",
+            "## Receiving work",
+            "- brief: `~/.cartooner/projects/<id>/briefs/<id>.toml` with "
+            "frontmatter (target=writer) + markdown body",
+            "- lane: `~/.cartooner/projects/<id>/lanes/<id>.toml` with "
+            "seat=writer, count=N text candidates expected",
+            "",
+            "## Closing work",
+            "- single deliverable: `deliver_brief.py --brief-id <id> --actor writer "
+            "--output-path <path>` (UTF-8, ≤ 5MB)",
+            "- N candidates: `deposit_asset.py --asset-type text --actor writer` "
+            "× N (last call adds `--all-candidates-deposited`)",
+            "",
+            "## Forbidden",
+            "- no direct dispatch to builder-* (memory routes everything; "
+            "violation breaks Vision Steward SSOT)",
+            "- no shot decisions / model prompts / camera vocabulary "
+            "(builder-av's domain)",
+            "- no asset viewing (no-image-policy)",
+        ]
+    elif is_builder_image or is_builder_av:
+        modal = "image" if is_builder_image else "video / audio"
+        skills = ("nb / gpt-image-2 / storyboard / design"
+                  if is_builder_image else
+                  "Seedance / shot_list authoring / MiniMax music / TTS")
+        lines += [
+            "",
+            "## Receiving work",
+            "- brief: single deliverable (revise shot_list / character_dna / reference_learning report)",
+            "- lane: N parallel candidate generations via skill stack ({})".format(skills),
+            "",
+            "## Closing work",
+            "- brief deliverable: `deliver_brief.py --brief-id <id> --actor "
+            f"{seat_id} --output-path <path>` or `--fail --reason ...`",
+            "- lane candidates: `deposit_asset.py` per asset (model_metadata + "
+            "file_metadata only; never self-eval), final call adds "
+            "`--all-candidates-deposited`",
+            "",
+            "## Vision input boundary (no-image-policy)",
+            "- main thread: NEVER view candidate / reference content",
+            "- only sanctioned vision path: `spawn_subagent.py` (root_cause / "
+            "reference_learning), text-only report ≤ 1MB UTF-8 returned to main thread",
+            "",
+            "## Forbidden",
+            "- no direct dispatch to other executor seats (memory routes everything)",
+            "- no narrative authoring (writer's domain)",
+            f"- no {('audio / video' if is_builder_image else 'image')} deposits "
+            f"(asset_type strictly = {modal})",
+        ]
+    elif is_patrol:
+        lines += [
+            "",
+            "## Read-only Asset Guardian",
+            "- `patrol_pipeline_sla.py --check {sla|integrity|authorization|all}`",
+            "- exit 2 on anomalies; emit findings to memory via "
+            "`escalate_to_producer.py --trigger sla_breach` (only when "
+            "automation_mode=auto and threshold breached)",
+            "",
+            "## Forbidden",
+            "- never dispatch (no `dispatch_brief.py` / `spawn_lane.py` calls)",
+            "- never deposit any asset",
+            "- never `pick_winner.py` (no decision authority)",
+            "- never user-direct *mutate* (user-direct query OK; user-direct "
+            "mutate returns a clear error per user-direct-contract.md)",
+        ]
+
+    lines += [
+        "",
+        "## User-direct override (Producer-centric)",
+        "- any seat receiving user-direct calls `report_to_memory.py "
+        "--event user_direct_request` fail-closed BEFORE acting",
+        "- auto mode auto-flips to manual on `user_direct_received`",
+        "- self-dispatch after user-direct: pass "
+        "`--triggered-by user_direct --actor <self>` to `dispatch_brief.py` / "
+        "`spawn_lane.py`; audit shows the user-direct provenance throughout",
+    ]
     return lines
 
 
@@ -695,7 +915,13 @@ def workspace_contract_payload(
         "project_seat_map": project_seat_map,
         "seat_boundary": [line[2:] for line in render_seat_boundary_lines(session, engineer) if line.startswith("- ")],
         "communication_protocol": [
-            line[2:] for line in render_communication_protocol_lines(engineer, project.name) if line.startswith("- ")
+            line[2:]
+            for line in render_communication_protocol_lines(
+                engineer,
+                project.name,
+                template_name=str(getattr(project, "template_name", "") or ""),
+            )
+            if line.startswith("- ")
         ],
         "source_paths": source_paths,
     }

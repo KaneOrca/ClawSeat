@@ -239,7 +239,7 @@ def test_clawseat_creative_project_template_context_loads_five_profiles(
     assert profiles["memory"].default_auth_mode == "api"
     assert profiles["memory"].default_provider == "minimax"
     assert profiles["writer"].default_tool == "claude"
-    assert profiles["writer"].default_auth_mode == "oauth"
+    assert profiles["writer"].default_auth_mode == "oauth_token"
     assert profiles["builder-image"].default_tool == "codex"
     assert profiles["builder-image"].default_auth_mode == "oauth"
     assert profiles["builder-av"].default_tool == "gemini"
@@ -252,14 +252,14 @@ def test_clawseat_creative_project_template_context_loads_five_profiles(
 @pytest.mark.parametrize(
     ("seat_id", "expected_role_fragment", "expected_skill_path", "expected_marker"),
     [
-        # memory still maps to memory-oracle skill via legacy SEAT_SKILL_MAP
-        pytest.param("memory", "project-memory", "core/skills/memory-oracle/SKILL.md", "orphan knowledge holder", id="memory"),
+        # memory uses cartooner memory variant template (Vision Steward) and loads cartooner-harness SKILL via template-aware role_hint override
+        pytest.param("memory", "Vision Steward", "core/skills/cartooner-harness/SKILL.md", "process-automation engine", id="memory"),
         # creative seats map to cartooner-harness/SKILL.md (cartooner-bound boundary)
         pytest.param("writer", "Role: `screenwriter`", "core/skills/cartooner-harness/SKILL.md", "Story Specialist", id="writer"),
         pytest.param("builder-image", "Role: `builder-image`", "core/skills/cartooner-harness/SKILL.md", "Image Specialist", id="builder-image"),
         pytest.param("builder-av", "Role: `builder-av`", "core/skills/cartooner-harness/SKILL.md", "AV Cinematographer", id="builder-av"),
-        # patrol stays on its gstack patrol skill — covers both engineering and creative templates
-        pytest.param("patrol", "Role: `patrol`", "core/skills/patrol/SKILL.md", "Cron-driven patrol seat", id="patrol"),
+        # patrol on creative loads cartooner-harness role contract (Asset Guardian) via the template-aware override
+        pytest.param("patrol", "Role: `patrol`", "core/skills/cartooner-harness/SKILL.md", "Asset Guardian", id="patrol"),
     ],
 )
 def test_clawseat_creative_rendered_workspace_embeds_role_contract(
@@ -274,7 +274,11 @@ def test_clawseat_creative_rendered_workspace_embeds_role_contract(
 
     agents_md = _render_agents_md(seat_id, project, profiles, engineer_order)
     assert expected_role_fragment in agents_md
-    assert "## Role SKILL (canonical)" in agents_md
+    # Memory uses the cartooner variant template (workspace-memory-cartooner.template.md)
+    # which embeds the Vision Steward role contract inline instead of appending a
+    # separate "## Role SKILL (canonical)" wrapper. Other seats keep the wrapper.
+    if seat_id != "memory":
+        assert "## Role SKILL (canonical)" in agents_md
     assert expected_skill_path in agents_md
     assert expected_marker in agents_md
 

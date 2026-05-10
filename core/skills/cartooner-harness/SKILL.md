@@ -222,22 +222,38 @@ relies on the protocol contract + audit, not filesystem-level isolation.
 
 ## Protocol Primitives
 
-v1 ships 11 backend scripts. All protocol primitives are implemented and
-test-covered (88 subprocess tests).
+v1 ships 13 backend scripts (11 state + 2 dispatch). All implemented +
+test-covered (106 subprocess tests).
 
-| Script | Status | Caller | Effect |
-|---|---|---|---|
-| `spawn_lane.py` | ✅ v1 | memory (or seat self-dispatch) | Open N concurrent generation lanes on a target seat |
-| `deposit_asset.py` | ✅ v1 | builder-* | Persist a generated asset with model_metadata + file_metadata only (no LLM self-eval) |
-| `pick_winner.py` | ✅ v1 | memory | Record pick from N candidates (caller's UI handles user prompt; supports manual / model-metadata-rank / first-passing / random-from-passing strategies) |
-| `iterate_prompt.py` | ✅ v1 | memory | Record user feedback at L1 / L2 / L3 layer (caller dispatches downstream action) |
-| `share_style_bible.py` | ✅ v1 | memory | Set / get / history the project's style_bible (or character_dna) pointer with versioning |
-| `render_asset_tree.py` | ✅ v1 | any seat | Read-only CLI view: lanes + assets grouped by shot, plus tournaments / iterations / escalations |
-| `patrol_pipeline_sla.py` | ✅ v1 | patrol | SLA + integrity + skill-authorization audit; exits 2 on anomalies |
-| `report_to_memory.py` | ✅ v1 | any seat (mandatory after user-direct) | Notify memory of user-direct request; auto-flips to manual on `user_direct_request` |
-| `set_automation_mode.py` | ✅ v1 | user | Toggle manual / auto; auto requires explicit pick_strategy + (optional) escalate_on triggers |
-| `escalate_to_producer.py` | ✅ v1 | memory (auto mode) | Record escalation; optionally `--auto-flip-to-manual` to atomically flip mode + log trigger |
-| `spawn_subagent.py` | ✅ v1 | builder-image / builder-av | Allocate / complete / fail an isolated subagent for vision-input analysis. Strict no-image-policy enforcement: text-only report ≤ 1MB, UTF-8 decoded, root_cause requires user_feedback (no self-eval). |
+### State primitives (lane / asset / pick / iterate)
+
+| Script | Caller | Effect |
+|---|---|---|
+| `spawn_lane.py` | memory (or seat self-dispatch on user-direct) | Open N concurrent generation lanes on `builder-image` / `builder-av` / `writer` |
+| `deposit_asset.py` | `builder-image` (image) / `builder-av` (video, audio) / `writer` (text) | Persist a generated asset with model_metadata + file_metadata only (no LLM self-eval). Text assets: UTF-8 + ≤ 5MB. |
+| `pick_winner.py` | memory | Record tournament pick from N candidates (manual / model-metadata-rank / first-passing / random-from-passing) |
+| `iterate_prompt.py` | memory | Record user feedback at L1 / L2 / L3 layer (caller dispatches downstream action) |
+| `share_style_bible.py` | memory | Set / get / history the project's style_bible (or character_dna) pointer with versioning |
+| `render_asset_tree.py` | any seat | Read-only CLI view: lanes + assets grouped by shot, plus tournaments / iterations / escalations / briefs |
+| `patrol_pipeline_sla.py` | patrol | SLA + integrity + skill-authorization audit; exits 2 on anomalies |
+| `report_to_memory.py` | any seat (mandatory after user-direct) | Notify memory of user-direct request; auto-flips to manual on `user_direct_received` |
+| `set_automation_mode.py` | user | Toggle manual / auto; auto requires explicit pick_strategy + (optional) escalate_on triggers |
+| `escalate_to_producer.py` | memory (auto mode) | Record escalation; optionally `--auto-flip-to-manual` to atomically flip mode + log trigger |
+| `spawn_subagent.py` | builder-image / builder-av | Allocate / complete / fail an isolated subagent for vision-input analysis. Strict no-image-policy enforcement: text-only report ≤ 1MB, UTF-8 decoded, root_cause requires user_feedback (no self-eval). |
+
+### Dispatch primitives (memory ↔ executor seats)
+
+| Script | Caller | Effect |
+|---|---|---|
+| `dispatch_brief.py` | memory (or seat self-dispatch on user-direct) | Single-deliverable handoff to writer / builder-image / builder-av. Writes `briefs/<id>.toml` (frontmatter+body), wakes target via `core/shell-scripts/send-and-verify.sh`. |
+| `deliver_brief.py` | writer / builder-image / builder-av | Receiver closes a brief: validates UTF-8 / size / actor match, flips state to `delivered` (or `failed` with `--fail`), wakes memory pane. |
+
+The split: **lane** is for tournament-bound multi-candidate work (4
+image candidates, 3 BGM variants, 4 lyric drafts); **brief** is for
+single-deliverable handoffs (revise shot 5, ingest a YouTube reference,
+write the canonical narrative_outline.md). Memory chooses based on
+whether the producer should pick among parallel options or accept one
+authoritative answer. See [`references/communication-protocol.md`](references/communication-protocol.md) for the full spec.
 
 `spawn_subagent.py` is the **only** sanctioned mechanism for any seat
 other than user to view asset content or external reference media.

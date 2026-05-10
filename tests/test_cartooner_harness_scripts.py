@@ -1902,3 +1902,407 @@ def test_patrol_authorization_catches_unauthorized_subagent_spawn(
     assert res.returncode == 2
     assert "subagent_spawned" in res.stdout
     assert "'memory'" in res.stdout
+
+
+# ── dispatch_brief / deliver_brief / writer-lane ─────────────────────
+
+
+def test_dispatch_brief_writes_frontmatter_and_body(cartooner_env, cartooner_root):
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "lyric",
+        "--body", "30s 红苹果广告主题曲, 国风暗黑, 抖音 25-35 女性",
+        "--deliverable-path", "lyrics_v1.md",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    brief_id = res.stdout.strip()
+    assert brief_id.startswith("brief-")
+
+    project_root = cartooner_root / "projects" / "demo"
+    brief_file = project_root / "briefs" / f"{brief_id}.toml"
+    assert brief_file.is_file()
+    text = brief_file.read_text(encoding="utf-8")
+    assert text.startswith("+++\n")
+    assert 'target = "writer"' in text
+    assert 'intent = "lyric"' in text
+    assert 'state = "open"' in text
+    assert "30s 红苹果广告主题曲" in text   # body present
+
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text(encoding="utf-8"))
+    assert brief_id in index["briefs"]
+    assert index["briefs"][brief_id]["state"] == "open"
+    assert index["briefs"][brief_id]["source"] == "memory"
+
+
+def test_dispatch_brief_body_file(cartooner_env, cartooner_root, tmp_path):
+    body_file = tmp_path / "long_brief.md"
+    body_file.write_text("# Brief\n\nLine 1\nLine 2\n", encoding="utf-8")
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "builder-av",
+        "--intent", "shot_list_revision",
+        "--body-file", str(body_file),
+        "--deliverable-path", "shot_list.toml",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    brief_id = res.stdout.strip()
+    text = (cartooner_root / "projects" / "demo" / "briefs" / f"{brief_id}.toml").read_text()
+    assert "Line 1" in text and "Line 2" in text
+
+
+def test_dispatch_brief_rejects_empty_body(cartooner_env):
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "lyric",
+        "--body", "   ",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_dispatch_brief_rejects_unknown_parent_lane(cartooner_env):
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "lyric",
+        "--body", "x",
+        "--parent-lane", "lane-fake-deadbeef",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_dispatch_brief_non_memory_actor_requires_user_direct(cartooner_env):
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "writer",
+        "--intent", "lyric",
+        "--body", "x",
+        "--actor", "writer",
+        "--triggered-by", "memory_dispatch",  # mismatch — should fail
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "user_direct" in (res.stderr or "")
+
+
+def test_dispatch_brief_user_direct_self_dispatch(cartooner_env, cartooner_root):
+    res = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", "builder-image",
+        "--intent", "other",
+        "--body", "user just told me to redo shot-3",
+        "--actor", "builder-image",
+        "--triggered-by", "user_direct",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    brief_id = res.stdout.strip()
+    project_root = cartooner_root / "projects" / "demo"
+    rec = json.loads((project_root / "PROJECT_INDEX.json").read_text())["briefs"][brief_id]
+    assert rec["source"] == "user_direct:builder-image"
+    assert rec["triggered_by"] == "user_direct"
+
+
+def _dispatch_brief_helper(env, target="writer", intent="lyric"):
+    r = _run(
+        "dispatch_brief.py",
+        "--project", "demo",
+        "--target", target,
+        "--intent", intent,
+        "--body", "test brief body",
+        "--deliverable-path", "out.md",
+        "--skip-wakeup",
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_deliver_brief_happy_path(cartooner_env, cartooner_root, tmp_path):
+    brief_id = _dispatch_brief_helper(cartooner_env)
+    deliverable = tmp_path / "lyrics.md"
+    deliverable.write_text("# Lyrics\n\nVerse 1...\n", encoding="utf-8")
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "writer",
+        "--output-path", str(deliverable),
+        "--summary", "first draft, 4 hooks",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["briefs"][brief_id]
+    assert rec["state"] == "delivered"
+    assert rec["result"]["output_size_chars"] > 0
+    assert rec["result"]["summary"] == "first draft, 4 hooks"
+
+
+def test_deliver_brief_failure_path(cartooner_env, cartooner_root):
+    brief_id = _dispatch_brief_helper(cartooner_env)
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "writer",
+        "--fail",
+        "--reason", "model API timed out twice",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["briefs"][brief_id]
+    assert rec["state"] == "failed"
+    assert rec["result"]["failure_reason"] == "model API timed out twice"
+
+
+def test_deliver_brief_rejects_actor_mismatch(cartooner_env, tmp_path):
+    brief_id = _dispatch_brief_helper(cartooner_env, target="writer")
+    deliverable = tmp_path / "out.md"
+    deliverable.write_text("x", encoding="utf-8")
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo",
+        "--brief-id", brief_id,
+        "--actor", "builder-image",   # wrong — brief targets writer
+        "--output-path", str(deliverable),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "does not match brief.target" in (res.stderr or "")
+
+
+def test_deliver_brief_rejects_double_close(cartooner_env, tmp_path):
+    brief_id = _dispatch_brief_helper(cartooner_env)
+    deliverable = tmp_path / "out.md"
+    deliverable.write_text("x", encoding="utf-8")
+    r1 = _run(
+        "deliver_brief.py",
+        "--project", "demo", "--brief-id", brief_id,
+        "--actor", "writer", "--output-path", str(deliverable),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert r1.returncode == 0
+    r2 = _run(
+        "deliver_brief.py",
+        "--project", "demo", "--brief-id", brief_id,
+        "--actor", "writer", "--output-path", str(deliverable),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert r2.returncode != 0
+
+
+def test_deliver_brief_rejects_binary_output(cartooner_env, tmp_path):
+    brief_id = _dispatch_brief_helper(cartooner_env)
+    binary = tmp_path / "binary.md"
+    binary.write_bytes(b"\xff\xfe\x00\x01\x02\x80\xfe")
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo", "--brief-id", brief_id,
+        "--actor", "writer", "--output-path", str(binary),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_deliver_brief_rejects_oversized_output(cartooner_env, tmp_path):
+    brief_id = _dispatch_brief_helper(cartooner_env)
+    huge = tmp_path / "huge.md"
+    huge.write_bytes(b"a" * (5 * 1024 * 1024 + 1))
+    res = _run(
+        "deliver_brief.py",
+        "--project", "demo", "--brief-id", brief_id,
+        "--actor", "writer", "--output-path", str(huge),
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+
+
+def test_writer_lane_multi_candidate(cartooner_env, cartooner_root, tmp_path):
+    """writer can be lane-spawned for multi-candidate text outputs."""
+    res = _run(
+        "spawn_lane.py",
+        "--project", "demo",
+        "--seat", "writer",
+        "--count", "4",
+        "--prompt", "4 hooks for 30s ad, 国风暗黑",
+        "--shot-id", "hook-1",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    lane_id = res.stdout.strip()
+    assert lane_id.startswith("lane-writer-")
+
+    for i, name in enumerate(("h1", "h2", "h3", "h4")):
+        f = tmp_path / f"{name}.md"
+        f.write_text(f"# Hook {name}\n\n苹果赞歌 v{i+1}\n", encoding="utf-8")
+        is_last = name == "h4"
+        args = [
+            "--project", "demo", "--lane-id", lane_id,
+            "--asset-id", name, "--asset-path", str(f),
+            "--actor", "writer", "--asset-type", "text",
+        ]
+        if is_last:
+            args.append("--all-candidates-deposited")
+        rd = _run("deposit_asset.py", *args, env=cartooner_env)
+        assert rd.returncode == 0, rd.stderr
+
+    project_root = cartooner_root / "projects" / "demo"
+    index = json.loads((project_root / "PROJECT_INDEX.json").read_text())
+    assert index["lanes"][lane_id]["seat"] == "writer"
+    assert index["lanes"][lane_id]["state"] == "deposited"
+    assert {a for a in index["assets"] if index["assets"][a]["lane"] == lane_id} == {"h1", "h2", "h3", "h4"}
+
+    # tournament works on text candidates
+    pick = _run(
+        "pick_winner.py",
+        "--project", "demo",
+        "--round-id", "hook-1-r1",
+        "--candidates", "h1,h2,h3,h4",
+        "--strategy", "manual",
+        "--picked", "h2",
+        env=cartooner_env,
+    )
+    assert pick.returncode == 0
+
+
+def test_writer_text_asset_rejects_binary(cartooner_env, cartooner_root, tmp_path):
+    res = _run(
+        "spawn_lane.py", "--project", "demo", "--seat", "writer",
+        "--count", "1", "--prompt", "x", env=cartooner_env,
+    )
+    lane_id = res.stdout.strip()
+    binary = tmp_path / "binary.md"
+    binary.write_bytes(b"\xff\xfe\x00\x01")
+    rd = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--asset-id", "h1", "--asset-path", str(binary),
+        "--actor", "writer", "--asset-type", "text",
+        env=cartooner_env,
+    )
+    assert rd.returncode != 0
+    assert "UTF-8" in (rd.stderr or "") or "no-image-policy" in (rd.stderr or "")
+
+
+def test_writer_cannot_deposit_image(cartooner_env, cartooner_root, tmp_path):
+    """asset_type / actor mismatch enforcement."""
+    res = _run(
+        "spawn_lane.py", "--project", "demo", "--seat", "writer",
+        "--count", "1", "--prompt", "x", env=cartooner_env,
+    )
+    lane_id = res.stdout.strip()
+    f = tmp_path / "x.png"
+    f.write_bytes(b"X" * 100)
+    rd = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--asset-id", "x", "--asset-path", str(f),
+        "--actor", "writer", "--asset-type", "image",   # forbidden
+        env=cartooner_env,
+    )
+    assert rd.returncode != 0
+
+
+def test_patrol_authorization_catches_non_memory_brief_dispatch(
+    cartooner_env, cartooner_root
+):
+    """A brief_dispatched with actor != memory (and no user_direct path) is a violation."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({"project_id": "demo", "version": 1, "automation_mode": "manual",
+                    "lanes": {}, "assets": {}, "tournaments": {}}),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-10T00:00:00.000+00:00",
+            "event": "brief_dispatched",
+            "actor": "writer",   # only memory may dispatch
+            "brief_id": "brief-fake",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run("patrol_pipeline_sla.py", "--project", "demo",
+               "--check", "authorization", env=cartooner_env)
+    assert res.returncode == 2
+    assert "brief_dispatched" in res.stdout
+    assert "'writer'" in res.stdout
+
+
+def test_dispatch_brief_log_event_records_wakeup_skip(cartooner_env, cartooner_root):
+    brief_id = _dispatch_brief_helper(cartooner_env)
+    log = (cartooner_root / "projects" / "demo" / "generation_log.jsonl").read_text()
+    last = json.loads(log.strip().splitlines()[-1])
+    assert last["event"] == "brief_dispatched"
+    assert last["actor"] == "memory"
+    assert last["wakeup_ok"] is False
+    assert last["wakeup_reason"] == "skipped_by_caller"
+
+
+def test_e2e_memory_dispatches_writer_brief_then_av_lane(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """Hub-and-spoke: memory→writer brief; writer delivers; memory→builder-av lane."""
+    # 1. memory dispatches brief to writer
+    brief_id = _dispatch_brief_helper(cartooner_env, target="writer", intent="narrative")
+
+    # 2. writer delivers narrative
+    narrative = tmp_path / "narrative_outline.md"
+    narrative.write_text("# Narrative outline\n\nScene 1: ...\n", encoding="utf-8")
+    r = _run(
+        "deliver_brief.py",
+        "--project", "demo", "--brief-id", brief_id,
+        "--actor", "writer", "--output-path", str(narrative),
+        "--summary", "first cut, 3 scenes",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert r.returncode == 0
+
+    # 3. memory now spawns builder-av lane based on the narrative
+    r = _run(
+        "spawn_lane.py",
+        "--project", "demo",
+        "--seat", "builder-av",
+        "--count", "2",
+        "--prompt", "shot list authoring per narrative_outline.md",
+        "--shot-id", "shot-1",
+        env=cartooner_env,
+    )
+    assert r.returncode == 0
+
+    # 4. log captures the full chain
+    log = (cartooner_root / "projects" / "demo" / "generation_log.jsonl").read_text()
+    events = [json.loads(line)["event"] for line in log.strip().splitlines()]
+    assert "brief_dispatched" in events
+    assert "brief_delivered" in events
+    assert "lane_spawned" in events

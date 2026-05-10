@@ -39,11 +39,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import _common as common  # noqa: E402
 
-VALID_DEPOSIT_ACTORS = ("builder-image", "builder-av")
+VALID_DEPOSIT_ACTORS = ("builder-image", "builder-av", "writer")
 VALID_TYPES_PER_ACTOR = {
     "builder-image": ("image",),
     "builder-av": ("video", "audio"),
+    "writer": ("text",),
 }
+MAX_TEXT_ASSET_BYTES = 5 * 1024 * 1024  # 5MB; mirrors deliver_brief constraint
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -69,6 +71,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         "(aesthetic_score / safety / etc)")
     p.add_argument("--all-candidates-deposited", action="store_true",
                    help="Set lane state=deposited (final candidate landed)")
+    p.add_argument("--skip-wakeup", action="store_true",
+                   help="Skip tmux wakeup of memory pane on final deposit")
     return p.parse_args(argv)
 
 
@@ -94,6 +98,23 @@ def main(argv: list[str] | None = None) -> int:
         common.fail_closed(
             f"actor {args.actor!r} cannot deposit asset_type={args.asset_type!r}"
         )
+
+    # Text-asset constraints (writer's lane outputs):
+    # - must be UTF-8 (no binary contamination)
+    # - must be ≤ 5MB (mirrors deliver_brief; binary suggests boundary violation)
+    if args.asset_type == "text":
+        if file_size > MAX_TEXT_ASSET_BYTES:
+            common.fail_closed(
+                f"text asset {file_size} bytes exceeds {MAX_TEXT_ASSET_BYTES} "
+                f"(text-only constraint)"
+            )
+        try:
+            asset_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as e:
+            common.fail_closed(
+                f"text asset is not valid UTF-8: {e} "
+                f"(no-image-policy: writer outputs are text-only)"
+            )
 
     lane = common.load_lane(args.project, args.lane_id)
     if lane is None:
@@ -143,6 +164,32 @@ def main(argv: list[str] | None = None) -> int:
         lane["result"]["deposited_at"] = now
     common.write_lane(args.project, args.lane_id, lane)
 
+    # Wake memory ONLY on the lane-final deposit (state flipped to
+    # "deposited"). Individual non-final deposits accumulate silently —
+    # no need to spam memory's pane between candidates.
+    wakeup_ok = None
+    wakeup_reason = None
+    if final:
+        memory_session = common.resolve_seat_session(args.project, "memory") or ""
+        wakeup_message = (
+            f"[{args.actor}] lane_completed: {args.lane_id} "
+            f"({len(lane['result']['candidates'])} {args.asset_type} candidates ready); "
+            f"run pick_winner.py --round-id <id> --candidates <comma-list>"
+        )
+        wakeup = common.send_wakeup(
+            args.project,
+            memory_session,
+            wakeup_message,
+            skip=args.skip_wakeup,
+        )
+        wakeup_ok = wakeup["ok"]
+        wakeup_reason = wakeup["reason"]
+        if not wakeup_ok and not args.skip_wakeup:
+            sys.stderr.write(
+                f"[deposit_asset] WARN wakeup failed: {wakeup_reason} "
+                f"(lane is durable; memory can pull via render_asset_tree)\n"
+            )
+
     common.append_generation_log(args.project, {
         "event": "asset_deposited",
         "lane_id": args.lane_id,
@@ -156,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
         "file_size": file_size,
         "model_metadata": model_metadata,
         "lane_final": final,
+        "wakeup_ok": wakeup_ok,
+        "wakeup_reason": wakeup_reason,
     })
 
     print(args.asset_id)

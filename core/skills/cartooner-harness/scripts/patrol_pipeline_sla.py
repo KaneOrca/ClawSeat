@@ -52,8 +52,8 @@ VALID_FORMATS = ("text", "json")
 # Mirrors SKILL.md "Skill Authorization Matrix" and per-seat user-direct
 # table; this is the audit ground truth.
 EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
-    "lane_spawned": {"memory", "builder-image", "builder-av"},
-    "asset_deposited": {"builder-image", "builder-av"},
+    "lane_spawned": {"memory", "builder-image", "builder-av", "writer"},
+    "asset_deposited": {"builder-image", "builder-av", "writer"},
     "pick_winner": {"user", "memory_acting_director"},
     "iterate_prompt": {"user", "memory_acting_director"},
     "share_style_bible": {"user", "memory_acting_director"},
@@ -67,11 +67,16 @@ EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
     "subagent_spawned": {"builder-image", "builder-av"},
     "subagent_completed": {"builder-image", "builder-av"},
     "subagent_failed": {"builder-image", "builder-av"},
+    # cross-seat dispatch protocol (communication-protocol.md §6)
+    "brief_dispatched": {"memory"},          # only memory dispatches; user-direct self-dispatch logs as actor=<seat> + triggered_by=user_direct
+    "brief_delivered": {"writer", "builder-image", "builder-av"},
+    "brief_failed": {"writer", "builder-image", "builder-av"},
 }
 
 ASSET_TYPE_BY_ACTOR: dict[str, set[str]] = {
     "builder-image": {"image"},
     "builder-av": {"video", "audio"},
+    "writer": {"text"},
 }
 
 

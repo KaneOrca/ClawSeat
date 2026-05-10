@@ -44,7 +44,7 @@ CARTOONER_ROOT_ENV = "CARTOONER_ROOT"
 
 VALID_SEATS = ("memory", "writer", "builder-image", "builder-av", "patrol")
 VALID_LANE_STATES = ("spawned", "generating", "deposited", "picked", "failed", "superseded")
-VALID_ASSET_TYPES = ("image", "video", "audio")
+VALID_ASSET_TYPES = ("image", "video", "audio", "text")
 
 
 def cartooner_root() -> Path:
@@ -59,6 +59,7 @@ def project_root(project_id: str) -> Path:
 
 
 def ensure_project_skeleton(project_id: str) -> Path:
+    validate_project_id(project_id)
     root = project_root(project_id)
     for sub in (
         "lanes",
@@ -77,6 +78,7 @@ def now_iso() -> str:
 
 
 def load_project_index(project_id: str) -> dict[str, Any]:
+    validate_project_id(project_id)
     path = project_root(project_id) / "PROJECT_INDEX.json"
     if not path.exists():
         return {
@@ -126,6 +128,140 @@ def write_lane(project_id: str, lane_id: str, data: dict[str, Any]) -> None:
     path.write_text(serialize_toml(data), encoding="utf-8")
 
 
+def load_brief(project_id: str, brief_id: str) -> dict[str, Any] | None:
+    """Load a brief TOML file (frontmatter + body).
+
+    Returns a dict with both the frontmatter fields and a `body` key
+    holding the markdown body string. Returns None if the file is missing
+    or malformed.
+    """
+    path = project_root(project_id) / "briefs" / f"{brief_id}.toml"
+    if not path.exists():
+        return None
+    raw = path.read_text(encoding="utf-8")
+    return parse_brief(raw)
+
+
+def parse_brief(raw: str) -> dict[str, Any] | None:
+    """Parse a brief frontmatter+body file into {**frontmatter, body: <md>}."""
+    marker = "+++"
+    if not raw.startswith(marker):
+        return None
+    end = raw.find("\n" + marker, len(marker))
+    if end < 0:
+        return None
+    fm_text = raw[len(marker):end].strip()
+    body = raw[end + len("\n" + marker):].lstrip("\n")
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover
+        import tomli as tomllib  # type: ignore[no-redef]
+    try:
+        fm = tomllib.loads(fm_text)
+    except Exception:
+        return None
+    fm["body"] = body
+    return fm
+
+
+def write_brief(
+    project_id: str,
+    brief_id: str,
+    frontmatter: dict[str, Any],
+    body: str,
+) -> None:
+    """Write a brief TOML file with `+++` frontmatter markers + body."""
+    ensure_project_skeleton(project_id)
+    briefs_dir = project_root(project_id) / "briefs"
+    briefs_dir.mkdir(parents=True, exist_ok=True)
+    path = briefs_dir / f"{brief_id}.toml"
+    fm_serialized = serialize_toml(frontmatter).rstrip("\n")
+    parts = ["+++", fm_serialized, "+++", "", body.rstrip("\n"), ""]
+    path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def resolve_seat_session(project_id: str, seat_id: str) -> str | None:
+    """Look up a seat's canonical tmux session name from ~/.agents/sessions/.
+
+    Used by dispatch_brief / spawn_lane wakeup paths. Returns None when no
+    session record exists (e.g., during tests with mocked HOME) — callers
+    should treat that as "skip wakeup, just write durable file".
+    """
+    real_home = Path(os.environ.get("CLAWSEAT_REAL_HOME") or os.path.expanduser("~"))
+    path = real_home / ".agents" / "sessions" / project_id / seat_id / "session.toml"
+    if not path.exists():
+        return None
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover
+        import tomli as tomllib  # type: ignore[no-redef]
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:
+        return None
+    session = data.get("session")
+    return str(session) if session else None
+
+
+def send_wakeup(
+    project_id: str,
+    target_session: str,
+    message: str,
+    *,
+    skip: bool = False,
+) -> dict[str, Any]:
+    """Best-effort tmux wakeup via core/shell-scripts/send-and-verify.sh.
+
+    Returns a dict {ok: bool, reason: str|None, exit_code: int|None}.
+    Never raises; never blocks the caller's audit write. When skip=True
+    or send-and-verify is missing or returns non-zero, the durable brief /
+    lane is still considered authoritative — wakeup is the signal, not
+    the truth.
+    """
+    if skip:
+        return {"ok": False, "reason": "skipped_by_caller", "exit_code": None}
+    if not target_session:
+        return {"ok": False, "reason": "no_target_session", "exit_code": None}
+    transport = _send_and_verify_path()
+    if transport is None or not transport.exists():
+        return {"ok": False, "reason": "transport_missing", "exit_code": None}
+    import subprocess
+    try:
+        result = subprocess.run(
+            [
+                "bash",
+                str(transport),
+                "--project",
+                project_id,
+                target_session,
+                message,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception as exc:  # pragma: no cover
+        return {"ok": False, "reason": f"exception:{exc}", "exit_code": None}
+    if result.returncode == 0:
+        return {"ok": True, "reason": None, "exit_code": 0}
+    return {
+        "ok": False,
+        "reason": (result.stderr or result.stdout or "non_zero_exit").strip()[:240],
+        "exit_code": result.returncode,
+    }
+
+
+def _send_and_verify_path() -> Path | None:
+    here = Path(__file__).resolve().parent
+    for parent in [here, *here.parents]:
+        candidate = parent / "core" / "shell-scripts" / "send-and-verify.sh"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def serialize_toml(data: dict[str, Any]) -> str:
     """Minimal TOML serializer for our flat-with-one-section lane schema.
 
@@ -154,6 +290,10 @@ def _kv_line(key: str, value: Any) -> str:
     if isinstance(value, (int, float)):
         return f"{key} = {value}"
     if isinstance(value, str):
+        if "\n" in value:
+            # Use TOML multiline basic string for values containing newlines
+            safe = value.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+            return f'{key} = """\n{safe}\n"""'
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'{key} = "{escaped}"'
     if isinstance(value, list):
@@ -176,3 +316,34 @@ def fail_closed(message: str, code: int = 1) -> None:
     """Print to stderr and exit non-zero. Strict fail-closed semantics."""
     print(f"[cartooner-harness] FAIL: {message}", file=sys.stderr)
     sys.exit(code)
+
+
+def validate_project_id(project_id: str) -> str:
+    """Reject path-like project ids early.
+
+    Seats sometimes pass `--project ~/.cartooner/projects/<name>` thinking
+    they need to provide the absolute state path. The protocol's contract
+    is that `--project` is the BARE project name; the script resolves the
+    state root via `~/.cartooner/projects/<name>/`. Accepting a path here
+    creates nested junk like `~/.cartooner/projects/Users/ywf/.../home/.cartooner/projects/<name>/`.
+    """
+    if not project_id or not project_id.strip():
+        fail_closed("--project must be a non-empty bare name")
+    bad_chars = ("/", "\\", "~", "$")
+    for ch in bad_chars:
+        if ch in project_id:
+            fail_closed(
+                f"--project must be a bare name (no path chars); "
+                f"got {project_id!r}. Use the project's id "
+                f"(e.g. 'cartooner-video'), not its filesystem path."
+            )
+    if project_id.startswith(".") or project_id.startswith("-"):
+        fail_closed(
+            f"--project may not start with '.' or '-'; got {project_id!r}"
+        )
+    if any(c in project_id for c in ("\n", "\r", "\t", "\0", " ")):
+        fail_closed(
+            f"--project may not contain whitespace or control chars; "
+            f"got {project_id!r}"
+        )
+    return project_id

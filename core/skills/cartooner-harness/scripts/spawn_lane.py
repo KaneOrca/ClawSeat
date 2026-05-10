@@ -30,7 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import _common as common  # noqa: E402
 
-VALID_SPAWN_SEATS = ("builder-image", "builder-av")
+VALID_SPAWN_SEATS = ("builder-image", "builder-av", "writer")
 VALID_TRIGGERS = ("memory_spawn", "user_direct", "iterate_prompt", "auto_iterate")
 
 
@@ -56,6 +56,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--triggered-by", default="memory_spawn", choices=VALID_TRIGGERS)
     p.add_argument("--actor", default="memory",
                    help="Calling seat id (defaults to memory)")
+    p.add_argument("--skip-wakeup", action="store_true",
+                   help="Skip tmux wakeup (tests / dry runs)")
     return p.parse_args(argv)
 
 
@@ -101,6 +103,19 @@ def main(argv: list[str] | None = None) -> int:
     }
     common.write_project_index(args.project, index)
 
+    target_session = common.resolve_seat_session(args.project, args.seat) or ""
+    wakeup_message = (
+        f"[{args.actor}] lane_spawned: {lane_id} seat={args.seat} "
+        f"count={args.count} shot={args.shot_id or '-'}; "
+        f"read lanes/{lane_id}.toml then deposit_asset.py × {args.count}"
+    )
+    wakeup = common.send_wakeup(
+        args.project,
+        target_session,
+        wakeup_message,
+        skip=args.skip_wakeup,
+    )
+
     common.append_generation_log(args.project, {
         "event": "lane_spawned",
         "lane_id": lane_id,
@@ -111,7 +126,15 @@ def main(argv: list[str] | None = None) -> int:
         "prompt_l2": args.prompt,
         "shot_id": args.shot_id or None,
         "parent_lane": args.parent_lane or None,
+        "wakeup_ok": wakeup["ok"],
+        "wakeup_reason": wakeup["reason"],
     })
+
+    if not wakeup["ok"] and not args.skip_wakeup:
+        sys.stderr.write(
+            f"[spawn_lane] WARN wakeup failed: {wakeup['reason']} "
+            f"(lane is durable; receiver can pull via render_asset_tree)\n"
+        )
 
     print(lane_id)
     return 0
