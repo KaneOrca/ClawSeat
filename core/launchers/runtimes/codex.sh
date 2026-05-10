@@ -42,10 +42,9 @@ run_codex_runtime() {
     if [[ -n "$resume_session_id" ]]; then
       resume_args=(--resume "$resume_session_id")
       resume_label="$resume_session_id"
-    else
-      resume_args=(--last)
-      resume_label="last"
     fi
+    # No --last fallback: codex CLI rejects '--last' as a top-level flag.
+    # When no prior session id is recorded, start fresh (no resume args).
   fi
 
   if [[ "$auth_mode" == "chatgpt" ]]; then
@@ -60,7 +59,7 @@ run_codex_runtime() {
     echo " CODEX_HOME: $CODEX_HOME"
     echo "────────────────────────────────────────"
     [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
-    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" "${resume_args[@]}"
+    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" ${resume_args[@]+"${resume_args[@]}"}
   fi
 
   local secret_file="" runtime_dir
@@ -138,9 +137,9 @@ PY
   [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
   if [[ "$auth_mode" == "custom" ]]; then
     if [[ -n "${LAUNCHER_CUSTOM_MODEL:-}" ]]; then
-      exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi -m "${LAUNCHER_CUSTOM_MODEL}" "${resume_args[@]}"
+      exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi -m "${LAUNCHER_CUSTOM_MODEL}" ${resume_args[@]+"${resume_args[@]}"}
     fi
-    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi "${resume_args[@]}"
+    exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" -c model_provider=customapi ${resume_args[@]+"${resume_args[@]}"}
   fi
-  exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" "${resume_args[@]}"
+  exec codex --dangerously-bypass-approvals-and-sandbox -C "$workdir" ${resume_args[@]+"${resume_args[@]}"}
 }

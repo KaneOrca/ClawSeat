@@ -55,7 +55,7 @@ run_gemini_runtime() {
     echo " HOME:       $HOME"
     echo "────────────────────────────────────────"
     [[ -n "$resume_args" ]] && launcher_resume_banner "$resume_label" >&2
-    exec gemini -y "${resume_args[@]}"
+    exec gemini -y ${resume_args[@]+"${resume_args[@]}"}
   fi
 
   local secret_file="" runtime_dir
@@ -105,7 +105,7 @@ run_gemini_runtime() {
   echo "────────────────────────────────────────"
   [[ -n "$resume_args" ]] && launcher_resume_banner "$resume_label" >&2
   if [[ -n "${LAUNCHER_CUSTOM_MODEL:-}" ]]; then
-    exec gemini -y -m "${LAUNCHER_CUSTOM_MODEL}" "${resume_args[@]}"
+    exec gemini -y -m "${LAUNCHER_CUSTOM_MODEL}" ${resume_args[@]+"${resume_args[@]}"}
   fi
-  exec gemini -y "${resume_args[@]}"
+  exec gemini -y ${resume_args[@]+"${resume_args[@]}"}
 }

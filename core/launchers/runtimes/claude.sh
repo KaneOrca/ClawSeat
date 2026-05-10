@@ -92,7 +92,7 @@ run_claude_runtime() {
     fi
     echo "────────────────────────────────────────"
     [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
-    exec claude --dangerously-skip-permissions "${resume_args[@]}"
+    exec claude --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
   fi
 
   local secret_file="" runtime_dir
@@ -221,5 +221,5 @@ run_claude_runtime() {
   echo " AGENT_HOME: $AGENT_HOME"
   echo "────────────────────────────────────────"
   [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
-  exec claude --dangerously-skip-permissions "${resume_args[@]}"
+  exec claude --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
 }
