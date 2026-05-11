@@ -212,6 +212,29 @@ run_selected_tool() {
   esac
 }
 
+# Audit finding #11 (2026-05-11): inject ~/.agents/secrets/shared/*.env
+# into the launching tool's env BEFORE runtime-specific auth secret loads.
+# Auth-tied secrets (sourced inside runtimes/<tool>.sh) thus override the
+# shared baseline. Without this, builder-image / builder-av had no
+# MINIMAX_API_KEY / GEMINI_API_KEY / XCODE_BEST_GPT_IMAGE_API_KEY in
+# their sandbox env even though shared/ files existed — agent_admin's
+# build_runtime added them but start_engineer_launch bypassed build_runtime.
+# Loading at the launcher (L3) instead means every launch path inherits.
+load_shared_secrets() {
+  local shared_dir="${CLAWSEAT_SHARED_SECRETS_DIR:-${REAL_HOME:-$HOME}/.agents/secrets/shared}"
+  if [[ ! -d "$shared_dir" ]]; then
+    return 0
+  fi
+  set -a
+  local f
+  for f in "$shared_dir"/*.env; do
+    [[ -f "$f" ]] || continue
+    # shellcheck source=/dev/null
+    source "$f"
+  done
+  set +a
+}
+
 if [[ "${CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY:-}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
@@ -277,5 +300,7 @@ fi
 
 validate_top_level_inputs
 ensure_custom_env_file_for_auth
+
+load_shared_secrets
 
 run_selected_tool "$TOOL_NAME" "$AUTH_MODE" "$WORKDIR" "$SESSION_NAME"
