@@ -88,6 +88,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--reason", default="",
                    help="(fail) Free-form failure reason")
 
+    # spawn-only concurrency cap (audit finding #12)
+    p.add_argument("--max-concurrent", type=int, default=4,
+                   help="(spawn) Maximum number of subagents this caller may "
+                        "have in 'spawned' (not yet completed/failed) state at "
+                        "once. Fails closed if exceeded. Audit finding #12 "
+                        "(2026-05-11): Gemini's function-calling API rejects "
+                        "follow-on turns when prior parallel tool calls have "
+                        "unmatched response parts — builder-av (Gemini-backed) "
+                        "should pass --max-concurrent 1 to spawn subagents "
+                        "strictly sequentially. Codex / Claude callers can "
+                        "leave the default of 4.")
+
     return p.parse_args(argv)
 
 
@@ -141,6 +153,29 @@ def _spawn(args: argparse.Namespace) -> int:
             )
 
     common.ensure_project_skeleton(args.project)
+
+    if args.max_concurrent < 1:
+        common.fail_closed(
+            f"--max-concurrent must be >= 1, got {args.max_concurrent}"
+        )
+
+    # Audit finding #12: enforce per-caller concurrency cap before any
+    # state mutation. Counts only "spawned" (in-flight) subagents from
+    # the same caller — completed / failed don't count.
+    index_pre = common.load_project_index(args.project)
+    in_flight = [
+        sa for sa in (index_pre.get("subagents") or {}).values()
+        if sa.get("state") == "spawned" and sa.get("caller") == args.seat
+    ]
+    if len(in_flight) >= args.max_concurrent:
+        in_flight_ids = sorted(sa.get("id", "<no-id>") for sa in in_flight)
+        common.fail_closed(
+            f"--max-concurrent={args.max_concurrent} exceeded: caller "
+            f"{args.seat!r} already has {len(in_flight)} spawned "
+            f"subagents in flight ({in_flight_ids}). Complete or fail "
+            f"them first (spawn_subagent.py --action complete/fail). "
+            f"Lower --max-concurrent if you want strict serialization."
+        )
 
     if args.parent_round:
         index_check = common.load_project_index(args.project)

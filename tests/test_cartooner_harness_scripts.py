@@ -3229,3 +3229,213 @@ def test_parse_brief_round_trips_multi_output_result_block(
     )
     assert res.returncode == 0, res.stderr
     assert "OK" in res.stdout
+
+
+# ── audit finding #10: lane model intent + deposit coherence ───────────
+
+
+def _spawn_lane_with_model(env, model: str, seat: str = "builder-image"):
+    r = _run(
+        "spawn_lane.py",
+        "--project", "demo",
+        "--seat", seat,
+        "--count", "1",
+        "--prompt", "test",
+        "--model", model,
+        "--skip-wakeup",
+        env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_spawn_lane_records_model_in_lane_and_index(cartooner_env, cartooner_root):
+    lane_id = _spawn_lane_with_model(cartooner_env, "gpt-image-2")
+    proj = cartooner_root / "projects" / "demo"
+    raw = (proj / "lanes" / f"{lane_id}.toml").read_text(encoding="utf-8")
+    assert 'model = "gpt-image-2"' in raw
+    rec = json.loads((proj / "PROJECT_INDEX.json").read_text())["lanes"][lane_id]
+    assert rec["model"] == "gpt-image-2"
+
+
+def test_deposit_asset_model_match_no_fallback_required(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """When deposit's --model equals lane.model, no fallback reason needed."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "minimax-image-01")
+    img = tmp_path / "asset.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo",
+        "--lane-id", lane_id,
+        "--asset-id", "img-test-1",
+        "--asset-path", str(img),
+        "--actor", "builder-image",
+        "--asset-type", "image",
+        "--model", "minimax-image-01",
+        "--all-candidates-deposited",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["assets"]["img-test-1"]
+    assert rec["model"] == "minimax-image-01"
+    assert rec["model_asked"] == "minimax-image-01"
+    assert rec["model_fallback_reason"] is None
+
+
+def test_deposit_asset_model_mismatch_requires_fallback_reason(
+    cartooner_env, tmp_path
+):
+    """Memory asked gpt-image-2 but builder used minimax → must justify."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "gpt-image-2")
+    img = tmp_path / "asset.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo",
+        "--lane-id", lane_id,
+        "--asset-id", "img-test-2",
+        "--asset-path", str(img),
+        "--actor", "builder-image",
+        "--asset-type", "image",
+        "--model", "minimax-image-01",  # different from lane
+        "--all-candidates-deposited",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "model-fallback-reason" in res.stderr
+    assert "audit finding #10" in res.stderr
+
+
+def test_deposit_asset_model_mismatch_with_fallback_reason_succeeds(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """Same mismatch, but with --model-fallback-reason → passes + records both."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "gpt-image-2")
+    img = tmp_path / "asset.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo",
+        "--lane-id", lane_id,
+        "--asset-id", "img-test-3",
+        "--asset-path", str(img),
+        "--actor", "builder-image",
+        "--asset-type", "image",
+        "--model", "minimax-image-01",
+        "--model-fallback-reason", "OpenAI route 401 — no OPENAI_API_KEY in sandbox",
+        "--all-candidates-deposited",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["assets"]["img-test-3"]
+    assert rec["model"] == "minimax-image-01"
+    assert rec["model_asked"] == "gpt-image-2"
+    assert "OPENAI_API_KEY" in rec["model_fallback_reason"]
+    # Same diverged event in generation_log
+    log = (
+        cartooner_root / "projects" / "demo" / "generation_log.jsonl"
+    ).read_text()
+    last_dep = [
+        json.loads(l) for l in log.strip().splitlines()
+        if json.loads(l).get("event") == "asset_deposited"
+    ][-1]
+    assert last_dep["model_asked"] == "gpt-image-2"
+    assert last_dep["model"] == "minimax-image-01"
+
+
+def test_deposit_asset_lane_without_model_intent_skips_check(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """Pre-#10 lanes (no model field) bypass the coherence check."""
+    # spawn lane WITHOUT --model
+    r = _run(
+        "spawn_lane.py", "--project", "demo", "--seat", "builder-image",
+        "--count", "1", "--prompt", "no-model-lane",
+        "--skip-wakeup", env=cartooner_env,
+    )
+    assert r.returncode == 0
+    lane_id = r.stdout.strip()
+    img = tmp_path / "a.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    # deposit with arbitrary model — no fallback reason needed
+    res = _run(
+        "deposit_asset.py", "--project", "demo", "--lane-id", lane_id,
+        "--asset-id", "img-test-4", "--asset-path", str(img),
+        "--actor", "builder-image", "--asset-type", "image",
+        "--model", "any-thing",
+        "--all-candidates-deposited", "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+
+
+# ── audit finding #12: subagent --max-concurrent enforcement ────────────
+
+
+def _spawn_subagent_helper(env, seat="builder-image", max_concurrent=None):
+    args = [
+        "spawn_subagent.py", "--project", "demo", "--action", "spawn",
+        "--seat", seat, "--subagent-type", "reference_learning",
+        "--inputs", '{"reference_url": "https://x.example/y"}',
+    ]
+    if max_concurrent is not None:
+        args += ["--max-concurrent", str(max_concurrent)]
+    r = _run(*args, env=env)
+    return r
+
+
+def test_spawn_subagent_max_concurrent_blocks_excess(cartooner_env):
+    """builder-av --max-concurrent 1 must reject the 2nd parallel spawn."""
+    r1 = _spawn_subagent_helper(cartooner_env, seat="builder-av", max_concurrent=1)
+    assert r1.returncode == 0, r1.stderr
+    r2 = _spawn_subagent_helper(cartooner_env, seat="builder-av", max_concurrent=1)
+    assert r2.returncode != 0
+    assert "max-concurrent=1" in r2.stderr
+    assert "audit finding #12" in r2.stderr or "in flight" in r2.stderr
+
+
+def test_spawn_subagent_max_concurrent_allows_after_complete(
+    cartooner_env, tmp_path
+):
+    """After completing the 1st, the 2nd spawn is allowed."""
+    r1 = _spawn_subagent_helper(cartooner_env, seat="builder-av", max_concurrent=1)
+    sa1 = r1.stdout.strip()
+    report = tmp_path / "report.md"
+    report.write_text("# review\n\nfindings\n", encoding="utf-8")
+    rc = _run(
+        "spawn_subagent.py", "--project", "demo", "--action", "complete",
+        "--subagent-id", sa1, "--report-path", str(report),
+        env=cartooner_env,
+    )
+    assert rc.returncode == 0, rc.stderr
+    r2 = _spawn_subagent_helper(cartooner_env, seat="builder-av", max_concurrent=1)
+    assert r2.returncode == 0, r2.stderr
+
+
+def test_spawn_subagent_max_concurrent_default_allows_4(cartooner_env):
+    """Default --max-concurrent = 4 → 4 spawns OK, 5th blocks."""
+    for i in range(4):
+        r = _spawn_subagent_helper(cartooner_env, seat="builder-image")
+        assert r.returncode == 0, f"spawn {i}: {r.stderr}"
+    r5 = _spawn_subagent_helper(cartooner_env, seat="builder-image")
+    assert r5.returncode != 0
+    assert "max-concurrent=4" in r5.stderr
+
+
+def test_spawn_subagent_max_concurrent_per_caller_isolation(cartooner_env):
+    """Cap is per-caller, not global: builder-image at cap doesn't block builder-av."""
+    for _ in range(4):
+        r = _spawn_subagent_helper(cartooner_env, seat="builder-image")
+        assert r.returncode == 0, r.stderr
+    # builder-av's cap independent
+    r_av = _spawn_subagent_helper(cartooner_env, seat="builder-av", max_concurrent=1)
+    assert r_av.returncode == 0, r_av.stderr

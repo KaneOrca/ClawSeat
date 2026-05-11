@@ -77,6 +77,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Explicit memory tmux session name (overrides "
                         "resolve_seat_session). Use when memory's tmux is "
                         "bound to a different project than --project.")
+    p.add_argument("--model-fallback-reason", default="",
+                   help="Required when --model differs from lane.model "
+                        "(audit finding #10). Forces silent provider "
+                        "fallback to be an explicit, audited signal: e.g. "
+                        "'OpenAI route 401', 'Imagen API quota exceeded'. "
+                        "If lane has no model intent, this arg is ignored. "
+                        "If --model matches lane.model, this arg is ignored.")
     return p.parse_args(argv)
 
 
@@ -137,6 +144,24 @@ def main(argv: list[str] | None = None) -> int:
             f"cannot deposit into lane {args.lane_id} (state={lane.get('state')})"
         )
 
+    # Audit finding #10 (2026-05-11): silent provider fallback breaks
+    # cross-model comparison tests. If memory anchored a model intent on
+    # the lane and the deposit's --model disagrees, the depositor MUST
+    # justify the fallback via --model-fallback-reason. The asset record
+    # then carries both `model_asked` (lane intent) and `model` (actual)
+    # so downstream readers can audit the divergence.
+    lane_model = (lane.get("model") or "").strip()
+    actual_model = (args.model or "").strip()
+    fallback_reason = args.model_fallback_reason.strip()
+    model_diverged = bool(lane_model) and bool(actual_model) and lane_model != actual_model
+    if model_diverged and not fallback_reason:
+        common.fail_closed(
+            f"deposit_asset --model={actual_model!r} disagrees with "
+            f"lane.model={lane_model!r}. Pass --model-fallback-reason "
+            f"\"<why>\" to record the divergence as an audit signal "
+            f"(silent provider fallback is forbidden by audit finding #10)."
+        )
+
     now = common.now_iso()
     final = bool(args.all_candidates_deposited)
     new_state = "deposited" if final else "generating"
@@ -147,6 +172,10 @@ def main(argv: list[str] | None = None) -> int:
         "type": args.asset_type,
         "lane": args.lane_id,
         "model": args.model,
+        # Audit finding #10: capture lane's requested model so downstream
+        # readers see (asked, actual) pair and can detect silent fallback.
+        "model_asked": lane_model or None,
+        "model_fallback_reason": fallback_reason or None,
         "seed": args.seed,
         "api_status": args.api_status,
         "file_size": file_size,
@@ -208,6 +237,8 @@ def main(argv: list[str] | None = None) -> int:
         "asset_type": args.asset_type,
         "actor": args.actor,
         "model": args.model,
+        "model_asked": lane_model or None,
+        "model_fallback_reason": fallback_reason or None,
         "seed": args.seed,
         "prompt_l3": args.prompt_l3,
         "api_status": args.api_status,

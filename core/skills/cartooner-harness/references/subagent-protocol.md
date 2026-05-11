@@ -141,6 +141,46 @@ shot_list.toml's `references` field.
 
 **Storage**: `references_learned/<provider>-<title-slug>.md`
 
+## Concurrency cap (audit finding #12, 2026-05-11)
+
+`spawn_subagent.py --action spawn` enforces a per-caller cap on
+in-flight (state=`spawned`) subagents via `--max-concurrent` (default 4).
+Once exceeded, spawn fails closed until the caller completes / fails one
+of its prior subagents.
+
+| Caller seat | Tool | Recommended `--max-concurrent` |
+|---|---|---|
+| `builder-image` | Codex CLI | **4** (default; Codex tolerates parallel function calls) |
+| `builder-av` | Gemini CLI | **1** (strict serial; see below) |
+
+**Why builder-av must serialize**: Gemini's function-calling API rejects
+follow-on conversation turns when a prior turn has parallel tool calls
+with unmatched response parts. Symptom (observed in clawseat-storyboard-test
+2026-05-11): main thread crashes with
+`status: INVALID_ARGUMENT — number of function response parts is equal
+to the number of function call parts of the function call turn`. Calling
+`spawn_subagent --action spawn` three times in parallel within one Gemini
+turn is the reproducer.
+
+**Workaround pattern for builder-av**:
+
+```bash
+# spawn-1
+spawn_subagent.py --action spawn --max-concurrent 1 --seat builder-av \
+    --subagent-type reference_learning --inputs '{"reference_url": "..."}'
+# (run subagent's vision call in a separate Gemini sub-turn,
+#  write report to references_learned/<id>.md)
+spawn_subagent.py --action complete --subagent-id <id> --report-path ...
+
+# spawn-2 (only after #1 completes)
+spawn_subagent.py --action spawn --max-concurrent 1 --seat builder-av ...
+```
+
+If builder-av needs to compare N candidates, spawn ONE subagent with
+all N candidate paths in the inputs JSON — let the subagent do the
+comparison in its single isolated context. Spawning N parallel subagents
+is both a Gemini-API hazard and a context-cost waste.
+
 ## Why builder-av uses Gemini for this
 
 Reference-learning subagents need video ingestion. Among LLM providers:

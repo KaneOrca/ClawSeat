@@ -62,6 +62,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Explicit tmux session name to wake (overrides "
                         "resolve_seat_session). Use when target seat's tmux "
                         "is bound to a different project than --project.")
+    p.add_argument("--model", default="",
+                   help="Requested model id (e.g. gpt-image-2, "
+                        "nano-banana-pro, minimax-image-01, codex-image-builtin, "
+                        "seedance-2.0-i2v). Captured as the lane's intent; "
+                        "deposit_asset enforces coherence — a deposit whose "
+                        "--model differs from this requires explicit "
+                        "--model-fallback-reason so silent fallbacks become "
+                        "an audit signal. Audit finding #10 (2026-05-11).")
     return p.parse_args(argv)
 
 
@@ -93,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         "character_dna_ref": args.character_dna_ref,
         "parent_lane": args.parent_lane,
         "triggered_by": args.triggered_by,
+        "model": args.model,
     }
     common.write_lane(args.project, lane_id, lane_data)
 
@@ -104,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             "shot_id": args.shot_id or None,
             "triggered_by": args.triggered_by,
             "created_at": now,
+            "model": args.model or None,
         }
         return index
     common.update_project_index(args.project, _add_lane)
@@ -113,10 +123,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     # Wakeup MUST name --project explicitly (audit finding #8): receiver
     # LLMs otherwise drift to their session-bound default project and
-    # deposit assets in the wrong PROJECT_INDEX.
+    # deposit assets in the wrong PROJECT_INDEX. Model intent (audit
+    # finding #10) named so receiver knows which provider to attempt
+    # before any fallback.
+    model_hint = f" model={args.model}" if args.model else ""
     wakeup_message = (
         f"[{args.actor}] lane_spawned: {lane_id} project={args.project} "
-        f"seat={args.seat} count={args.count} shot={args.shot_id or '-'}; "
+        f"seat={args.seat} count={args.count} shot={args.shot_id or '-'}{model_hint}; "
         f"read ~/.cartooner/projects/{args.project}/lanes/{lane_id}.toml "
         f"then deposit_asset.py --project {args.project} --lane-id {lane_id} "
         f"× {args.count} candidates"
@@ -138,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         "prompt_l2": args.prompt,
         "shot_id": args.shot_id or None,
         "parent_lane": args.parent_lane or None,
+        "model": args.model or None,
         "wakeup_ok": wakeup["ok"],
         "wakeup_reason": wakeup["reason"],
     })
