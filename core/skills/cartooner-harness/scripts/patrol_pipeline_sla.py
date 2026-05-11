@@ -54,6 +54,7 @@ VALID_FORMATS = ("text", "json")
 EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
     "lane_spawned": {"memory", "builder-image", "builder-av", "writer"},
     "asset_deposited": {"builder-image", "builder-av", "writer"},
+    "lane_failed": {"builder-image", "builder-av", "writer"},
     "pick_winner": {"user", "memory_acting_director"},
     "iterate_prompt": {"user", "memory_acting_director"},
     "share_style_bible": {"user", "memory_acting_director"},

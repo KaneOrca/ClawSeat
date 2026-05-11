@@ -101,11 +101,42 @@ Responsibilities:
   - Calls `cartooner-image` / `cartooner-storyboard` / `cartooner-design`
   - `deposit_asset` with model_metadata + file_metadata only
 
+### Lane model intent → execution path (audit finding #14, 2026-05-11)
+
+When `lane.model` is set (audit finding #10), builder-image MUST honor
+the model intent by routing to the right execution path. There are two
+execution paths and they are mutually exclusive — picking the wrong one
+silently produces an asset from a different model than the lane intended.
+
+| `lane.model` value | Execution path | Why |
+|---|---|---|
+| `nb2`, `nbp`, `nano-banana-pro`, `nanobanana-pro`, `nanobanana2`, `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview` | `cartooner-image` skill (`generate_image.py`) | Skill owns Gemini SDK + proxy auth + retry/cache |
+| `minimax`, `image-01`, `image-01-live` | `cartooner-image` skill | Skill owns MiniMax HTTP + non-retryable code handling |
+| `gpt-image-2`, `image-2`, `xcode-image-2` | `cartooner-image` skill | Skill owns xcode.best whitelist + Cloudflare retry |
+| `codex-image-builtin`, `codex-image-*` | **Codex CLI's native `image_generation` tool — NOT cartooner-image skill** | The skill has no codex-internal route and will fail-closed (#13). Native tool uses chatgpt OAuth, not env API key. |
+| Anything else | `deposit_asset --fail` with reason "lane.model not in builder-image's known route table — escalate to memory" | Don't guess; the protocol only honors known intents. |
+
+**Strict no-silent-fallback rule** (audit finding #13): cartooner-image
+skill rejects unknown `--model` aliases by default. If the requested
+provider is unavailable in this environment (route stalled / API key
+missing / quota exhausted / native tool not callable), builder-image
+must call `deposit_asset --model <fallback> --model-fallback-reason "..."`
+to make the divergence explicit, OR `deposit_asset --fail --reason "..."`
+to escalate. Never silently pick a different model.
+
+**Concretely**: if the lane requested `codex-image-builtin` and codex's
+internal `image_generation` tool isn't reachable in this seat's runtime,
+the right action is `deposit_asset --fail --reason "codex-image-builtin
+route unavailable: codex CLI tool image_generation not in this session's
+auth tier"`, not silently routing through cartooner-image (which would
+end up at Gemini default since the skill rejects the unknown alias).
+
 Forbidden in main thread:
 - Viewing any asset content (use root-cause subagent only when triggered by user feedback)
 - Self-evaluating output (no-image-policy)
 - Picking own candidates
 - Writing narrative or shot_list (consume only, don't author)
+- Silent model-route fallback (use --model-fallback-reason or --fail)
 
 Subagent allowance:
 - **root-cause subagent**: triggered by user feedback ("too bright"); views

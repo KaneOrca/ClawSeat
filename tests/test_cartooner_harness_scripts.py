@@ -3439,3 +3439,163 @@ def test_spawn_subagent_max_concurrent_per_caller_isolation(cartooner_env):
     # builder-av's cap independent
     r_av = _spawn_subagent_helper(cartooner_env, seat="builder-av", max_concurrent=1)
     assert r_av.returncode == 0, r_av.stderr
+
+
+# ── audit finding #16: deposit_asset --fail-lane primitive ─────────────
+
+
+def test_deposit_asset_fail_lane_marks_lane_failed(
+    cartooner_env, cartooner_root
+):
+    """--fail-lane transitions lane to state=failed without depositing asset."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "codex-image-builtin")
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo",
+        "--lane-id", lane_id,
+        "--actor", "builder-image",
+        "--fail-lane",
+        "--reason", "codex-image-builtin route unavailable in this auth tier",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    rec = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    )["lanes"][lane_id]
+    assert rec["state"] == "failed"
+    assert "codex-image-builtin" in rec["failure_reason"]
+    assert "failed_at" in rec
+    # No asset created
+    assets = json.loads(
+        (cartooner_root / "projects" / "demo" / "PROJECT_INDEX.json").read_text()
+    ).get("assets", {})
+    assert not assets
+
+
+def test_deposit_asset_fail_lane_requires_reason(cartooner_env):
+    """--fail-lane without --reason fails closed."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "gpt-image-2")
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--actor", "builder-image",
+        "--fail-lane",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "--fail-lane requires --reason" in res.stderr
+
+
+def test_deposit_asset_fail_lane_mutex_with_deposit_args(
+    cartooner_env, tmp_path
+):
+    """--fail-lane + --asset-id is invalid (mutually exclusive)."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "gpt-image-2")
+    img = tmp_path / "x.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--actor", "builder-image",
+        "--asset-id", "img-x",
+        "--asset-path", str(img),
+        "--asset-type", "image",
+        "--fail-lane",
+        "--reason", "ignored",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "mutually exclusive" in res.stderr
+
+
+def test_deposit_asset_fail_lane_emits_lane_failed_event(
+    cartooner_env, cartooner_root
+):
+    """generation_log captures lane_failed with model_asked + reason."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "nano-banana-pro")
+    res = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--actor", "builder-image",
+        "--fail-lane",
+        "--reason", "GEMINI_API_KEY missing in sandbox env",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    log = (
+        cartooner_root / "projects" / "demo" / "generation_log.jsonl"
+    ).read_text()
+    last = json.loads(log.strip().splitlines()[-1])
+    assert last["event"] == "lane_failed"
+    assert last["model_asked"] == "nano-banana-pro"
+    assert "GEMINI_API_KEY" in last["reason"]
+    assert last["actor"] == "builder-image"
+
+
+def test_deposit_asset_fail_lane_rejects_already_deposited_lane(
+    cartooner_env, tmp_path
+):
+    """Cannot fail a lane that already deposited."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "minimax-image-01")
+    img = tmp_path / "y.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    # First deposit successfully
+    res1 = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--asset-id", "img-y", "--asset-path", str(img),
+        "--actor", "builder-image", "--asset-type", "image",
+        "--model", "minimax-image-01",
+        "--all-candidates-deposited",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res1.returncode == 0
+    # Now try to fail-lane the deposited lane
+    res2 = _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--actor", "builder-image",
+        "--fail-lane",
+        "--reason", "too late",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    assert res2.returncode != 0
+    assert "only valid for spawned/generating" in res2.stderr
+
+
+def test_patrol_authorization_accepts_lane_failed_event(
+    cartooner_env, cartooner_root
+):
+    """patrol_pipeline_sla.py --check authorization recognizes lane_failed."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({
+            "project_id": "demo", "version": 1, "automation_mode": "manual",
+            "lanes": {}, "assets": {}, "tournaments": {},
+        }),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-11T00:00:00.000+00:00",
+            "event": "lane_failed",
+            "actor": "builder-image",
+            "lane_id": "lane-x",
+            "reason": "route stalled",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run(
+        "patrol_pipeline_sla.py",
+        "--project", "demo", "--check", "authorization",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    assert "clean" in res.stdout

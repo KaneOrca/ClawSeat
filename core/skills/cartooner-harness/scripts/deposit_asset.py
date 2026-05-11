@@ -52,13 +52,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="deposit_asset")
     p.add_argument("--project", required=True)
     p.add_argument("--lane-id", required=True)
-    p.add_argument("--asset-id", required=True,
-                   help="Unique asset id (e.g. img-042-a)")
-    p.add_argument("--asset-path", required=True,
-                   help="Path to deposited asset file (must exist + size > 0)")
+    p.add_argument("--asset-id", default="",
+                   help="Unique asset id (e.g. img-042-a). Required for "
+                        "deposit; ignored for --fail-lane.")
+    p.add_argument("--asset-path", default="",
+                   help="Path to deposited asset file (must exist + size > 0). "
+                        "Required for deposit; ignored for --fail-lane.")
     p.add_argument("--actor", required=True, choices=VALID_DEPOSIT_ACTORS,
                    help="Depositing seat (must match lane.seat)")
-    p.add_argument("--asset-type", required=True, choices=common.VALID_ASSET_TYPES)
+    p.add_argument("--asset-type", default="", choices=("",) + common.VALID_ASSET_TYPES,
+                   help="Asset type. Required for deposit; ignored for --fail-lane.")
     p.add_argument("--prompt-l3", default="", help="Model-specific prompt used")
     p.add_argument("--model", default="",
                    help="e.g. nano-banana, gpt-image-2, seedance-2.0-i2v")
@@ -84,6 +87,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         "'OpenAI route 401', 'Imagen API quota exceeded'. "
                         "If lane has no model intent, this arg is ignored. "
                         "If --model matches lane.model, this arg is ignored.")
+    p.add_argument("--fail-lane", action="store_true",
+                   help="Audit finding #14 (2026-05-11): mark the lane as "
+                        "failed without depositing any asset. Use when the "
+                        "requested model.intent route is genuinely "
+                        "unreachable (e.g., codex-image-builtin with no "
+                        "chatgpt access). Requires --reason. Mutually "
+                        "exclusive with the deposit args (--asset-id / "
+                        "--asset-path / --asset-type / --model). Memory "
+                        "may then re-spawn with a different model + "
+                        "parent-lane=<this>.")
+    p.add_argument("--reason", default="",
+                   help="(--fail-lane) free-form reason the lane could not "
+                        "produce an asset (e.g., 'codex-image-builtin route "
+                        "unavailable in this codex auth tier').")
     return p.parse_args(argv)
 
 
@@ -91,6 +108,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     common.validate_id_token(args.lane_id, kind="--lane-id")
+
+    # Audit finding #14: --fail-lane is the no-deposit path. Branch
+    # before any asset validation so deposit-required args are skipped.
+    if args.fail_lane:
+        return _fail_lane(args)
+
+    if not args.asset_id:
+        common.fail_closed("deposit requires --asset-id (or use --fail-lane)")
+    if not args.asset_path:
+        common.fail_closed("deposit requires --asset-path (or use --fail-lane)")
+    if not args.asset_type:
+        common.fail_closed("deposit requires --asset-type (or use --fail-lane)")
+
     common.validate_id_token(args.asset_id, kind="--asset-id")
 
     asset_path = Path(args.asset_path).expanduser()
@@ -250,6 +280,82 @@ def main(argv: list[str] | None = None) -> int:
     })
 
     print(args.asset_id)
+    return 0
+
+
+def _fail_lane(args: argparse.Namespace) -> int:
+    """Audit finding #14: transition lane to state=failed without depositing.
+
+    Used when the lane's requested model intent is unreachable in this
+    seat's runtime (e.g., codex-image-builtin with no chatgpt access) and
+    the right action is to escalate to memory rather than silent fallback.
+    Memory may then re-spawn with a different model + parent_lane=<this>.
+    """
+    if not args.reason.strip():
+        common.fail_closed("--fail-lane requires --reason")
+    if args.asset_id or args.asset_path or args.asset_type:
+        common.fail_closed(
+            "--fail-lane is mutually exclusive with --asset-id / "
+            "--asset-path / --asset-type (no asset is being deposited)"
+        )
+
+    lane = common.load_lane(args.project, args.lane_id)
+    if lane is None:
+        common.fail_closed(f"lane not found: {args.lane_id}")
+    if lane.get("seat") != args.actor:
+        common.fail_closed(
+            f"actor mismatch: lane.seat={lane.get('seat')!r} "
+            f"actor={args.actor!r}"
+        )
+    if lane.get("state") in ("deposited", "picked", "superseded", "failed"):
+        common.fail_closed(
+            f"cannot fail-lane {args.lane_id} (state={lane.get('state')}); "
+            f"--fail-lane is only valid for spawned/generating lanes"
+        )
+
+    now = common.now_iso()
+    lane["state"] = "failed"
+    lane.setdefault("result", {})
+    lane["result"]["failed_at"] = now
+    lane["result"]["failure_reason"] = args.reason
+    common.write_lane(args.project, args.lane_id, lane)
+
+    def _mark_failed(index):
+        lane_idx = index.setdefault("lanes", {}).setdefault(args.lane_id, {})
+        lane_idx["state"] = "failed"
+        lane_idx["failed_at"] = now
+        lane_idx["failure_reason"] = args.reason
+        return index
+    common.update_project_index(args.project, _mark_failed)
+
+    memory_session = args.target_session.strip() or (
+        common.resolve_seat_session(args.project, "memory") or ""
+    )
+    msg = (
+        f"[{args.actor}] lane_failed: {args.lane_id} "
+        f"project={args.project} reason={args.reason[:120]}; "
+        f"memory may re-spawn with --parent-lane {args.lane_id} + "
+        f"different --model"
+    )
+    wakeup = common.send_wakeup(
+        args.project, memory_session, msg, skip=args.skip_wakeup,
+    )
+    if not wakeup["ok"] and not args.skip_wakeup:
+        sys.stderr.write(
+            f"[deposit_asset] WARN wakeup failed: {wakeup['reason']}\n"
+        )
+
+    common.append_generation_log(args.project, {
+        "event": "lane_failed",
+        "lane_id": args.lane_id,
+        "actor": args.actor,
+        "model_asked": (lane.get("model") or None),
+        "reason": args.reason,
+        "wakeup_ok": wakeup["ok"],
+        "wakeup_reason": wakeup["reason"],
+    })
+
+    print(args.lane_id)
     return 0
 
 
