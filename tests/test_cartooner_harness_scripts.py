@@ -3599,3 +3599,177 @@ def test_patrol_authorization_accepts_lane_failed_event(
     )
     assert res.returncode == 0
     assert "clean" in res.stdout
+
+
+# ── audit finding #18: archive_project primitive ─────────────────────
+
+
+def _setup_demo_project(env, *, spawn_lane: bool = True):
+    """Bring a demo project into a non-trivial state for archival tests."""
+    if not spawn_lane:
+        # just ensure skeleton
+        _run("render_asset_tree.py", "--project", "demo", env=env)
+        return
+    _spawn_lane_with_model(env, "minimax-image-01")
+
+
+def test_archive_project_dry_run_does_not_rename(
+    cartooner_env, cartooner_root
+):
+    _setup_demo_project(cartooner_env)
+    res = _run(
+        "archive_project.py",
+        "--project", "demo",
+        "--reason", "pre-V4 test",
+        "--dry-run",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    src = cartooner_root / "projects" / "demo"
+    assert src.exists(), "dry-run should NOT rename source dir"
+    target = res.stdout.strip()
+    assert "demo-archived-" in target
+    assert "pre-v4-test" in target  # slugified
+    assert not Path(target).exists()
+
+
+def test_archive_project_renames_and_writes_summary(
+    cartooner_env, cartooner_root
+):
+    _setup_demo_project(cartooner_env)
+    src = cartooner_root / "projects" / "demo"
+    assert src.exists()
+    res = _run(
+        "archive_project.py",
+        "--project", "demo",
+        "--reason", "v3 evidence",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    target = Path(res.stdout.strip())
+    assert target.exists(), f"archive path missing: {target}"
+    assert not src.exists(), "source dir should have been renamed away"
+    # Summary lives inside the archive
+    summary = target / "ARCHIVE_SUMMARY.md"
+    assert summary.is_file()
+    body = summary.read_text(encoding="utf-8")
+    assert "Archive Summary" in body
+    assert "lanes:" in body
+    assert "Lane outcomes" in body
+    # generation_log inside archive should carry the project_archived event
+    log_text = (target / "generation_log.jsonl").read_text(encoding="utf-8")
+    last_line = log_text.strip().splitlines()[-1]
+    last = json.loads(last_line)
+    assert last["event"] == "project_archived"
+    assert last["actor"] == "user"
+    assert "v3 evidence" in last.get("reason", "")
+
+
+def test_archive_project_missing_project_fails_closed(cartooner_env):
+    res = _run(
+        "archive_project.py",
+        "--project", "nonexistent-project-xyz",
+        "--dry-run",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "project not found" in res.stderr
+
+
+def test_archive_project_collision_appends_suffix(
+    cartooner_env, cartooner_root
+):
+    """Two archives within the same second get -1, -2, ... suffix."""
+    _setup_demo_project(cartooner_env)
+    # First archive
+    r1 = _run("archive_project.py", "--project", "demo", "--reason", "x",
+              env=cartooner_env)
+    assert r1.returncode == 0, r1.stderr
+    path1 = Path(r1.stdout.strip())
+    # Re-create the demo project so we can archive twice
+    _setup_demo_project(cartooner_env)
+    r2 = _run("archive_project.py", "--project", "demo", "--reason", "x",
+              env=cartooner_env)
+    assert r2.returncode == 0, r2.stderr
+    path2 = Path(r2.stdout.strip())
+    assert path1 != path2, "second archive should have a different path"
+    # path2 likely has -1 suffix if within same second (could be unequal ts though)
+    assert path2.exists()
+    assert path1.exists()
+
+
+def test_archive_project_actor_validated(cartooner_env, cartooner_root):
+    _setup_demo_project(cartooner_env)
+    res = _run(
+        "archive_project.py",
+        "--project", "demo",
+        "--actor", "writer",  # not allowed
+        "--dry-run",
+        env=cartooner_env,
+    )
+    assert res.returncode != 0
+    assert "invalid choice" in res.stderr or "writer" in res.stderr
+
+
+def test_archive_project_summary_includes_model_intent_distribution(
+    cartooner_env, cartooner_root, tmp_path
+):
+    """ARCHIVE_SUMMARY.md must surface #10 audit metrics: asked vs actual."""
+    lane_id = _spawn_lane_with_model(cartooner_env, "gpt-image-2")
+    img = tmp_path / "a.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    # Deposit with a fallback to make the audit signal interesting
+    _run(
+        "deposit_asset.py",
+        "--project", "demo", "--lane-id", lane_id,
+        "--asset-id", "img-test", "--asset-path", str(img),
+        "--actor", "builder-image", "--asset-type", "image",
+        "--model", "minimax-image-01",
+        "--model-fallback-reason", "xcode 524",
+        "--all-candidates-deposited",
+        "--skip-wakeup",
+        env=cartooner_env,
+    )
+    res = _run(
+        "archive_project.py", "--project", "demo",
+        "--reason", "audit signal test",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0, res.stderr
+    target = Path(res.stdout.strip())
+    summary = (target / "ARCHIVE_SUMMARY.md").read_text(encoding="utf-8")
+    assert "Asset model intent (#10 audit)" in summary
+    assert "asked=gpt-image-2" in summary
+    assert "with explicit model_fallback_reason: 1" in summary
+
+
+def test_patrol_authorization_accepts_project_archived_event(
+    cartooner_env, cartooner_root
+):
+    """patrol_pipeline_sla --check authorization recognizes project_archived."""
+    project_root = cartooner_root / "projects" / "demo"
+    project_root.mkdir(parents=True, exist_ok=True)
+    project_root.joinpath("PROJECT_INDEX.json").write_text(
+        json.dumps({
+            "project_id": "demo", "version": 1, "automation_mode": "manual",
+            "lanes": {}, "assets": {}, "tournaments": {},
+        }),
+        encoding="utf-8",
+    )
+    project_root.joinpath("generation_log.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-05-11T00:00:00.000+00:00",
+            "event": "project_archived",
+            "actor": "user",
+            "reason": "post-V3",
+            "archive_path": "/tmp/demo-archived-...",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res = _run(
+        "patrol_pipeline_sla.py",
+        "--project", "demo", "--check", "authorization",
+        env=cartooner_env,
+    )
+    assert res.returncode == 0
+    assert "clean" in res.stdout

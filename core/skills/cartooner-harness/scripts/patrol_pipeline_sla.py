@@ -55,6 +55,12 @@ EVENT_ALLOWED_ACTORS: dict[str, set[str]] = {
     "lane_spawned": {"memory", "builder-image", "builder-av", "writer"},
     "asset_deposited": {"builder-image", "builder-av", "writer"},
     "lane_failed": {"builder-image", "builder-av", "writer"},
+    # audit finding #18 (2026-05-11): project_archived is the audited
+    # state-archive primitive (replaces operator-side `mv ...` which had
+    # no audit trail). Actor is typically user (Producer-initiated)
+    # but memory may also invoke (e.g., automation policy archiving
+    # stale tests).
+    "project_archived": {"user", "memory", "memory_acting_director"},
     "pick_winner": {"user", "memory_acting_director"},
     "iterate_prompt": {"user", "memory_acting_director"},
     "share_style_bible": {"user", "memory_acting_director"},
