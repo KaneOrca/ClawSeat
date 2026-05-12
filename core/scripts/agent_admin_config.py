@@ -364,27 +364,27 @@ def tool_default_base_url(tool: str) -> str | None:
     return None
 
 
-def provider_defaults(tool: str, provider: str) -> dict[str, object]:
+def _provider_defaults(tool: str, provider: str) -> dict[str, object]:
     raw = PROVIDER_DEFAULTS.get(tool, {}).get(provider, {})
     return dict(raw) if isinstance(raw, dict) else {}
 
 
 def provider_default_base_url(tool: str, provider: str) -> str | None:
-    value = provider_defaults(tool, provider).get("base_url")
+    value = _provider_defaults(tool, provider).get("base_url")
     if isinstance(value, str) and value:
         return value
     return None
 
 
 def provider_default_model(tool: str, provider: str) -> str | None:
-    value = provider_defaults(tool, provider).get("default_model")
+    value = _provider_defaults(tool, provider).get("default_model")
     if isinstance(value, str) and value:
         return value
     return None
 
 
-def provider_url_markers(tool: str, provider: str) -> tuple[str, ...]:
-    value = provider_defaults(tool, provider).get("url_markers", ())
+def _provider_url_markers(tool: str, provider: str) -> tuple[str, ...]:
+    value = _provider_defaults(tool, provider).get("url_markers", ())
     if isinstance(value, (list, tuple)):
         return tuple(str(item) for item in value if str(item).strip())
     return ()
@@ -394,7 +394,7 @@ def provider_url_matches(tool: str, provider: str, base_url: str) -> bool:
     candidate = str(base_url or "").strip().lower()
     if not candidate:
         return False
-    return any(marker.lower() in candidate for marker in provider_url_markers(tool, provider))
+    return any(marker.lower() in candidate for marker in _provider_url_markers(tool, provider))
 
 
 XCODE_PROVIDER_ENDPOINT_RULES = {

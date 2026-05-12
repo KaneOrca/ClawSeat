@@ -331,49 +331,8 @@ def heartbeat_manifest_path(session: SessionRecord) -> Path:
     return HEARTBEAT_HANDLERS.manifest_path(session)
 
 
-def heartbeat_receipt_path(session: SessionRecord) -> Path:
-    return HEARTBEAT_HANDLERS.receipt_path(session)
-
-
-def load_heartbeat_manifest(session: SessionRecord) -> dict | None:
-    return HEARTBEAT_HANDLERS.load_manifest(session)
-
-
-def load_heartbeat_receipt(session: SessionRecord) -> dict | None:
-    return HEARTBEAT_HANDLERS.load_receipt(session)
-
-
 def heartbeat_manifest_fingerprint(manifest: dict) -> str:
     return HEARTBEAT_HANDLERS.manifest_fingerprint(manifest)
-
-
-def heartbeat_install_fingerprint(session: SessionRecord, manifest: dict) -> str:
-    return HEARTBEAT_HANDLERS.install_fingerprint(session, manifest)
-
-
-def heartbeat_receipt_matches_manifest(receipt: dict | None, manifest: dict, session: SessionRecord) -> bool:
-    return HEARTBEAT_HANDLERS.receipt_matches_manifest(receipt, manifest, session)
-
-
-def write_heartbeat_receipt(
-    session: SessionRecord,
-    manifest: dict,
-    *,
-    verification_method: str,
-    evidence: str,
-    status: str = "verified",
-    job_id: str = "",
-    schedule: str = "",
-) -> None:
-    HEARTBEAT_HANDLERS.write_receipt(
-        session,
-        manifest,
-        verification_method=verification_method,
-        evidence=evidence,
-        status=status,
-        job_id=job_id,
-        schedule=schedule,
-    )
 
 
 def provision_session_heartbeat(
