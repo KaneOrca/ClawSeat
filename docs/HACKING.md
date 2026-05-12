@@ -56,7 +56,7 @@ ClawSeat/
 │   │   ├── send-and-verify.sh     # seat 间消息发送
 │   │   └── agentctl.sh            # 查 seat 状态
 │   ├── lib/
-│   │   ├── project_binding.py     # PROJECT_BINDING.toml v3 schema
+│   │   ├── project_binding.py     # PROJECT_BINDING.toml binding schema (BINDING_SCHEMA_VERSION=3)
 │   │   ├── project_tool_root.py   # per-project tool 隔离
 │   │   └── ...
 │   ├── transport/
