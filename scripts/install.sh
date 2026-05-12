@@ -54,9 +54,6 @@ CLAWSEAT_AUTOUPDATE_INSTALLER="$REPO_ROOT/scripts/install_clawseat_autoupdate.py
 PATROL_HOOK_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_hook.py"
 PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_cron.py"
 SEAT_CLEAR_WATCHDOG_INSTALLER="$REPO_ROOT/core/skills/clawseat-install/scripts/install_seat_clear_watchdog.py"
-# Backward-compatible variable exports for callers that source install.sh.
-QA_HOOK_INSTALLER="$PATROL_HOOK_INSTALLER"
-QA_PATROL_CRON_INSTALLER="$PATROL_CRON_INSTALLER"
 MEMORY_ROOT="$HOME/.agents/memory"; PROVIDER_ENV=""; BRIEF_PATH=""
 MEMORY_WORKSPACE=""
 GRID_WINDOW_ID=""
@@ -123,8 +120,6 @@ refresh_clawseat_repo_paths() {
   PATROL_HOOK_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_hook.py"
   PATROL_CRON_INSTALLER="$REPO_ROOT/core/skills/patrol/scripts/install_patrol_cron.py"
   SEAT_CLEAR_WATCHDOG_INSTALLER="$REPO_ROOT/core/skills/clawseat-install/scripts/install_seat_clear_watchdog.py"
-  QA_HOOK_INSTALLER="$PATROL_HOOK_INSTALLER"
-  QA_PATROL_CRON_INSTALLER="$PATROL_CRON_INSTALLER"
   export REPO_ROOT CLAWSEAT_ROOT
 }
 
