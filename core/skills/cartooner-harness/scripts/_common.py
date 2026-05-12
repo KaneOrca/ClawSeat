@@ -311,6 +311,34 @@ def resolve_seat_session(project_id: str, seat_id: str) -> str | None:
     return None
 
 
+def resolve_wakeup_target(args, brief: dict | None = None, fallback_seat: str = "memory") -> str:
+    """Resolve wakeup tmux session: explicit arg > brief.dispatch_session > resolve_seat_session(fallback_seat).
+
+    Centralises the 3-layer fallback so all callers stay in sync (audit §10.6).
+
+    Layer 1 — args.target_session (explicit operator override).
+    Layer 2 — brief frontmatter dispatch_session (captured at dispatch time;
+               lets cross-project wakeups find the right memory session even
+               when resolve_seat_session would return nothing; audit finding #9).
+    Layer 3 — resolve_seat_session(project_id, fallback_seat) (project-bound
+               default; seat name varies per caller: "memory" for deposit/deliver,
+               args.target for dispatch_brief, args.seat for spawn_lane).
+    """
+    explicit = (getattr(args, "target_session", "") or "").strip()
+    if explicit:
+        return explicit
+    if brief is not None:
+        from_brief = (brief.get("dispatch_session") or "").strip()
+        if from_brief:
+            return from_brief
+    project_id = getattr(args, "project", None)
+    if project_id:
+        fallback = resolve_seat_session(project_id, fallback_seat) or ""
+        if fallback:
+            return fallback
+    return ""
+
+
 def send_wakeup(
     project_id: str,
     target_session: str,

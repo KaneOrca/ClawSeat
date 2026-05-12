@@ -210,18 +210,11 @@ def main(argv: list[str] | None = None) -> int:
             fh.write(common.serialize_toml(record["result"]).rstrip("\n") + "\n")
             fh.write("+++\n")
 
-    # Target session resolution (audit finding #9):
+    # Target session resolution (audit finding #9, unified in §10.6):
     #   1. explicit --target-session                  (operator override)
     #   2. brief frontmatter dispatch_session         (captured at dispatch)
     #   3. resolve_seat_session(project, "memory")    (project-bound default)
-    # Step 2 is the new fix: in cross-project cases (e.g. memory in
-    # cartooner-video dispatching to clawseat-anime-test) step 3 returns
-    # nothing, so without step 2 the wakeup would silently fail.
-    memory_session = (
-        args.target_session.strip()
-        or (brief.get("dispatch_session") or "").strip()
-        or (common.resolve_seat_session(args.project, "memory") or "")
-    )
+    memory_session = common.resolve_wakeup_target(args, brief=brief)
     if args.fail:
         msg = (
             f"[{args.actor}] brief_failed: {args.brief_id} "

@@ -190,9 +190,10 @@ def main(argv: list[str] | None = None) -> int:
     index.setdefault("briefs", {})[brief_id] = index_record
     common.write_project_index(args.project, index)
 
-    target_session = args.target_session.strip() or (
-        common.resolve_seat_session(args.project, args.target) or ""
-    )
+    # Unified 3-layer resolution (audit §10.6): explicit > brief.dispatch_session
+    # > resolve_seat_session(project, target). No brief dict at dispatch time,
+    # so only layers 1 and 3 apply here; fallback_seat=args.target is correct.
+    target_session = common.resolve_wakeup_target(args, fallback_seat=args.target)
     # Wakeup message MUST name the project explicitly (audit finding #8).
     # Without --project in the wakeup, the receiver's LLM tends to fall
     # back to its own session-bound default project and deposit assets

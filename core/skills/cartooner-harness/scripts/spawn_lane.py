@@ -118,9 +118,10 @@ def main(argv: list[str] | None = None) -> int:
         return index
     common.update_project_index(args.project, _add_lane)
 
-    target_session = args.target_session.strip() or (
-        common.resolve_seat_session(args.project, args.seat) or ""
-    )
+    # Unified 3-layer resolution (audit §10.6): explicit > brief.dispatch_session
+    # > resolve_seat_session(project, seat). No brief dict here; fallback is the
+    # spawned lane's target seat, not "memory".
+    target_session = common.resolve_wakeup_target(args, fallback_seat=args.seat)
     # Wakeup MUST name --project explicitly (audit finding #8): receiver
     # LLMs otherwise drift to their session-bound default project and
     # deposit assets in the wrong PROJECT_INDEX. Model intent (audit

@@ -236,9 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     wakeup_ok = None
     wakeup_reason = None
     if final:
-        memory_session = args.target_session.strip() or (
-            common.resolve_seat_session(args.project, "memory") or ""
-        )
+        memory_session = common.resolve_wakeup_target(args)
         wakeup_message = (
             f"[{args.actor}] lane_completed: {args.lane_id} "
             f"project={args.project} "
@@ -328,9 +326,7 @@ def _fail_lane(args: argparse.Namespace) -> int:
         return index
     common.update_project_index(args.project, _mark_failed)
 
-    memory_session = args.target_session.strip() or (
-        common.resolve_seat_session(args.project, "memory") or ""
-    )
+    memory_session = common.resolve_wakeup_target(args)
     msg = (
         f"[{args.actor}] lane_failed: {args.lane_id} "
         f"project={args.project} reason={args.reason[:120]}; "
