@@ -22,7 +22,6 @@ from agent_admin_layered import (
     cmd_project_validate,
 )
 from agent_admin_config import (
-    AGENT_ADMIN_SH,
     AGENTCTL_SH,
     AGENTS_ROOT,
     CODEX_API_PROVIDER_CONFIGS,

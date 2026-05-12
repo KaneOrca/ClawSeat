@@ -124,7 +124,6 @@ CURRENT_PROJECT_PATH = STATE_ROOT / "current_project"
 TEMPLATES_ROOT = REPO_ROOT / "core" / "templates"
 DEFAULT_PATH = _default_path()
 AGENTCTL_SH = REPO_ROOT / "core" / "shell-scripts" / "agentctl.sh"
-AGENT_ADMIN_SH = REPO_ROOT / "core" / "shell-scripts" / "agent-admin.sh"
 SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 HARNESS_PROFILE_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "assets" / "profiles"
 
