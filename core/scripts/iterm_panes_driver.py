@@ -512,7 +512,9 @@ async def _find_existing_tab(window: Any, spec: dict[str, str]) -> tuple[bool, s
     return False, detection_failure
 
 
-async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None:
+async def _mark_tab(tab: Any, spec: dict[str, str]) -> None:
+    """Set tab/session title and user.tab_name marker. Cheap, does not enter
+    tmux control mode — safe to run during Phase 1 before any command runs."""
     session = getattr(tab, "current_session", None)
     if session is None:
         raise RuntimeError(f"tab {spec['name']!r} has no current session")
@@ -535,6 +537,14 @@ async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None
             await setter("user.tab_name", spec["name"])
         except Exception:  # noqa: BLE001 metadata is best-effort
             pass
+
+
+async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None:
+    """Send the command to a tab whose marker has already been set by _mark_tab.
+    This is the Phase 2 step that triggers tmux control mode on attach."""
+    session = getattr(tab, "current_session", None)
+    if session is None:
+        raise RuntimeError(f"tab {spec['name']!r} has no current session")
 
     if delay_s > 0:
         await asyncio.sleep(delay_s)
@@ -604,6 +614,13 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
     # immediately after creation.
     handled_tab_ids: set[int] = set()
 
+    # Phase 1: create all tabs before sending any commands.
+    # Sending tmux-attach via async_send_text to an already-created tab causes
+    # iTerm to enter tmux control mode, which invalidates the window's Python
+    # API handle — subsequent async_create_tab calls fail with INVALID_WINDOW_ID.
+    # Fix: materialize every tab object first, then configure (send commands) in
+    # a second pass after all tabs exist.
+    pending: list[tuple[Any, dict[str, str], str, str]] = []  # (tab, spec, status, reason)
     try:
         for spec in tabs:
             status = "created"
@@ -613,7 +630,6 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                 if matched:
                     tabs_skipped += 1
                     tab_results.append({"status": "skipped", "tab": spec["name"]})
-                    # Mark the matched tab as handled so prune skips it.
                     for existing_tab in getattr(window, "tabs", []) or []:
                         ok, _ = await _tab_matches_expected(existing_tab, spec)
                         if ok:
@@ -624,7 +640,7 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                     status = "detect-failure"
                     reason = detection_failure
 
-            if created_window and tabs_created == 0 and getattr(window, "current_tab", None) is not None:
+            if created_window and len(pending) == 0 and getattr(window, "current_tab", None) is not None:
                 tab = window.current_tab
             else:
                 try:
@@ -662,8 +678,17 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                         "window_id": getattr(window, "window_id", ""),
                     }
 
-            await _configure_tab(tab, spec, delay_s)
+            # Set marker (title + user.tab_name) immediately so that
+            # _find_existing_tab in subsequent specs doesn't mistake this
+            # freshly created (but unconfigured) tab for a stale ghost.
+            await _mark_tab(tab, spec)
+            pending.append((tab, spec, status, reason))
             handled_tab_ids.add(id(tab))
+
+        # Phase 2: configure all tabs (send commands) now that the window
+        # structure is fully built and no more async_create_tab calls are needed.
+        for tab, spec, status, reason in pending:
+            await _configure_tab(tab, spec, delay_s)
             tabs_created += 1
             entry = {"status": status, "tab": spec["name"]}
             if reason:
