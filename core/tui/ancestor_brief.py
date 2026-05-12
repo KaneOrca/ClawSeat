@@ -20,14 +20,13 @@ import dataclasses
 import datetime as _dt
 import json
 import os
-import shutil
-import subprocess
 import sys
 import textwrap
 from pathlib import Path
 from typing import Any
 
 from core.lib.real_home import real_user_home
+from core.lib.tmux import tmux_session_alive as _tmux_session_alive  # noqa: E402
 
 try:
     import tomllib
@@ -112,17 +111,8 @@ class BriefContext:
 
 # ─────────────────────────────────────────────────────────────────────
 # Path & session probes — read-only; never mutate anything
+# _tmux_session_alive is imported from core.lib.tmux (audit §10.5)
 # ─────────────────────────────────────────────────────────────────────
-
-def _tmux_session_alive(session_name: str) -> bool:
-    if not shutil.which("tmux"):
-        return False
-    r = subprocess.run(
-        ["tmux", "has-session", "-t", f"={session_name}"],
-        capture_output=True, check=False,
-    )
-    return r.returncode == 0
-
 
 def _render_path(p: Path | None) -> str:
     if p is None:
