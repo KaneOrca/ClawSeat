@@ -78,6 +78,8 @@ def parse_ops_todos(ops_dir: Path) -> list[tuple[str, str, str]]:
 def capture_tmux(session: str) -> str:
     import subprocess
 
+    # Exact-match (-t "=<name>") prevents substring collision (audit §10.5).
+    # Cannot import core.lib.tmux here; inline implementation is intentional.
     try:
         result = subprocess.run(
             [tmux_bin, "has-session", "-t", f"={session}"],
