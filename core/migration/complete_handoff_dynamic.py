@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import argparse
+import re
+import subprocess
 from pathlib import Path
 import sys
 
@@ -188,6 +190,150 @@ def build_frontstage_objective(
     return "\n".join(lines)
 
 
+# ─── Lineage + branch-lock helpers ───────────────────────────────────────────
+
+PASS_NEEDS_INTEGRATION = "PASS_NEEDS_INTEGRATION"
+
+
+def _receipt_reported_commit(receipt: dict[str, object]) -> str | None:
+    for key in ("builder_commit", "commit", "branch_tip"):
+        raw = receipt.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def _git_merge_base_is_ancestor(repo_root: Path, reported_commit: str) -> bool | None:
+    if not repo_root.exists():
+        print(f"warn: repo_root {repo_root} does not exist; skip lineage guard", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", reported_commit, "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage guard", file=sys.stderr)
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    detail = (result.stderr or result.stdout or "").strip()
+    print(
+        f"warn: merge-base --is-ancestor failed for commit={reported_commit!r} "
+        f"in {repo_root}: {detail or 'unknown git error'}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _annotate_lineage_status(
+    receipt: dict[str, object],
+    *,
+    repo_root: Path | None,
+) -> tuple[str, bool, str | None]:
+    reported_commit = _receipt_reported_commit(receipt)
+    if not reported_commit:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+        return "unknown", False, None
+    if repo_root is None:
+        print("warn: cannot evaluate lineage guard without repo_root; marking unknown", file=sys.stderr)
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+        return "unknown", False, reported_commit
+    contains = _git_merge_base_is_ancestor(repo_root, reported_commit)
+    if contains is True:
+        receipt["head_contains_commit"] = True
+        receipt["lineage_status"] = "in-lineage"
+    elif contains is False:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "divergent"
+    else:
+        receipt["head_contains_commit"] = False
+        receipt["lineage_status"] = "unknown"
+    if not isinstance(receipt.get("builder_commit"), str) or not str(receipt.get("builder_commit") or "").strip():
+        receipt["builder_commit"] = reported_commit
+    return str(receipt["lineage_status"]), bool(receipt["head_contains_commit"]), reported_commit
+
+
+def _emit_pass_needs_integration(
+    profile: object,
+    *,
+    task_id: str,
+    source: str,
+    target: str,
+    reported_commit: str,
+    delivery_path: Path,
+    user_summary: str | None,
+) -> None:
+    message_lines = [
+        f"{PASS_NEEDS_INTEGRATION}: task_id={task_id}",
+        "lineage_status=divergent",
+        f"reported_commit={reported_commit}",
+        f"source={source}",
+        f"target={target}",
+        f"delivery_path={delivery_path}",
+    ]
+    if user_summary:
+        message_lines.append(f"user_summary={user_summary.strip()}")
+    message = "\n".join(message_lines)
+    try:
+        result = notify(profile, "memory", message)
+    except Exception as exc:
+        print(f"warn: PASS_NEEDS_INTEGRATION notify raised for task_id={task_id!r}: {exc}", file=sys.stderr)
+        return
+    if getattr(result, "returncode", 0) != 0:
+        detail = (
+            getattr(result, "stderr", "")
+            or getattr(result, "stdout", "")
+            or f"exit {getattr(result, 'returncode', 'unknown')}"
+        )
+        print(
+            f"warn: PASS_NEEDS_INTEGRATION notify failed for task_id={task_id!r}: "
+            f"{str(detail).strip() or 'unknown notify error'}",
+            file=sys.stderr,
+        )
+
+
+def _validate_branch_lock(
+    receipt: dict[str, object],
+    dispatch_receipt: dict[str, object] | None,
+    *,
+    source: str,
+    target: str,
+    allow_branch_mismatch: bool = False,
+) -> None:
+    if not source.startswith("builder") or not target.startswith("planner"):
+        return
+    if not isinstance(dispatch_receipt, dict):
+        return
+    expected_branch = dispatch_receipt.get("expected_branch")
+    if not isinstance(expected_branch, str) or not expected_branch:
+        return
+    actual_branch = receipt.get("branch")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        actual_branch = receipt.get("branch_tip")
+    if not isinstance(actual_branch, str) or not actual_branch:
+        return
+    if re.fullmatch(r"[0-9a-f]{7,64}", actual_branch):
+        return
+    if actual_branch == "main":
+        return
+    if actual_branch == expected_branch:
+        return
+    if allow_branch_mismatch:
+        print("WARNING: bypassing branch lock; worktree drift risk", file=sys.stderr)
+        return
+    raise SystemExit(f"BOUNCE: branch mismatch — expected {expected_branch} got {actual_branch}")
+
+
+# ─── End lineage/branch-lock helpers ─────────────────────────────────────────
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Complete or consume a dynamic-roster harness handoff.")
     parser.add_argument("--profile", required=True, help="Path to the dynamic profile TOML.")
@@ -202,6 +348,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--user-summary", help="Short user-facing summary.")
     parser.add_argument("--next-action", help="Short frontstage instruction.")
     parser.add_argument("--ack-only", action="store_true", help="Only append the durable Consumed ACK.")
+    parser.add_argument(
+        "--allow-branch-mismatch",
+        action="store_true",
+        help="Skip branch-lock enforcement (bypass BOUNCE guard). Emit a warning instead.",
+    )
     add_notify_args(parser)
     return parser.parse_args()
 
@@ -221,6 +372,18 @@ def main() -> int:
     }
     receipt["project"] = profile.project_name
     receipt["target"] = target
+
+    # Annotate lineage (runs for both ack-only and full completion).
+    repo_root = getattr(profile, "repo_root", None)
+    repo_root_path = Path(str(repo_root)).expanduser().resolve() if repo_root else None
+    lineage_status, _, reported_commit = _annotate_lineage_status(
+        receipt, repo_root=repo_root_path
+    )
+
+    # Load the dispatch receipt (planner→source direction) for branch-lock.
+    dispatch_receipt_path = profile.handoff_path(args.task_id, target, args.source)
+    source_dispatch_receipt = load_json(dispatch_receipt_path) if dispatch_receipt_path.exists() else None
+
     source_role = profile.seat_roles.get(args.source, "")
     if args.ack_only:
         ack_line, ack_path = append_consumed_ack_with_fallback(
@@ -241,6 +404,13 @@ def main() -> int:
         print(ack_line)
         print(f"receipt: {receipt_path}")
         return 0
+    _validate_branch_lock(
+        receipt,
+        source_dispatch_receipt,
+        source=args.source,
+        target=target,
+        allow_branch_mismatch=args.allow_branch_mismatch,
+    )
     if source_role == "reviewer" and args.verdict not in VALID_VERDICTS:
         raise SystemExit(
             f"{args.source} delivery requires --verdict with a canonical value "
@@ -323,6 +493,16 @@ def main() -> int:
         source=args.source,
         disposition=args.frontstage_disposition or "",
     )
+    if lineage_status == "divergent" and reported_commit:
+        _emit_pass_needs_integration(
+            profile,
+            task_id=args.task_id,
+            source=args.source,
+            target=target,
+            reported_commit=reported_commit,
+            delivery_path=delivery_path,
+            user_summary=args.user_summary,
+        )
     print(f"completed {args.task_id} -> {target}")
     print(f"delivery: {delivery_path}")
     print(f"receipt: {receipt_path}")

@@ -20,6 +20,11 @@ from dynamic_common import (
 )
 
 
+def reminder_summary(profile: HarnessProfile) -> str:
+    result = run_command(executable_command(profile.patrol_script), cwd=profile.repo_root)
+    return (result.stdout or result.stderr).strip()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Render the CLI control console for a dynamic-roster harness profile.")
     parser.add_argument("--profile", required=True, help="Path to the dynamic profile TOML.")
@@ -142,6 +147,7 @@ def main() -> int:
         "seats": seat_summary(profile),
         "handoffs": handoff_summary(profile),
         "heartbeat": heartbeat_state(profile, profile.heartbeat_owner),
+        "reminders": reminder_summary(profile),
     }
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -165,6 +171,8 @@ def main() -> int:
                 f"- {item['task_id']} {item['source']} -> {item['target']}: "
                 f"assigned={item['assigned']} notified={item['notified']} consumed={item['consumed']}"
             )
+    print("\n== Reminder candidates ==")
+    print(payload["reminders"] or "none")
     return 0
 
 

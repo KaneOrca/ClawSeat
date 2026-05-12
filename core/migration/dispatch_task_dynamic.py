@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,131 @@ from pathlib import Path
 _REPO_ROOT_DYN = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT_DYN) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT_DYN))
+
+from core.lib.real_home import real_user_home
+
+
+def _resolve_gstack_skills_root() -> str:
+    env = os.environ.get("GSTACK_SKILLS_ROOT", "")
+    if env:
+        expanded = Path(env).expanduser()
+        if expanded.is_absolute():
+            return str(expanded)
+    return str(real_user_home() / ".gstack" / "repos" / "gstack" / ".agents" / "skills")
+
+
+_GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
+
+INTENT_MAP: dict[str, dict[str, str]] = {
+    "eng-review": {
+        "trigger": "Review the architecture and lock in the plan",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-eng-review/SKILL.md",
+        "description": "engineering plan review (architecture / data flow / test coverage / perf)",
+    },
+    "ceo-review": {
+        "trigger": "Think bigger and expand scope if it creates a better product",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-ceo-review/SKILL.md",
+        "description": "CEO/founder-mode strategy review (scope expand / hold / reduce)",
+    },
+    "design-review": {
+        "trigger": "Review the design plan and design critique",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-design-review/SKILL.md",
+        "description": "designer's-eye plan review (UX / visual / component; plan-mode)",
+    },
+    "devex-review": {
+        "trigger": "DX review and developer experience audit (Addy Osmani framework)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-plan-devex-review/SKILL.md",
+        "description": "developer experience audit (zero friction / learn by doing / fight uncertainty)",
+    },
+    "ship": {
+        "trigger": "Ship it and create a PR (run tests, review diff, bump VERSION, update CHANGELOG)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-ship/SKILL.md",
+        "description": "ship workflow (test → diff → version → commit → push → PR)",
+    },
+    "land": {
+        "trigger": "Land the PR and deploy — merge, wait for CI and deploy, verify production",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-land-and-deploy/SKILL.md",
+        "description": "merge + canary + production verification",
+    },
+    "investigate": {
+        "trigger": "Investigate root cause — debug this, why is this broken, root cause analysis",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-investigate/SKILL.md",
+        "description": "bug RCA (investigate → analyze → hypothesize → implement)",
+    },
+    "freeze": {
+        "trigger": "Freeze and restrict edits to this directory",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-freeze/SKILL.md",
+        "description": "restrict Edit/Write to one module for the session",
+    },
+    "unfreeze": {
+        "trigger": "Unfreeze and remove the edit restriction",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-unfreeze/SKILL.md",
+        "description": "clear the /freeze boundary, allow all-directory edits again",
+    },
+    "code-review": {
+        "trigger": "Code review — pre-landing PR review, check the diff for SQL safety, LLM trust, conditional side effects, structural issues",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-review/SKILL.md",
+        "description": "pre-landing PR review (NOT plan-review; for final diff check)",
+    },
+    "qa-test": {
+        "trigger": "QA — systematically test this web app and fix bugs found (test → fix → verify loop)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-qa/SKILL.md",
+        "description": "full QA test-fix-verify loop with before/after health scores",
+    },
+    "qa-only": {
+        "trigger": "QA report only — just report bugs, don't fix anything",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-qa-only/SKILL.md",
+        "description": "report-only QA (no source code edits, only a structured report)",
+    },
+    "design-critique": {
+        "trigger": "Audit the design — visual QA, check if it looks good, design polish (post-implementation)",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-design-review/SKILL.md",
+        "description": "post-implementation visual audit (iteratively fixes visual issues)",
+    },
+    "design-html": {
+        "trigger": "Finalize this design and turn it into production HTML/CSS",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-design-html/SKILL.md",
+        "description": "design → production HTML/CSS via Pretext patterns",
+    },
+    "design-shotgun": {
+        "trigger": "Design shotgun — generate multiple AI design variants and compare",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-design-shotgun/SKILL.md",
+        "description": "multi-variant design exploration with comparison board",
+    },
+    "office-hours": {
+        "trigger": "Office hours brainstorm — help me think through this, is this worth building",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-office-hours/SKILL.md",
+        "description": "YC office-hours brainstorm (6 forcing questions / design doc)",
+    },
+    "checkpoint": {
+        "trigger": "Checkpoint — save progress and where was I",
+        "skill_md": f"{_GSTACK_SKILLS_ROOT}/gstack-checkpoint/SKILL.md",
+        "description": "save/resume working state across sessions",
+    },
+}
+
+
+def apply_intent(
+    intent: str | None,
+    objective: str,
+    skill_refs: list[str] | None,
+) -> tuple[str, list[str]]:
+    if intent is None:
+        return objective, (skill_refs or [])
+    if intent not in INTENT_MAP:
+        valid = ", ".join(sorted(INTENT_MAP.keys()))
+        raise ValueError(f"unknown --intent {intent!r}; valid intents: {valid}")
+    spec = INTENT_MAP[intent]
+    trigger = spec["trigger"]
+    skill_md = spec["skill_md"]
+    if trigger.lower() not in objective.lower():
+        new_objective = f"**{trigger}** — {objective.strip()}"
+    else:
+        new_objective = objective
+    refs = list(skill_refs or [])
+    if skill_md not in refs:
+        refs.append(skill_md)
+    return new_objective, refs
 
 from dynamic_common import (
     add_notify_args,
@@ -183,6 +309,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reply-to", help="Seat that should receive completion back from the target.")
     parser.add_argument("--notes", default="dispatched via dynamic-roster harness", help="TASKS.md note.")
     parser.add_argument("--status-note", help="Optional STATUS.md note.")
+    parser.add_argument(
+        "--skill-refs",
+        nargs="*",
+        metavar="SKILL_REF",
+        default=None,
+        help="Optional skill documentation pointers to include in the dispatched TODO.md.",
+    )
+    parser.add_argument(
+        "--intent",
+        choices=sorted(INTENT_MAP.keys()),
+        default=None,
+        help=(
+            "High-level user-intent key that auto-injects the canonical gstack "
+            "skill trigger phrase into --objective AND appends the skill's "
+            "SKILL.md path to --skill-refs. "
+            "Valid keys: " + ", ".join(sorted(INTENT_MAP.keys())) + "."
+        ),
+    )
     add_notify_args(parser)
     return parser.parse_args()
 
@@ -224,6 +368,14 @@ def main() -> int:
     todo_path = profile.todo_path(args.target)
     reply_to = args.reply_to or source
     expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
+    effective_objective, effective_skill_refs = apply_intent(
+        args.intent,
+        args.objective,
+        args.skill_refs,
+    )
+    if effective_skill_refs:
+        skill_refs_section = "\n\n# Skill Refs\n" + "\n".join(f"- {r}" for r in effective_skill_refs)
+        effective_objective = effective_objective.rstrip() + skill_refs_section
     write_todo(
         todo_path,
         task_id=args.task_id,
@@ -231,7 +383,7 @@ def main() -> int:
         owner=args.target,
         status="pending",
         title=args.title,
-        objective=args.objective,
+        objective=effective_objective,
         source=source,
         reply_to=reply_to,
         test_policy=args.test_policy,
