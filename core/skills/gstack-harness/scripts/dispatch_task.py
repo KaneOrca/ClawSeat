@@ -797,6 +797,16 @@ def parse_args() -> argparse.Namespace:
             "See TOOLS/dispatch.md for the user-intent → key mapping."
         ),
     )
+    parser.add_argument(
+        "--spec-path",
+        default=None,
+        help=(
+            "Path to memory's SPEC.md for this task. When provided, the path is "
+            "embedded in the dispatch receipt and surfaced to the specialist via "
+            "TODO so they can read the contract (acceptance criteria, deliverables, "
+            "out-of-scope) before working. See core/scripts/spec_admin.py."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -975,6 +985,8 @@ def main() -> int:
         receipt["rca_override"] = True
     if args.core_ux:
         receipt["core_ux"] = True
+    if args.spec_path:
+        receipt["spec_path"] = args.spec_path
     if expected_base_sha:
         receipt["expected_base_sha"] = expected_base_sha
     receipt.update(

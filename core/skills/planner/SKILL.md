@@ -33,7 +33,7 @@ covers memory-entry; Chain End Relay covers planner-entry.
 memory remains the KB retention authority. planner does not write KB directly;
 it relays the chain-end summary to memory for synthesis.
 ## Capabilities
-Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, and Official Docs Dispatch Gate.
+Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, `core/skills/planner/references/spec-aware-dispatch.md`, and Official Docs Dispatch Gate.
 ## Output Schema
 Deliver `workflow.md`, dispatch receipts, consumed ACKs, planner summaries, and escalation questions when workflow progress needs memory/user authority.
 Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harness/references/communication-protocol.md`; use `complete_handoff.py` as the durable receipt path and `send-and-verify.sh` only as wake-up transport after the receipt exists; Stop hook is Claude Code convenience only.

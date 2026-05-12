@@ -240,7 +240,7 @@ Memory loads two companion skills:
   goal-drift recall.
 
 Koder loads `clawseat-intake` but not `memory-report-mode`; planner does
-not load either for high-context operator work.
+not load either for high-context operator work. Spec authority: memory authors/verifies task SPEC.md via `core/scripts/spec_admin.py`; full protocol in [`references/spec-authority.md`](references/spec-authority.md).
 
 ## Decision Payload Output
 
