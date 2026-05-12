@@ -112,8 +112,7 @@ is legacy; v0.7 reframes koder as the Feishu reverse channel — see §Mental Mo
 | Project | `memory`, `planner`, `builder`, `reviewer`, `patrol` | tmux `<project>-<seat>`; memory lives in the shared memories window, workers live in the per-project workers window; memory owns lifecycle; numbered/fan-out sessions are optional extensions |
 
 Verification uses the canonical `patrol` seat. Legacy verification-seat names
-were removed on 2026-04-29; migrate old project state with
-`scripts/migrate-qa-to-patrol.sh`.
+were removed on 2026-04-29.
 
 Legacy v1 profile templates are no longer shipped in-tree — they depended on
 `heartbeat_*` fields the v2 validator rejects. Current v0.7 install is
