@@ -178,8 +178,12 @@ def common_env() -> dict[str, str]:
     term = host.get("TERM", "")
     if not term or term == "dumb":
         term = "xterm-256color"
+    path_parts = [p for p in DEFAULT_PATH.split(":") if p]
+    for part in host.get("PATH", "").split(":"):
+        if part and part not in path_parts:
+            path_parts.append(part)
     env = {
-        "PATH": host.get("PATH", DEFAULT_PATH),
+        "PATH": ":".join(path_parts),
         "USER": host.get("USER", os.popen("id -un").read().strip() or ""),
         "SHELL": host.get("SHELL", "/bin/zsh"),
         "TERM": term,

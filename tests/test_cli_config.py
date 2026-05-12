@@ -195,7 +195,7 @@ def test_tool_bin_source_is_populated_for_every_backend() -> None:
     from core.scripts.agent_admin_config import TOOL_BINARIES, tool_bin_source
     for name in TOOL_BINARIES:
         source = tool_bin_source(name)
-        assert source in ("path", "homebrew", "bare"), f"{name}: unexpected source {source!r}"
+        assert source in ("path", "clawseat", "homebrew", "bare"), f"{name}: unexpected source {source!r}"
 
 
 def test_unresolved_tool_bins_surfaces_bare_fallback() -> None:

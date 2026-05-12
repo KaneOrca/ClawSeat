@@ -21,8 +21,16 @@
 set -euo pipefail
 
 PROJECT="${1:-install}"
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3.12 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3.12)"
+  else
+    PYTHON_BIN="python3"
+  fi
+fi
 PRIMARY_SEAT_ID="$(
-  PROJECT="$PROJECT" python3 - <<'PY'
+  PROJECT="$PROJECT" "$PYTHON_BIN" - <<'PY'
 import os
 from pathlib import Path
 
@@ -45,11 +53,11 @@ agent_admin_dir="$(cd "$(dirname "$0")/.." && pwd -P)"
 agent_admin_bin="$agent_admin_dir/core/scripts/agent_admin.py"
 resolve_session_name() {
   local seat_id="$1"
-  python3 "$agent_admin_bin" session-name "$seat_id" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$seat_id"
+  "$PYTHON_BIN" "$agent_admin_bin" session-name "$seat_id" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$seat_id"
 }
 
 read_worker_seats() {
-  PROJECT="$PROJECT" PRIMARY_SEAT_ID="$PRIMARY_SEAT_ID" python3 - <<'PY'
+  PROJECT="$PROJECT" PRIMARY_SEAT_ID="$PRIMARY_SEAT_ID" "$PYTHON_BIN" - <<'PY'
 import os
 from pathlib import Path
 
@@ -109,7 +117,7 @@ warn_pty_pressure() {
   fi
 }
 
-PRIMARY_SESSION="$(python3 "$agent_admin_bin" session-name "$PRIMARY_SEAT_ID" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$PRIMARY_SEAT_ID")"
+PRIMARY_SESSION="$("$PYTHON_BIN" "$agent_admin_bin" session-name "$PRIMARY_SEAT_ID" --project "$PROJECT" 2>/dev/null || printf '%s-%s-claude\n' "$PROJECT" "$PRIMARY_SEAT_ID")"
 WINDOW_TITLE="clawseat-${PROJECT}-workers"
 
 if ! env -u TMUX tmux has-session -t "=$PRIMARY_SESSION" 2>/dev/null; then

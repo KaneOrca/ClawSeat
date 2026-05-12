@@ -67,7 +67,8 @@ def _resolve_effective_home() -> Path:
 def _resolve_tool_bin(name: str) -> str:
     """Resolve a backend CLI binary path.
 
-    Probe order: PATH (via shutil.which) → /opt/homebrew/bin → bare name.
+    Probe order: PATH (via shutil.which) → ClawSeat local tool entries →
+    /opt/homebrew/bin → bare name.
     The "bare" fallback means `shell exec` will rely on the caller's PATH
     at runtime; if the CLI is not installed, execution fails with a
     cryptic "command not found" instead of a clear preflight error.
@@ -78,6 +79,14 @@ def _resolve_tool_bin(name: str) -> str:
     if resolved:
         _TOOL_BIN_SOURCES[name] = "path"
         return resolved
+    home = _resolve_effective_home()
+    for candidate in (
+        home / "AI" / "工具入口" / name,
+        home / "AI" / "toolchains" / "npm-global" / "bin" / name,
+    ):
+        if candidate.exists():
+            _TOOL_BIN_SOURCES[name] = "clawseat"
+            return str(candidate)
     homebrew = f"/opt/homebrew/bin/{name}"
     if os.path.exists(homebrew):
         _TOOL_BIN_SOURCES[name] = "homebrew"
@@ -105,7 +114,11 @@ def _default_path() -> str:
         return override
     base = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     if sys.platform == "darwin":
-        return "/opt/homebrew/bin:" + base
+        home = _resolve_effective_home()
+        ai_root = home / "AI"
+        tool_entry = ai_root / "工具入口"
+        npm_global = ai_root / "toolchains" / "npm-global" / "bin"
+        return f"{tool_entry}:{npm_global}:/opt/homebrew/bin:{base}"
     return base
 
 

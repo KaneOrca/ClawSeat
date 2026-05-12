@@ -30,16 +30,35 @@ def test_resolve_tool_bin_homebrew_fallback_when_which_none(monkeypatch):
     """When which returns None but /opt/homebrew/bin/<name> exists, use it."""
     with (
         patch("agent_admin_config.shutil.which", return_value=None),
+        patch("agent_admin_config.Path.exists", return_value=False),
         patch("agent_admin_config.os.path.exists", return_value=True),
     ):
         result = agent_admin_config._resolve_tool_bin("codex")
     assert result == "/opt/homebrew/bin/codex"
 
 
+def test_resolve_tool_bin_clawseat_tool_entry_before_homebrew(monkeypatch, tmp_path):
+    """ClawSeat local tool entries are used before /opt/homebrew/bin."""
+    home = tmp_path / "home"
+    tool_entry = home / "AI" / "工具入口"
+    tool_entry.mkdir(parents=True)
+    (tool_entry / "codex").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(agent_admin_config, "_resolve_effective_home", lambda: home)
+
+    with (
+        patch("agent_admin_config.shutil.which", return_value=None),
+        patch("agent_admin_config.os.path.exists", return_value=True),
+    ):
+        result = agent_admin_config._resolve_tool_bin("codex")
+
+    assert result == str(tool_entry / "codex")
+
+
 def test_resolve_tool_bin_bare_name_when_both_missing(monkeypatch):
     """When which is None and homebrew path absent, return bare name."""
     with (
         patch("agent_admin_config.shutil.which", return_value=None),
+        patch("agent_admin_config.Path.exists", return_value=False),
         patch("agent_admin_config.os.path.exists", return_value=False),
     ):
         result = agent_admin_config._resolve_tool_bin("codex")
@@ -48,12 +67,15 @@ def test_resolve_tool_bin_bare_name_when_both_missing(monkeypatch):
 
 # ── _default_path ────────────────────────────────────────────────────────────
 
-def test_default_path_darwin_prepends_homebrew(monkeypatch):
-    """On darwin with no env override, path starts with /opt/homebrew/bin:."""
+def test_default_path_darwin_prepends_clawseat_tool_entries(monkeypatch, tmp_path):
+    """On darwin with no env override, path starts with ClawSeat tool entries."""
     monkeypatch.delenv("CLAWSEAT_DEFAULT_PATH", raising=False)
     monkeypatch.setattr(agent_admin_config.sys, "platform", "darwin")
+    monkeypatch.setattr(agent_admin_config, "_resolve_effective_home", lambda: tmp_path)
     result = agent_admin_config._default_path()
-    assert result.startswith("/opt/homebrew/bin:")
+    assert result.startswith(
+        f"{tmp_path}/AI/工具入口:{tmp_path}/AI/toolchains/npm-global/bin:/opt/homebrew/bin:"
+    )
 
 
 def test_default_path_linux_no_homebrew(monkeypatch):
