@@ -205,17 +205,18 @@ def _spawn(args: argparse.Namespace) -> int:
     sa_path = subagents_dir / f"{subagent_id}.toml"
     sa_path.write_text(common.serialize_toml(record), encoding="utf-8")
 
-    index = common.load_project_index(args.project)
-    index.setdefault("subagents", {})[subagent_id] = {
-        "id": subagent_id,
-        "type": args.subagent_type,
-        "caller": args.seat,
-        "state": "spawned",
-        "spawned_at": now,
-        "parent_round": args.parent_round or None,
-        "parent_shot": args.parent_shot or None,
-    }
-    common.write_project_index(args.project, index)
+    def _add_subagent(index):
+        index.setdefault("subagents", {})[subagent_id] = {
+            "id": subagent_id,
+            "type": args.subagent_type,
+            "caller": args.seat,
+            "state": "spawned",
+            "spawned_at": now,
+            "parent_round": args.parent_round or None,
+            "parent_shot": args.parent_shot or None,
+        }
+        return index
+    common.update_project_index(args.project, _add_subagent)
 
     common.append_generation_log(args.project, {
         "event": "subagent_spawned",
