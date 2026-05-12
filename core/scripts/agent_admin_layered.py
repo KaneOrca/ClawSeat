@@ -18,7 +18,6 @@ import argparse
 import os
 import re
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +35,7 @@ for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "core" / "lib")):
         sys.path.insert(0, _p)
 
 from real_home import real_user_home  # noqa: E402
+from tmux import tmux_session_alive as _tmux_session_alive_shared  # noqa: E402
 from project_binding import (  # noqa: E402
     ProjectBinding,
     ProjectBindingError,
@@ -351,14 +351,7 @@ def cmd_project_koder_bind(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 def _tmux_session_alive(name: str) -> bool:
-    try:
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", name],
-            capture_output=True, timeout=3,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+    return _tmux_session_alive_shared(name, timeout=3.0)
 
 
 def describe_memory(cfg=None) -> list[str]:

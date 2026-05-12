@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import projects_registry
+from tmux import tmux_session_alive as _tmux_session_alive_shared  # noqa: E402
 
 
 class AgentAdminWindowError(Exception):
@@ -29,6 +30,9 @@ TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 ITERM_SCRIPT_APPS = ("iTerm", "iTerm2")
 ITERM_SCRIPT_RETRIES = 3
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
 _ITERM_PANES_DRIVER = Path(__file__).resolve().with_name("iterm_panes_driver.py")
 _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
@@ -108,16 +112,7 @@ def tmux_with_retry(
 
 
 def tmux_has_session(session: str) -> bool:
-    try:
-        result = tmux_with_retry(
-            ["has-session", "-t", session],
-            label=f"tmux_has_session({session})",
-            check=False,
-            retries=1,
-        )
-        return result.returncode == 0
-    except AgentAdminWindowError:
-        return False
+    return _tmux_session_alive_shared(session, timeout=TMUX_COMMAND_TIMEOUT_SECONDS)
 
 
 def tmux_window_panes(window_target: str) -> list[dict[str, int | str]]:

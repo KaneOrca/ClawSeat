@@ -38,6 +38,7 @@ REPO_ROOT = SCRIPT_PATH.parents[3]
 
 
 from core.lib.real_home import real_user_home
+from core.lib.tmux import tmux_session_alive as _tmux_session_alive
 
 
 def _get_migration_root() -> Path:
@@ -535,22 +536,8 @@ class ClawseatAdapter:
             )
         session_data = load_toml_like(session_path)
         session_name = session_data.get("session", "")
-        running = False
-        if session_name:
-            try:
-                probe = subprocess.run(
-                    ["tmux", "has-session", "-t", session_name],
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                    timeout=5,  # Audit M15: tmux has-session can hang if the
-                                # server is wedged; fail fast so the caller
-                                # treats it as not-running rather than blocking
-                                # the whole dispatch pipeline.
-                )
-                running = probe.returncode == 0
-            except subprocess.TimeoutExpired:
-                running = False
+        # Audit §10.5: exact-match via shared primitive; timeout=5 matches Audit M15.
+        running = _tmux_session_alive(session_name, timeout=5.0) if session_name else False
         return SessionStatus(
             project_name=project_name,
             seat_id=seat_id,
