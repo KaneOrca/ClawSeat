@@ -436,6 +436,65 @@ async def _tab_session_name(tab: Any) -> str:
     return ""
 
 
+async def _tab_current_job(tab: Any) -> str:
+    """Return the current foreground job name of the tab's current session.
+    iTerm exposes this as the `jobName` variable (e.g. "tmux", "zsh", "node").
+    Returns "" when unavailable — caller treats that as "unknown / not dead"."""
+    session = getattr(tab, "current_session", None)
+    if session is None:
+        return ""
+    # Test fakes set a `current_job` attribute directly; honor it first.
+    job = getattr(session, "current_job", None)
+    if isinstance(job, str) and job.strip():
+        return job.strip()
+    getter = getattr(session, "async_get_variable", None)
+    if getter is None:
+        return ""
+    for var_name in ("jobName", "session.jobName"):
+        try:
+            value = await getter(var_name)
+        except Exception:  # noqa: BLE001 best-effort SDK metadata lookup
+            value = ""
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+# Job names that indicate the tab is still inside a tmux client (attach is alive).
+# Anything else (zsh, bash, sh, fish, etc.) means tmux attach has exited.
+_TMUX_CLIENT_JOB_PREFIXES = ("tmux",)
+
+
+def _job_indicates_tmux_client(job_name: str) -> bool:
+    if not job_name:
+        return False
+    lower = job_name.lower()
+    return any(lower.startswith(prefix) for prefix in _TMUX_CLIENT_JOB_PREFIXES)
+
+
+def _command_is_tmux_attach(command: str) -> bool:
+    """Heuristic: command opens a tmux client (attach, attach-session, a, etc.)."""
+    if not command:
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    saw_tmux = False
+    for token in tokens:
+        if not saw_tmux:
+            if token == "tmux" or token.endswith("/tmux"):
+                saw_tmux = True
+            continue
+        if token in {"attach", "attach-session", "a", "at"}:
+            return True
+        if token.startswith("-"):
+            continue
+        # First non-flag token after tmux that isn't an attach verb → not attach.
+        return False
+    return False
+
+
 def _expected_session_substr(spec: dict[str, str]) -> str:
     command = spec.get("command", "")
     if not command:
@@ -501,15 +560,59 @@ async def _tab_matches_expected(tab: Any, spec: dict[str, str]) -> tuple[bool, s
     )
 
 
-async def _find_existing_tab(window: Any, spec: dict[str, str]) -> tuple[bool, str | None]:
-    detection_failure = None
+async def _tab_attach_died(tab: Any, spec: dict[str, str]) -> bool:
+    """True iff the tab's marker matches the spec name AND the tab's
+    launching tmux-attach command is no longer the foreground job. This is
+    the "marker says X but tmux client exited" state — caller should reuse
+    the tab and re-send the command rather than create a new tab."""
+    expected_name = spec.get("name", "")
+    if not expected_name:
+        return False
+    command = spec.get("command", "")
+    if not _command_is_tmux_attach(command):
+        return False  # only meaningful for tmux-attach style commands
+    try:
+        tab_name = await _tab_name(tab)
+    except Exception:  # noqa: BLE001 best-effort metadata lookup
+        return False
+    if tab_name != expected_name:
+        return False
+    job = await _tab_current_job(tab)
+    if not job:
+        return False  # unknown → don't claim it's dead
+    return not _job_indicates_tmux_client(job)
+
+
+async def _find_existing_tab(
+    window: Any, spec: dict[str, str]
+) -> tuple[bool, Any | None, str | None]:
+    """Scan existing tabs for one that matches spec.
+
+    Returns (matched, reuse_tab, detection_failure):
+      matched=True  → fully attached and working; skip.
+      reuse_tab=<tab> → marker matches but the launching tmux-attach has
+                       exited; caller should reuse the tab and re-send
+                       the command (not create a new tab).
+      detection_failure=<msg> → marker matches but session-name doesn't
+                                (different tmux session); caller will
+                                create a new tab.
+    """
+    detection_failure: str | None = None
+    reuse_tab: Any | None = None
     for tab in getattr(window, "tabs", []) or []:
+        # Check attach-died FIRST: a tab whose marker matches but whose
+        # tmux-attach has exited would otherwise pass _tab_matches_expected
+        # via the session_name==marker fallback, and we'd incorrectly skip
+        # it instead of re-sending the attach.
+        if reuse_tab is None and await _tab_attach_died(tab, spec):
+            reuse_tab = tab
+            continue
         matched, failure = await _tab_matches_expected(tab, spec)
         if matched:
-            return True, None
+            return True, None, None
         if failure and detection_failure is None:
             detection_failure = failure
-    return False, detection_failure
+    return False, reuse_tab, detection_failure
 
 
 async def _mark_tab(tab: Any, spec: dict[str, str]) -> None:
@@ -626,7 +729,7 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
             status = "created"
             reason = ""
             if ensure and not created_window:
-                matched, detection_failure = await _find_existing_tab(window, spec)
+                matched, reuse_tab, detection_failure = await _find_existing_tab(window, spec)
                 if matched:
                     tabs_skipped += 1
                     tab_results.append({"status": "skipped", "tab": spec["name"]})
@@ -635,6 +738,14 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                         if ok:
                             handled_tab_ids.add(id(existing_tab))
                             break
+                    continue
+                if reuse_tab is not None:
+                    # Marker matches but the previous tmux-attach has died
+                    # (its tmux session was killed/restarted). Reuse the
+                    # existing tab and re-send the command in Phase 2.
+                    await _mark_tab(reuse_tab, spec)
+                    pending.append((reuse_tab, spec, "reattached", ""))
+                    handled_tab_ids.add(id(reuse_tab))
                     continue
                 if detection_failure:
                     status = "detect-failure"
