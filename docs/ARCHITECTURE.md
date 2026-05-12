@@ -200,7 +200,6 @@ These are NOT user-facing entry points. They are called from L1 / L2 / Phase-A:
 | Script | Called by | Purpose |
 |---|---|---|
 | `init_koder.py` | `apply-koder-overlay.sh` | Destructive overlay onto an OpenClaw agent workspace |
-| `init_specialist.py` | legacy v0.5 / migration paths | Materialize a specialist seat workspace |
 | `install_memory_hook.py` | `install.sh` Step 7.5 | Install Stop hook into memory's workspace |
 | `install_planner_hook.py` | `memory` Phase-A B3.5 | Install Stop hook into planner's workspace |
 

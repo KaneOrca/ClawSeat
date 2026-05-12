@@ -59,7 +59,7 @@ def project_root(project_id: str) -> Path:
 
 
 def ensure_project_skeleton(project_id: str) -> Path:
-    validate_project_id(project_id)
+    validate_id_token(project_id, kind="--project")
     root = project_root(project_id)
     for sub in (
         "lanes",
@@ -83,7 +83,7 @@ def now_iso() -> str:
 
 
 def load_project_index(project_id: str) -> dict[str, Any]:
-    validate_project_id(project_id)
+    validate_id_token(project_id, kind="--project")
     path = project_root(project_id) / "PROJECT_INDEX.json"
     if not path.exists():
         return {
@@ -492,37 +492,6 @@ def fail_closed(message: str, code: int = 1) -> None:
     """Print to stderr and exit non-zero. Strict fail-closed semantics."""
     print(f"[cartooner-harness] FAIL: {message}", file=sys.stderr)
     sys.exit(code)
-
-
-def validate_project_id(project_id: str) -> str:
-    """Reject path-like project ids early.
-
-    Seats sometimes pass `--project ~/.cartooner/projects/<name>` thinking
-    they need to provide the absolute state path. The protocol's contract
-    is that `--project` is the BARE project name; the script resolves the
-    state root via `~/.cartooner/projects/<name>/`. Accepting a path here
-    creates nested junk like `~/.cartooner/projects/Users/ywf/.../home/.cartooner/projects/<name>/`.
-    """
-    if not project_id or not project_id.strip():
-        fail_closed("--project must be a non-empty bare name")
-    bad_chars = ("/", "\\", "~", "$")
-    for ch in bad_chars:
-        if ch in project_id:
-            fail_closed(
-                f"--project must be a bare name (no path chars); "
-                f"got {project_id!r}. Use the project's id "
-                f"(e.g. 'cartooner-video'), not its filesystem path."
-            )
-    if project_id.startswith(".") or project_id.startswith("-"):
-        fail_closed(
-            f"--project may not start with '.' or '-'; got {project_id!r}"
-        )
-    if any(c in project_id for c in ("\n", "\r", "\t", "\0", " ")):
-        fail_closed(
-            f"--project may not contain whitespace or control chars; "
-            f"got {project_id!r}"
-        )
-    return project_id
 
 
 def validate_id_token(token: str, *, kind: str) -> str:

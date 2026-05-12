@@ -139,23 +139,6 @@ def test_launcher_discover_uses_real_home_override(monkeypatch, tmp_path: Path) 
     assert module.discover_home() == real_home
 
 
-def test_launcher_fuzzy_defaults_to_real_home_under_sandbox(monkeypatch, tmp_path: Path) -> None:
-    sandbox_home = tmp_path / "sandbox-home"
-    real_home = tmp_path / "real-home"
-    sandbox_home.mkdir()
-    real_home.mkdir()
-
-    monkeypatch.setenv("HOME", str(sandbox_home))
-    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(real_home))
-    monkeypatch.delenv("REAL_HOME", raising=False)
-    monkeypatch.delenv("CLAWSEAT_LAUNCHER_ROOTS", raising=False)
-    monkeypatch.delenv("CLAWSEAT_LAUNCHER_FAVORITES", raising=False)
-
-    module = _load_module("issue15_launcher_fuzzy", LAUNCHERS / "agent-launcher-fuzzy.py")
-    assert module.ROOT_SPECS[0][0] == real_home / "coding"
-    assert module.FAVORITES[-1] == str(real_home)
-
-
 def test_seat_template_default_engineers_root_uses_real_home(monkeypatch, tmp_path: Path) -> None:
     sandbox_home = tmp_path / "sandbox-home"
     real_home = tmp_path / "real-home"

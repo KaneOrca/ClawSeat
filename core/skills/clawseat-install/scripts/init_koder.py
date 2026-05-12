@@ -129,8 +129,7 @@ def _render_tool_template(name: str, values: dict[str, object]) -> str:
     return rendered
 
 
-# Conflict-handling plumbing is shared with init_specialist.py. The managed
-# file set differs per script, so we pass it in each call.
+# Conflict-handling plumbing lives in _seat_bootstrap.py.
 from _seat_bootstrap import (  # noqa: E402
     backup_managed_files,
     resolve_conflict_policy,

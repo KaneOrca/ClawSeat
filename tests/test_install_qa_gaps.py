@@ -15,7 +15,6 @@ _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
 _LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
 _TEMPLATE = _REPO / "core" / "templates" / "gstack-harness" / "template.toml"
-_INIT_SPECIALIST = _REPO / "core" / "skills" / "clawseat-install" / "scripts" / "init_specialist.py"
 
 sys.path.insert(0, str(_REPO / "core" / "scripts"))
 import agent_admin  # noqa: E402
@@ -178,7 +177,7 @@ def test_install_dry_run_registers_memory_tmux_with_tool_suffix(tmp_path: Path) 
     assert "--tmux-name qa-gaps-memory-codex" in combined
 
 
-def test_gstack_harness_template_has_patrol(tmp_path: Path) -> None:
+def test_gstack_harness_template_has_patrol() -> None:
     template = tomllib.loads(_TEMPLATE.read_text(encoding="utf-8"))
     patrol_specs = [eng for eng in template["engineers"] if eng.get("id") == "patrol"]
 
@@ -189,39 +188,6 @@ def test_gstack_harness_template_has_patrol(tmp_path: Path) -> None:
     assert patrol_specs[0]["provider"] == "minimax"
     assert patrol_specs[0]["model"] == "MiniMax-M2.7-highspeed"
     assert patrol_specs[0]["base_url"] == "https://api.minimaxi.com/anthropic"
-
-    profile = tmp_path / "profile.toml"
-    workspace_root = tmp_path / "workspaces"
-    (workspace_root / "patrol").mkdir(parents=True)
-    profile.write_text(
-        "\n".join(
-            [
-                'project_name = "qa-gaps"',
-                f'workspace_root = "{workspace_root}"',
-                'heartbeat_owner = "koder"',
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(_INIT_SPECIALIST),
-            "--profile",
-            str(profile),
-            "--seat",
-            "patrol",
-            "--force",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert (workspace_root / "patrol" / "IDENTITY.md").exists()
 
 
 def test_agent_launcher_session_has_tool_suffix(tmp_path: Path) -> None:
