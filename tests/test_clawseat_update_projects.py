@@ -67,6 +67,27 @@ def test_dry_run_reports_fresh_project(tmp_path):
     assert "fake-fresh" in r.stdout
 
 
+def test_dry_run_ignores_workspace_backup_markers(tmp_path):
+    """Workspace .backup-* folders should not make a freshly rendered project stale."""
+    head_sha = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    _seed_project(tmp_path, "fake-with-backup", rendered_sha=head_sha)
+    backup = tmp_path / ".agents" / "workspaces" / "fake-with-backup" / ".backup-20260513T204203Z"
+    backup.mkdir(parents=True, exist_ok=True)
+    (backup / "CLAUDE.md").write_text(
+        "<!-- rendered_from_clawseat_sha=abc123def4560000000000000000000000000000 -->\n",
+        encoding="utf-8",
+    )
+
+    r = _run(tmp_path, "--project", "fake-with-backup")
+
+    assert r.returncode == 0, r.stderr
+    assert "fresh" in r.stdout
+    assert "fake-with-backup" in r.stdout
+
+
 def test_dry_run_reports_unknown_when_marker_missing(tmp_path):
     """Workspace without rendered_from_clawseat_sha marker reports as 'unknown'."""
     _seed_project(tmp_path, "fake-nomarker", rendered_sha=None)

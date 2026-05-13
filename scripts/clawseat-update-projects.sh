@@ -152,7 +152,12 @@ for proj_dir in "$PROJECTS_DIR"/*/; do
   fi
 
   ws_sha=$(
-    grep -roh 'rendered_from_clawseat_sha=[a-f0-9]\+' "$ws_dir/" 2>/dev/null \
+    find "$ws_dir" -type f \
+      \( -name 'AGENTS.md' -o -name 'CLAUDE.md' -o -name 'GEMINI.md' \) \
+      ! -path '*/.backup-*/*' -print0 \
+      | while IFS= read -r -d '' marker_file; do
+          grep -oh 'rendered_from_clawseat_sha=[a-f0-9]\+' "$marker_file" 2>/dev/null || true
+        done \
       | head -1 | cut -d= -f2 || true
   )
 
@@ -189,3 +194,5 @@ if [ "$DRY_RUN" = 0 ]; then
 elif [ "$stale_count" -gt 0 ]; then
   echo "Re-run with --apply to regenerate stale workspaces."
 fi
+
+exit 0
