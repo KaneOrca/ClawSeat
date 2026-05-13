@@ -11,6 +11,12 @@ class ParserHooks:
     cmd_list_projects: Callable[[Any], int]
     cmd_list_engineers: Callable[[Any], int]
     cmd_list_identities: Callable[[Any], int]
+    cmd_provider_list: Callable[[Any], int]
+    cmd_provider_get: Callable[[Any], int]
+    cmd_provider_add: Callable[[Any], int]
+    cmd_provider_update: Callable[[Any], int]
+    cmd_provider_remove: Callable[[Any], int]
+    cmd_provider_rename: Callable[[Any], int]
     cmd_show_project: Callable[[Any], int]
     cmd_show_engineer: Callable[[Any], int]
     cmd_show: Callable[[Any], int]
@@ -91,6 +97,54 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
 
     list_identities = sub.add_parser("list-identities", help="List configured tool identities.")
     list_identities.set_defaults(func=hooks.cmd_list_identities)
+
+    provider = sub.add_parser("provider", help="Provider SSOT registry and secret-file operations.")
+    provider_sub = provider.add_subparsers(dest="provider_command", required=True)
+
+    provider_list = provider_sub.add_parser("list", help="List configured providers.")
+    provider_list.add_argument("--tool", choices=["claude", "codex", "gemini"])
+    provider_list.add_argument("--json", action="store_true")
+    provider_list.set_defaults(func=hooks.cmd_provider_list)
+
+    provider_get = provider_sub.add_parser("get", help="Show one provider record.")
+    provider_get.add_argument("--name", required=True)
+    provider_get.add_argument("--json", action="store_true")
+    provider_get.set_defaults(func=hooks.cmd_provider_get)
+
+    provider_add = provider_sub.add_parser("add", help="Add one provider record.")
+    provider_add.add_argument("--name", required=True)
+    provider_add.add_argument("--tool", required=True, choices=["claude", "codex", "gemini"])
+    provider_add.add_argument("--kind", required=True, choices=["api_key", "oauth_token"])
+    provider_add.add_argument(
+        "--family",
+        required=True,
+        choices=["anthropic", "minimax", "openai", "openai-compat", "gemini"],
+    )
+    provider_add.add_argument("--base-url", default="")
+    provider_add.add_argument("--model", default="")
+    provider_add.add_argument("--secret-stdin", action="store_true", required=True)
+    provider_add.add_argument("--json", action="store_true")
+    provider_add.set_defaults(func=hooks.cmd_provider_add)
+
+    provider_update = provider_sub.add_parser("update", help="Update provider metadata or secret.")
+    provider_update.add_argument("--name", required=True)
+    provider_update.add_argument("--base-url")
+    provider_update.add_argument("--model")
+    provider_update.add_argument("--secret-stdin", action="store_true")
+    provider_update.add_argument("--json", action="store_true")
+    provider_update.set_defaults(func=hooks.cmd_provider_update)
+
+    provider_remove = provider_sub.add_parser("remove", help="Remove one provider record.")
+    provider_remove.add_argument("--name", required=True)
+    provider_remove.add_argument("--force", action="store_true")
+    provider_remove.add_argument("--json", action="store_true")
+    provider_remove.set_defaults(func=hooks.cmd_provider_remove)
+
+    provider_rename = provider_sub.add_parser("rename", help="Rename one provider record.")
+    provider_rename.add_argument("--from", dest="from_name", required=True)
+    provider_rename.add_argument("--to", dest="to_name", required=True)
+    provider_rename.add_argument("--json", action="store_true")
+    provider_rename.set_defaults(func=hooks.cmd_provider_rename)
 
     show_project = sub.add_parser("show-project", help="Show one project record.")
     show_project.add_argument("project")

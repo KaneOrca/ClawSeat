@@ -61,6 +61,7 @@ from agent_admin_info import InfoHandlers, InfoHooks
 # (audit H8): a top-level import forced the runtime path to pull in migration
 # code on every invocation, so any bug there leaked into normal operation.
 from agent_admin_parser import ParserHooks, build_parser as build_agent_admin_parser
+from agent_admin_provider import ProviderHandlers
 from agent_admin_runtime import (
     common_env,
     detect_macos_system_proxies,
@@ -179,6 +180,9 @@ class Project:
 
 class AgentAdminError(RuntimeError):
     pass
+
+
+PROVIDER_HANDLERS = ProviderHandlers(AgentAdminError)
 
 
 def ensure_dir(path: Path) -> None:
@@ -734,6 +738,30 @@ def cmd_list_identities(args: argparse.Namespace) -> int:
     return INFO_HANDLERS.list_identities(args)
 
 
+def cmd_provider_list(args: argparse.Namespace) -> int:
+    return PROVIDER_HANDLERS.list(args)
+
+
+def cmd_provider_get(args: argparse.Namespace) -> int:
+    return PROVIDER_HANDLERS.get(args)
+
+
+def cmd_provider_add(args: argparse.Namespace) -> int:
+    return PROVIDER_HANDLERS.add(args)
+
+
+def cmd_provider_update(args: argparse.Namespace) -> int:
+    return PROVIDER_HANDLERS.update(args)
+
+
+def cmd_provider_remove(args: argparse.Namespace) -> int:
+    return PROVIDER_HANDLERS.remove(args)
+
+
+def cmd_provider_rename(args: argparse.Namespace) -> int:
+    return PROVIDER_HANDLERS.rename(args)
+
+
 def cmd_run_engineer(args: argparse.Namespace) -> int:
     return INFO_HANDLERS.run_engineer(args)
 
@@ -1186,6 +1214,12 @@ PARSER_HOOKS = ParserHooks(
     cmd_list_projects=cmd_list_projects,
     cmd_list_engineers=cmd_list_engineers,
     cmd_list_identities=cmd_list_identities,
+    cmd_provider_list=cmd_provider_list,
+    cmd_provider_get=cmd_provider_get,
+    cmd_provider_add=cmd_provider_add,
+    cmd_provider_update=cmd_provider_update,
+    cmd_provider_remove=cmd_provider_remove,
+    cmd_provider_rename=cmd_provider_rename,
     cmd_show_project=cmd_show_project,
     cmd_show_engineer=cmd_show_engineer,
     cmd_show=cmd_show,

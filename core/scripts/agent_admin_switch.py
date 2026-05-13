@@ -37,6 +37,19 @@ class SwitchHandlers:
     def __init__(self, hooks: SwitchHooks) -> None:
         self.hooks = hooks
 
+    def _provider_secret_file(self, session: Any) -> Path | None:
+        try:
+            from providers import ProviderError, get_provider
+        except Exception:
+            return None
+        try:
+            provider = get_provider(session.provider)
+        except ProviderError as exc:
+            raise self.hooks.error_cls(str(exc)) from exc
+        if provider is None:
+            return None
+        return Path(provider.secret_file)
+
     def default_launch_args_for_tool(self, tool: str) -> list[str]:
         return list(self.hooks.default_tool_args.get(tool, []))
 
@@ -65,23 +78,31 @@ class SwitchHandlers:
         return candidates
 
     def ensure_secret_ready(self, session: Any) -> None:
-        if session.auth_mode not in AUTH_MODES_REQUIRING_SECRET_FILE or not session.secret_file:
+        if session.auth_mode not in AUTH_MODES_REQUIRING_SECRET_FILE:
             return
-        secret_path = Path(session.secret_file)
+        provider_secret_path = self._provider_secret_file(session)
+        secret_path = provider_secret_path or (Path(session.secret_file) if session.secret_file else None)
+        if secret_path is None:
+            return
         if not secret_path.exists() or not secret_path.read_text().strip():
             self.hooks.ensure_dir(secret_path.parent)
+            source_candidates: list[Path] = []
+            if session.secret_file:
+                legacy_secret = Path(session.secret_file)
+                if legacy_secret != secret_path and legacy_secret.exists() and legacy_secret.read_text().strip():
+                    source_candidates.append(legacy_secret)
             for peer in sorted(secret_path.parent.glob("*.env")):
                 if peer == secret_path or not peer.read_text().strip():
                     continue
-                shutil.copy2(peer, secret_path)
-                self.hooks.ensure_secret_permissions(secret_path)
-                break
-        if not secret_path.exists() or not secret_path.read_text().strip():
+                source_candidates.append(peer)
             for shared_secret in self.shared_secret_candidates(session):
                 if not shared_secret.exists() or not shared_secret.read_text().strip():
                     continue
-                self.hooks.ensure_dir(secret_path.parent)
-                shutil.copy2(shared_secret, secret_path)
+                source_candidates.append(shared_secret)
+            for source in source_candidates:
+                if source == secret_path or not source.exists() or not source.read_text().strip():
+                    continue
+                shutil.copy2(source, secret_path)
                 self.hooks.ensure_secret_permissions(secret_path)
                 break
         if not secret_path.exists():
