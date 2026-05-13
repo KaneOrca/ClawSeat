@@ -17,6 +17,12 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+markers = [
+  "host: requires maintainer workstation state, real local repositories, or user-scoped tools",
+  "slow: intentionally exercises sleeps, full install paths, or process-heavy smoke checks",
+  "legacy: protects deprecated or compatibility behavior that should be reviewed before removal",
+  "script: executes shell/CLI/subprocess surfaces instead of pure in-process units",
+]
 
 [tool.setuptools.packages.find]
 include = ["core*", "adapters*", "shells*"]
