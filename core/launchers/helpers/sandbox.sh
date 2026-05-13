@@ -367,3 +367,55 @@ target_path.parent.mkdir(parents=True, exist_ok=True)
 target_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 PY
 }
+
+prepare_claude_host_oauth_state() {
+  # OAuth seats intentionally run against the operator's real HOME so Claude
+  # Code can reuse the host login. Still, a stale/incomplete ~/.claude.json can
+  # block the tmux pane on the welcome/theme/trust prompts after every restart.
+  # Patch only that lightweight state file; do not materialize isolated
+  # settings, skills, hooks, or auth files into the host HOME.
+  local host_home="${1:-$REAL_HOME}"
+  local trust_workdir="${2:-}"
+  local host_claude_json="$host_home/.claude.json"
+
+  python3 - "$host_claude_json" "$trust_workdir" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+trust_workdir = sys.argv[2] if len(sys.argv) > 2 else ""
+data: dict[str, object] = {}
+
+if target_path.exists():
+    try:
+        loaded = json.loads(target_path.read_text(encoding="utf-8"))
+    except Exception:
+        loaded = {}
+    if isinstance(loaded, dict):
+        data.update(loaded)
+
+data["hasCompletedOnboarding"] = True
+data["hasSeenWelcome"] = True
+version = data.get("lastOnboardingVersion")
+if not isinstance(version, str) or not version.strip():
+    data["lastOnboardingVersion"] = "99.99.99"
+
+if trust_workdir:
+    projects = data.get("projects")
+    if not isinstance(projects, dict):
+        projects = {}
+    entry = projects.get(trust_workdir)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["hasTrustDialogAccepted"] = True
+    entry["hasCompletedProjectOnboarding"] = True
+    projects[trust_workdir] = entry
+    data["projects"] = projects
+
+target_path.parent.mkdir(parents=True, exist_ok=True)
+target_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+}

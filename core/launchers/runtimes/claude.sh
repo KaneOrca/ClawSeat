@@ -77,6 +77,7 @@ run_claude_runtime() {
     # Re-apply preserved host env after the wipe.
     eval "$_oauth_host_env_snapshot"
     seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
+    prepare_claude_host_oauth_state "$HOME" "$workdir"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Claude Code · Host OAuth (reuse)"
