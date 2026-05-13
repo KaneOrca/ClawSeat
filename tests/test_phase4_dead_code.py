@@ -77,7 +77,7 @@ def test_branch_base_soft_fail_threads_into_pass_needs_integration():
     # main() invocation, but we can assert the downstream conditional uses
     # `final_lineage_status` (the post-soft-fail value) not `lineage_status`
     # (the pre-soft-fail cached value).
-    src_path = Path("/Users/ywf/coding/ClawSeat/core/skills/gstack-harness/scripts/complete_handoff.py")
+    src_path = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "complete_handoff.py"
     src = src_path.read_text(encoding="utf-8")
 
     # PASS_NEEDS_INTEGRATION emit gate must use final_*
@@ -91,6 +91,12 @@ def test_branch_base_soft_fail_threads_into_pass_needs_integration():
     # Receipt persistence reads from the dict so the soft-fail mutation survives
     assert "final_lineage_status = str(receipt.get(\"lineage_status\") or lineage_status)" in src, \
         "receipt persistence must honor _validate_completion_receipt's mutation"
+
+
+def test_phase4_dead_code_tests_are_ci_portable():
+    text = Path(__file__).read_text(encoding="utf-8")
+    hardcoded_checkout = "/Users/ywf/coding" + "/ClawSeat"
+    assert hardcoded_checkout not in text
 
 
 def test_missing_required_fields_still_hard_fail():
