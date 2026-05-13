@@ -49,7 +49,7 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 - Read the claimed brief at `tasks/<project>/<team>/brief/<task_id>.md` and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
 - Read the lazy skill catalog cache at `~/.agents/cache/skill-catalog.json`; rebuild with `core/scripts/rebuild_skill_catalog.py` when stale or missing.
 - Validate every step against `core/skills/planner/references/workflow-doc-schema.md`.
-- **Acceptance fields are immutable**: `brief.acceptance_criteria.{mechanical,reviewer,operator}` are written by memory and copied verbatim into workflow.md if needed; planner MUST NOT add/remove/edit acceptance items. If brief acceptance is unrunnable, emit `task_bounced` event via `agent_admin brief` (Phase 2 wiring) instead of editing.
+- **Acceptance fields are immutable**: `brief.acceptance_criteria.{mechanical,reviewer,operator}` are written by memory and copied verbatim into workflow.md if needed; planner MUST NOT add/remove/edit acceptance items. If brief acceptance is unrunnable, emit `task_bounced` event via `agent_admin brief` instead of editing.
 - Use `query_seat_liveness(project)` before each workflow render.
 - Enforce 派工首选 by calling `assign_owner(step_owner_role, seats_available, project)`.
 - Dispatch directly to a live specialist when one matches `owner_role`.
@@ -65,30 +65,18 @@ See [core/references/workflow-collaboration-protocol.md](../../references/workfl
 
 ## /clear before dispatch protocol
 
-Before planner sends task N+1 to worker W, planner MUST evaluate three gates:
+Before task N+1 to worker W, planner MUST pass all gates before `/clear`:
 
-1. **Closure gate** - task N on W is fully closed:
-   - `~/.agents/tasks/<project>/patrol/handoffs/<task_N>__<W>__planner.json.consumed` exists
-   - `~/.agents/tasks/<project>/<W>/DELIVERY.md` exists
-   If not closed -> skip `/clear`, dispatch directly.
-2. **Context-relatedness gate** - planner judges whether task N and N+1 share
-   material context (same code surface, same investigation thread, continuation
-   work). Planner judgment is authoritative; misclassification is recoverable
-   (worker re-loads from brief/workflow.md).
-   If related -> skip `/clear`, dispatch directly.
-3. **Idle gate** - pane snapshot:
-   ```bash
-   tmux capture-pane -t $(agentctl session-name <W> --project <project>) -p | tail -8
-   ```
-   Last line is a waiting prompt (`❯`) and no active marker (`Cogitated`,
-   `Thinking`, `Working`, `Misting`, `… (N tokens)`, spinner). If busy -> skip
-   `/clear`, dispatch directly.
+1. **Closure**: task N has both `handoffs/<task_N>__<W>__planner.json.consumed`
+   and `<W>/DELIVERY.md`; otherwise dispatch directly.
+2. **Context-relatedness**: if task N and N+1 share material context, dispatch
+   directly; planner judgment is authoritative and recoverable from workflow.md.
+3. **Idle**: `tmux capture-pane -t $(agentctl session-name <W> --project <project>) -p | tail -8`
+   shows waiting prompt (`❯`) and no active marker (`Cogitated`, `Thinking`,
+   `Working`, `Misting`, token counter, spinner).
 
-All three gates pass -> send `/clear` -> wait 2s -> dispatch.
-Any gate fails -> dispatch without `/clear`.
-
-Precedent: memory's planner `/compact` rule already uses the same
-pane-snapshot idle pattern; this is the symmetric inverse for worker context.
+All three pass -> `/clear`, wait 2s, dispatch. Any failure -> dispatch without
+`/clear`. This mirrors memory's planner `/compact` idle pattern.
 
 ## Strict Fan-in: verify specialist .consumed receipts (mandatory)
 

@@ -65,15 +65,7 @@ Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Mem
 Canonical task dispatch is the gstack harness helper:
 
 ```bash
-python3 core/skills/gstack-harness/scripts/dispatch_task.py \
-  --profile ~/.agents/profiles/<project>-profile-dynamic.toml \
-  --source memory \
-  --target <seat> \
-  --task-id <id> \
-  --title "<title>" \
-  --objective "<objective>" \
-  --test-policy EXTEND \
-  --reply-to planner
+python3 core/skills/gstack-harness/scripts/dispatch_task.py --profile ~/.agents/profiles/<project>-profile-dynamic.toml --source memory --target <seat> --task-id <id> --title "<title>" --objective "<objective>" --test-policy EXTEND --reply-to planner
 ```
 
 The real CLI requires `--profile`, one of `--target` or `--target-role`,
@@ -181,6 +173,17 @@ light land a local `memory_commit`, medium dispatch builder repair, heavy
 escalate to operator. Keep the signal one-way; do not bounce it back to the
 builder seat.
 
+## Canonical Workflow Entry
+
+For single-team v2 workflows only, memory may use the legacy workflow entry:
+
+1. Create workflow.md with `agent_admin.py task create --workflow-template ...`.
+2. Edit workflow.md until `workflow.md ready`, including `notify_on_done: [memory]`.
+3. Then wake planner through the canonical transport.
+
+禁止短路: do not send builder work directly, do not skip planner, and do not
+replace workflow.md with ad hoc pane text. v3 multi-team work uses `brief queue`.
+
 ## Post-Spawn Chain Rehearsal (必做)
 
 memory MUST initiate a chain rehearsal brief in these situations:
@@ -283,32 +286,19 @@ send.
 
 ## 目录布局（v0.8）
 
-```text
-~/.agents/memory/
-├── machine/<*.json>  credentials / network / openclaw / github / current_context
-├── learnings/        跨项目模式（如有）
-├── shared/           library_knowledge / patterns / examples
-├── index.json        scan_index.py 全局综合索引
-├── events.log        全局 append-only JSONL
-├── responses/<task_id>.json  memory_deliver.py 输出
-└── projects/<project>/{dev_env.json,decision/,finding/,task/,plan/,builder/,planner/,reviewer/,patrol/, _index/}
-```
+`~/.agents/memory/` contains `machine/*.json`, `learnings/`, `shared/`,
+`index.json`, `events.log`, `responses/<task_id>.json`, and
+`projects/<project>/{dev_env.json,decision/,finding/,task/,plan/,builder/,planner/,reviewer/,patrol/,_index/}`.
 
 ## 工具速查
 
-```bash
-python3 memory_write.py --kind decision --project install --title "..." --author memory
-python3 query_memory.py --project install --kind decision [--since 2026-04-01]
-python3 query_memory.py --key credentials.keys.MINIMAX_API_KEY.value
-python3 scan_environment.py --output ~/.agents/memory/                 # 默认写 machine/ 5 文件
-python3 scan_project.py --project clawseat --repo ~/.clawseat --depth shallow --commit
-python3 memory_deliver.py --profile <profile> --task-id <id> --target <seat> --response-inline '{...}'
-
-# Typed-link graph (P1: deterministic regex extraction, no LLM, no embedding)
-python3 extract_links.py --file <path>                                  # auto-runs on memory_write
-python3 query_memory.py --backlinks "entity:taskid:ARENA-228"           # who linked here
-python3 query_memory.py --graph projects/arena/decision/foo --depth 2   # BFS reachable nodes
-```
+- `memory_write.py --kind decision --project install --title "..." --author memory`
+- `query_memory.py --project install --kind decision [--since 2026-04-01]`
+- `query_memory.py --key credentials.keys.MINIMAX_API_KEY.value`
+- `scan_environment.py --output ~/.agents/memory/` writes the default `machine/` 5 files.
+- `scan_project.py --project clawseat --repo ~/.clawseat --depth shallow --commit`
+- `memory_deliver.py --profile <profile> --task-id <id> --target <seat> --response-inline '{...}'`
+- `extract_links.py --file <path>` auto-runs on write; use `query_memory.py --backlinks ...` or `--graph ...`.
 
 ## Typed-link graph (v0.9, P1)
 
@@ -318,13 +308,7 @@ extraction over markdown content. See
 [`core/references/memory-link-graph.md`](../../references/memory-link-graph.md)
 for full schema + edge types.
 
-Indexes:
-
-```text
-~/.agents/memory/_links/<flat-source>.jsonl       # outgoing edges from a page
-~/.agents/memory/_backlinks/<flat-target>.jsonl   # incoming refs to a page or entity
-```
-
+Indexes live at `_links/<flat-source>.jsonl` and `_backlinks/<flat-target>.jsonl`.
 Slug encoding: paths separated by `__`, namespace separator `:` becomes `++`.
 External entities use `entity:<namespace>:<value>` form; supported namespaces
 are `taskid` (e.g. `ARENA-228`), `commit`, `component`, `file`, `url`, `key`,
@@ -360,14 +344,9 @@ Memory seat 的 Claude Code Stop-hook 是：
 
 ## Feishu requireMention 双层配置
 
-Layer 1 是 `openclaw.json` 里的 `requireMention: true`。这是 install
-B5.4.x 自动写入的项目配置，用来要求 Koder 只响应明确 @ 的群消息。
-
-Layer 2 是飞书后台 UI 手工开关：进入飞书后台的群机器人设置，启用
-"需要@机器人才能回复"。这一步编程不可达，operator 必须手工确认。
-
-验证方式：配置后在绑定群 @ Koder 发一条普通消息；Koder 应收到 webhook，
-可查 `~/.openclaw/logs/` 中对应项目日志。
+Layer 1: `openclaw.json` has `requireMention: true` (install B5.4.x writes it).
+Layer 2: operator manually enables Feishu bot "需要@机器人才能回复" in the admin UI.
+Verify by @ Koder in the bound group and checking the matching `~/.openclaw/logs/` project log.
 
 ## 两类任务
 
@@ -458,18 +437,10 @@ Scan a project repo into `projects/<name>/` structured facts.
 python3 scan_project.py --project <name> --repo <path> --depth {shallow|medium|deep}
 ```
 
-Depth: `shallow` = `dev_env.json` only; `medium` = +`runtime/tests/deploy/ci/lint/structure`;
-`deep` = +`env_templates`。  
-Default 是 **dry-run**（stdout JSON）。加 `--commit` 才写盘；`--force-commit`
-允许覆盖。  
-D20: scanner is subprocess-free — pure static filesystem reads (no npm/pip/docker).
-
-Query after commit:
-
-```bash
-python3 query_memory.py --project clawseat --kind runtime
-python3 scan_project.py --project clawseat --repo ~/.clawseat --depth shallow --commit
-```
+Depth: `shallow` = `dev_env.json`; `medium` adds runtime/tests/deploy/ci/lint/structure;
+`deep` adds `env_templates`. Default is dry-run JSON; `--commit` writes, `--force-commit`
+overwrites. D20: scanner is subprocess-free static reads only. Query with
+`query_memory.py --project clawseat --kind runtime` after committing.
 
 M1 scanners (`scan_environment.py`) → machine layer；M2 (`scan_project.py`) → project layer。
 
@@ -480,12 +451,9 @@ seat-infrastructure and ancestor-handoff steps.
 
 ## Borrowed Practices
 
-- **Brainstorming** — see [`core/references/superpowers-borrowed/brainstorming.md`]
-  设计阶段苏格拉底式提问；不直接给方案，先把需求拆出来再展示给用户。
-- **Writing plans** — see [`core/references/superpowers-borrowed/writing-plans.md`]
-  起草 dispatch brief 时遵循颗粒度规则：每个验收项都能 5 分钟内验证。
-- **Verification before completion** — see [`core/references/superpowers-borrowed/verification-before-completion.md`]
-  作为 verifier 时证据优先于推断；模糊验收一律打回 builder。
+- **Brainstorming**: see [`core/references/superpowers-borrowed/brainstorming.md`](../../references/superpowers-borrowed/brainstorming.md)，先拆需求再给方案。
+- **Writing plans**: see [`core/references/superpowers-borrowed/writing-plans.md`](../../references/superpowers-borrowed/writing-plans.md)，验收项需能快速验证。
+- **Verification before completion**: see [`core/references/superpowers-borrowed/verification-before-completion.md`](../../references/superpowers-borrowed/verification-before-completion.md)，证据优先。
 
 ## Operator Language Matching(强制)
 
