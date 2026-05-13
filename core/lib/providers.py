@@ -300,8 +300,8 @@ def _render_provider(provider: Provider) -> list[str]:
     return lines
 
 
-def read_providers(path: Path | None = None) -> ProvidersStore:
-    providers_file = Path(path) if path is not None else providers_path()
+def read_providers(path: Path | None = None, *, home: Path | None = None) -> ProvidersStore:
+    providers_file = Path(path) if path is not None else providers_path(home=home)
     if not providers_file.exists():
         return ProvidersStore()
     with providers_file.open("rb") as handle:
@@ -323,7 +323,7 @@ def read_providers(path: Path | None = None) -> ProvidersStore:
         entry = raw_providers[name]
         if not isinstance(entry, dict):
             raise ProviderValidationError(f"provider entry {name!r} must be a table")
-        store.providers[str(name)] = _provider_from_raw(str(name), entry)
+        store.providers[str(name)] = _provider_from_raw(str(name), entry, home=home)
     return store
 
 
@@ -334,14 +334,24 @@ def write_providers(store: ProvidersStore, path: Path | None = None) -> Path:
     return providers_file
 
 
-def get_provider(name: str, *, store: ProvidersStore | None = None) -> Provider | None:
+def get_provider(
+    name: str,
+    *,
+    store: ProvidersStore | None = None,
+    home: Path | None = None,
+) -> Provider | None:
     provider_name = _validate_name(name)
-    current = store if store is not None else read_providers()
+    current = store if store is not None else read_providers(home=home)
     return current.providers.get(provider_name)
 
 
-def list_providers(tool: str | None = None, *, store: ProvidersStore | None = None) -> list[Provider]:
-    current = store if store is not None else read_providers()
+def list_providers(
+    tool: str | None = None,
+    *,
+    store: ProvidersStore | None = None,
+    home: Path | None = None,
+) -> list[Provider]:
+    current = store if store is not None else read_providers(home=home)
     return current.sorted_providers(tool)
 
 

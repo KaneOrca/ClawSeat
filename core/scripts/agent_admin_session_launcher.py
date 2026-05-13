@@ -33,7 +33,7 @@ class SessionLaunchEnv:
         except Exception:
             return None
         try:
-            provider = get_provider(session.provider)
+            provider = get_provider(session.provider, home=self._real_home_for_tool_seeding())
         except ProviderError as exc:
             raise SessionStartError(str(exc)) from exc
         return provider

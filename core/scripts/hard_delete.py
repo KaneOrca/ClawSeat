@@ -101,8 +101,8 @@ def _seat_session_name(conn: sqlite3.Connection | None, home: Path, project: str
             session_name = str(data.get("session", "")).strip()
             if session_name:
                 return session_name
-        except Exception:
-            pass
+        except (OSError, tomllib.TOMLDecodeError, TypeError, ValueError):
+            return ""
     return ""
 
 

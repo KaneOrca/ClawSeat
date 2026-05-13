@@ -43,7 +43,7 @@ class SwitchHandlers:
         except Exception:
             return None
         try:
-            provider = get_provider(session.provider)
+            provider = get_provider(session.provider, home=self.operator_home())
         except ProviderError as exc:
             raise self.hooks.error_cls(str(exc)) from exc
         if provider is None:
