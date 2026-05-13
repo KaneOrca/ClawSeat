@@ -90,6 +90,7 @@ extract() {
 
 TOOL="$(extract tool)"
 AUTH_MODE="$(extract auth_mode)"
+PROVIDER="$(extract provider)"
 WORKSPACE="$(extract workspace)"
 
 [[ -n "$AUTH_OVERRIDE" ]] && AUTH_MODE="$AUTH_OVERRIDE"
@@ -101,9 +102,21 @@ if [[ -z "$TOOL" || -z "$AUTH_MODE" || -z "$WORKSPACE" ]]; then
 fi
 
 SESSION_NAME="${PROJECT}-${SEAT}-${TOOL}"
+LAUNCHER_AUTH="$AUTH_MODE"
+if [[ -z "$AUTH_OVERRIDE" ]]; then
+  case "$TOOL:$AUTH_MODE:$PROVIDER" in
+    claude:api:minimax) LAUNCHER_AUTH="minimax" ;;
+    claude:api:deepseek) LAUNCHER_AUTH="deepseek" ;;
+    claude:api:xcode-best) LAUNCHER_AUTH="xcode" ;;
+    claude:api:anthropic-console) LAUNCHER_AUTH="anthropic-console" ;;
+    codex:api:xcode-best) LAUNCHER_AUTH="xcode" ;;
+    codex:oauth:openai) LAUNCHER_AUTH="chatgpt" ;;
+    gemini:api:google-api-key) LAUNCHER_AUTH="custom" ;;
+  esac
+fi
 
-printf 'restart-seat:\n  project:   %s\n  seat:      %s\n  tool:      %s\n  auth:      %s\n  workspace: %s\n  session:   %s\n' \
-  "$PROJECT" "$SEAT" "$TOOL" "$AUTH_MODE" "$WORKSPACE" "$SESSION_NAME"
+printf 'restart-seat:\n  project:       %s\n  seat:          %s\n  tool:          %s\n  auth:          %s\n  launcher_auth: %s\n  workspace:     %s\n  session:       %s\n' \
+  "$PROJECT" "$SEAT" "$TOOL" "$AUTH_MODE" "$LAUNCHER_AUTH" "$WORKSPACE" "$SESSION_NAME"
 
 if "$TMUX_BIN" has-session -t "=$SESSION_NAME" 2>/dev/null; then
   echo "  status:    killing existing session"
@@ -120,7 +133,7 @@ CLAWSEAT_PROJECT="$PROJECT" CLAWSEAT_SEAT="$SEAT" \
   --headless \
   --tool "$TOOL" \
   --session "$SESSION_NAME" \
-  --auth "$AUTH_MODE" \
+  --auth "$LAUNCHER_AUTH" \
   --dir "$WORKSPACE" >/dev/null
 
 # Verify the session came up.
