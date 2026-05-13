@@ -77,42 +77,74 @@ command -v "$TMUX_BIN" >/dev/null 2>&1 || {
   exit 3
 }
 
-# Read effective launch config — single source of truth for tool/auth/workspace.
-if ! launch_out="$("$PYTHON_BIN" "$AGENT_ADMIN" session effective-launch --project "$PROJECT" "$SEAT" 2>&1)"; then
-  echo "error: agent_admin effective-launch failed for $PROJECT/$SEAT:" >&2
-  printf '%s\n' "$launch_out" >&2
+CUSTOM_ENV_FILE=""
+cleanup_custom_env_file() {
+  if [[ -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
+    rm -f "$CUSTOM_ENV_FILE"
+  fi
+}
+trap cleanup_custom_env_file EXIT
+
+# Build the launch plan through agent_admin internals — single source of truth
+# for provider SSOT, launcher auth labels, and custom env overlays.
+if ! plan_out="$(
+  "$PYTHON_BIN" - "$REPO_ROOT" "$PROJECT" "$SEAT" "$AUTH_OVERRIDE" 2>&1 <<'PY'
+import shlex
+import sys
+
+repo_root, project, seat, auth_override = sys.argv[1:5]
+sys.path.insert(0, f"{repo_root}/core/scripts")
+sys.path.insert(0, f"{repo_root}/core/lib")
+
+try:
+    import agent_admin  # type: ignore
+    from agent_admin_session_base import _engineer_profile_path  # type: ignore
+
+    session = agent_admin.resolve_engineer_session(seat, project_name=project)
+    launcher_auth = auth_override.strip() or agent_admin.SESSION_SERVICE._launcher_auth_for(session)
+    custom_env_file = ""
+    if not auth_override.strip():
+        agent_admin.SESSION_SERVICE._sync_launcher_secret_file(session, launcher_auth)
+        if launcher_auth == "custom":
+            custom_env_file = agent_admin.SESSION_SERVICE._write_launcher_custom_env_file(session)
+
+    runtime_dir = agent_admin.SESSION_SERVICE._launcher_runtime_dir(session, launcher_auth)
+    if runtime_dir is not None and session.runtime_dir != str(runtime_dir):
+        session.runtime_dir = str(runtime_dir)
+        agent_admin.write_session(session)
+
+    real_home = agent_admin.SESSION_SERVICE._real_home_for_tool_seeding()
+    engineer_profile = _engineer_profile_path(session.engineer_id)
+    fields = {
+        "TOOL": session.tool,
+        "AUTH_MODE": session.auth_mode,
+        "PROVIDER": session.provider,
+        "WORKSPACE": session.workspace,
+        "SESSION_NAME": session.session,
+        "ENGINEER_ID": session.engineer_id,
+        "LAUNCHER_AUTH": launcher_auth,
+        "CUSTOM_ENV_FILE": custom_env_file,
+        "REAL_HOME_VALUE": str(real_home),
+        "ENGINEER_PROFILE": str(engineer_profile),
+    }
+    for key, value in fields.items():
+        print(f"{key}={shlex.quote(str(value))}")
+except Exception as exc:  # noqa: BLE001 - shell caller needs one sanitized line.
+    print(f"error: agent_admin restart launch plan failed for {project}/{seat}: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+)"; then
+  echo "error: agent_admin launch plan failed for $PROJECT/$SEAT:" >&2
+  printf '%s\n' "$plan_out" >&2
   exit 1
 fi
 
-extract() {
-  printf '%s\n' "$launch_out" | awk -v key="$1" '$1 == key && $2 == "=" { sub(/^[^=]*= /, ""); print; exit }'
-}
-
-TOOL="$(extract tool)"
-AUTH_MODE="$(extract auth_mode)"
-PROVIDER="$(extract provider)"
-WORKSPACE="$(extract workspace)"
-
-[[ -n "$AUTH_OVERRIDE" ]] && AUTH_MODE="$AUTH_OVERRIDE"
+eval "$plan_out"
 
 if [[ -z "$TOOL" || -z "$AUTH_MODE" || -z "$WORKSPACE" ]]; then
-  echo "error: incomplete launch config from agent_admin:" >&2
-  printf '%s\n' "$launch_out" >&2
+  echo "error: incomplete launch plan from agent_admin:" >&2
+  printf '%s\n' "$plan_out" >&2
   exit 1
-fi
-
-SESSION_NAME="${PROJECT}-${SEAT}-${TOOL}"
-LAUNCHER_AUTH="$AUTH_MODE"
-if [[ -z "$AUTH_OVERRIDE" ]]; then
-  case "$TOOL:$AUTH_MODE:$PROVIDER" in
-    claude:api:minimax) LAUNCHER_AUTH="minimax" ;;
-    claude:api:deepseek) LAUNCHER_AUTH="deepseek" ;;
-    claude:api:xcode-best) LAUNCHER_AUTH="xcode" ;;
-    claude:api:anthropic-console) LAUNCHER_AUTH="anthropic-console" ;;
-    codex:api:xcode-best) LAUNCHER_AUTH="xcode" ;;
-    codex:oauth:openai) LAUNCHER_AUTH="chatgpt" ;;
-    gemini:api:google-api-key) LAUNCHER_AUTH="custom" ;;
-  esac
 fi
 
 printf 'restart-seat:\n  project:       %s\n  seat:          %s\n  tool:          %s\n  auth:          %s\n  launcher_auth: %s\n  workspace:     %s\n  session:       %s\n' \
@@ -128,13 +160,21 @@ fi
 # agent-launcher.sh --headless creates the tmux session itself (don't wrap
 # in `tmux new-session`). It validates inputs, wires env (HOME, CODEX_HOME,
 # etc.), and re-execs as --exec-agent inside the session it spawns.
-CLAWSEAT_PROJECT="$PROJECT" CLAWSEAT_SEAT="$SEAT" \
-  bash "$LAUNCHER" \
-  --headless \
-  --tool "$TOOL" \
-  --session "$SESSION_NAME" \
-  --auth "$LAUNCHER_AUTH" \
-  --dir "$WORKSPACE" >/dev/null
+launcher_cmd=(
+  bash "$LAUNCHER"
+  --headless
+  --tool "$TOOL"
+  --session "$SESSION_NAME"
+  --auth "$LAUNCHER_AUTH"
+  --dir "$WORKSPACE"
+)
+if [[ -n "$CUSTOM_ENV_FILE" ]]; then
+  launcher_cmd+=(--custom-env-file "$CUSTOM_ENV_FILE")
+fi
+CLAWSEAT_PROJECT="$PROJECT" CLAWSEAT_SEAT="$ENGINEER_ID" \
+  CLAWSEAT_PROVIDER="$PROVIDER" CLAWSEAT_ENGINEER_ID="$ENGINEER_ID" \
+  CLAWSEAT_ENGINEER_PROFILE="$ENGINEER_PROFILE" REAL_HOME="$REAL_HOME_VALUE" \
+  "${launcher_cmd[@]}" >/dev/null
 
 # Verify the session came up.
 for _ in 1 2 3 4 5; do

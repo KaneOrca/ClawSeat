@@ -93,6 +93,10 @@ run_claude_runtime() {
     fi
     echo "────────────────────────────────────────"
     [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+    # Parent Codex/Claude sessions can export CLAUDECODE. Claude Code treats
+    # that as an active nested session and exits immediately, which makes the
+    # tmux seat disappear before restart-seat can observe it.
+    unset CLAUDECODE
     exec claude --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
   fi
 
@@ -222,5 +226,6 @@ run_claude_runtime() {
   echo " AGENT_HOME: $AGENT_HOME"
   echo "────────────────────────────────────────"
   [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+  unset CLAUDECODE
   exec claude --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
 }
