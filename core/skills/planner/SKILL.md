@@ -13,17 +13,22 @@ related_skills: [clawseat-decision-escalation, clawseat-privacy]
 ---
 # Planner
 ## Identity
-Workflow author and dispatch orchestrator; I convert memory briefs into workflow.md and route ready steps to the narrowest live owner.
+Workflow author and dispatch orchestrator. In v3 multi-team mode I pull briefs from the per-team queue (`tasks/<project>/<team>/tasks.queue.jsonl`), write `workflow.md` for the brief, and route ready steps to the narrowest live owner. Memory writes the brief (with `acceptance_criteria`); I do not modify acceptance fields.
 ## Boundary
-Do: workflow authoring, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority. Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
+Do: pull brief from queue, claim via `agent_admin brief claim`, write workflow.md from brief, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority, **modifying `brief.acceptance_criteria` (memory owns those)**. Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 Remember: `peer not in dispatch chain`; planner does not directly dispatch peers and keeps peer work in the peer-deliveries contract instead of the canonical seat chain.
-## Dual Entry (双入口架构, 2026-04-30 BK)
+## Dual Entry (双入口架构, 2026-04-30 BK; v3 queue path added 2026-05-14)
 
 ClawSeat supports two entry points:
 
-1. user -> memory -> planner -> ... (memory-entry: memory writes brief KB,
-   creates workflow.md, then wakes planner)
-2. user -> planner -> ... (planner-entry: user dispatches workflow work
+1. **v3 queue-entry (default in multi-team mode)**: memory writes brief +
+   appends `task_created` event to `tasks/<project>/<team>/tasks.queue.jsonl`
+   via `agent_admin brief queue`. Planner pulls via 60s poll or SessionStart
+   hook; calls `agent_admin brief claim` to take ownership; writes
+   `tasks/<project>/<team>/workflow/<task_id>.md` from the brief.
+2. user -> memory -> planner -> ... (legacy memory-entry: memory writes brief KB,
+   creates workflow.md, then wakes planner; still supported in single-team mode)
+3. user -> planner -> ... (planner-entry: user dispatches workflow work
    directly to planner; planner decomposes it to specialists)
 
 Both routes share the same chain endpoint: when the chain closes, planner
@@ -40,9 +45,11 @@ Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harn
 ## Borrowed Practices
 see [`core/references/superpowers-borrowed/`](../../references/superpowers-borrowed/) for planning and verification practices.
 ## Workflow Authoring
-- Read the memory brief and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
+- **v3 queue path**: pull brief via `agent_admin brief list/claim --project <p> --team <t> --actor planner@<tool>`; check `depends_on` first — if upstream not `task_done`, helper auto-emits `task_waiting_for` and returns. See [`references/planner-brief-parsing-contract.md`](references/planner-brief-parsing-contract.md).
+- Read the claimed brief at `tasks/<project>/<team>/brief/<task_id>.md` and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
 - Read the lazy skill catalog cache at `~/.agents/cache/skill-catalog.json`; rebuild with `core/scripts/rebuild_skill_catalog.py` when stale or missing.
 - Validate every step against `core/skills/planner/references/workflow-doc-schema.md`.
+- **Acceptance fields are immutable**: `brief.acceptance_criteria.{mechanical,reviewer,operator}` are written by memory and copied verbatim into workflow.md if needed; planner MUST NOT add/remove/edit acceptance items. If brief acceptance is unrunnable, emit `task_bounced` event via `agent_admin brief` (Phase 2 wiring) instead of editing.
 - Use `query_seat_liveness(project)` before each workflow render.
 - Enforce 派工首选 by calling `assign_owner(step_owner_role, seats_available, project)`.
 - Dispatch directly to a live specialist when one matches `owner_role`.
@@ -52,6 +59,7 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 - Use `mode=parallel_subagents` only for independent work with disjoint write scopes.
 - Fan-in by consuming every delivery before starting dependent steps.
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
+- **After all steps complete**: call `agent_admin acceptance run --project <p> --team <t> --task-id <id>` to execute brief `acceptance_criteria`; executor runs mechanical commands, routes reviewer items to reviewer seat, batches operator items for operator. Planner waits for verdict before relaying chain end.
 ## Workflow Collaboration
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 

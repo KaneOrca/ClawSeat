@@ -2,6 +2,7 @@
 set -euo pipefail
 
 DRY_RUN=0; PROJECT="install"; REPO_ROOT_OVERRIDE=""; FORCE_REPO_ROOT=""
+INSTALL_MODE="single"; INSTALL_TEAMS=""  # v3 multi-team mode (spec §4.1 §12)
 _PROJECT_EXPLICIT=0; _TEMPLATE_EXPLICIT=0  # set to 1 when flag is passed explicitly
 UNINSTALL_PROJECT=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -218,6 +219,8 @@ parse_args() {
       --enable-auto-patrol) ENABLE_AUTO_PATROL=1; shift ;;
       --load-all-skills) LOAD_ALL_SKILLS=1; shift ;;
       --template) CLAWSEAT_TEMPLATE_NAME="$2"; _TEMPLATE_EXPLICIT=1; shift 2 ;;
+      --mode) INSTALL_MODE="$2"; shift 2 ;;
+      --teams) INSTALL_TEAMS="$2"; shift 2 ;;
       --reset-harness-memory)
         "$PYTHON_BIN" - "$REPO_ROOT" <<'PY'
 import sys
@@ -232,7 +235,8 @@ PY
         exit 0
         ;;
       --help|-h) cat <<'EOF'
-Usage: scripts/install.sh [--project <name>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]
+Usage: scripts/install.sh [--project <name>] [--mode single|multi --teams <csv>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]
+--mode multi --teams a,b,c   v3 multi-team flow (delegates to install_multi.sh; reads approved configs from tasks/<project>/_config-proposals/).
 --repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.
 --detect-only prints one JSON environment summary and exits.
 --provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.
@@ -263,6 +267,13 @@ EOF
     [[ "$UNINSTALL_PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "--uninstall project must match ^[a-z0-9-]+$"
   fi
   [[ "$PROJECT" =~ ^[a-z0-9-]+$ ]] || die 2 INVALID_PROJECT "project must match ^[a-z0-9-]+$"
+  case "$INSTALL_MODE" in
+    single|multi) ;;
+    *) die 2 INVALID_MODE "--mode must be single | multi, got: $INSTALL_MODE" ;;
+  esac
+  if [[ "$INSTALL_MODE" == "multi" && -z "$INSTALL_TEAMS" ]]; then
+    die 2 INVALID_FLAGS "--mode multi requires --teams <csv> (e.g. core,content,shell)"
+  fi
   case "$CLAWSEAT_TEMPLATE_NAME" in
     clawseat-engineering|clawseat-creative|clawseat-solo) ;;
     *) die 2 INVALID_TEMPLATE "--template must be clawseat-engineering | clawseat-creative | clawseat-solo, got: $CLAWSEAT_TEMPLATE_NAME" ;;
@@ -336,6 +347,18 @@ main() {
   if [[ "$DETECT_ONLY" == "1" ]]; then
     detect_all
     exit 0
+  fi
+  # v3 multi-team mode (Phase 1 minimal bridge — spec §12)
+  # Delegates to install_multi.sh; legacy single flow runs only when --mode=single (default).
+  if [[ "$INSTALL_MODE" == "multi" ]]; then
+    local multi_script="$SCRIPT_DIR/install_multi.sh"
+    [[ -x "$multi_script" ]] || die 2 MISSING_SCRIPT "install_multi.sh not found at $multi_script"
+    local multi_args=("--project" "$PROJECT")
+    [[ -n "$INSTALL_TEAMS" ]] && multi_args+=("--teams" "$INSTALL_TEAMS")
+    [[ "$DRY_RUN" == "1" ]] && multi_args+=("--dry-run")
+    [[ -n "$REPO_ROOT_OVERRIDE" ]] && multi_args+=("--repo-root" "$REPO_ROOT_OVERRIDE")
+    printf '==> v3 multi-team mode: delegating to install_multi.sh (teams=%s)\n' "$INSTALL_TEAMS" >&2
+    exec "$multi_script" "${multi_args[@]}"
   fi
   self_update_check "$@"
   if [[ -n "$UNINSTALL_PROJECT" ]]; then

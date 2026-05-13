@@ -84,6 +84,22 @@ from agent_admin_task import auto_supersede as task_auto_supersede
 from agent_admin_task import create_task as task_create
 from agent_admin_task import list_pending as task_list_pending
 from agent_admin_task import update_status as task_update_status
+
+# v3 brief / queue subcommand wiring (spec §4.2 §4.3)
+from agent_admin_brief import cmd_queue as brief_queue
+from agent_admin_brief import cmd_list as brief_list
+from agent_admin_brief import cmd_claim as brief_claim
+from agent_admin_brief import cmd_show as brief_show
+
+# v3 acceptance executor (Phase 2, spec §4.7)
+_CORE_LIB_PATH = REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB_PATH) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB_PATH))
+from acceptance_executor import (  # noqa: E402
+    AcceptanceError as _AcceptanceError,
+    aggregate_verdict as _aggregate_verdict,
+    run_acceptance as _run_acceptance,
+)
 from agent_admin_template import TemplateHandlers, TemplateHooks
 from agent_admin_tui import TuiHooks, run_tui_app
 from agent_admin_window import (
@@ -1189,6 +1205,46 @@ def cmd_task_update_status(args: argparse.Namespace) -> int:
     return task_update_status(args)
 
 
+def cmd_brief_queue(args: argparse.Namespace) -> int:
+    return brief_queue(args)
+
+
+def cmd_brief_list(args: argparse.Namespace) -> int:
+    return brief_list(args)
+
+
+def cmd_brief_claim(args: argparse.Namespace) -> int:
+    return brief_claim(args)
+
+
+def cmd_brief_show(args: argparse.Namespace) -> int:
+    return brief_show(args)
+
+
+def cmd_acceptance_run(args: argparse.Namespace) -> int:
+    try:
+        results = _run_acceptance(
+            project=args.project,
+            team=args.team,
+            task_id=args.task_id,
+            brief_path=Path(args.brief_path) if args.brief_path else None,
+            reviewer_seat=args.reviewer_seat,
+            cwd=Path(args.cwd) if args.cwd else None,
+            profile_path=Path(args.profile) if getattr(args, "profile", None) else None,
+        )
+    except _AcceptanceError as exc:
+        print(f"acceptance schema error: {exc}", file=sys.stderr)
+        return 2
+    verdict = _aggregate_verdict(results)
+    for route, r in results.items():
+        passed = sum(1 for i in r.items if i.result == "pass")
+        failed = sum(1 for i in r.items if i.result == "fail")
+        pending = sum(1 for i in r.items if i.result == "pending")
+        print(f"{route}: {r.verdict} (pass={passed} fail={failed} pending={pending})")
+    print(f"aggregate: {verdict}")
+    return 1 if verdict == "FAIL" else 0
+
+
 def cmd_window_config_monitor(args: argparse.Namespace) -> int:
     project = load_project_or_current(args.project)
     engineers = [normalize_name(item) for item in args.engineers.split(",") if item.strip()]
@@ -1275,6 +1331,11 @@ PARSER_HOOKS = ParserHooks(
     cmd_task_auto_supersede=cmd_task_auto_supersede,
     cmd_task_list_pending=cmd_task_list_pending,
     cmd_task_update_status=cmd_task_update_status,
+    cmd_brief_queue=cmd_brief_queue,
+    cmd_brief_list=cmd_brief_list,
+    cmd_brief_claim=cmd_brief_claim,
+    cmd_brief_show=cmd_brief_show,
+    cmd_acceptance_run=cmd_acceptance_run,
     cmd_tui=cmd_tui,
     cmd_project_koder_bind=cmd_project_koder_bind,
     cmd_machine_memory_show=cmd_machine_memory_show,

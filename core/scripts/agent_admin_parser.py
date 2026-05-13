@@ -78,6 +78,13 @@ class ParserHooks:
     cmd_machine_memory_show: Callable[[Any], int]
     cmd_project_seat_list: Callable[[Any], int]
     cmd_project_validate: Callable[[Any], int]
+    # v3 brief / queue commands (spec §4.2 §4.3)
+    cmd_brief_queue: Callable[[Any], int]
+    cmd_brief_list: Callable[[Any], int]
+    cmd_brief_claim: Callable[[Any], int]
+    cmd_brief_show: Callable[[Any], int]
+    # v3 acceptance executor (Phase 2, spec §4.7)
+    cmd_acceptance_run: Callable[[Any], int]
 
 
 def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
@@ -737,6 +744,94 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     task_update_status.add_argument("status", choices=["pending", "in_progress", "done", "blocked"])
     task_update_status.add_argument("--project", required=True)
     task_update_status.set_defaults(func=hooks.cmd_task_update_status)
+
+    # v3 brief subcommand — memory writes brief + queue events, planner pulls.
+    # Spec §4.2 (brief schema) + §4.3 (queue events).
+    brief = sub.add_parser(
+        "brief",
+        help="v3 multi-team brief/queue ops (memory writes brief, planner claims).",
+    )
+    brief_sub = brief.add_subparsers(dest="brief_command", required=True)
+
+    brief_queue = brief_sub.add_parser(
+        "queue",
+        help="Write brief markdown + append task_created event to per-team queue.",
+    )
+    brief_queue.add_argument("--project", required=True)
+    brief_queue.add_argument("--team", required=True)
+    brief_queue.add_argument("--task-id", required=True, dest="task_id")
+    brief_queue.add_argument("--objective", required=True)
+    brief_queue.add_argument("--depends-on", nargs="*", default=[], dest="depends_on")
+    brief_queue.add_argument(
+        "--seats-required",
+        nargs="*",
+        default=None,
+        dest="seats_required",
+        help="Seats required (default: ['builder']). Schema requires non-empty.",
+    )
+    brief_queue.add_argument("--parent-task-id", default=None, dest="parent_task_id")
+    brief_queue.add_argument(
+        "--brief-content-file",
+        default=None,
+        dest="brief_content_file",
+        help="Optional path to pre-written brief markdown (overrides skeleton).",
+    )
+    brief_queue.add_argument("--force", action="store_true", help="Overwrite existing brief.")
+    brief_queue.set_defaults(func=hooks.cmd_brief_queue)
+
+    brief_list = brief_sub.add_parser(
+        "list",
+        help="List tasks for a team (default: pending only; --all shows all).",
+    )
+    brief_list.add_argument("--project", required=True)
+    brief_list.add_argument("--team", required=True)
+    brief_list.add_argument("--all", action="store_true")
+    brief_list.set_defaults(func=hooks.cmd_brief_list)
+
+    brief_claim = brief_sub.add_parser(
+        "claim",
+        help="Planner claims a pending task (validates depends_on).",
+    )
+    brief_claim.add_argument("--project", required=True)
+    brief_claim.add_argument("--team", required=True)
+    brief_claim.add_argument("--task-id", required=True, dest="task_id")
+    brief_claim.add_argument(
+        "--actor",
+        required=True,
+        help="Format: <role>@<tool>, e.g. planner@claude",
+    )
+    brief_claim.set_defaults(func=hooks.cmd_brief_claim)
+
+    brief_show = brief_sub.add_parser(
+        "show",
+        help="Show current state (collapsed) of a task_id in the queue.",
+    )
+    brief_show.add_argument("--project", required=True)
+    brief_show.add_argument("--team", required=True)
+    brief_show.add_argument("--task-id", required=True, dest="task_id")
+    brief_show.set_defaults(func=hooks.cmd_brief_show)
+
+    # v3 acceptance executor (Phase 2, spec §4.7)
+    acceptance = sub.add_parser(
+        "acceptance",
+        help="v3 acceptance executor (mechanical / reviewer / operator routes).",
+    )
+    acceptance_sub = acceptance.add_subparsers(dest="acceptance_command", required=True)
+
+    acceptance_run = acceptance_sub.add_parser(
+        "run",
+        help="Run brief.acceptance_criteria for a task; physically execute mechanical commands, route reviewer/operator items.",
+    )
+    acceptance_run.add_argument("--project", required=True)
+    acceptance_run.add_argument("--team", required=True)
+    acceptance_run.add_argument("--task-id", required=True, dest="task_id")
+    acceptance_run.add_argument("--brief-path", default=None, dest="brief_path",
+                                help="Explicit brief path (default: tasks/<p>/<t>/brief/<task_id>.md)")
+    acceptance_run.add_argument("--reviewer-seat", default=None, dest="reviewer_seat")
+    acceptance_run.add_argument("--cwd", default=None, help="Working dir for mechanical commands")
+    acceptance_run.add_argument("--profile", default=None, dest="profile",
+                                help="Profile path for reviewer dispatch (default: ~/.agents/profiles/<project>-profile-dynamic.toml)")
+    acceptance_run.set_defaults(func=hooks.cmd_acceptance_run)
 
     identity = sub.add_parser("identity", help="Tool identity list/show operations.")
     identity_sub = identity.add_subparsers(dest="identity_command", required=True)

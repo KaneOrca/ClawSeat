@@ -118,34 +118,62 @@ Verify Ack 4-step after dispatch:
 Treat missing handoff, silent target pane, absent delivery, or absent remote
 commit as an unacknowledged dispatch until proven otherwise.
 
-## Canonical Workflow Entry (memory dispatch 必走步)
+## Canonical Brief Queue Entry (v3 multi-team, memory 必走步)
 
-Before notifying planner of a new task, memory MUST create canonical workflow
-state first:
+Memory writes briefs into the per-team queue. Planner pulls via 60s poll +
+SessionStart hook. No workflow.md authored by memory — planner writes it
+from the claimed brief (spec §5.1, §5.2).
 
 ```bash
-# 1. Create workflow.md as the chain state file.
-python3 core/scripts/agent_admin.py task create \
-  --project <p> \
-  --workflow-template brief-driven \
-  <task_id>
+# 1. Append brief + task_created event to per-team queue.
+python3 core/scripts/agent_admin.py brief queue \
+  --project <p> --team <t> \
+  --task-id <task_id> \
+  --objective "<one-line objective>" \
+  --seats-required builder reviewer \
+  --depends-on <upstream_task_ids…>
 
-# 2. Edit workflow.md so brief modules become steps.
-# Required per step: owner_role, mode, status, and notify_on_done: [memory].
-# Reference: core/skills/planner/references/workflow-doc-schema.md
+# 2. Edit brief frontmatter to fill in acceptance_criteria
+#    (mechanical / reviewer / operator) — schema requires non-empty mechanical.
+#    THIS is the only place memory authors acceptance — planner copies it
+#    verbatim and MUST NOT modify (planner SKILL.md §Workflow Authoring).
+$EDITOR ~/.agents/tasks/<p>/<t>/brief/<task_id>.md
 
-# 3. Then wake planner.
-send-and-verify.sh --project <p> planner \
-  "[<task_id>] workflow.md ready, brief: <path>"
+# 3. No explicit wake-up needed — planner's SessionStart hook + 60s poll
+#    will pick the task up automatically. If planner is offline, install
+#    the hook via core/skills/planner/scripts/install_queue_poll.py.
 ```
 
-Why: `workflow.md` is the chain canonical state file. It enables patrol step
-monitoring, `notify_on_done: [memory]` routing, planner SWALLOW fallback
-decisions, and cross-seat dependency tracking.
+Why: queue + event stream is the v3 canonical state (spec §4.3). Memory does
+NOT write `workflow.md`; planner authors it after `agent_admin brief claim`.
+Memory's ownership boundary:
 
-**禁止短路**: `send-and-verify.sh --project <p> planner "<inline brief>"`
-before workflow.md exists skips canonical state. Use send-and-verify only as
-the wake-up transport after workflow.md is ready.
+- **WRITES** `brief.acceptance_criteria` (mechanical / reviewer / operator)
+- **CONSUMES** planner's chain-end relay + acceptance receipts
+- **NEVER RUNS** `agent_admin acceptance run` directly — that is planner's job
+  between final workflow step and chain-end relay (planner SKILL.md
+  §Workflow Authoring + planner-brief-parsing-contract.md §4)
+
+**Legacy `agent_admin task create --workflow-template`** is retained for
+single-team v2 projects only. v3 multi-team projects use `brief queue` above.
+
+### Memory consumes planner's chain-end relay (not run acceptance itself)
+
+After planner runs `agent_admin acceptance run`, planner relays the verdict
+to memory via `complete_handoff.py`. Memory then:
+
+1. Reads `tasks/<p>/<t>/acceptance/<task_id>__{mechanical,reviewer,operator}.json`
+   to inspect the routed outcomes.
+2. If aggregate verdict is PASS → memory commits the chain to KB
+   (decision/finding) and may merge to main (spec §8 git flow).
+3. If aggregate is FAIL → memory writes a new brief (parent_task_id linkage)
+   with corrected acceptance and re-queues.
+4. If aggregate is PENDING and receipt carries `lineage_status: divergent` →
+   memory routes through PASS_NEEDS_INTEGRATION three-lane handler
+   (spec §C / DO spec): rebase / integration-branch / disposable retry.
+
+Memory does NOT shell out `acceptance run` — that would short-circuit the
+planner's chain. Planner is the seat that runs it; memory is the consumer.
 
 ## PASS_NEEDS_INTEGRATION 三档恢复
 When `PASS_NEEDS_INTEGRATION` appears, memory owns the three-lane recovery:

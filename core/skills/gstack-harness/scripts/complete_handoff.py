@@ -891,10 +891,23 @@ def _validate_completion_receipt(
 
     actual_base = receipt.get("branch_base")
     if actual_base != expected_base:
-        raise SystemExit(
-            "branch_base mismatch: receipt base does not match dispatch expected_base_sha."
-            " Rebase the feature branch onto the current main and retry."
+        # v3 spec §10 item 6 (post-DO): soft-fail instead of SystemExit so the
+        # canonical receipt path keeps flowing during base drift. The
+        # `_annotate_lineage_status` step earlier records lineage_status; here
+        # we ensure it reflects divergence even if upstream missed it.
+        # Downstream consumers (memory) recover via the PASS_NEEDS_INTEGRATION
+        # three-lane handler (spec §C / DO spec). Hard-failing here previously
+        # blocked planner→memory fan-in (AL-503 finding).
+        print(
+            "warn: branch_base mismatch — "
+            f"receipt={actual_base!r} vs dispatch expected_base_sha={expected_base!r}; "
+            f"lineage_status={receipt.get('lineage_status', '?')!r}; "
+            "receipt still emitted, memory PASS_NEEDS_INTEGRATION handler decides recovery",
+            file=sys.stderr,
         )
+        if receipt.get("lineage_status") != "divergent":
+            receipt["lineage_status"] = "divergent"
+            receipt["head_contains_commit"] = False
 
 
 def main() -> int:
@@ -1155,8 +1168,14 @@ def main() -> int:
     receipt["verdict"] = args.verdict
     receipt["frontstage_disposition"] = args.frontstage_disposition
     receipt["next_action"] = args.next_action
-    receipt["head_contains_commit"] = head_contains_commit
-    receipt["lineage_status"] = lineage_status
+    # v3 spec §10 item 6: `_validate_completion_receipt` may have downgraded
+    # lineage_status to 'divergent' on branch_base mismatch. Preserve that
+    # downgrade by reading the dict (not the cached local value from
+    # `_annotate_lineage_status` at line ~1018).
+    final_lineage_status = str(receipt.get("lineage_status") or lineage_status)
+    final_head_contains_commit = bool(receipt.get("head_contains_commit", head_contains_commit))
+    receipt["head_contains_commit"] = final_head_contains_commit
+    receipt["lineage_status"] = final_lineage_status
     if planner_to_frontstage:
         frontstage_todo = profile.todo_path(args.target)
         append_task_to_queue(
@@ -1184,7 +1203,12 @@ def main() -> int:
         )
         receipt["todo_path"] = str(frontstage_todo)
         receipt["assigned_at"] = utc_now_iso()
-    if lineage_status == "divergent" and reported_commit and args.target != "memory":
+    # v3 spec §10 item 6 (audit fix 2): use final_lineage_status so the
+    # soft-failed branch_base-mismatch path triggers PASS_NEEDS_INTEGRATION
+    # notification to memory. Cached `lineage_status` from line ~1018
+    # reflects only the merge-base ancestry check, not the subsequent soft
+    # downgrade in `_validate_completion_receipt`.
+    if final_lineage_status == "divergent" and reported_commit and args.target != "memory":
         _emit_pass_needs_integration(
             profile,
             task_id=args.task_id,
@@ -1218,7 +1242,7 @@ def main() -> int:
             target=args.target,
             user_summary=args.user_summary,
         )
-        if lineage_status == "divergent" and reported_commit:
+        if final_lineage_status == "divergent" and reported_commit:
             message += (
                 "\n\n"
                 f"{PASS_NEEDS_INTEGRATION}: "

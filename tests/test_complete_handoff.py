@@ -295,7 +295,13 @@ def test_completion_missing_ci_conclusion_fails(tmp_path: Path) -> None:
     assert "ci_conclusion" in result.stderr
 
 
-def test_completion_rejects_stale_branch_base_against_expected(tmp_path: Path) -> None:
+def test_completion_soft_fails_stale_branch_base_against_expected(tmp_path: Path) -> None:
+    """v3 spec §10 item 6: branch_base mismatch is now a soft-fail (warning +
+    lineage_status=divergent), not SystemExit. Earlier hard-fail blocked
+    AL-503 planner→memory fan-in. Memory PASS_NEEDS_INTEGRATION handler
+    recovers downstream (spec §C / DO spec)."""
+    import json as _json
+
     repo = _init_git_repo(tmp_path)
     profile, _, _ = _write_profile(tmp_path, repo)
 
@@ -315,8 +321,21 @@ def test_completion_rejects_stale_branch_base_against_expected(tmp_path: Path) -
     subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/clawseat/main", head], check=True)
 
     result = _complete(profile, "C5", branch="main", pr_number="101", ci_conclusion="success")
-    assert result.returncode != 0
+    # Receipt now emitted (returncode 0) with warning on stderr.
+    assert result.returncode == 0, f"expected soft-fail success, got: {result.stderr}"
     assert "branch_base mismatch" in result.stderr
+    # PASS_NEEDS_INTEGRATION signal must appear so memory's handler routes recovery.
+    assert "PASS_NEEDS_INTEGRATION" in result.stderr, (
+        "soft-fail must surface PASS_NEEDS_INTEGRATION hint so memory "
+        "handler can route recovery (spec §C / DO spec)"
+    )
+    # Verify receipt records the divergent lineage so downstream (memory) can
+    # route via PASS_NEEDS_INTEGRATION.
+    receipt_path = tmp_path / "handoffs" / "C5__builder__planner.json"
+    assert receipt_path.exists()
+    receipt = _json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt.get("lineage_status") == "divergent"
+    assert receipt.get("head_contains_commit") is False
 
 
 def test_completion_legacy_without_expected_base_skips_validation(tmp_path: Path) -> None:
