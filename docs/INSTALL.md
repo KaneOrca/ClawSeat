@@ -375,6 +375,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--load-all-skills` | Install all bundled ClawSeat skills for non-Claude tools too. Claude always receives the full set. |
 | `--dry-run` | Print planned actions without mutating host state where supported. |
 | `--detect-only` | Print one `detect_all` JSON environment summary and exit before install side effects. |
+| `--no-window` | Skip native iTerm workers/memories windows. Tmux seats still launch and can be attached from embedded terminals. |
 | `--reset-harness-memory` | Delete remembered per-seat harness choices and exit. |
 | `--help` / `-h` | Print the parser-owned usage line. |
 

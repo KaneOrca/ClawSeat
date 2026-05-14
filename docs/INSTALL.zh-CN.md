@@ -291,6 +291,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--load-all-skills` | 为非 Claude tool 也安装所有 bundled ClawSeat skills。Claude 总是获得完整集合。 |
 | `--dry-run` | 打印计划动作，尽可能不修改 host state。 |
 | `--detect-only` | 打印一次 `detect_all` JSON 环境摘要，并在产生安装副作用前退出。 |
+| `--no-window` | 跳过原生 iTerm workers/memories 窗口；tmux seats 仍会启动，可从内嵌终端 attach。 |
 | `--reset-harness-memory` | 删除 remembered per-seat harness choices 并退出。 |
 | `--help` / `-h` | 打印 parser-owned usage line。 |
 

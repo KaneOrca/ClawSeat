@@ -11,6 +11,7 @@ CLAWSEAT_ROOT="${CLAWSEAT_ROOT_OVERRIDE:-$REPO_ROOT}"
 PYTHON_BIN_WAS_SET="${PYTHON_BIN+1}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 FORCE_REINSTALL=0
+OPEN_NATIVE_WINDOWS=1
 PROVISION_KEYS=0
 ENABLE_AUTO_PATROL=0
 LOAD_ALL_SKILLS=0
@@ -194,6 +195,7 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --dry-run) DRY_RUN=1; shift ;;
+      --no-window|--no-windows) OPEN_NATIVE_WINDOWS=0; shift ;;
       --detect-only) DETECT_ONLY=1; shift ;;
       --project) PROJECT="$2"; _PROJECT_EXPLICIT=1; shift 2 ;;
       --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
@@ -235,10 +237,11 @@ PY
         exit 0
         ;;
       --help|-h) cat <<'EOF'
-Usage: scripts/install.sh [--project <name>] [--mode single|multi --teams <csv>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--reset-harness-memory]
+Usage: scripts/install.sh [--project <name>] [--mode single|multi --teams <csv>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--no-window] [--reset-harness-memory]
 --mode multi --teams a,b,c   v3 multi-team flow (delegates to install_multi.sh; reads approved configs from tasks/<project>/_config-proposals/).
 --repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.
 --detect-only prints one JSON environment summary and exits.
+--no-window skips native iTerm workers/memories windows; tmux seats still launch.
 --provider now controls the memory seat only; use --all-api-provider for global api-seat provider override.
 --provision-keys prompts for missing template API keys and writes ~/.agents/.env.global.
 
@@ -399,25 +402,29 @@ main() {
   install_seat_clear_watchdog
   install_patrol_bootstrap
 
-  # v2 split window topology (per RFC-001 §3): one workers window per project +
-  # one shared memories window across all projects (rebuilt on each install).
-  if [[ "$PRIMARY_SEAT_ID" == "memory" ]]; then
-    note "Step 7a: open per-project workers window (${#PENDING_SEATS[@]} template workers)"
-    open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
+  if [[ "$OPEN_NATIVE_WINDOWS" == "1" ]]; then
+    # v2 split window topology (per RFC-001 §3): one workers window per project +
+    # one shared memories window across all projects (rebuilt on each install).
+    if [[ "$PRIMARY_SEAT_ID" == "memory" ]]; then
+      note "Step 7a: open per-project workers window (${#PENDING_SEATS[@]} template workers)"
+      open_iterm_window "$(workers_payload)" GRID_WINDOW_ID
 
-    [[ ! -f "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" ]] || bash "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" || true
-    note "Step 7b: ensure shared memories window (tab per project)"
-    local _memories_payload
-    _memories_payload="$(memories_payload)"
-    if [[ -n "$_memories_payload" && "$_memories_payload" != *'"status": "skip"'* ]]; then
-      local _mem_window_id=""
-      open_iterm_window "$_memories_payload" _mem_window_id
+      [[ ! -f "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" ]] || bash "$REPO_ROOT/scripts/cleanup-stale-memories-window.sh" || true
+      note "Step 7b: ensure shared memories window (tab per project)"
+      local _memories_payload
+      _memories_payload="$(memories_payload)"
+      if [[ -n "$_memories_payload" && "$_memories_payload" != *'"status": "skip"'* ]]; then
+        local _mem_window_id=""
+        open_iterm_window "$_memories_payload" _mem_window_id
+      else
+        warn "memories_payload returned skip — no project memory tmux sessions found"
+      fi
     else
-      warn "memories_payload returned skip — no project memory tmux sessions found"
+      # Legacy single-window topology for imported ancestor-primary templates.
+      note "Step 7: open legacy iTerm worker grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
     fi
   else
-    # Legacy single-window topology for imported ancestor-primary templates.
-    note "Step 7: open legacy iTerm worker grid"; open_iterm_window "$(grid_payload)" GRID_WINDOW_ID
+    note "Step 7: skip native iTerm windows (--no-window); tmux seats remain available for embedded xterm attach"
   fi
 
   # v1 LEGACY (M4 remove): machine-memory-claude tmux session may still be running on machines

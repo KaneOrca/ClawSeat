@@ -24,6 +24,7 @@ def test_install_help_lists_all_templates() -> None:
     assert "clawseat-engineering" in output
     assert "clawseat-creative" in output
     assert "clawseat-solo" in output
+    assert "--no-window skips native iTerm" in output
     assert "5-seat" in output
     assert "3-seat" in output
     assert "cartooner-bound" in output
