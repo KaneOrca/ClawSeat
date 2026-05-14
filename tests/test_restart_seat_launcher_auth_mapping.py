@@ -69,6 +69,7 @@ def test_restart_seat_translates_canonical_api_auth_to_launcher_labels() -> None
     assert "_write_launcher_custom_env_file" in text
     assert '--auth "$LAUNCHER_AUTH"' in text
     assert "--custom-env-file" in text
+    assert "CUSTOM_ENV_FILE_DELEGATED_TO_TMUX" in text
 
 
 def test_restart_seat_launches_custom_provider_through_agent_admin_plan(tmp_path: Path) -> None:

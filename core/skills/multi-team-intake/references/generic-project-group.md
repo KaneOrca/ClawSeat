@@ -10,6 +10,7 @@ actual repo.
 topology_strategy: project-memory-plus-scaled-subteams
 project_archetype: derived-from-repo
 project_memory: one global memory, never copied into subteams
+rendered_profile: top-level mode.project_memory = "memory"; teams contain workers only
 required_always:
   - quality-docs
 candidate_subteams:

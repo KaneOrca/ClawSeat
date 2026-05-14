@@ -93,6 +93,9 @@ def test_render_supports_named_same_role_instances(tmp_path: Path) -> None:
 
     data = tomllib.loads(render_project_toml_v3(project="p", proposals_dir=proposals))
 
+    assert data["mode"]["project_memory"] == "memory"
+    assert data["seat_roles"]["memory"] == "project-memory"
+    assert data["seat_overrides"]["memory"]["tool"] == "codex"
     assert data["teams"]["quality-docs"]["autonomous"] is True
     assert data["teams"]["quality-docs"]["loop"] == "continuous"
     assert data["teams"]["quality-docs"]["stop_rule"] == "campaign_clean_streak_3"

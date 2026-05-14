@@ -20,6 +20,11 @@
         "team_structure": {
           "type": "string",
           "enum": ["single", "multi"]
+        },
+        "project_memory": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "The single project-level memory seat. It is outside subteams."
         }
       },
       "required": ["team_structure"]

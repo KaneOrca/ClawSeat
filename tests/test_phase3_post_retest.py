@@ -63,6 +63,7 @@ estimated_monthly_cost_usd: { low: 1, high: 2 }
     assert profile.project_name == "p"
     assert profile.profile_name == "p-profile-dynamic"
     assert profile.template_name == "clawseat-engineering"
+    assert "memory" in profile.seats
 
 
 # ---------- #2: brief schema enforced ----------

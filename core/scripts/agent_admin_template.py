@@ -122,9 +122,15 @@ def _load_role_skill_content(
             return result
 
     try:
-        from seat_skill_mapping import role_skill_for_seat
+        from seat_skill_mapping import role_skill_for_hint, role_skill_for_seat
     except ModuleNotFoundError:
         return None
+    if role_hint:
+        role_name = role_skill_for_hint(role_hint)
+        if role_name:
+            result = _read_skill(role_name)
+            if result is not None:
+                return result
     role_name = role_skill_for_seat(seat_id)
     if not role_name:
         return None

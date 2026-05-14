@@ -39,6 +39,8 @@ from proposal_validator import (  # noqa: E402
     validate_proposal_dir,
 )
 
+PROJECT_MEMORY_SEAT = "memory"
+
 
 def _load_yaml_proposal(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
@@ -143,9 +145,15 @@ def render_project_toml_v3(
         team_files = all_files
 
     teams: dict[str, dict[str, object]] = {}
-    all_seats: list[str] = []
-    seat_roles: dict[str, str] = {}
-    seat_overrides: dict[str, dict[str, object]] = {}
+    all_seats: list[str] = [PROJECT_MEMORY_SEAT]
+    seat_roles: dict[str, str] = {PROJECT_MEMORY_SEAT: "project-memory"}
+    seat_overrides: dict[str, dict[str, object]] = {
+        PROJECT_MEMORY_SEAT: {
+            "tool": "codex",
+            "provider": "openai",
+            "auth_mode": "oauth",
+        }
+    }
 
     for f in team_files:
         data = _load_yaml_proposal(f)
@@ -237,6 +245,7 @@ def render_project_toml_v3(
     lines.append("# v3 mode + teams metadata (read by core/lib/profile_loader_v3.py)")
     lines.append("[mode]")
     lines.append('team_structure = "multi"')
+    lines.append(f"project_memory = {_toml_quote(PROJECT_MEMORY_SEAT)}")
     lines.append("")
     lines.append("[teams]")
     for team_name, team_data in teams.items():

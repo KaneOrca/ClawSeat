@@ -21,7 +21,9 @@ v3:
    v3 profile and team workspaces.
 
 The first project-level memory seat is a project-group architect. It is not a
-team-local memory.
+team-local memory. In the rendered v3 profile, it remains the top-level
+`mode.project_memory = "memory"` seat so worker teams can still close receipts
+and wake memory through the normal transport path.
 
 ## Non-Goals
 
@@ -400,6 +402,7 @@ similarly named tasks across teams.
 The agreed MULTI_TEAM v0.1 protocol is strict enough to dogfood because it has:
 
 - one project memory instead of duplicated team memories
+- top-level `project_memory` encoded in the profile, outside all subteams
 - per-team queues and `project + team + task_id` identity
 - memory-owned spec and final acceptance
 - planner-owned workflow and dispatch

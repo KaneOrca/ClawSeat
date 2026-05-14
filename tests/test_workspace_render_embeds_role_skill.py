@@ -129,6 +129,37 @@ def test_load_role_skill_content_role_hint_falls_back_when_skill_missing(tmp_pat
     assert "Builder fallback" in body
 
 
+def test_load_role_skill_content_role_hint_alias_wins_for_dynamic_team_prefix(tmp_path: Path) -> None:
+    """A team slug can contain role words; the engineer role_hint remains authoritative."""
+    (tmp_path / "core" / "skills" / "planner").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "planner" / "SKILL.md").write_text("# Planner alias\n", encoding="utf-8")
+    (tmp_path / "core" / "skills" / "builder").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "builder" / "SKILL.md").write_text("# Builder wrong prefix\n", encoding="utf-8")
+
+    info = agent_admin_template._load_role_skill_content(
+        tmp_path,
+        "builder-tools-planner",
+        role_hint="planner-dispatcher",
+    )
+    assert info is not None
+    role, body = info
+    assert role == "planner"
+    assert "Planner alias" in body
+
+
+def test_load_role_skill_content_unknown_role_hint_falls_back_to_seat_id(tmp_path: Path) -> None:
+    (tmp_path / "core" / "skills" / "clawseat").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "clawseat" / "SKILL.md").write_text("# Generic\n", encoding="utf-8")
+    (tmp_path / "core" / "skills" / "builder").mkdir(parents=True)
+    (tmp_path / "core" / "skills" / "builder" / "SKILL.md").write_text("# Builder seat\n", encoding="utf-8")
+
+    info = agent_admin_template._load_role_skill_content(tmp_path, "builder-2", role_hint="specialist")
+    assert info is not None
+    role, body = info
+    assert role == "builder"
+    assert "Builder seat" in body
+
+
 def test_role_skill_section_lines_empty_when_missing(tmp_path: Path) -> None:
     assert agent_admin_template._role_skill_section_lines(tmp_path, "unknown-seat") == []
 

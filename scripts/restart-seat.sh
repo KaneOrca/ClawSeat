@@ -78,8 +78,9 @@ command -v "$TMUX_BIN" >/dev/null 2>&1 || {
 }
 
 CUSTOM_ENV_FILE=""
+CUSTOM_ENV_FILE_DELEGATED_TO_TMUX=0
 cleanup_custom_env_file() {
-  if [[ -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
+  if [[ "$CUSTOM_ENV_FILE_DELEGATED_TO_TMUX" == "0" && -n "$CUSTOM_ENV_FILE" && -f "$CUSTOM_ENV_FILE" ]]; then
     rm -f "$CUSTOM_ENV_FILE"
   fi
 }
@@ -185,6 +186,7 @@ CLAWSEAT_PROJECT="$PROJECT" CLAWSEAT_SEAT="$ENGINEER_ID" \
   CLAWSEAT_PROVIDER="$PROVIDER" CLAWSEAT_ENGINEER_ID="$ENGINEER_ID" \
   CLAWSEAT_ENGINEER_PROFILE="$ENGINEER_PROFILE" REAL_HOME="$REAL_HOME_VALUE" \
   "${launcher_cmd[@]}" >/dev/null
+CUSTOM_ENV_FILE_DELEGATED_TO_TMUX=1
 
 # Verify the session came up.
 for _ in 1 2 3 4 5; do

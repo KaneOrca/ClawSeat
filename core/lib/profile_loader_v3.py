@@ -44,6 +44,7 @@ class ProfileV3:
     profile_path: Path
     project_name: str
     team_structure: str  # 'single' or 'multi'
+    project_memory: str = "memory"
     teams: dict[str, TeamSpec] = field(default_factory=dict)
     seats: list[str] = field(default_factory=list)
     seat_roles: dict[str, str] = field(default_factory=dict)
@@ -93,7 +94,7 @@ def load_profile_v3(profile_path: Path | str) -> ProfileV3:
     - mode.team_structure ∈ {single, multi}
     - multi mode requires [teams]
     - every seat in [teams].*.seats is in top-level seats
-    - every seat appears in exactly one team (no overlap, no orphan)
+    - every non-memory worker seat appears in exactly one team (no overlap)
     """
     path = Path(profile_path)
     if not path.exists():
@@ -127,6 +128,11 @@ def load_profile_v3(profile_path: Path | str) -> ProfileV3:
         raise ProfileV3Error(
             f"{path}: mode.team_structure must be one of {sorted(VALID_MODES)}, "
             f"got {team_structure!r}"
+        )
+    project_memory = str(mode_block.get("project_memory", "memory")).strip() or "memory"
+    if project_memory not in seats:
+        raise ProfileV3Error(
+            f"{path}: mode.project_memory={project_memory!r} is not in top-level seats"
         )
 
     teams: dict[str, TeamSpec] = {}
@@ -162,7 +168,11 @@ def load_profile_v3(profile_path: Path | str) -> ProfileV3:
                 seat_to_team[seat] = str(team_name)
             teams[str(team_name)] = TeamSpec(name=str(team_name), seats=team_seats)
 
-        orphan = [s for s in seats if s not in seat_to_team]
+        if project_memory in seat_to_team:
+            raise ProfileV3Error(
+                f"{path}: project memory seat {project_memory!r} must not be assigned to a subteam"
+            )
+        orphan = [s for s in seats if s not in seat_to_team and s != project_memory]
         if orphan:
             raise ProfileV3Error(
                 f"{path}: multi mode but seats not assigned to any team: {orphan}"
@@ -172,6 +182,7 @@ def load_profile_v3(profile_path: Path | str) -> ProfileV3:
         profile_path=path,
         project_name=project_name,
         team_structure=team_structure,
+        project_memory=project_memory,
         teams=teams,
         seats=seats,
         seat_roles=seat_roles,
