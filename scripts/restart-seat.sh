@@ -102,6 +102,16 @@ try:
 
     session = agent_admin.resolve_engineer_session(seat, project_name=project)
     launcher_auth = auth_override.strip() or agent_admin.SESSION_SERVICE._launcher_auth_for(session)
+    if (
+        not auth_override.strip()
+        and session.tool == "claude"
+        and session.auth_mode == "oauth"
+        and session.provider == "anthropic"
+    ):
+        # Cartooner/ClawSeat policy: Claude Code official OAuth seats run via
+        # long-lived CLAUDE_CODE_OAUTH_TOKEN, not host Keychain OAuth. This
+        # keeps old session.toml records from reopening browser/login flows.
+        launcher_auth = "oauth_token"
     custom_env_file = ""
     if not auth_override.strip():
         agent_admin.SESSION_SERVICE._sync_launcher_secret_file(session, launcher_auth)
