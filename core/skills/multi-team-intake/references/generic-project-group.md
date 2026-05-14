@@ -43,8 +43,27 @@ Rules:
 - With one builder, reviewer is optional; planner performs spec review and
   delivery review fallback.
 - With two or three builders, reviewer is mandatory.
+- With two or three builders, each builder must have a distinct `instance`,
+  `purpose`, and `capabilities`; these fields are the planner's routing hints
+  for exact `owner_seat` selection.
 - A fourth builder is forbidden; memory must propose a new subteam instead.
 - Subteams must not declare a memory seat.
+- Applying an approved roster change is handled by `clawseat-roster-admin`, not
+  by direct TOML edits.
+
+## Current-Project Ownership Doc
+
+Memory maintains one project-local doc:
+
+```text
+~/.agents/tasks/<project>/TEAM_OWNERSHIP.md
+```
+
+It is a readable ownership summary, not runtime config. Include each team's
+mission, ownership paths, seat ids, stable builder purpose/capabilities, and
+non-owned boundaries. Planner reads this doc but writes per-task assignments in
+`workflow/<task_id>.md`; planner does not maintain a second long-lived builder
+split file.
 
 ## Generic YAML Examples
 

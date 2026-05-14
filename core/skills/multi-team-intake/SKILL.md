@@ -4,7 +4,8 @@ description: >
   Memory-driven project-group designer for ClawSeat v3 multi-team projects.
   Use when the first project memory needs to analyze a repo, recommend a
   module/layer-based team topology, write reviewable config proposals, or
-  design an autonomous quality-docs testing group.
+  design an autonomous quality-docs testing group. For applying approved
+  roster changes after initial design, pair with clawseat-roster-admin.
 ---
 
 # Multi-Team Intake
@@ -24,14 +25,24 @@ only then rename or rewrite to `*__approved.yaml`.
    validation, long-running GUI flows, SDK/provider integration, or release gates.
 5. Explain each team: why it exists, which paths it owns, which risks it tests,
    and which acceptance routes it needs.
-6. Write proposed YAML files under:
+6. Draft the current-project `TEAM_OWNERSHIP.md` summary for the proposed
+   topology. Keep it descriptive only; do not duplicate runtime config.
+7. Write proposed YAML files under:
 
    ```text
    ~/.agents/tasks/<project>/_config-proposals/
    ```
 
-7. Ask for operator approval before producing `__approved.yaml`.
-8. Tell the operator the dry-run command:
+8. Ask for operator approval before producing `__approved.yaml`.
+9. After approval, update:
+
+   ```text
+   ~/.agents/tasks/<project>/TEAM_OWNERSHIP.md
+   ```
+
+   This document is project-local and owned by memory. It records stable team
+   and builder capability split; it is not a second config source.
+10. Tell the operator the dry-run command:
 
    ```bash
    scripts/install.sh --mode multi --project <project> --teams <csv> --dry-run
@@ -40,6 +51,10 @@ only then rename or rewrite to `*__approved.yaml`.
 Memory designs the project group and briefs. Team planners design workflows.
 Memory does not write `workflow.md` and does not dispatch directly to builders.
 There is one project-level memory. Subteams never include memory seats.
+
+After the operator approves adding a seat or subteam to an already-installed
+project, switch to `clawseat-roster-admin`; do not edit project/profile TOML
+directly from this skill.
 
 ## Minimal Project Group Rules
 
@@ -69,9 +84,11 @@ Rules:
 3. With 1 builder, reviewer is optional and planner performs spec/delivery
    review fallback.
 4. With 2-3 builders, reviewer is mandatory.
-5. A requested 4th builder is forbidden; memory must propose a new subteam
+5. With 2-3 builders, every builder seat must declare `instance`, `purpose`,
+   and `capabilities` so the subteam planner can choose exact `owner_seat`.
+6. A requested 4th builder is forbidden; memory must propose a new subteam
    instead.
-6. Each subteam should declare `ownership_paths` so planner can route by module
+7. Each subteam should declare `ownership_paths` so planner can route by module
    boundary.
 
 ## Generic Topology Heuristic
@@ -177,6 +194,28 @@ stop_rule: campaign_clean_streak_3
 
 Use `instance` when a team needs more than one seat with the same role. The v3
 renderer materializes seat ids as `<team>-<role>-<instance>`.
+
+## TEAM_OWNERSHIP.md
+
+Memory maintains `~/.agents/tasks/<project>/TEAM_OWNERSHIP.md` for the current
+project only. Keep it short:
+
+```md
+## <team>
+Mission: ...
+Ownership paths:
+- src/...
+Seats:
+- planner: <team>-planner
+- reviewer: <team>-reviewer
+- builder-<instance>: purpose; capabilities
+Boundaries:
+- Not responsible for ...
+```
+
+Do not add a planner-owned long-lived builder assignment document. Planner's
+per-task split belongs in `tasks/<project>/<team>/workflow/<task_id>.md`; stable
+ownership changes are relayed back to memory for this document.
 
 ## References
 

@@ -287,6 +287,161 @@ def preferred_seat_for_role(
     return None
 
 
+def _load_dynamic_profile_data(project_name: str) -> tuple[Path, dict[str, Any]] | None:
+    try:
+        from resolve import dynamic_profile_path as _dpp  # noqa: PLC0415
+    except Exception:
+        return None
+    profile_path = _dpp(project_name)
+    if not profile_path.is_file():
+        return None
+    try:
+        with profile_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return profile_path, data
+
+
+def _role_for_profile_seat(profile_data: dict[str, Any], seat_id: str) -> str:
+    roles = profile_data.get("seat_roles") or {}
+    if isinstance(roles, dict):
+        role = str(roles.get(seat_id) or "").strip()
+        if role:
+            return role
+    return ""
+
+
+def _team_for_profile_seat(profile_data: dict[str, Any], seat_id: str) -> tuple[str, dict[str, Any]] | None:
+    mode = profile_data.get("mode") or {}
+    if not isinstance(mode, dict) or str(mode.get("team_structure") or "single") != "multi":
+        return None
+    project_memory = str(mode.get("project_memory") or "memory").strip() or "memory"
+    if seat_id == project_memory:
+        return None
+    teams = profile_data.get("teams") or {}
+    if not isinstance(teams, dict):
+        return None
+    for team_name, team_cfg in teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        seats = [str(item) for item in team_cfg.get("seats") or []]
+        if seat_id in seats:
+            return str(team_name), team_cfg
+    return None
+
+
+def _render_runtime_fragment(override: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("tool", "auth_mode", "provider", "model"):
+        value = str(override.get(key) or "").strip()
+        if value:
+            parts.append(f"{key}={value}")
+    return ", ".join(parts) if parts else "runtime not declared"
+
+
+def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
+    loaded = _load_dynamic_profile_data(project.name)
+    if loaded is None:
+        return []
+    profile_path, profile_data = loaded
+    seat_id = str(getattr(session, "engineer_id", "") or "").strip()
+    team_info = _team_for_profile_seat(profile_data, seat_id)
+    if team_info is None:
+        return []
+    team_name, team_cfg = team_info
+    team_seats = [str(item) for item in team_cfg.get("seats") or []]
+    overrides = profile_data.get("seat_overrides") or {}
+    if not isinstance(overrides, dict):
+        overrides = {}
+    current_role = _role_for_profile_seat(profile_data, seat_id)
+    ownership_paths = [
+        str(item).strip()
+        for item in team_cfg.get("ownership_paths") or []
+        if str(item).strip()
+    ]
+    scaling_policy = team_cfg.get("scaling_policy") or {}
+    if not isinstance(scaling_policy, dict):
+        scaling_policy = {}
+
+    lines = [
+        "## Team Scope",
+        "",
+        f"- Profile: `{profile_path}`",
+        f"- Project mode: `multi`",
+        f"- Your team: `{team_name}`",
+        f"- Your seat: `{seat_id}` (`{current_role or 'role not declared'}`)",
+        f"- Team queue: `~/.agents/tasks/{project.name}/{team_name}/tasks.queue.jsonl`",
+    ]
+    if ownership_paths:
+        lines.append(
+            "- Team ownership paths: "
+            + ", ".join(f"`{path}`" for path in ownership_paths)
+        )
+    else:
+        lines.append("- Team ownership paths: not declared; ask memory to clarify before broad dispatch")
+    if scaling_policy:
+        policy_items = ", ".join(
+            f"{key}={value}" for key, value in sorted(scaling_policy.items())
+        )
+        lines.append(f"- Scaling policy: `{policy_items}`")
+
+    lines.extend(["", "## Managed Team Seats", ""])
+    builders: list[str] = []
+    reviewer_seats: list[str] = []
+    for managed_seat in team_seats:
+        role = _role_for_profile_seat(profile_data, managed_seat) or "unknown"
+        override = overrides.get(managed_seat) if isinstance(overrides.get(managed_seat), dict) else {}
+        if role == "builder":
+            builders.append(managed_seat)
+        elif role == "reviewer":
+            reviewer_seats.append(managed_seat)
+        details: list[str] = [f"role `{role}`", _render_runtime_fragment(override)]
+        instance = str(override.get("instance") or "").strip()
+        if instance:
+            details.append(f"instance `{instance}`")
+        purpose = str(override.get("purpose") or "").strip()
+        if purpose:
+            details.append(f"purpose: {purpose}")
+        capabilities = [
+            str(item).strip()
+            for item in override.get("capabilities") or []
+            if str(item).strip()
+        ]
+        if capabilities:
+            details.append("capabilities: " + ", ".join(f"`{item}`" for item in capabilities))
+        marker = " (you)" if managed_seat == seat_id else ""
+        lines.append(f"- `{managed_seat}`{marker}: " + "; ".join(details))
+
+    if current_role in {"planner", "planner-dispatcher"}:
+        lines.extend(["", "## Builder Assignment Rules", ""])
+        if builders:
+            lines.append(
+                "- Available builders in this team: "
+                + ", ".join(f"`{builder}`" for builder in builders)
+            )
+        else:
+            lines.append("- No builder is declared for this team; bounce implementation work to memory.")
+        if reviewer_seats:
+            lines.append("- Reviewer gate: " + ", ".join(f"`{seat}`" for seat in reviewer_seats))
+        elif len(builders) > 1:
+            lines.append("- Reviewer gate missing for multiple builders; block and ask memory for roster repair.")
+        else:
+            lines.append("- Reviewer fallback: planner reviews only because this team has one builder.")
+        lines.extend(
+            [
+                "- With multiple builders, never dispatch to bare role `builder`; choose an exact `owner_seat`.",
+                "- Assign by declared `capabilities`, `purpose`, and `ownership_paths` first; then by disjoint files/tests.",
+                "- Keep the same file or tightly coupled module on one builder unless the workflow declares a merge owner.",
+                "- Run parallel builder waves only when write scopes are disjoint and fan-in is explicit before review.",
+                "- If a fourth builder would be useful, stop and ask memory to propose a new subteam.",
+            ]
+        )
+    return lines
+
+
 def render_project_seat_map_lines(
     session: Any,
     project: Any,
@@ -295,8 +450,9 @@ def render_project_seat_map_lines(
     project_engineers: dict[str, Any] | None = None,
     engineer_order: list[str] | None = None,
 ) -> list[str]:
+    lines = render_multi_team_scope_lines(session, project)
     if engineer.role not in {"frontstage-supervisor", "planner-dispatcher"}:
-        return []
+        return lines
     engineers = project_engineers or {}
     ordered_engineer_ids = list(engineer_order or project.engineers or engineers.keys())
     seat_lines: list[str] = []
@@ -312,12 +468,14 @@ def render_project_seat_map_lines(
         scope = render_role_scope_summary(mapped_engineer)
         seat_lines.append(f"- `{engineer_id}` -> `{mapped_engineer.role}`: {scope} (`{runtime}`)")
     if not seat_lines:
-        return []
-    lines = [
+        return lines
+    if lines:
+        lines.append("")
+    lines.extend([
         "## Project Seat Map",
         "",
         f"- Current project role order: `{' -> '.join(ordered_engineer_ids)}`",
-    ]
+    ])
     lines.extend(seat_lines)
     return lines
 

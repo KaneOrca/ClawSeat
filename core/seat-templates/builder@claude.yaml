@@ -9,7 +9,6 @@ cost_class: medium-high
 default_skills:
   - builder
   - gstack-harness
-  - superpowers-borrowed
 boot_command: "claude --workspace {workspace}"
 session_kind: tmux
 capabilities:

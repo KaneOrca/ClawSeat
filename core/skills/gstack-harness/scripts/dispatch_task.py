@@ -729,7 +729,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force-parallel-builder",
         action="store_true",
-        help="Bypass the builder serial dispatch lock for an intentional parallel wave.",
+        help="Bypass the same-seat builder dispatch lock for intentional task stacking.",
     )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
@@ -888,13 +888,15 @@ def main() -> int:
         if outstanding_task and outstanding_task != args.task_id:
             if args.force_parallel_builder:
                 print(
-                    "WARNING: bypassing serial dispatch lock; multi-dispatch wakeup collapse risk",
+                    "WARNING: bypassing same-seat builder dispatch lock; "
+                    "use only when intentionally stacking work on one builder seat",
                     file=sys.stderr,
                 )
             else:
                 print(
-                    f"BLOCKED: builder dispatch outstanding ({outstanding_task}); "
-                    "awaiting __builder__planner.json",
+                    f"BLOCKED: builder seat {args.target} dispatch outstanding "
+                    f"({outstanding_task}); awaiting completion receipt before "
+                    "stacking another task on the same seat",
                     file=sys.stderr,
                 )
                 return 2

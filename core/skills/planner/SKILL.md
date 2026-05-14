@@ -42,13 +42,17 @@ Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, 
 ## Output Schema
 Deliver `workflow.md`, dispatch receipts, consumed ACKs, planner summaries, and escalation questions when workflow progress needs memory/user authority.
 Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harness/references/communication-protocol.md`; use `complete_handoff.py` as the durable receipt path and `send-and-verify.sh` only as wake-up transport after the receipt exists; Stop hook is Claude Code convenience only.
-## Borrowed Practices
-see [`core/references/superpowers-borrowed/`](../../references/superpowers-borrowed/) for planning and verification practices.
+## Operator Language Matching
+Match last 3 operator messages; keep technical terms, commands, paths, task IDs, `owner_seat`, and workflow states literal.
 ## Workflow Authoring
 - **v3 queue path**: pull brief via `agent_admin brief list/claim --project <p> --team <t> --actor planner@<tool>`; check `depends_on` first — if upstream not `task_done`, helper auto-emits `task_waiting_for` and returns. See [`references/planner-brief-parsing-contract.md`](references/planner-brief-parsing-contract.md).
 - Read the claimed brief at `tasks/<project>/<team>/brief/<task_id>.md` and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
 - In multi-team mode, read `[teams].<team>` metadata and same-role seat instances.
   Multiple builders require exact `owner_seat`; do not rely on least-busy `builder`.
+- First identify your own team from `WORKSPACE_CONTRACT.toml` / workspace `Team Scope` / profile `[teams]` by finding the team whose `seats` contains your planner seat. You only dispatch within that team unless the brief declares a cross-team dependency or memory explicitly routes work elsewhere.
+- Read `~/.agents/tasks/<project>/TEAM_OWNERSHIP.md` when present for stable
+  team/builder responsibilities, but treat `project.toml` as the runtime source
+  of truth if they conflict.
 - Read the lazy skill catalog cache at `~/.agents/cache/skill-catalog.json`; rebuild with `core/scripts/rebuild_skill_catalog.py` when stale or missing.
 - Validate every step against `core/skills/planner/references/workflow-doc-schema.md`.
 - **Acceptance fields are immutable**: `brief.acceptance_criteria.{mechanical,reviewer,operator}` are written by memory and copied verbatim into workflow.md if needed; planner MUST NOT add/remove/edit acceptance items. If brief acceptance is unrunnable, emit `task_bounced` event via `agent_admin brief` instead of editing.
@@ -62,6 +66,20 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 - Fan-in by consuming every delivery before starting dependent steps.
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
 - **After all steps complete**: call `agent_admin acceptance run --project <p> --team <t> --task-id <id>` to execute brief `acceptance_criteria`; executor runs mechanical commands, routes reviewer items to reviewer seat, batches operator items for operator. Planner waits for verdict before relaying chain end.
+
+## Multi-Builder Assignment
+
+When a team has multiple builders:
+
+- Choose a concrete `owner_seat` for every implementation step; never dispatch a step to bare role `builder`.
+- Prefer the builder whose `seat_overrides.<seat>.capabilities`, `purpose`, or `instance` matches the files/modules in the step.
+- If capabilities do not decide, split by disjoint path ownership, then by disjoint tests/research lanes.
+- Keep tightly coupled files or one transaction on one builder; use a merge-owner step when parallel branches touch neighboring surfaces.
+- Fan-in before review: every builder must complete handoff, then reviewer or planner consumes all receipts before verdict.
+- If there are two or three builders and no reviewer, block and ask memory for roster repair; if a fourth builder seems needed, ask memory to propose a new subteam.
+- Do not maintain a separate long-lived builder assignment document. Per-task
+  assignment lives in this task's `workflow.md`; stable responsibility changes
+  are relayed to memory for `TEAM_OWNERSHIP.md`.
 ## Workflow Collaboration
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 
@@ -192,7 +210,13 @@ See [core/references/context-management-protocol.md](../../references/context-ma
 Detect operator language from the last 3 messages: >70% Chinese means Chinese, >70% English means English, mixed means Chinese. Keep technical terms, commands, and paths literal.
 
 
-## DF dispatch hardening note
-- Only one outstanding planner -> builder dispatch may exist at a time.
-- `dispatch_task.py` now blocks the second builder dispatch until the prior `__builder__planner.json` completion receipt exists.
-- `--force-parallel-builder` is the explicit bypass for the CX parallel-wave exception; use it only when the dispatch plan expects the wakeup-collapsing risk.
+## DF Dispatch Hardening Note
+- The dispatch lock is per concrete builder seat, not global across the team.
+- The same `owner_seat` must not receive task N+1 until task N has completed
+  the handoff receipt, unless the workflow explicitly stacks work with
+  `--force-parallel-builder`.
+- Different builder seats in the same team may run in parallel when their write
+  scopes are disjoint, each step names an exact `owner_seat`, and planner has
+  a fan-in step before review/verdict.
+- Do not use `--target-role builder` for a multi-builder team; use
+  `--target <exact-builder-seat>`.

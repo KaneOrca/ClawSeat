@@ -328,6 +328,10 @@ def test_multi_team_intake_skill_documents_generic_quality_group() -> None:
     assert "module/layer-based team topology" in text
     assert "reviewer_required_when_builders_gte" in text
     assert "propose_new_subteam" in text
+    assert "capabilities" in text
+    assert "owner_seat" in text
+    assert "TEAM_OWNERSHIP.md" in text
+    assert "not a second config source" in text
     assert "quality-docs" in text
     assert "campaign_clean_streak_3" in text
     assert "patrol-fast" in text and "patrol-human" in text and "patrol-chaos" in text
@@ -337,3 +341,18 @@ def test_multi_team_intake_skill_documents_generic_quality_group() -> None:
     assert "product-surface" in ref_text
     assert "runtime-platform" in ref_text
     assert "orchestration-ops" in ref_text
+    assert "planner does not maintain a second long-lived builder" in ref_text
+
+
+def test_roster_admin_updates_team_ownership_doc() -> None:
+    text = (
+        REPO_ROOT
+        / "core"
+        / "skills"
+        / "clawseat-roster-admin"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+
+    assert "TEAM_OWNERSHIP.md" in text
+    assert "stable team responsibilities" in text
+    assert "per-task assignments" in text

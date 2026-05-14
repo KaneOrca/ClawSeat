@@ -449,11 +449,11 @@ Seats reach memory via the query protocol defined in
 (not optional) in the install flow; see [../../../docs/INSTALL.md]'s
 seat-infrastructure and ancestor-handoff steps.
 
-## Borrowed Practices
+## ClawSeat Planning / Verification Practices
 
-- **Brainstorming**: see [`core/references/superpowers-borrowed/brainstorming.md`](../../references/superpowers-borrowed/brainstorming.md)，先拆需求再给方案。
-- **Writing plans**: see [`core/references/superpowers-borrowed/writing-plans.md`](../../references/superpowers-borrowed/writing-plans.md)，验收项需能快速验证。
-- **Verification before completion**: see [`core/references/superpowers-borrowed/verification-before-completion.md`](../../references/superpowers-borrowed/verification-before-completion.md)，证据优先。
+- Intake: use `clawseat-intake` / `multi-team-intake` when user intent or project topology is unclear.
+- Planning handoff: planner owns `workflow.md`; memory owns durable project memory, accepted briefs, and team ownership summaries.
+- Verification: require concrete command/test/doc evidence before claiming completion; no borrowed external practice layer is required.
 
 ## Operator Language Matching(强制)
 
