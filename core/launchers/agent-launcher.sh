@@ -241,6 +241,7 @@ fi
 
 if [[ -z "$EXEC_MODE" ]]; then
   validate_top_level_inputs
+  ensure_launcher_proxy_env
   ensure_custom_env_file_for_auth
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -299,6 +300,7 @@ EOF
 fi
 
 validate_top_level_inputs
+ensure_launcher_proxy_env
 ensure_custom_env_file_for_auth
 
 load_shared_secrets

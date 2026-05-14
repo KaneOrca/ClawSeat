@@ -105,6 +105,97 @@ echo "no_proxy=${no_proxy:-NONE}"
     assert "no_proxy=127.0.0.1" in out
 
 
+def test_macos_system_proxy_detected_when_proxy_env_missing(tmp_path: Path) -> None:
+    """Launcher should convert macOS system proxy settings into tmux env."""
+    fakebin = tmp_path / "bin"
+    fakebin.mkdir()
+    (fakebin / "uname").write_text("#!/usr/bin/env bash\nprintf 'Darwin\\n'\n", encoding="utf-8")
+    (fakebin / "scutil").write_text(
+        """#!/usr/bin/env bash
+if [[ "$1" != "--proxy" ]]; then
+  exit 2
+fi
+cat <<'EOF'
+<dictionary> {
+  HTTPEnable : 1
+  HTTPProxy : 127.0.0.1
+  HTTPPort : 10808
+  HTTPSEnable : 1
+  HTTPSProxy : 127.0.0.1
+  HTTPSPort : 10808
+  SOCKSEnable : 1
+  SOCKSProxy : 127.0.0.1
+  SOCKSPort : 10808
+}
+EOF
+""",
+        encoding="utf-8",
+    )
+    (fakebin / "uname").chmod(0o755)
+    (fakebin / "scutil").chmod(0o755)
+    script = f"""
+set -euo pipefail
+unset {_PRESERVE_VARS_ALL}
+source {ENV_HELPER!s}
+ensure_launcher_proxy_env
+echo "HTTPS_PROXY=${{HTTPS_PROXY:-NONE}}"
+echo "HTTP_PROXY=${{HTTP_PROXY:-NONE}}"
+echo "ALL_PROXY=${{ALL_PROXY:-NONE}}"
+echo "NO_PROXY=${{NO_PROXY:-NONE}}"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"PATH": f"{fakebin}:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "HTTPS_PROXY=http://127.0.0.1:10808" in result.stdout
+    assert "HTTP_PROXY=http://127.0.0.1:10808" in result.stdout
+    assert "ALL_PROXY=socks5://127.0.0.1:10808" in result.stdout
+    assert "NO_PROXY=localhost,127.0.0.1,::1,.local" in result.stdout
+
+
+def test_existing_proxy_env_not_overwritten_by_system_proxy(tmp_path: Path) -> None:
+    fakebin = tmp_path / "bin"
+    fakebin.mkdir()
+    (fakebin / "uname").write_text("#!/usr/bin/env bash\nprintf 'Darwin\\n'\n", encoding="utf-8")
+    (fakebin / "scutil").write_text(
+        """#!/usr/bin/env bash
+cat <<'EOF'
+<dictionary> {
+  HTTPEnable : 1
+  HTTPProxy : 127.0.0.1
+  HTTPPort : 10808
+}
+EOF
+""",
+        encoding="utf-8",
+    )
+    (fakebin / "uname").chmod(0o755)
+    (fakebin / "scutil").chmod(0o755)
+    script = f"""
+set -euo pipefail
+unset {_PRESERVE_VARS_ALL}
+export HTTPS_PROXY=http://existing.proxy:9999
+source {ENV_HELPER!s}
+ensure_launcher_proxy_env
+echo "HTTPS_PROXY=${{HTTPS_PROXY:-NONE}}"
+echo "HTTP_PROXY=${{HTTP_PROXY:-NONE}}"
+"""
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"PATH": f"{fakebin}:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "HTTPS_PROXY=http://existing.proxy:9999" in result.stdout
+    assert "HTTP_PROXY=NONE" in result.stdout
+
+
 def test_tls_vars_preserved() -> None:
     out = _run(
         {"NODE_USE_SYSTEM_CA": "1", "NODE_EXTRA_CA_CERTS": "/etc/ssl/cert.pem"},
