@@ -35,6 +35,7 @@ VALID_TOOL = frozenset({"claude", "codex", "gemini"})
 VALID_AUTH_MODE = frozenset({"oauth", "oauth_token", "api"})
 VALID_PROVIDER = frozenset({"anthropic", "openai", "google", "minimax"})
 VALID_IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+VALID_TEAM_TYPE = frozenset({"subteam", "quality-docs"})
 
 # Known role catalog (post-review fix #2; spec §16.7.2 role catalog validation).
 # Source of truth: planner/builder/reviewer/patrol are the original 4 specialist
@@ -207,7 +208,94 @@ def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]
         value = data.get(key)
         if not isinstance(value, str) or not value.strip():
             violations.append(f"{proposal_file.name}: {key} must be a non-empty string")
+
+    team_type = str(data.get("team_type") or "").strip()
+    if team_type and team_type not in VALID_TEAM_TYPE:
+        violations.append(
+            f"{proposal_file.name}: team_type={team_type!r} not in "
+            f"{sorted(VALID_TEAM_TYPE)}"
+        )
+
+    if "ownership_paths" in data:
+        paths = data.get("ownership_paths")
+        if not isinstance(paths, list) or not paths:
+            violations.append(f"{proposal_file.name}: ownership_paths must be a non-empty list")
+        elif any(not isinstance(item, str) or not item.strip() for item in paths):
+            violations.append(f"{proposal_file.name}: ownership_paths items must be non-empty strings")
+
+    if "scaling_policy" in data:
+        policy = data.get("scaling_policy")
+        if not isinstance(policy, dict):
+            violations.append(f"{proposal_file.name}: scaling_policy must be a mapping")
+        else:
+            max_builders = policy.get("max_builders")
+            if max_builders is not None and max_builders != 3:
+                violations.append(f"{proposal_file.name}: scaling_policy.max_builders must be 3")
+            reviewer_gte = policy.get("reviewer_required_when_builders_gte")
+            if reviewer_gte is not None and reviewer_gte != 2:
+                violations.append(
+                    f"{proposal_file.name}: "
+                    "scaling_policy.reviewer_required_when_builders_gte must be 2"
+                )
+            overflow = str(policy.get("overflow_action") or "").strip()
+            if overflow and overflow != "propose_new_subteam":
+                violations.append(
+                    f"{proposal_file.name}: scaling_policy.overflow_action "
+                    "must be 'propose_new_subteam'"
+                )
+            fallback = str(policy.get("reviewer_fallback") or "").strip()
+            if fallback and fallback != "planner":
+                violations.append(
+                    f"{proposal_file.name}: scaling_policy.reviewer_fallback "
+                    "must be 'planner'"
+                )
     return violations
+
+
+def _check_subteam_policy(
+    data: dict[str, Any],
+    proposal_file: Path,
+    seats: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    violations: list[str] = []
+    warnings: list[str] = []
+    team_type = str(data.get("team_type") or "").strip()
+    if team_type != "subteam":
+        return violations, warnings
+
+    roles = [str(seat.get("role") or "").strip() for seat in seats]
+    planner_count = roles.count("planner")
+    builder_count = roles.count("builder")
+    reviewer_count = roles.count("reviewer")
+
+    if planner_count != 1:
+        violations.append(
+            f"{proposal_file.name}: subteam must declare exactly one planner "
+            f"(found {planner_count})"
+        )
+    if builder_count < 1:
+        violations.append(f"{proposal_file.name}: subteam must declare at least one builder")
+    if builder_count > 3:
+        violations.append(
+            f"{proposal_file.name}: subteam declares {builder_count} builders; "
+            "max is 3, propose a new subteam instead"
+        )
+    if builder_count >= 2 and reviewer_count < 1:
+        violations.append(
+            f"{proposal_file.name}: subteam with {builder_count} builders "
+            "must declare a reviewer"
+        )
+    if reviewer_count > 1:
+        violations.append(
+            f"{proposal_file.name}: subteam should declare at most one reviewer "
+            f"(found {reviewer_count})"
+        )
+    if "ownership_paths" not in data:
+        warnings.append(
+            f"{proposal_file.name}: subteam should declare ownership_paths "
+            "so planner can route by module boundary"
+        )
+    return violations, warnings
 
 
 def validate_proposal_file(path: Path | str) -> ValidationReport:
@@ -247,12 +335,14 @@ def validate_proposal_file(path: Path | str) -> ValidationReport:
         report.violations.append(f"{p.name}: 'seats' must be non-empty list")
     else:
         seen_identities: dict[str, int] = {}
+        seat_dicts: list[dict[str, Any]] = []
         for idx, seat in enumerate(seats):
             if not isinstance(seat, dict):
                 report.violations.append(
                     f"{p.name} seat[{idx}]: must be a mapping"
                 )
                 continue
+            seat_dicts.append(seat)
             v, w = _check_seat(seat, p, idx)
             report.violations.extend(v)
             report.warnings.extend(w)
@@ -264,6 +354,9 @@ def validate_proposal_file(path: Path | str) -> ValidationReport:
                 )
             else:
                 seen_identities[identity] = idx
+        v, w = _check_subteam_policy(data, p, seat_dicts)
+        report.violations.extend(v)
+        report.warnings.extend(w)
 
     return report
 

@@ -34,6 +34,7 @@ Field definitions:
 ```yaml
 name: foundation-docs
 owner_role: builder
+owner_seat: cartooner-front-builder-core
 status: pending
 prereq: []
 mode: single
@@ -55,6 +56,9 @@ Field definitions:
 
 - `name`: stable step name. It must match the heading name.
 - `owner_role`: role that owns the step.
+- `owner_seat`: optional exact seat id. Required when a subteam has multiple
+  seats with the same role, especially multiple builders. Use this to preserve
+  module ownership; `owner_role` remains the capability fallback.
 - `status`: one of `pending`, `in_progress`, `done`, or `blocked`.
 - `prereq`: list of step names that must be `done` before this step is ready.
 - `mode`: one of `single`, `parallel_subagents`, or `nested`.
@@ -82,6 +86,7 @@ Complete workflow example, step 1:
 ```yaml
 ## Step 1: write-foundation-docs
 owner_role: builder
+owner_seat: product-surface-builder-core
 status: pending
 prereq: []
 mode: single
@@ -110,6 +115,7 @@ Complete workflow example, step 2:
 ```yaml
 ## Step 2: audit-doc-families
 owner_role: reviewer
+owner_seat: product-surface-reviewer
 status: pending
 prereq: [write-foundation-docs]
 mode: parallel_subagents

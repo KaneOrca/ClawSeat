@@ -47,6 +47,8 @@ see [`core/references/superpowers-borrowed/`](../../references/superpowers-borro
 ## Workflow Authoring
 - **v3 queue path**: pull brief via `agent_admin brief list/claim --project <p> --team <t> --actor planner@<tool>`; check `depends_on` first — if upstream not `task_done`, helper auto-emits `task_waiting_for` and returns. See [`references/planner-brief-parsing-contract.md`](references/planner-brief-parsing-contract.md).
 - Read the claimed brief at `tasks/<project>/<team>/brief/<task_id>.md` and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
+- In multi-team mode, read `[teams].<team>` metadata and same-role seat instances.
+  Multiple builders require exact `owner_seat`; do not rely on least-busy `builder`.
 - Read the lazy skill catalog cache at `~/.agents/cache/skill-catalog.json`; rebuild with `core/scripts/rebuild_skill_catalog.py` when stale or missing.
 - Validate every step against `core/skills/planner/references/workflow-doc-schema.md`.
 - **Acceptance fields are immutable**: `brief.acceptance_criteria.{mechanical,reviewer,operator}` are written by memory and copied verbatim into workflow.md if needed; planner MUST NOT add/remove/edit acceptance items. If brief acceptance is unrunnable, emit `task_bounced` event via `agent_admin brief` instead of editing.

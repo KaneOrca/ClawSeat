@@ -60,9 +60,19 @@ def _toml_array(items: list[str]) -> str:
     return "[\n  " + ",\n  ".join(quoted) + ",\n]"
 
 
-def _toml_inline_value(value: object) -> str:
+def _toml_value(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
+    if isinstance(value, dict):
+        parts = [
+            f"{str(key)} = {_toml_value(val)}"
+            for key, val in value.items()
+        ]
+        return "{ " + ", ".join(parts) + " }"
     return _toml_quote(str(value))
 
 
@@ -74,12 +84,23 @@ def _seat_id_for(team_name: str, seat: dict) -> str:
 
 def _team_metadata(data: dict) -> dict[str, object]:
     metadata: dict[str, object] = {}
-    for key in ("autonomous", "loop", "stop_rule"):
+    for key in (
+        "team_type",
+        "ownership_paths",
+        "scaling_policy",
+        "autonomous",
+        "loop",
+        "stop_rule",
+    ):
         if key not in data:
             continue
         value = data.get(key)
         if key == "autonomous":
             metadata[key] = bool(value)
+        elif key == "ownership_paths" and isinstance(value, list):
+            metadata[key] = [str(item).strip() for item in value if str(item).strip()]
+        elif key == "scaling_policy" and isinstance(value, dict):
+            metadata[key] = dict(value)
         elif str(value or "").strip():
             metadata[key] = str(value).strip()
     return metadata
@@ -225,7 +246,7 @@ def render_project_toml_v3(
         metadata = team_data.get("metadata") or {}
         if isinstance(metadata, dict):
             for key, value in metadata.items():
-                inline_parts.append(f"{key} = {_toml_inline_value(value)}")
+                inline_parts.append(f"{key} = {_toml_value(value)}")
         lines.append(f"{team_name} = {{ {', '.join(inline_parts)} }}")
     lines.append("")
     lines.append("[seat_roles]")

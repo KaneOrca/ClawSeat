@@ -30,9 +30,9 @@ team-local memory.
 - Do not add `MULTI_TEAM_MINIMAL` to the standalone `--template` whitelist.
 - Do not require iTerm. Cartooner-integrated multi-team testing uses tmux and
   embedded terminals / `--no-window`.
-- Do not start with reviewer, image, or creative lane complexity. The one
-  exception is an autonomous `quality-docs` group, because continuous testing is
-  now part of the minimal project-group contract.
+- Do not require reviewer for every subteam at first launch. A one-builder
+  subteam may use planner review fallback. Once a subteam has two or three
+  builders, reviewer is mandatory.
 - Do not assume the old Cartooner Python/OpenClaw backend architecture.
 
 ## Cartooner Facts Used For The Design
@@ -91,6 +91,25 @@ Most development teams start with only:
 planner + builder
 ```
 
+Normal subteams never include memory and must obey:
+
+```yaml
+team_type: subteam
+scaling_policy:
+  max_builders: 3
+  reviewer_required_when_builders_gte: 2
+  overflow_action: propose_new_subteam
+  reviewer_fallback: planner
+```
+
+The exact gate:
+
+```text
+1 builder: reviewer optional; planner performs spec/delivery review fallback.
+2-3 builders: reviewer mandatory.
+4th builder request: forbidden; memory proposes a new subteam.
+```
+
 The `quality-docs` team starts with:
 
 ```text
@@ -106,26 +125,36 @@ tests and failure modes, memory may split it.
 For Cartooner, the derived topology maps to the real architecture:
 
 ```text
-cartooner-app
-  Electron host, IPC/preload, React UI/UX, Vibe Canvas nodes/edges, Chat
-  Sidebar, Tactical HUD, Core Event display.
+cartooner-front
+  React UI/UX, Chat Sidebar, Vibe Canvas nodes/edges, Tactical HUD, Core Event
+  display, interaction state, and visible product workflows.
 
-sdk-runtime
-  Claude Code SDK query path, streaming events, system prompt, command protocol,
-  cwd isolation, provider env overlay, MiniMax/Anthropic compatibility.
+cartooner-runtime-platform
+  Electron host, IPC/preload, Claude Code SDK query path, streaming events,
+  cwd isolation, provider env overlay, MiniMax/Anthropic compatibility,
+  local workspace data, and ClawSeat bridge hooks.
 
 cartooner-skills
   ~/.agents/skills/cartooner-* router/resource-ops/image/video/audio/prompt,
-  pipeline runtime, polymer/preset, asset manifest, no-image policy.
-
-clawseat-bridge
-  v3 project group creation, no-window mode, tmux/embedded terminal, brief
-  queues, restart/refresh, Cartooner AgentLauncher integration.
+  pipeline runtime, project/asset persistence, style bible, and media/provider
+  skill guardrails.
 
 quality-docs
   Autonomous QA planner plus three MiniMax patrols for fast, human, and chaos
   testing.
 ```
+
+The default first launch should be:
+
+```text
+cartooner-memory
+cartooner-front: planner + builder-core
+quality-docs: planner + patrol-fast + patrol-human + patrol-chaos
+```
+
+Memory may later recommend `cartooner-runtime-platform` or
+`cartooner-skills`, or expand a subteam to 2-3 builders with a mandatory
+reviewer.
 
 ## Minimal Proposal Shape
 
@@ -138,6 +167,14 @@ project: <project>
 team: product-ui
 proposal_status: approved
 operator_approved_ts: <iso8601>
+team_type: subteam
+ownership_paths:
+  - apps/web/src/**
+scaling_policy:
+  max_builders: 3
+  reviewer_required_when_builders_gte: 2
+  overflow_action: propose_new_subteam
+  reviewer_fallback: planner
 seats:
   - role: planner
     tool: claude
@@ -162,6 +199,7 @@ When a team needs multiple seats with the same role, proposals use `instance`:
 
 ```yaml
 team: quality-docs
+team_type: quality-docs
 autonomous: true
 loop: continuous
 stop_rule: campaign_clean_streak_3
@@ -209,7 +247,10 @@ Skill responsibilities:
 5. Write proposed YAML files first, not approved YAML.
 6. Ask the operator to approve or edit.
 7. Convert proposals to `__approved.yaml` only after explicit approval.
-8. Tell the operator the exact `install.sh --mode multi` dry-run command.
+8. Enforce the subteam scaling gate: 1 builder can rely on planner review
+   fallback, 2-3 builders require reviewer, and a 4th builder means a new
+   subteam proposal.
+9. Tell the operator the exact `install.sh --mode multi` dry-run command.
 
 Important boundary: memory designs the project groups and writes briefs /
 acceptance criteria. Planner claims team queues and authors workflow. Memory
@@ -300,6 +341,25 @@ project + team + task_id
 
 Never refer to a bare task id in multi-team mode.
 
+## Multi-Builder Dispatch Rule
+
+When a subteam has more than one builder, planner must route by exact seat, not
+only by role:
+
+```yaml
+owner_role: builder
+owner_seat: cartooner-front-builder-canvas-graph
+```
+
+`owner_role` remains the fallback capability label. `owner_seat` is the module
+ownership decision. Planner derives it from `[teams].<team>.ownership_paths`,
+`[teams].<team>.scaling_policy`, and `seat_overrides.<seat>.purpose` /
+`capabilities`.
+
+Using `--target-role builder` is acceptable only for a one-builder subteam or
+for explicitly fungible work. Module-owned work must use `dispatch_task.py
+--target <exact-seat>`.
+
 ## Planner Compact Trigger
 
 Planner must not emit `[CLEAR-REQUESTED]`. Planner keeps cross-step routing
@@ -334,6 +394,25 @@ Memory then:
 
 The compact summary must include `team`; otherwise planner recovery can mix
 similarly named tasks across teams.
+
+## Protocol Rigor Review
+
+The agreed MULTI_TEAM v0.1 protocol is strict enough to dogfood because it has:
+
+- one project memory instead of duplicated team memories
+- per-team queues and `project + team + task_id` identity
+- memory-owned spec and final acceptance
+- planner-owned workflow and dispatch
+- builder scaling gates with reviewer required for 2-3 builders
+- exact `owner_seat` routing for multi-builder subteams
+- autonomous `quality-docs` with evidence, findings, and regression docs
+- durable cross-team dependencies through queue state
+- team-aware compact summaries
+
+Known hardening item before enabling a background claim loop by default:
+
+- add a claim-and-wakeup wrapper so a queued task is never marked claimed while
+  the planner TUI remains idle.
 
 ## Open Design Questions
 

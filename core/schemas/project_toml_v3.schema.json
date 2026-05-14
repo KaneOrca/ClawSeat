@@ -37,6 +37,27 @@
               "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
               "minItems": 1
             },
+            "team_type": {
+              "type": "string",
+              "enum": ["subteam", "quality-docs"],
+              "description": "Template-level team kind. Project memory is not a subteam seat."
+            },
+            "ownership_paths": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Path globs this team owns; planners use this for module-boundary routing."
+            },
+            "scaling_policy": {
+              "type": "object",
+              "description": "Subteam builder/reviewer scaling gate.",
+              "properties": {
+                "max_builders": {"type": "integer", "const": 3},
+                "reviewer_required_when_builders_gte": {"type": "integer", "const": 2},
+                "overflow_action": {"type": "string", "const": "propose_new_subteam"},
+                "reviewer_fallback": {"type": "string", "const": "planner"}
+              },
+              "additionalProperties": false
+            },
             "autonomous": {
               "type": "boolean",
               "description": "Team owns an autonomous work loop instead of only memory-queued briefs."

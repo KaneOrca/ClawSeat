@@ -39,6 +39,40 @@ only then rename or rewrite to `*__approved.yaml`.
 
 Memory designs the project group and briefs. Team planners design workflows.
 Memory does not write `workflow.md` and does not dispatch directly to builders.
+There is one project-level memory. Subteams never include memory seats.
+
+## Minimal Project Group Rules
+
+Every multi-team project starts from:
+
+```text
+project-memory
+one or more subteams
+quality-docs
+```
+
+Subteams are execution units:
+
+```yaml
+team_type: subteam
+scaling_policy:
+  max_builders: 3
+  reviewer_required_when_builders_gte: 2
+  overflow_action: propose_new_subteam
+  reviewer_fallback: planner
+```
+
+Rules:
+
+1. A subteam has exactly one planner.
+2. A subteam has 1-3 builders.
+3. With 1 builder, reviewer is optional and planner performs spec/delivery
+   review fallback.
+4. With 2-3 builders, reviewer is mandatory.
+5. A requested 4th builder is forbidden; memory must propose a new subteam
+   instead.
+6. Each subteam should declare `ownership_paths` so planner can route by module
+   boundary.
 
 ## Generic Topology Heuristic
 
@@ -107,15 +141,20 @@ Planner loop:
 
 ## Proposal Fields
 
-Each team proposal should include:
+Each normal subteam proposal should include:
 
 ```yaml
 project: <project>
 team: <team>
 proposal_status: proposed
-autonomous: true        # only for autonomous teams like quality-docs
-loop: continuous        # only when autonomous is true
-stop_rule: campaign_clean_streak_3
+team_type: subteam
+ownership_paths:
+  - src/**
+scaling_policy:
+  max_builders: 3
+  reviewer_required_when_builders_gte: 2
+  overflow_action: propose_new_subteam
+  reviewer_fallback: planner
 seats:
   - role: planner
     tool: claude
@@ -125,6 +164,15 @@ seats:
 estimated_monthly_cost_usd:
   low: 0
   high: 20
+```
+
+Only autonomous teams such as `quality-docs` add:
+
+```yaml
+team_type: quality-docs
+autonomous: true
+loop: continuous
+stop_rule: campaign_clean_streak_3
 ```
 
 Use `instance` when a team needs more than one seat with the same role. The v3
