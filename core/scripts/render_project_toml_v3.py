@@ -60,6 +60,31 @@ def _toml_array(items: list[str]) -> str:
     return "[\n  " + ",\n  ".join(quoted) + ",\n]"
 
 
+def _toml_inline_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return _toml_quote(str(value))
+
+
+def _seat_id_for(team_name: str, seat: dict) -> str:
+    role = str(seat["role"]).strip()
+    instance = str(seat.get("instance") or "").strip()
+    return f"{team_name}-{role}-{instance}" if instance else f"{team_name}-{role}"
+
+
+def _team_metadata(data: dict) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    for key in ("autonomous", "loop", "stop_rule"):
+        if key not in data:
+            continue
+        value = data.get(key)
+        if key == "autonomous":
+            metadata[key] = bool(value)
+        elif str(value or "").strip():
+            metadata[key] = str(value).strip()
+    return metadata
+
+
 def render_project_toml_v3(
     project: str,
     proposals_dir: Path,
@@ -96,7 +121,7 @@ def render_project_toml_v3(
     else:
         team_files = all_files
 
-    teams: dict[str, list[str]] = {}
+    teams: dict[str, dict[str, object]] = {}
     all_seats: list[str] = []
     seat_roles: dict[str, str] = {}
     seat_overrides: dict[str, dict[str, object]] = {}
@@ -123,7 +148,8 @@ def render_project_toml_v3(
         team_seat_ids: list[str] = []
         for seat in data.get("seats") or []:
             role = str(seat["role"]).strip()
-            seat_id = f"{team_name}-{role}"
+            instance = str(seat.get("instance") or "").strip()
+            seat_id = _seat_id_for(team_name, seat)
             team_seat_ids.append(seat_id)
             all_seats.append(seat_id)
             seat_roles[seat_id] = role
@@ -132,6 +158,8 @@ def render_project_toml_v3(
                 "provider": str(seat["provider"]),
                 "auth_mode": str(seat["auth_mode"]),
             }
+            if instance:
+                override["instance"] = instance
             # Preserve concrete model id from approved config (post-review fix #1).
             # Approved yaml may omit model only for tools where provider implies it.
             if seat.get("model"):
@@ -142,7 +170,10 @@ def render_project_toml_v3(
             if caps:
                 override["capabilities"] = list(caps)
             seat_overrides[seat_id] = override
-        teams[team_name] = team_seat_ids
+        teams[team_name] = {
+            "seats": team_seat_ids,
+            "metadata": _team_metadata(data),
+        }
 
     # Sanity: no duplicate seat ids across teams
     if len(set(all_seats)) != len(all_seats):
@@ -187,10 +218,15 @@ def render_project_toml_v3(
     lines.append('team_structure = "multi"')
     lines.append("")
     lines.append("[teams]")
-    for team_name in teams:
+    for team_name, team_data in teams.items():
         # Inline table with seats array
-        seat_list = ", ".join(_toml_quote(s) for s in teams[team_name])
-        lines.append(f"{team_name} = {{ seats = [{seat_list}] }}")
+        seat_list = ", ".join(_toml_quote(s) for s in team_data["seats"])
+        inline_parts = [f"seats = [{seat_list}]"]
+        metadata = team_data.get("metadata") or {}
+        if isinstance(metadata, dict):
+            for key, value in metadata.items():
+                inline_parts.append(f"{key} = {_toml_inline_value(value)}")
+        lines.append(f"{team_name} = {{ {', '.join(inline_parts)} }}")
     lines.append("")
     lines.append("[seat_roles]")
     for seat_id, role in seat_roles.items():

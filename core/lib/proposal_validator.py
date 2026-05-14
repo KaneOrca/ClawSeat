@@ -14,6 +14,7 @@ See spec §16.7 (install-spec-2026-05-13-clawseat-v3-multi-team-protocol.md).
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +34,7 @@ except ImportError:  # pragma: no cover — PyYAML is a hard dep in ClawSeat run
 VALID_TOOL = frozenset({"claude", "codex", "gemini"})
 VALID_AUTH_MODE = frozenset({"oauth", "oauth_token", "api"})
 VALID_PROVIDER = frozenset({"anthropic", "openai", "google", "minimax"})
+VALID_IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 # Known role catalog (post-review fix #2; spec §16.7.2 role catalog validation).
 # Source of truth: planner/builder/reviewer/patrol are the original 4 specialist
@@ -128,6 +130,7 @@ def _check_seat(
     tool = str(seat.get("tool") or "").strip()
     auth_mode = str(seat.get("auth_mode") or "").strip()
     provider = str(seat.get("provider") or "").strip()
+    instance = str(seat.get("instance") or "").strip()
 
     if not role:
         violations.append(f"{seat_ctx}: missing required 'role'")
@@ -148,6 +151,11 @@ def _check_seat(
     if provider not in VALID_PROVIDER:
         violations.append(
             f"{seat_ctx}: provider={provider!r} not in {sorted(VALID_PROVIDER)}"
+        )
+    if instance and not VALID_IDENTIFIER_RE.match(instance):
+        violations.append(
+            f"{seat_ctx}: instance={instance!r} must match "
+            "^[a-z0-9][a-z0-9-]*$"
         )
 
     # §6.4 blacklist
@@ -174,6 +182,32 @@ def _check_seat(
         )
 
     return violations, warnings
+
+
+def _seat_identity(seat: dict[str, Any]) -> str:
+    role = str(seat.get("role") or "").strip()
+    instance = str(seat.get("instance") or "").strip()
+    return f"{role}-{instance}" if instance else role
+
+
+def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]:
+    violations: list[str] = []
+    team = str(data.get("team") or "").strip()
+    if team and not VALID_IDENTIFIER_RE.match(team):
+        violations.append(
+            f"{proposal_file.name}: team={team!r} must match "
+            "^[a-z0-9][a-z0-9-]*$"
+        )
+
+    if "autonomous" in data and not isinstance(data.get("autonomous"), bool):
+        violations.append(f"{proposal_file.name}: autonomous must be a boolean")
+    for key in ("loop", "stop_rule"):
+        if key not in data:
+            continue
+        value = data.get(key)
+        if not isinstance(value, str) or not value.strip():
+            violations.append(f"{proposal_file.name}: {key} must be a non-empty string")
+    return violations
 
 
 def validate_proposal_file(path: Path | str) -> ValidationReport:
@@ -206,11 +240,13 @@ def validate_proposal_file(path: Path | str) -> ValidationReport:
         report.warnings.append(
             f"{p.name}: §16.4 requires estimated_monthly_cost_usd"
         )
+    report.violations.extend(_check_team_metadata(data, p))
 
     seats = data.get("seats") or []
     if not isinstance(seats, list) or not seats:
         report.violations.append(f"{p.name}: 'seats' must be non-empty list")
     else:
+        seen_identities: dict[str, int] = {}
         for idx, seat in enumerate(seats):
             if not isinstance(seat, dict):
                 report.violations.append(
@@ -220,6 +256,14 @@ def validate_proposal_file(path: Path | str) -> ValidationReport:
             v, w = _check_seat(seat, p, idx)
             report.violations.extend(v)
             report.warnings.extend(w)
+            identity = _seat_identity(seat)
+            if identity in seen_identities:
+                report.violations.append(
+                    f"{p.name} seat[{idx}]: duplicate role/instance identity "
+                    f"{identity!r}; first seen at seat[{seen_identities[identity]}]"
+                )
+            else:
+                seen_identities[identity] = idx
 
     return report
 

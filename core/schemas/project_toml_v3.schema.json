@@ -36,6 +36,18 @@
               "type": "array",
               "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
               "minItems": 1
+            },
+            "autonomous": {
+              "type": "boolean",
+              "description": "Team owns an autonomous work loop instead of only memory-queued briefs."
+            },
+            "loop": {
+              "type": "string",
+              "description": "Autonomous loop mode, e.g. continuous."
+            },
+            "stop_rule": {
+              "type": "string",
+              "description": "Autonomous campaign stop rule, e.g. campaign_clean_streak_3."
             }
           }
         }
@@ -68,6 +80,7 @@
             "provider": {"$ref": "#/$defs/provider_enum"},
             "auth_mode": {"$ref": "#/$defs/auth_mode_enum"},
             "model": {"type": "string", "description": "Concrete model id from approved config (e.g. claude-opus-4-7, claude-sonnet-4-6)."},
+            "instance": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "Optional role instance suffix from approved config, used for multiple seats with the same role in one team."},
             "capabilities": {
               "type": "array",
               "items": {"type": "string"}

@@ -30,7 +30,9 @@ team-local memory.
 - Do not add `MULTI_TEAM_MINIMAL` to the standalone `--template` whitelist.
 - Do not require iTerm. Cartooner-integrated multi-team testing uses tmux and
   embedded terminals / `--no-window`.
-- Do not start with reviewer, patrol, image, or creative lane complexity.
+- Do not start with reviewer, image, or creative lane complexity. The one
+  exception is an autonomous `quality-docs` group, because continuous testing is
+  now part of the minimal project-group contract.
 - Do not assume the old Cartooner Python/OpenClaw backend architecture.
 
 ## Cartooner Facts Used For The Design
@@ -52,33 +54,78 @@ Current Cartooner mainline is SDK-only:
 Therefore the minimal Cartooner multi-team split should follow product and
 runtime boundaries, not legacy backend/frontend boundaries.
 
-## Proposed Cartooner Minimal Topology
+## Generic Minimal Topology
 
-For Cartooner, the first useful minimal topology is:
+The generic minimal topology is not a fixed team count. Memory derives team
+boundaries from the repo's modules/layers and starts from these candidate
+domains:
 
 ```text
 project-level memory
   Owns user intent, repo analysis, team topology proposal, acceptance strategy,
   and final memory retention.
 
-team: product-ui
-  Owns React UI surfaces, Vibe Canvas, chat, Tactical HUD, interaction state,
-  visual regressions, and frontend tests.
+team: product-surface
+  Owns user-visible UI/product workflows, interaction state, and UX regressions.
 
-team: desktop-runtime
-  Owns Electron, Claude SDK control plane, provider bridge, asset/runtime paths,
-  local project bridge, terminal/tmux bridge, and desktop acceptance.
+team: runtime-platform
+  Owns app/runtime host, SDK/provider adapters, auth/env, local paths, IPC,
+  terminal/session bridges, and integration acceptance.
+
+team: domain-capability
+  Owns project-specific skills, business logic, content/asset pipelines, or
+  model-specific capabilities.
+
+team: orchestration-ops
+  Owns ClawSeat/project-group lifecycle, install/restart/recovery, queue
+  protocol, and automation glue.
+
+team: quality-docs
+  Owns autonomous continuous testing, human-path simulation, chaos/risk testing,
+  QA docs, findings, and verification loops.
 ```
 
-Each team starts with only:
+Most development teams start with only:
 
 ```text
 planner + builder
 ```
 
-This keeps the first template focused on proving the v3 protocol instead of
-proving production-grade review coverage. Reviewer and patrol can be added in a
-second-tier `MULTI_TEAM_ENGINEERING` template.
+The `quality-docs` team starts with:
+
+```text
+planner + patrol-fast + patrol-human + patrol-chaos
+```
+
+If a candidate domain has no matching code or ownership surface, memory merges
+it into the nearest real team. If one domain has distinct modules with different
+tests and failure modes, memory may split it.
+
+## Cartooner Topology Example
+
+For Cartooner, the derived topology maps to the real architecture:
+
+```text
+cartooner-app
+  Electron host, IPC/preload, React UI/UX, Vibe Canvas nodes/edges, Chat
+  Sidebar, Tactical HUD, Core Event display.
+
+sdk-runtime
+  Claude Code SDK query path, streaming events, system prompt, command protocol,
+  cwd isolation, provider env overlay, MiniMax/Anthropic compatibility.
+
+cartooner-skills
+  ~/.agents/skills/cartooner-* router/resource-ops/image/video/audio/prompt,
+  pipeline runtime, polymer/preset, asset manifest, no-image policy.
+
+clawseat-bridge
+  v3 project group creation, no-window mode, tmux/embedded terminal, brief
+  queues, restart/refresh, Cartooner AgentLauncher integration.
+
+quality-docs
+  Autonomous QA planner plus three MiniMax patrols for fast, human, and chaos
+  testing.
+```
 
 ## Minimal Proposal Shape
 
@@ -111,6 +158,37 @@ estimated_monthly_cost_usd:
 The exact tool/provider defaults remain policy, not hard-coded truth. The skill
 should explain the choice and let the operator approve or change it.
 
+When a team needs multiple seats with the same role, proposals use `instance`:
+
+```yaml
+team: quality-docs
+autonomous: true
+loop: continuous
+stop_rule: campaign_clean_streak_3
+seats:
+  - role: patrol
+    instance: fast
+    tool: claude
+    provider: minimax
+    auth_mode: api
+    rationale: "runs high-frequency deterministic checks"
+  - role: patrol
+    instance: human
+    tool: claude
+    provider: minimax
+    auth_mode: api
+    rationale: "simulates real user workflows"
+  - role: patrol
+    instance: chaos
+    tool: claude
+    provider: minimax
+    auth_mode: api
+    rationale: "tests failure injection and recovery"
+```
+
+The renderer materializes these as `quality-docs-patrol-fast`,
+`quality-docs-patrol-human`, and `quality-docs-patrol-chaos`.
+
 ## Memory-Driven Team Designer Skill
 
 The final implementation should become a skill, tentatively:
@@ -136,6 +214,36 @@ Skill responsibilities:
 Important boundary: memory designs the project groups and writes briefs /
 acceptance criteria. Planner claims team queues and authors workflow. Memory
 does not write `workflow.md` and does not dispatch directly to builders.
+
+The skill now lives at:
+
+```text
+core/skills/multi-team-intake/SKILL.md
+```
+
+Its generic proposal-pack reference lives at:
+
+```text
+core/skills/multi-team-intake/references/generic-project-group.md
+```
+
+## Autonomous Quality-Docs Loop
+
+`quality-docs` is intentionally different from normal memory-queued teams:
+
+```text
+quality-docs-planner decides what to test and when
+memory receives status and long-term findings but does not decide whether to test
+patrols execute assigned TestMissions and record evidence
+```
+
+The planner scans development queues, workflow docs, deliveries, git diff, open
+findings, flaky history, and risk registers. It creates TestCampaigns and assigns
+missions to patrols. A patrol that finds nothing gets a harder next mission. A
+patrol leaves one campaign only after three consecutive clean rounds for that
+campaign; then the planner switches it to another attack surface. Findings are
+assigned back to the owning development team for fixes, and every closed finding
+becomes a regression scenario in the test matrix.
 
 ## Memory To Planner Execution Trigger
 
@@ -229,10 +337,7 @@ similarly named tasks across teams.
 
 ## Open Design Questions
 
-1. Should the first generic minimal topology be fixed to two teams, or should
-   memory always derive team count from repo analysis?
-2. Should minimal builder default to `codex/oauth/openai` or to
+1. Should minimal builder default to `codex/oauth/openai` or to
    `claude/oauth_token/anthropic` for consistency with planner?
-3. Should a safe claim-and-wakeup wrapper be added before enabling the
+2. Should a safe claim-and-wakeup wrapper be added before enabling the
    60-second background planner poller by default?
-

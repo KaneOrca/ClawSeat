@@ -1,0 +1,136 @@
+---
+name: multi-team-intake
+description: >
+  Memory-driven project-group designer for ClawSeat v3 multi-team projects.
+  Use when the first project memory needs to analyze a repo, recommend a
+  module/layer-based team topology, write reviewable config proposals, or
+  design an autonomous quality-docs testing group.
+---
+
+# Multi-Team Intake
+
+Use this skill from the first project-level memory seat when a project is being
+turned into a ClawSeat v3 project group. The output is a proposal pack, not a
+runtime roster: write `*__proposed.yaml` first, ask the operator to approve, and
+only then rename or rewrite to `*__approved.yaml`.
+
+## Core Workflow
+
+1. Scan the target repo's current docs, manifests, tests, and major directories.
+2. Identify natural module/layer boundaries. Prefer real ownership seams over a
+   fixed team count.
+3. Recommend a phase-1 topology with small teams and clear path ownership.
+4. Include an autonomous `quality-docs` team for products that need continuous
+   validation, long-running GUI flows, SDK/provider integration, or release gates.
+5. Explain each team: why it exists, which paths it owns, which risks it tests,
+   and which acceptance routes it needs.
+6. Write proposed YAML files under:
+
+   ```text
+   ~/.agents/tasks/<project>/_config-proposals/
+   ```
+
+7. Ask for operator approval before producing `__approved.yaml`.
+8. Tell the operator the dry-run command:
+
+   ```bash
+   scripts/install.sh --mode multi --project <project> --teams <csv> --dry-run
+   ```
+
+Memory designs the project group and briefs. Team planners design workflows.
+Memory does not write `workflow.md` and does not dispatch directly to builders.
+
+## Generic Topology Heuristic
+
+Start from these candidate domains, then merge or rename them to match the repo:
+
+| Candidate team | Use when the repo has... |
+|---|---|
+| `product-surface` | UI, user workflows, front-end state, UX, visible product behavior |
+| `runtime-platform` | Electron/CLI/server runtime, SDK adapters, providers, IPC, auth/env, local paths |
+| `domain-capability` | Domain skills, content pipelines, asset workflows, business logic, model-specific capabilities |
+| `orchestration-ops` | ClawSeat/project-group bridge, launch/restart/recovery, tmux/session automation, install/upgrade |
+| `quality-docs` | Continuous testing, human-path simulation, chaos/risk testing, QA docs, release gates |
+
+Do not force all five. A small library might only need `runtime-platform` and
+`quality-docs`; a large desktop product may need all five.
+
+## Quality-Docs Rule
+
+`quality-docs` is autonomous. Its planner decides when and how to test; memory
+does not decide whether testing is needed. The team runs continuously:
+
+```text
+quality-docs-planner
+quality-docs-patrol-fast
+quality-docs-patrol-human
+quality-docs-patrol-chaos
+```
+
+Use `instance` for same-role seats:
+
+```yaml
+seats:
+  - role: planner
+    tool: claude
+    provider: minimax
+    auth_mode: api
+  - role: patrol
+    instance: fast
+    tool: claude
+    provider: minimax
+    auth_mode: api
+  - role: patrol
+    instance: human
+    tool: claude
+    provider: minimax
+    auth_mode: api
+  - role: patrol
+    instance: chaos
+    tool: claude
+    provider: minimax
+    auth_mode: api
+```
+
+Planner loop:
+
+1. Scan development queues, workflow docs, deliveries, git diff, open findings,
+   flaky history, and risk registers.
+2. Create `TestCampaign`s and assign `TestMission`s.
+3. Each patrol runs exactly the mission assigned to it, writes evidence, then
+   waits for the next mission.
+4. If a mission finds nothing, raise the next mission's difficulty.
+5. A patrol leaves one campaign only after three consecutive clean rounds for
+   that campaign; then planner switches it to a new attack surface.
+6. Findings are assigned back to the owning development team for fixes. Patrols
+   do not edit product code.
+
+## Proposal Fields
+
+Each team proposal should include:
+
+```yaml
+project: <project>
+team: <team>
+proposal_status: proposed
+autonomous: true        # only for autonomous teams like quality-docs
+loop: continuous        # only when autonomous is true
+stop_rule: campaign_clean_streak_3
+seats:
+  - role: planner
+    tool: claude
+    provider: anthropic
+    auth_mode: oauth_token
+    rationale: "claims this team queue and writes workflow.md"
+estimated_monthly_cost_usd:
+  low: 0
+  high: 20
+```
+
+Use `instance` when a team needs more than one seat with the same role. The v3
+renderer materializes seat ids as `<team>-<role>-<instance>`.
+
+## References
+
+Read `references/generic-project-group.md` when generating a full generic
+proposal pack or when the operator asks for the default project-group template.
