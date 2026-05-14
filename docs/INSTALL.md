@@ -281,6 +281,12 @@ The `koder` overlay (ยง4) is the inbound channel: operator messages on Feishu โ
 
 ## 1. Prerequisites
 
+Window mode contract:
+
+- Standalone ClawSeat uses native iTerm workers/memories windows by default, so macOS + iTerm2 + the `iterm2` Python module are required for that visual mode.
+- Cartooner-integrated or embedded-terminal ClawSeat should pass `--no-window`; the install still launches canonical tmux seats, but skips native iTerm windows and their bootstrap hard checks.
+- `--mode multi` is the v3 multi-team/profile-render path. It renders approved team proposals and workspace skeletons, and does not open iTerm windows.
+
 ```bash
 git clone <repo-url> "$HOME/ClawSeat"
 cd "$HOME/ClawSeat"
@@ -351,6 +357,12 @@ bash scripts/install.sh --load-all-skills
 # Disable Feishu notifications (no lark-cli required)
 CLAWSEAT_FEISHU_ENABLED=0 bash scripts/install.sh --project myproj
 
+# Cartooner / embedded-terminal mode: tmux seats, no native iTerm windows
+bash scripts/install.sh --project myproj --template clawseat-creative --provider minimax --no-window
+
+# v3 multi-team dry-run after memory has written approved team proposals
+bash scripts/install.sh --mode multi --project myproj --teams core,content --dry-run
+
 # Forget remembered per-seat harness choices from a previous run
 bash scripts/install.sh --reset-harness-memory
 ```
@@ -375,7 +387,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--load-all-skills` | Install all bundled ClawSeat skills for non-Claude tools too. Claude always receives the full set. |
 | `--dry-run` | Print planned actions without mutating host state where supported. |
 | `--detect-only` | Print one `detect_all` JSON environment summary and exit before install side effects. |
-| `--no-window` | Skip native iTerm workers/memories windows. Tmux seats still launch and can be attached from embedded terminals. |
+| `--no-window` | Skip native iTerm workers/memories windows and bootstrap iTerm hard checks. Tmux seats still launch and can be attached from embedded terminals. |
 | `--reset-harness-memory` | Delete remembered per-seat harness choices and exit. |
 | `--help` / `-h` | Print the parser-owned usage line. |
 

@@ -276,8 +276,10 @@ cd ~/ClawSeat && ./scripts/install.sh --project demo
 
 **Q: 这玩意只在 Mac 上能跑？**
 
-现在是。我们用 iTerm 网格 + macOS Keychain 路由 + LaunchAgent。Linux 能
-跑核心功能但少了网格可视化。Windows 没测试。欢迎 PR——绝不 trivial。
+独立使用时基本是 Mac-first：默认 iTerm 网格 + macOS Keychain 路由 +
+LaunchAgent。配合 Cartooner / 内嵌终端使用时可以走 `--no-window`，只启动
+tmux seats，不依赖 iTerm 可视化窗口。Linux 能跑核心功能但少了原生网格可视化。
+Windows 没测试。欢迎 PR——绝不 trivial。
 
 **Q: 不用 Docker 怎么隔离 agent？**
 
