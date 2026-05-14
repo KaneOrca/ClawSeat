@@ -19,13 +19,18 @@ After Phase 1 suite layering and the Phase 2 audit helper:
 
 - Fast local suite: `2682 passed, 437 deselected, 2 xfailed in 2:16`
   via `bash scripts/test-fast.sh --tb=short`.
-- Full local suite: `3116 passed, 3 skipped, 2 xfailed in 11:19`
+- Full local suite after Phase 3 scan-test dedupe:
+  `3116 passed, 3 skipped, 2 xfailed in 8:43`
   via `python3 -m pytest tests/ -q --tb=short --durations=50`.
 - CI full suite now emits `--durations=50`; Python 3.11/3.12/3.13 passed on
   run `25831646236`.
-- The slowest local tests are clustered in `tests/test_scan_machine_subset.py`
-  and `tests/test_memory_oracle.py::TestScanGithub`, not in legacy/removal
-  guard tests.
+- Before Phase 3, the slowest local tests were clustered in repeated
+  `tests/test_scan_machine_subset.py` default scans plus
+  `tests/test_memory_oracle.py::TestScanGithub`. Phase 3 reduced repeated
+  default scans to one module fixture and mocked the schema-only GitHub scanner
+  test, cutting full local runtime from `11:19` to `8:43`.
+- The remaining slowest local tests are one real default scan smoke plus install
+  and process-heavy coverage, not legacy/removal guard tests.
 
 ## Legacy Inventory
 
@@ -92,6 +97,8 @@ Potential comment cleanup only:
    retained compatibility/removal guards.
 2. Consolidate small one-assertion removal guards into a single retired-artifact
    test module where it reduces collection overhead and maintenance cost.
-3. Decide explicit sunset dates for deprecated CLI aliases such as
+3. Continue performance work on install smoke tests by sharing expensive setup
+   only when assertions are read-only and behaviorally identical.
+4. Decide explicit sunset dates for deprecated CLI aliases such as
    `--skip-notify` and `--feishu-bot-account`.
-4. Only then remove obsolete tests together with the product code they protect.
+5. Only then remove obsolete tests together with the product code they protect.
