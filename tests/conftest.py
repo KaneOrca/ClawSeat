@@ -135,7 +135,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             or any(part in item.nodeid for part in SLOW_NODEID_PARTS)
         ):
             item.add_marker(pytest.mark.slow)
-        if any(part in lower_name for part in LEGACY_NAME_PARTS):
+        lower_nodeid = item.nodeid.lower()
+        if any(part in lower_name or part in lower_nodeid for part in LEGACY_NAME_PARTS):
             item.add_marker(pytest.mark.legacy)
         if any(token in text for token in SCRIPT_MARKER_TOKENS):
             item.add_marker(pytest.mark.script)

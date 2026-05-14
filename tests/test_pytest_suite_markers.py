@@ -36,3 +36,10 @@ def test_known_host_and_slow_files_are_classified() -> None:
     assert '"test_scan_machine_subset.py"' in conftest
     assert '"test_memory_oracle.py::TestScan"' in conftest
     assert "name.startswith(\"test_install_\")" in conftest
+
+
+def test_legacy_marker_uses_nodeid_terms() -> None:
+    conftest = (REPO / "tests" / "conftest.py").read_text(encoding="utf-8")
+
+    assert "lower_nodeid = item.nodeid.lower()" in conftest
+    assert "lower_name or part in lower_nodeid" in conftest
