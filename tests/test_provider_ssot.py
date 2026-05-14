@@ -21,7 +21,9 @@ for path in (REPO / "core" / "lib", REPO / "core" / "scripts"):
 from agent_admin_provider import ProviderHandlers
 from providers import (
     Provider,
+    ProviderSecretMissingError,
     add_provider,
+    build_env_overlay,
     get_provider,
     list_providers,
     migrate_legacy_provider_secrets,
@@ -80,7 +82,7 @@ def test_provider_cli_add_get_list_redacts_secret(tmp_path: Path, monkeypatch: p
     assert provider["secret_file"] == str(secret_file)
     assert provider["base_url"] == "https://api.anthropic.com"
     assert provider["has_secret"] is True
-    assert secret_file.read_text(encoding="utf-8") == "sk-secret-value\n"
+    assert secret_file.read_text(encoding="utf-8") == "ANTHROPIC_API_KEY=sk-secret-value\n"
     assert stat.S_IMODE(secret_file.stat().st_mode) == 0o600
 
     get_rc = handlers.get(SimpleNamespace(name="anthropic-console", json=True))
@@ -99,6 +101,94 @@ def test_provider_cli_add_get_list_redacts_secret(tmp_path: Path, monkeypatch: p
     assert "sk-secret-value" not in list_output.err
     list_payload = json.loads(list_output.out)
     assert [item["name"] for item in list_payload["providers"]] == ["anthropic-console"]
+
+
+def test_xcode_best_provider_family_maps_claude_sdk_and_codex_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    _set_home(monkeypatch, home)
+
+    result = add_provider(
+        Provider(
+            name="xcode-best",
+            tool="claude",
+            kind="api_key",
+            family="xcode-best",
+            secret_file="",
+            base_url="",
+            model="",
+        ),
+        "sk-xcode-secret\n",
+    )
+
+    assert result.provider.family == "xcode-best"
+    assert result.provider.base_url == "https://xcode.best"
+    assert result.provider.model == "gpt-5.5"
+    assert Path(result.provider.secret_file).read_text(encoding="utf-8") == "XCODE_BEST_API_KEY=sk-xcode-secret\n"
+
+    overlay = build_env_overlay(
+        "xcode-best",
+        {"XCODE_BEST_API_KEY": "sk-xcode-secret"},
+        result.provider.base_url,
+        result.provider.model,
+    )
+    assert overlay["ANTHROPIC_AUTH_TOKEN"] == "sk-xcode-secret"
+    assert overlay["ANTHROPIC_BASE_URL"] == "https://xcode.best"
+    assert overlay["ANTHROPIC_MODEL"] == "gpt-5.5"
+    assert overlay["OPENAI_API_KEY"] == "sk-xcode-secret"
+    assert overlay["OPENAI_MODEL"] == "gpt-5.5"
+
+
+def test_deepseek_provider_family_maps_to_claude_auth_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    _set_home(monkeypatch, home)
+
+    result = add_provider(
+        Provider(
+            name="deepseek",
+            tool="claude",
+            kind="api_key",
+            family="deepseek",
+            secret_file="",
+            base_url="",
+            model="",
+        ),
+        "sk-deepseek-secret\n",
+    )
+
+    assert result.provider.family == "deepseek"
+    assert result.provider.base_url == "https://api.deepseek.com/anthropic"
+    assert result.provider.model == "deepseek-v4-pro[1M]"
+    assert Path(result.provider.secret_file).read_text(encoding="utf-8") == "DEEPSEEK_API_KEY=sk-deepseek-secret\n"
+
+    overlay = build_env_overlay(
+        "deepseek",
+        {"DEEPSEEK_API_KEY": "sk-deepseek-secret"},
+        result.provider.base_url,
+        result.provider.model,
+    )
+    assert overlay["ANTHROPIC_AUTH_TOKEN"] == "sk-deepseek-secret"
+    assert overlay["ANTHROPIC_BASE_URL"] == "https://api.deepseek.com/anthropic"
+    assert overlay["ANTHROPIC_MODEL"] == "deepseek-v4-pro[1M]"
+    assert overlay["DEEPSEEK_API_KEY"] == "sk-deepseek-secret"
+
+
+def test_deepseek_placeholder_secret_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    _set_home(monkeypatch, home)
+
+    with pytest.raises(ProviderSecretMissingError):
+        add_provider(
+            Provider(
+                name="deepseek",
+                tool="claude",
+                kind="api_key",
+                family="deepseek",
+                secret_file="",
+                base_url="",
+                model="",
+            ),
+            "DEEPSEEK_API_KEY=<set-by-operator>\nDEEPSEEK_BASE_URL=https://api.deepseek.com/anthropic\n",
+        )
 
 
 def test_legacy_provider_migration_renames_per_engineer_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -136,6 +226,33 @@ def test_legacy_provider_migration_renames_per_engineer_files(tmp_path: Path, mo
     migrated = sorted(legacy_dir.glob("*.migrated-*"))
     assert len(migrated) == 2
     assert all(path.suffixes[-1].startswith(".migrated-") or ".migrated-" in path.name for path in migrated)
+
+
+def test_legacy_deepseek_provider_migration_preserves_deepseek_family(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    _set_home(monkeypatch, home)
+
+    legacy_dir = home / ".agents" / "secrets" / "claude" / "deepseek"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    legacy_secret = (
+        "DEEPSEEK_API_KEY=sk-deepseek-real\n"
+        "DEEPSEEK_BASE_URL=https://api.deepseek.com/anthropic\n"
+        "DEEPSEEK_MODEL=deepseek-v4-pro[1M]\n"
+    )
+    (legacy_dir / "planner.env").write_text(legacy_secret, encoding="utf-8")
+
+    results = migrate_legacy_provider_secrets(home=home)
+    assert results
+
+    providers = read_providers(home / ".agents" / "providers.toml")
+    provider = providers.providers["deepseek"]
+    assert provider.tool == "claude"
+    assert provider.family == "deepseek"
+    assert provider.kind == "api_key"
+    assert provider.base_url == "https://api.deepseek.com/anthropic"
+    assert provider.model == "deepseek-v4-pro[1M]"
+    assert provider.secret_file == str(home / ".agents" / "secrets" / "claude" / "deepseek.env")
+    assert Path(provider.secret_file).read_text(encoding="utf-8") == legacy_secret
 
 
 def test_rename_provider_updates_session_reference_and_secret_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

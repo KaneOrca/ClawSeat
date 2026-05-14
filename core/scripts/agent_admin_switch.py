@@ -67,6 +67,17 @@ class SwitchHandlers:
             )
         if session.tool == "claude" and session.provider == "minimax":
             candidates.append(self.hooks.legacy_secrets_root / "claude" / "minimax.env")
+        if session.tool == "claude" and session.provider == "deepseek":
+            candidates.append(self.hooks.legacy_secrets_root / "claude" / "deepseek.env")
+            candidates.append(
+                operator_home
+                / ".local"
+                / "share"
+                / "agent-launcher"
+                / "secrets"
+                / "claude"
+                / "deepseek.env"
+            )
         if session.tool == "claude" and session.provider == "ark":
             candidates.append(self.hooks.legacy_secrets_root / "claude" / "ark.env")
         if session.tool == "claude" and session.provider == "xcode-best":

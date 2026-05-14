@@ -330,6 +330,7 @@ PROVIDER_DEFAULTS = {
         },
         "xcode-best": {
             "base_url": "https://xcode.best",
+            "default_model": "gpt-5.5",
             "url_markers": ("xcode.best",),
         },
         "ccr-local": {
@@ -423,6 +424,15 @@ CLAUDE_API_PROVIDER_CONFIGS = {
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         },
     },
+    "deepseek": {
+        "model": PROVIDER_DEFAULTS["claude"]["deepseek"]["default_model"],
+        "base_url": PROVIDER_DEFAULTS["claude"]["deepseek"]["base_url"],
+        "auth_token_var": "DEEPSEEK_API_KEY",
+        "extra_env": {
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        },
+    },
     "ark": {
         "model": PROVIDER_DEFAULTS["claude"]["ark"]["default_model"],
         "base_url": PROVIDER_DEFAULTS["claude"]["ark"]["base_url"],
@@ -431,6 +441,15 @@ CLAUDE_API_PROVIDER_CONFIGS = {
         # ~/.agent-runtime/secrets/claude/ark.env. Session startup aliases
         # that name into launcher custom env at runtime.
         "auth_token_var": "ARK_API_KEY",
+        "extra_env": {
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        },
+    },
+    "xcode-best": {
+        "model": PROVIDER_DEFAULTS["claude"]["xcode-best"]["default_model"],
+        "base_url": PROVIDER_DEFAULTS["claude"]["xcode-best"]["base_url"],
+        "auth_token_var": "XCODE_BEST_API_KEY",
         "extra_env": {
             "API_TIMEOUT_MS": "3000000",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",

@@ -125,7 +125,7 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     provider_add.add_argument(
         "--family",
         required=True,
-        choices=["anthropic", "minimax", "openai", "openai-compat", "gemini"],
+        choices=["anthropic", "minimax", "deepseek", "xcode-best", "openai", "openai-compat", "gemini"],
     )
     provider_add.add_argument("--base-url", default="")
     provider_add.add_argument("--model", default="")

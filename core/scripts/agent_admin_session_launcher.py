@@ -47,7 +47,14 @@ class SessionLaunchEnv:
         return None
 
     def _provider_secret_env(self, session: Any) -> dict[str, str]:
-        secret_path = self._provider_secret_file(session)
+        provider = self._provider_record(session)
+        if provider is not None:
+            try:
+                from providers import load_provider_secret_vars
+            except Exception:
+                return self._parse_env_file(str(Path(provider.secret_file)))
+            return load_provider_secret_vars(provider)
+        secret_path = Path(session.secret_file) if session.secret_file else None
         if secret_path is None:
             return {}
         return self._parse_env_file(str(secret_path))

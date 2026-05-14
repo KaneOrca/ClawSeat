@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import tempfile
 import sys
@@ -15,7 +16,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
-from env_utils import parse_env_file
+from env_utils import parse_env_file, parse_env_text
 from real_home import real_user_home
 from utils import now_iso, q
 
@@ -25,17 +26,43 @@ _PROVIDERS_VERSION = 1
 _PROVIDER_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _TOOLS = {"claude", "codex", "gemini"}
 _KINDS = {"api_key", "oauth_token"}
-_FAMILIES = {"anthropic", "minimax", "openai", "openai-compat", "gemini"}
+_FAMILIES = {"anthropic", "minimax", "deepseek", "xcode-best", "openai", "openai-compat", "gemini"}
 
 _FAMILY_DEFAULT_BASE_URLS = {
     "anthropic": "https://api.anthropic.com",
     "minimax": "https://api.minimaxi.com/anthropic",
+    "deepseek": "https://api.deepseek.com/anthropic",
+    "xcode-best": "https://xcode.best",
     "openai": "https://api.openai.com/v1",
     "openai-compat": "https://api.openai.com/v1",
     "gemini": "https://generativelanguage.googleapis.com",
 }
 _FAMILY_DEFAULT_MODELS = {
     "minimax": "MiniMax-M2.7-highspeed",
+    "deepseek": "deepseek-v4-pro[1M]",
+    "xcode-best": "gpt-5.5",
+}
+
+_SECRET_KEY_NAMES = {
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ARK_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "DEEPSEEK_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "MINIMAX_API_KEY",
+    "OPENAI_API_KEY",
+    "XCODE_API_KEY",
+    "XCODE_BEST_API_KEY",
+    "API_KEY",
+}
+
+_PLACEHOLDER_SECRET_VALUES = {
+    "<set-by-operator>",
+    "set-by-operator",
+    "<set by operator>",
+    "set by operator",
 }
 
 
@@ -195,6 +222,56 @@ def _strip_secret_text(secret: str) -> str:
     return secret.rstrip("\r\n")
 
 
+def _is_placeholder_secret_value(value: str) -> bool:
+    return str(value or "").strip().strip("\"'").lower() in _PLACEHOLDER_SECRET_VALUES
+
+
+def _env_has_real_secret(parsed: Mapping[str, str]) -> bool:
+    for key, value in parsed.items():
+        if (
+            str(key).strip() in _SECRET_KEY_NAMES
+            and str(value).strip()
+            and not _is_placeholder_secret_value(str(value))
+        ):
+            return True
+    return False
+
+
+def _secret_env_key(provider: Provider) -> str:
+    if provider.family == "anthropic":
+        return "CLAUDE_CODE_OAUTH_TOKEN" if provider.kind == "oauth_token" else "ANTHROPIC_API_KEY"
+    if provider.family == "minimax":
+        return "ANTHROPIC_AUTH_TOKEN"
+    if provider.family == "deepseek":
+        return "DEEPSEEK_API_KEY"
+    if provider.family == "xcode-best":
+        return "XCODE_BEST_API_KEY"
+    if provider.family in {"openai", "openai-compat"}:
+        return "OPENAI_API_KEY"
+    if provider.family == "gemini":
+        return "GEMINI_API_KEY"
+    return "API_KEY"
+
+
+def _looks_like_env_secret_text(secret_text: str) -> bool:
+    parsed = parse_env_text(secret_text)
+    return bool(parsed) and all(re.fullmatch(r"[A-Z_][A-Z0-9_]*", key) for key in parsed)
+
+
+def _secret_file_text(provider: Provider, secret: str) -> str:
+    secret_text = _strip_secret_text(secret)
+    if not secret_text.strip() or _is_placeholder_secret_value(secret_text):
+        raise ProviderSecretMissingError(f"provider {provider.name!r} requires a secret on stdin")
+    if _looks_like_env_secret_text(secret_text):
+        parsed = parse_env_text(secret_text)
+        if not _env_has_real_secret(parsed):
+            raise ProviderSecretMissingError(
+                f"provider {provider.name!r} requires a non-placeholder secret value on stdin"
+            )
+        return secret_text.rstrip("\n") + "\n"
+    return f"{_secret_env_key(provider)}={shlex.quote(secret_text)}\n"
+
+
 def _validate_name(name: str) -> str:
     normalized = str(name or "").strip()
     if not normalized:
@@ -235,6 +312,16 @@ def _provider_defaults(tool: str, provider_name: str) -> tuple[str, str]:
     )
 
 
+def _looks_like_xcode_provider(provider_name: str, base_url: str) -> bool:
+    candidate = f"{provider_name} {base_url}".lower()
+    return "xcode-best" in candidate or "xcode.best" in candidate
+
+
+def _looks_like_deepseek_provider(provider_name: str, base_url: str) -> bool:
+    candidate = f"{provider_name} {base_url}".lower()
+    return "deepseek" in candidate
+
+
 def _provider_from_raw(name: str, raw: Mapping[str, Any], *, home: Path | None = None) -> Provider:
     provider_name = _validate_name(name)
     allowed = {
@@ -260,6 +347,21 @@ def _provider_from_raw(name: str, raw: Mapping[str, Any], *, home: Path | None =
     secret_file = str(raw.get("secret_file", "")).strip()
     created_at = str(raw.get("created_at", "")).strip()
     updated_at = str(raw.get("updated_at", "")).strip()
+    if (
+        family in {"minimax", "anthropic", "openai", "openai-compat"}
+        and _looks_like_deepseek_provider(provider_name, base_url)
+    ):
+        family = "deepseek"
+        if not base_url:
+            base_url = _FAMILY_DEFAULT_BASE_URLS["deepseek"]
+        if not model:
+            model = _FAMILY_DEFAULT_MODELS["deepseek"]
+    if family in {"minimax", "openai", "openai-compat"} and _looks_like_xcode_provider(provider_name, base_url):
+        family = "xcode-best"
+        if not base_url:
+            base_url = _FAMILY_DEFAULT_BASE_URLS["xcode-best"]
+        if not model:
+            model = _FAMILY_DEFAULT_MODELS["xcode-best"]
     _validate_common_fields(provider_name, tool, kind, family)
     provider = Provider(
         name=provider_name,
@@ -459,12 +561,10 @@ def add_provider(
         provider.base_url = default_base_url
     if not provider.model:
         provider.model = default_model
-    secret_text = _strip_secret_text(secret)
-    if not secret_text.strip():
-        raise ProviderSecretMissingError(f"provider {provider.name!r} requires a secret on stdin")
+    secret_text = _secret_file_text(provider, secret)
     secret_file = _expected_secret_file(provider)
     _ensure_dir_mode(secret_file.parent, 0o700)
-    _atomic_write_text(secret_file, secret_text.rstrip("\n") + "\n", mode=0o600)
+    _atomic_write_text(secret_file, secret_text, mode=0o600)
     timestamp = now_iso()
     provider.secret_file = str(secret_file)
     provider.created_at = timestamp
@@ -512,11 +612,9 @@ def update_provider(
     expected_secret = _expected_secret_file(updated)
     current_secret = Path(existing.secret_file).expanduser()
     if secret is not None:
-        secret_text = _strip_secret_text(secret)
-        if not secret_text.strip():
-            raise ProviderSecretMissingError(f"provider {provider_name!r} requires a secret on stdin")
+        secret_text = _secret_file_text(updated, secret)
         _ensure_dir_mode(expected_secret.parent, 0o700)
-        _atomic_write_text(expected_secret, secret_text.rstrip("\n") + "\n", mode=0o600)
+        _atomic_write_text(expected_secret, secret_text, mode=0o600)
     elif current_secret.exists() and current_secret != expected_secret:
         _ensure_dir_mode(expected_secret.parent, 0o700)
         shutil.move(str(current_secret), str(expected_secret))
@@ -552,7 +650,12 @@ def _legacy_provider_spec(
         return ("anthropic", "oauth_token", base_url, default_model)
 
     if "ANTHROPIC_API_KEY" in normalized:
-        base_url = normalized.get("ANTHROPIC_BASE_URL", "") or normalized.get("OPENAI_BASE_URL", "") or normalized.get("OPENAI_API_BASE", "") or base_url
+        base_url = (
+            normalized.get("ANTHROPIC_BASE_URL", "")
+            or normalized.get("OPENAI_BASE_URL", "")
+            or normalized.get("OPENAI_API_BASE", "")
+            or base_url
+        )
         model = normalized.get("ANTHROPIC_MODEL", "") or normalized.get("OPENAI_MODEL", "") or default_model
         return ("anthropic", "api_key", base_url, model)
 
@@ -561,14 +664,40 @@ def _legacy_provider_spec(
         model = normalized.get("ARK_MODEL", "") or normalized.get("ANTHROPIC_MODEL", "") or default_model
         return ("anthropic", "api_key", base_url, model)
 
+    if "DEEPSEEK_API_KEY" in normalized:
+        base_url = normalized.get("DEEPSEEK_BASE_URL", "") or normalized.get("ANTHROPIC_BASE_URL", "") or base_url
+        model = normalized.get("DEEPSEEK_MODEL", "") or normalized.get("ANTHROPIC_MODEL", "") or default_model
+        return ("deepseek", "api_key", base_url, model)
+
     if "ANTHROPIC_AUTH_TOKEN" in normalized:
         base_url = normalized.get("ANTHROPIC_BASE_URL", "") or normalized.get("MINIMAX_API_HOST", "") or base_url
         model = normalized.get("ANTHROPIC_MODEL", "") or default_model
+        if _looks_like_deepseek_provider(provider_name, base_url):
+            return (
+                "deepseek",
+                "api_key",
+                base_url or _FAMILY_DEFAULT_BASE_URLS["deepseek"],
+                model or _FAMILY_DEFAULT_MODELS["deepseek"],
+            )
+        if _looks_like_xcode_provider(provider_name, base_url):
+            return (
+                "xcode-best",
+                "api_key",
+                base_url or _FAMILY_DEFAULT_BASE_URLS["xcode-best"],
+                model or _FAMILY_DEFAULT_MODELS["xcode-best"],
+            )
         return ("minimax", "api_key", base_url, model)
 
     if "OPENAI_API_KEY" in normalized:
         base_url = normalized.get("OPENAI_BASE_URL", "") or normalized.get("OPENAI_API_BASE", "") or base_url
         model = normalized.get("OPENAI_MODEL", "") or default_model
+        if _looks_like_xcode_provider(provider_name, base_url):
+            return (
+                "xcode-best",
+                "api_key",
+                base_url or _FAMILY_DEFAULT_BASE_URLS["xcode-best"],
+                model or _FAMILY_DEFAULT_MODELS["xcode-best"],
+            )
         family = "openai-compat" if base_url and "api.openai.com" not in base_url.lower() else "openai"
         return (family, "api_key", base_url, model)
 
@@ -759,7 +888,7 @@ def rename_provider(
 def _coalesce(secret_vars: Mapping[str, str], keys: Iterable[str]) -> str:
     for key in keys:
         value = str(secret_vars.get(key, "")).strip()
-        if value:
+        if value and not _is_placeholder_secret_value(value):
             return value
     return ""
 
@@ -821,7 +950,9 @@ def build_env_overlay(
     if family == "minimax":
         token = _coalesce(secret_vars, ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "MINIMAX_API_KEY"))
         if not token:
-            raise ProviderSecretMissingError("minimax family secret is missing ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY / MINIMAX_API_KEY")
+            raise ProviderSecretMissingError(
+                "minimax family secret is missing ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY / MINIMAX_API_KEY"
+            )
         overlay["ANTHROPIC_AUTH_TOKEN"] = token
         overlay["ANTHROPIC_API_KEY"] = token
         overlay["MINIMAX_API_KEY"] = token
@@ -831,6 +962,61 @@ def build_env_overlay(
             overlay["ANTHROPIC_BASE_URL"] = api_host
         if model_value:
             overlay["ANTHROPIC_MODEL"] = model_value
+        return overlay
+
+    if family == "deepseek":
+        token = _coalesce(secret_vars, ("DEEPSEEK_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "API_KEY"))
+        if not token:
+            raise ProviderSecretMissingError(
+                "deepseek family secret is missing DEEPSEEK_API_KEY / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY / API_KEY"
+            )
+        base_url_value = _coalesce(secret_vars, ("DEEPSEEK_BASE_URL", "ANTHROPIC_BASE_URL")) or base_url_value
+        model_value = _coalesce(secret_vars, ("DEEPSEEK_MODEL", "ANTHROPIC_MODEL")) or model_value
+        overlay["DEEPSEEK_API_KEY"] = token
+        overlay["ANTHROPIC_AUTH_TOKEN"] = token
+        if base_url_value:
+            overlay["DEEPSEEK_BASE_URL"] = base_url_value
+            overlay["ANTHROPIC_BASE_URL"] = base_url_value
+        if model_value:
+            overlay["DEEPSEEK_MODEL"] = model_value
+            overlay["ANTHROPIC_MODEL"] = model_value
+        return overlay
+
+    if family == "xcode-best":
+        key = _coalesce(
+            secret_vars,
+            (
+                "XCODE_BEST_API_KEY",
+                "XCODE_API_KEY",
+                "ANTHROPIC_AUTH_TOKEN",
+                "ANTHROPIC_API_KEY",
+                "OPENAI_API_KEY",
+                "API_KEY",
+            ),
+        )
+        if not key:
+            raise ProviderSecretMissingError(
+                "xcode-best family secret is missing XCODE_BEST_API_KEY / XCODE_API_KEY / "
+                "ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY / OPENAI_API_KEY / API_KEY"
+            )
+        base_url_value = _coalesce(
+            secret_vars,
+            ("ANTHROPIC_BASE_URL", "XCODE_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE"),
+        ) or base_url_value
+        model_value = _coalesce(secret_vars, ("ANTHROPIC_MODEL", "XCODE_MODEL", "OPENAI_MODEL")) or model_value
+        overlay["ANTHROPIC_AUTH_TOKEN"] = key
+        overlay["ANTHROPIC_API_KEY"] = key
+        overlay["XCODE_BEST_API_KEY"] = key
+        overlay["OPENAI_API_KEY"] = key
+        if base_url_value:
+            overlay["ANTHROPIC_BASE_URL"] = base_url_value
+            overlay["XCODE_BASE_URL"] = base_url_value
+            overlay["OPENAI_BASE_URL"] = base_url_value
+            overlay["OPENAI_API_BASE"] = base_url_value
+        if model_value:
+            overlay["ANTHROPIC_MODEL"] = model_value
+            overlay["XCODE_MODEL"] = model_value
+            overlay["OPENAI_MODEL"] = model_value
         return overlay
 
     if family == "openai":
@@ -879,4 +1065,14 @@ def build_env_overlay(
 
 
 def load_provider_secret_vars(provider: Provider) -> dict[str, str]:
-    return parse_env_file(provider.secret_file)
+    vars = parse_env_file(provider.secret_file)
+    if vars and all(re.fullmatch(r"[A-Z_][A-Z0-9_]*", key) for key in vars):
+        return vars
+    try:
+        raw = Path(provider.secret_file).expanduser().read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+    secret_text = _strip_secret_text(raw)
+    if not secret_text.strip():
+        return {}
+    return {_secret_env_key(provider): secret_text}
