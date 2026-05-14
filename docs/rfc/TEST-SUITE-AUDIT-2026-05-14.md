@@ -31,6 +31,10 @@ After Phase 1 suite layering and the Phase 2 audit helper:
   test, cutting full local runtime from `11:19` to `8:43`.
 - The remaining slowest local tests are one real default scan smoke plus install
   and process-heavy coverage, not legacy/removal guard tests.
+- Phase 4 reused read-only fake-install results in privacy/skill symlink tests.
+  The targeted privacy + skill + pre-commit group dropped from about `54s` to
+  `36s`; full-suite runtime remains about `8:44` because the remaining install
+  smoke tests intentionally exercise separate setup paths.
 
 ## Legacy Inventory
 
@@ -98,7 +102,8 @@ Potential comment cleanup only:
 2. Consolidate small one-assertion removal guards into a single retired-artifact
    test module where it reduces collection overhead and maintenance cost.
 3. Continue performance work on install smoke tests by sharing expensive setup
-   only when assertions are read-only and behaviorally identical.
+   only when assertions are read-only and behaviorally identical; keep tests
+   with distinct preconditions isolated.
 4. Decide explicit sunset dates for deprecated CLI aliases such as
    `--skip-notify` and `--feishu-bot-account`.
 5. Only then remove obsolete tests together with the product code they protect.
