@@ -119,8 +119,11 @@ The exact gate:
 The `quality-docs` team starts with:
 
 ```text
-planner + patrol-fast + patrol-human + patrol-chaos
+planner + patrol-human
 ```
+
+`patrol-fast` and `patrol-chaos` are expansion seats for sustained QA
+campaigns; they are not part of the minimal launch.
 
 If a candidate domain has no matching code or ownership surface, memory merges
 it into the nearest real team. If one domain has distinct modules with different
@@ -146,8 +149,8 @@ cartooner-skills
   skill guardrails.
 
 quality-docs
-  Autonomous QA planner plus three MiniMax patrols for fast, human, and chaos
-  testing.
+  Autonomous QA planner plus one MiniMax human-path patrol for realistic
+  product workflow testing.
 ```
 
 The default first launch should be:
@@ -155,7 +158,7 @@ The default first launch should be:
 ```text
 cartooner-memory
 cartooner-front: planner + builder-core
-quality-docs: planner + patrol-fast + patrol-human + patrol-chaos
+quality-docs: planner + patrol-human
 ```
 
 Memory may later recommend `cartooner-runtime-platform` or
@@ -210,28 +213,22 @@ autonomous: true
 loop: continuous
 stop_rule: campaign_clean_streak_3
 seats:
-  - role: patrol
-    instance: fast
+  - role: planner
     tool: claude
     provider: minimax
     auth_mode: api
-    rationale: "runs high-frequency deterministic checks"
+    rationale: "designs QA campaigns and keeps QUALITY.md current"
   - role: patrol
     instance: human
     tool: claude
     provider: minimax
     auth_mode: api
     rationale: "simulates real user workflows"
-  - role: patrol
-    instance: chaos
-    tool: claude
-    provider: minimax
-    auth_mode: api
-    rationale: "tests failure injection and recovery"
 ```
 
-The renderer materializes these as `quality-docs-patrol-fast`,
-`quality-docs-patrol-human`, and `quality-docs-patrol-chaos`.
+The minimal renderer materializes this as `quality-docs-patrol-human`.
+`quality-docs-planner` may later add `patrol-fast` and `patrol-chaos` when a
+campaign needs deterministic high-frequency checks or fault-injection work.
 
 ## Memory-Driven Team Designer Skill
 

@@ -442,10 +442,17 @@ class EngineerCrud:
         if getattr(args, "all_seats", False):
             if getattr(args, "engineer", None):
                 raise self.hooks.error_cls("regenerate-workspace accepts either <seat> or --all-seats, not both")
-            sessions = [
-                self.hooks.resolve_engineer_session(engineer_id, project_name=project.name)
-                for engineer_id in project.engineers
-            ]
+            sessions = []
+            skipped: list[str] = []
+            for engineer_id in project.engineers:
+                try:
+                    sessions.append(self.hooks.resolve_engineer_session(engineer_id, project_name=project.name))
+                except self.hooks.error_cls as exc:
+                    skipped.append(f"{engineer_id}: {exc}")
+                    print(f"skipped\t{engineer_id}\t{exc}", file=sys.stderr)
+            if not sessions:
+                detail = "; ".join(skipped) if skipped else "project has no seats"
+                raise self.hooks.error_cls(f"no regeneratable workspaces in project {project.name}: {detail}")
         else:
             if not getattr(args, "engineer", None):
                 raise self.hooks.error_cls("regenerate-workspace requires <seat> or --all-seats")

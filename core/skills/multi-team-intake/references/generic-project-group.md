@@ -295,7 +295,7 @@ Default first launch:
 ```text
 cartooner-memory
 cartooner-front: planner + builder-core
-quality-docs: planner + patrol-fast + patrol-human + patrol-chaos
+quality-docs: planner + patrol-human
 ```
 
 Recommended subteams after memory confirms real need:

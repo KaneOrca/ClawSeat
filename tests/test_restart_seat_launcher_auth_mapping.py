@@ -305,3 +305,62 @@ def test_restart_seat_forces_legacy_claude_oauth_anthropic_to_oauth_token(tmp_pa
     assert "legacy-oauth-token" not in result.stderr
     assert "legacy-oauth-token" not in log
     assert (home / ".agents" / ".env.global").read_text(encoding="utf-8") == "CLAUDE_CODE_OAUTH_TOKEN=legacy-oauth-token\n"
+
+
+def test_restart_seat_materializes_declared_project_seat(tmp_path: Path) -> None:
+    """A v3 seat may be declared in project.toml before session.toml exists."""
+    home = tmp_path / "home"
+    workspace = tmp_path / "repo"
+    fakebin = tmp_path / "fakebin"
+    tmux_state = tmp_path / "tmux-state"
+    tmux_log = tmp_path / "tmux.log"
+    project = "declared-restart"
+    seat = "creative-runtime-builder"
+    session = f"{project}-{seat}-codex"
+
+    workspace.mkdir(parents=True)
+    (home / ".agents" / "projects" / project).mkdir(parents=True)
+    (home / ".agents" / "projects" / project / "project.toml").write_text(
+        textwrap.dedent(
+            f"""\
+            name = "{project}"
+            repo_root = "{workspace}"
+            monitor_session = "{project}-monitor"
+            engineers = ["{seat}"]
+            monitor_engineers = ["{seat}"]
+
+            [seat_overrides.{seat}]
+            tool = "codex"
+            auth_mode = "oauth"
+            provider = "openai"
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    tmux = _write_fake_tmux(fakebin, tmux_state, tmux_log)
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PYTHON_BIN": sys.executable,
+            "TMUX_BIN": str(tmux),
+            "PATH": f"{fakebin}{os.pathsep}{env.get('PATH', '')}",
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(SCRIPT), project, seat, "--no-window"],
+        cwd=str(REPO),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert f"session:       {session}" in result.stdout
+    assert "result:    tmux session alive" in result.stdout
+    assert (home / ".agents" / "engineers" / seat / "engineer.toml").exists()
+    assert (home / ".agents" / "sessions" / project / seat / "session.toml").exists()

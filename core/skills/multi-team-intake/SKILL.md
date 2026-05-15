@@ -113,7 +113,7 @@ Start from these candidate domains, then merge or rename them to match the repo:
 | `runtime-platform` | Electron/CLI/server runtime, SDK adapters, providers, IPC, auth/env, local paths |
 | `domain-capability` | Domain skills, content pipelines, asset workflows, business logic, model-specific capabilities |
 | `orchestration-ops` | ClawSeat/project-group bridge, launch/restart/recovery, tmux/session automation, install/upgrade |
-| `quality-docs` | Continuous testing, human-path simulation, chaos/risk testing, QA docs, release gates |
+| `quality-docs` | Continuous testing, human-path simulation, QA docs, release gates; add chaos/risk patrols only when needed |
 
 Do not force all five. A small library might only need `runtime-platform` and
 `quality-docs`; a large desktop product may need all five.
@@ -126,10 +126,11 @@ notifies memory directly; memory pulls the gate doc when awakened:
 
 ```text
 quality-docs-planner
-quality-docs-patrol-fast
 quality-docs-patrol-human
-quality-docs-patrol-chaos
 ```
+
+`quality-docs-patrol-fast` and `quality-docs-patrol-chaos` are scale-up seats,
+not part of MULTI_TEAM_MINIMAL.
 
 Use `instance` for same-role seats:
 

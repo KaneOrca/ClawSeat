@@ -122,6 +122,17 @@ estimated_monthly_cost_usd: {{ low: 0, high: 30 }}
 """
 
 
+def _approved_legacy_nested_review_subteam_yaml(project: str = "p") -> str:
+    return _approved_lightweight_subteam_yaml(project).replace(
+        "review_model: planner_owned\ndedicated_reviewer: false\n",
+        """review_model:
+  dedicated_reviewer: false
+  planner_reviews: true
+  escalation_review_path: quality-docs
+""",
+    )
+
+
 def test_render_supports_named_same_role_instances(tmp_path: Path) -> None:
     from render_project_toml_v3 import render_project_toml_v3
 
@@ -205,6 +216,28 @@ def test_render_supports_lightweight_planner_owned_review_subteam(tmp_path: Path
     team = data["teams"]["creative-runtime"]
     assert team["review_model"] == "planner_owned"
     assert team["dedicated_reviewer"] is False
+
+
+def test_render_normalizes_legacy_nested_review_model_mapping(tmp_path: Path) -> None:
+    from proposal_validator import validate_proposal_file
+    from render_project_toml_v3 import render_project_toml_v3
+
+    proposals = tmp_path / "_config-proposals"
+    proposals.mkdir()
+    proposal = proposals / "creative-runtime__approved.yaml"
+    proposal.write_text(
+        _approved_legacy_nested_review_subteam_yaml(),
+        encoding="utf-8",
+    )
+
+    report = validate_proposal_file(proposal)
+    assert report.ok
+
+    data = tomllib.loads(render_project_toml_v3(project="p", proposals_dir=proposals))
+    team = data["teams"]["creative-runtime"]
+    assert team["review_model"] == "planner_owned"
+    assert team["dedicated_reviewer"] is False
+    assert "planner_reviews" not in team
     assert team["seats"] == [
         "creative-runtime-planner",
         "creative-runtime-builder-runtime",

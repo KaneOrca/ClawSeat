@@ -147,6 +147,34 @@ def test_multi_team_planner_workspace_shows_team_scope(
     assert "Reviewer gate: `cartooner-front-reviewer`" in text
 
 
+def test_multi_team_planner_protocol_uses_memory_not_legacy_koder(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    _write_multi_profile(home)
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(engineer_id="cartooner-front-planner", project="cartooner")
+    engineer = SimpleNamespace(role="planner-dispatcher")
+
+    boundary = "\n".join(workspace.render_seat_boundary_lines(session, engineer))
+    protocol = "\n".join(
+        workspace.render_communication_protocol_lines(
+            engineer,
+            "cartooner",
+            seat_id="cartooner-front-planner",
+        )
+    )
+    text = f"{boundary}\n{protocol}"
+
+    assert "koder" not in text
+    assert "frontstage" not in text.lower()
+    assert "notify project memory only when this team queue is drained" in text
+    assert "do not send per-task memory pings" in text
+
+
 def test_multi_team_scope_is_rendered_even_when_role_stub_is_dynamic(
     tmp_path: Path,
     monkeypatch,
@@ -299,3 +327,31 @@ def test_quality_docs_planner_workspace_uses_campaign_mode(
     assert "Do not notify memory directly" in text
     assert "`quality-docs-patrol-fast`" in text
     assert "quality-docs/QUALITY.md" in read_first
+
+
+def test_quality_docs_planner_protocol_never_uses_legacy_koder(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    _write_multi_profile(home)
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(engineer_id="quality-docs-planner", project="cartooner")
+    engineer = SimpleNamespace(role="planner-dispatcher")
+
+    boundary = "\n".join(workspace.render_seat_boundary_lines(session, engineer))
+    protocol = "\n".join(
+        workspace.render_communication_protocol_lines(
+            engineer,
+            "cartooner",
+            seat_id="quality-docs-planner",
+        )
+    )
+    text = f"{boundary}\n{protocol}"
+
+    assert "koder" not in text
+    assert "frontstage" not in text.lower()
+    assert "never notify memory directly" in text
+    assert "QUALITY.md" in text

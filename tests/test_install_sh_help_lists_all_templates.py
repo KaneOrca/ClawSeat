@@ -23,6 +23,7 @@ def test_install_help_lists_all_templates() -> None:
     assert "Templates (--template)" in output
     assert "clawseat-engineering" in output
     assert "clawseat-creative" in output
+    assert "clawseat-minimal" in output
     assert "clawseat-solo" in output
     assert "--no-window skips native iTerm" in output
     assert "5-seat" in output
@@ -60,5 +61,37 @@ def test_clawseat_solo_template_dry_run_is_valid(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "INVALID_TEMPLATE" not in result.stderr
     assert "legacy alias for v3 MULTI_TEAM_MINIMAL" in result.stderr
+    assert 'team_structure = "multi"' in result.stdout
+    assert "quality-docs" in result.stdout
+
+
+def test_clawseat_minimal_template_dry_run_is_valid(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    result = subprocess.run(
+        [
+            "bash",
+            str(INSTALL),
+            "--template",
+            "clawseat-minimal",
+            "--dry-run",
+            "--project",
+            "jj-minimal",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PYTHON_BIN": sys.executable,
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "INVALID_TEMPLATE" not in result.stderr
+    assert "clawseat-minimal uses v3 MULTI_TEAM_MINIMAL" in result.stderr
+    assert 'template_name = "clawseat-minimal"' in result.stdout
     assert 'team_structure = "multi"' in result.stdout
     assert "quality-docs" in result.stdout

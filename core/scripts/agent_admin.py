@@ -1001,6 +1001,11 @@ SWITCH_HANDLERS = SwitchHandlers(
         session_stop_engineer=session_stop_engineer,
         session_record_cls=SessionRecord,
         normalize_name=normalize_name,
+        engineer_path=engineer_path,
+        load_engineer=load_engineer,
+        write_engineer=write_engineer,
+        create_engineer_profile=create_engineer_profile,
+        create_session_record=create_session_record,
     )
 )
 
