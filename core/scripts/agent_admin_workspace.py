@@ -716,6 +716,13 @@ def render_project_seat_map_lines(
 
 def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
     seat_name = session.engineer_id
+    project_name = str(getattr(session, "project", "") or "").strip()
+    multi_team_context: tuple[str, dict[str, Any]] | None = None
+    if project_name:
+        loaded_profile = _load_dynamic_profile_data(project_name)
+        if loaded_profile is not None:
+            _profile_path, profile_data = loaded_profile
+            multi_team_context = _team_for_profile_seat(profile_data, seat_name)
     planner_seat = (
         preferred_seat_for_role(
             getattr(session, "project_record", None),
@@ -745,6 +752,34 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
             ]
         )
     elif engineer.role == "planner-dispatcher":
+        if multi_team_context is not None:
+            team_name, team_cfg = multi_team_context
+            planner_mode = _planner_mode_for(team_name, team_cfg)
+            notify_policy = _notify_policy_for(team_name, team_cfg)
+            lines.extend(
+                [
+                    f"- `{seat_name}` owns `{team_name}` execution decisions, next-hop routing, durable consumption, and planner-side acceptance.",
+                    f"- team notify policy is `{notify_policy}`; do not use legacy single-team closeout semantics in multi-team mode.",
+                    "- use document-first dispatch helpers; treat raw `tmux send-keys` as a protocol violation",
+                ]
+            )
+            if planner_mode == "quality_campaign":
+                lines.extend(
+                    [
+                        f"- expect patrol seats to return findings and evidence to `{seat_name}`, never directly to memory",
+                        "- never notify memory directly; update `QUALITY.md`, findings, campaigns, missions, and evidence instead",
+                        "- escalate to project memory only for roster, ownership, queue-dependency, or operator-authority decisions",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        f"- expect builders/reviewers to return completion to `{seat_name}`, not directly to memory",
+                        "- after task PASS, append `task_done`, claim or continue the next queued task, and avoid per-task memory pings",
+                        "- notify project memory only when this team queue is drained or an exception needs memory/operator authority",
+                    ]
+                )
+            return lines
         lines.extend(
             [
                 f"- `{seat_name}` owns execution decisions, next-hop routing, and durable consumption of specialist completions.",
@@ -768,6 +803,7 @@ def render_communication_protocol_lines(
     project_name: str,
     *,
     template_name: str = "",
+    seat_id: str = "",
 ) -> list[str]:
     send_script = str(SEND_AND_VERIFY_SH)
     # Creative templates branch FIRST — even for "specialist" seats like
@@ -828,6 +864,33 @@ def render_communication_protocol_lines(
             ]
         )
     elif engineer.role == "planner-dispatcher":
+        multi_team_context: tuple[str, dict[str, Any]] | None = None
+        if seat_id:
+            loaded_profile = _load_dynamic_profile_data(project_name)
+            if loaded_profile is not None:
+                _profile_path, profile_data = loaded_profile
+                multi_team_context = _team_for_profile_seat(profile_data, seat_id)
+        if multi_team_context is not None:
+            team_name, team_cfg = multi_team_context
+            planner_mode = _planner_mode_for(team_name, team_cfg)
+            notify_policy = _notify_policy_for(team_name, team_cfg)
+            lines.extend(
+                [
+                    "- dispatch via `dispatch_task.py` (not raw tmux); always pass `--test-policy` and `--intent` to activate the gstack skill",
+                    "- stamp durable `Consumed:` ACK before routing the next hop; ACK alone does NOT finish the chain",
+                    "- use canonical verdicts: `APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`",
+                    f"- this team is `{team_name}` with notify policy `{notify_policy}`; do not use legacy single-team closeout commands",
+                ]
+            )
+            if planner_mode == "quality_campaign":
+                lines.append(
+                    "- never notify memory directly; update `QUALITY.md`, findings, campaigns, missions, and evidence for memory to pull during acceptance"
+                )
+            else:
+                lines.append(
+                    "- when the team queue is drained, notify project memory with a concise queue-drained closeout and evidence links; do not send per-task memory pings"
+                )
+            return lines
         lines.extend(
             [
                 "- dispatch via `dispatch_task.py` (not raw tmux); always pass `--test-policy` and `--intent` to activate the gstack skill",
@@ -1327,6 +1390,7 @@ def workspace_contract_payload(
                 engineer,
                 project.name,
                 template_name=str(getattr(project, "template_name", "") or ""),
+                seat_id=str(getattr(session, "engineer_id", "") or ""),
             )
             if line.startswith("- ")
         ],

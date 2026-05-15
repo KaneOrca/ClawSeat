@@ -39,6 +39,9 @@ def test_seed_multi_team_minimal_detects_cartooner(tmp_path: Path) -> None:
     assert "planner_mode: quality_campaign" in quality_text
     assert "notify_policy: never_notify_memory" in quality_text
     assert "quality_gate_doc: quality-docs/QUALITY.md" in quality_text
+    assert "instance: human" in quality_text
+    assert "instance: fast" not in quality_text
+    assert "instance: chaos" not in quality_text
 
 
 def test_install_multi_seed_template_writes_v3_profile(tmp_path: Path) -> None:
@@ -51,6 +54,8 @@ def test_install_multi_seed_template_writes_v3_profile(tmp_path: Path) -> None:
             "mini",
             "--seed-template",
             "multi-team-minimal",
+            "--seed-archetype",
+            "generic",
         ],
         capture_output=True,
         text=True,
@@ -62,10 +67,20 @@ def test_install_multi_seed_template_writes_v3_profile(tmp_path: Path) -> None:
     profile = home / ".agents" / "profiles" / "mini-profile-dynamic.toml"
     data = tomllib.loads(profile.read_text(encoding="utf-8"))
     assert data["mode"]["team_structure"] == "multi"
+    assert data["template_name"] == "clawseat-minimal"
     assert data["teams"]["core"]["planner_mode"] == "delivery"
     assert data["teams"]["quality-docs"]["notify_policy"] == "never_notify_memory"
     assert data["teams"]["quality-docs"]["quality_gate_doc"] == "quality-docs/QUALITY.md"
     assert (home / ".agents" / "tasks" / "mini" / "TEAM_OWNERSHIP.md").exists()
+    project_record = home / ".agents" / "projects" / "mini" / "project.toml"
+    project_data = tomllib.loads(project_record.read_text(encoding="utf-8"))
+    assert project_data["template_name"] == "clawseat-minimal"
+    assert project_data["engineers"] == data["seats"]
+    assert "builder" not in project_data["engineers"]
+    assert "quality-docs-patrol-human" in project_data["engineers"]
+    assert "quality-docs-patrol-fast" not in project_data["engineers"]
+    assert "quality-docs-patrol-chaos" not in project_data["engineers"]
+    assert project_data["seat_overrides"]["core-builder-core"]["tool"] == "codex"
 
 
 def test_seed_multi_team_minimal_adds_quality_docs_to_custom_teams(tmp_path: Path) -> None:
@@ -96,6 +111,8 @@ def test_seed_multi_team_minimal_adds_quality_docs_to_custom_teams(tmp_path: Pat
 
 def test_clawseat_solo_alias_dry_run_does_not_persist_seed(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    repo_root = tmp_path / "generic-app"
+    repo_root.mkdir()
     result = subprocess.run(
         [
             "bash",
@@ -104,6 +121,8 @@ def test_clawseat_solo_alias_dry_run_does_not_persist_seed(tmp_path: Path) -> No
             "solo-alias",
             "--template",
             "clawseat-solo",
+            "--repo-root",
+            str(repo_root),
             "--dry-run",
         ],
         capture_output=True,

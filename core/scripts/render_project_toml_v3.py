@@ -41,6 +41,7 @@ except ImportError:
 from proposal_validator import (  # noqa: E402
     ProposalValidationError,
     assert_all_valid,
+    normalize_review_model_fields,
     validate_proposal_dir,
 )
 
@@ -235,11 +236,14 @@ def _team_metadata(data: dict, team_name: str) -> dict[str, object]:
     else:
         metadata["planner_mode"] = str(data.get("planner_mode") or "delivery").strip()
         metadata["notify_policy"] = str(data.get("notify_policy") or "queue_drained_only").strip()
+    review_model, dedicated_reviewer, _ = normalize_review_model_fields(data)
+    if review_model:
+        metadata["review_model"] = review_model
+    if dedicated_reviewer is not None:
+        metadata["dedicated_reviewer"] = dedicated_reviewer
     for key in (
         "ownership_paths",
         "scaling_policy",
-        "review_model",
-        "dedicated_reviewer",
         "autonomous",
         "loop",
         "stop_rule",
@@ -263,11 +267,51 @@ def _team_metadata(data: dict, team_name: str) -> dict[str, object]:
     return metadata
 
 
+def render_project_record_toml_v3(profile_text: str) -> str:
+    """Render ~/.agents/projects/<project>/project.toml from a v3 profile.
+
+    The dynamic profile is the rich v3 runtime record. The project registry is
+    still consumed by older ClawSeat and Cartooner paths, so keep it in the v1
+    shape while using the v3 seat roster and overrides. This prevents stale
+    flat-template seats from resurfacing as "ungrouped" UI seats after
+    reinstall.
+    """
+    data = tomllib.loads(profile_text)
+    project = str(data.get("project_name") or "").strip()
+    repo_root = str(data.get("repo_root") or "").strip()
+    template_name = str(data.get("template_name") or "clawseat-minimal").strip()
+    seats = [str(item) for item in data.get("seats", []) if str(item).strip()]
+    seat_overrides = data.get("seat_overrides") if isinstance(data.get("seat_overrides"), dict) else {}
+    monitor_count = max(1, min(len(seats), 12))
+
+    lines: list[str] = [
+        "version = 1",
+        f"name = {_toml_quote(project)}",
+        f"repo_root = {_toml_quote(repo_root)}",
+        f"monitor_session = {_toml_quote(f'project-{project}-monitor')}",
+        f"template_name = {_toml_quote(template_name)}",
+        'window_mode = "split-2"',
+        f"monitor_max_panes = {monitor_count}",
+        "open_detail_windows = false",
+        f"engineers = {_toml_array(seats)}",
+        f"monitor_engineers = {_toml_array(seats)}",
+    ]
+    for seat_id, override in sorted(seat_overrides.items()):
+        if not isinstance(override, dict):
+            continue
+        lines.extend(["", f"[seat_overrides.{seat_id}]"])
+        for key, value in override.items():
+            lines.append(f"{key} = {_toml_value(value)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def render_project_toml_v3(
     project: str,
     proposals_dir: Path,
     repo_root: str | None = None,
     teams_filter: list[str] | None = None,
+    template_name: str = "clawseat-engineering",
 ) -> str:
     """Generate the project.toml text from approved config proposals.
 
@@ -379,7 +423,7 @@ def render_project_toml_v3(
     lines.append("")
     # All top-level scalar/array keys MUST come before any [table] section.
     lines.append(f"profile_name = {_toml_quote(f'{project}-profile-dynamic')}")
-    lines.append(f"template_name = {_toml_quote('clawseat-engineering')}")
+    lines.append(f"template_name = {_toml_quote(template_name)}")
     lines.append(f"project_name = {_toml_quote(project)}")
     if repo_root:
         lines.append(f"repo_root = {_toml_quote(repo_root)}")
@@ -447,6 +491,16 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path for generated TEAM_OWNERSHIP.md sidecar.",
     )
+    parser.add_argument(
+        "--project-record-output",
+        default=None,
+        help="Optional path for ~/.agents/projects/<project>/project.toml registry output.",
+    )
+    parser.add_argument(
+        "--template-name",
+        default="clawseat-engineering",
+        help="Template name to embed in project.toml (default: clawseat-engineering).",
+    )
     args = parser.parse_args(argv)
 
     teams_filter = None
@@ -459,6 +513,7 @@ def main(argv: list[str] | None = None) -> int:
             proposals_dir=Path(args.proposals_dir),
             repo_root=args.repo_root,
             teams_filter=teams_filter,
+            template_name=args.template_name,
         )
     except ProposalValidationError as exc:
         for v in exc.violations:
@@ -474,6 +529,11 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output).write_text(toml_text, encoding="utf-8")
         print(f"wrote {args.output}", file=sys.stderr)
+    if args.project_record_output:
+        project_record_path = Path(args.project_record_output)
+        project_record_path.parent.mkdir(parents=True, exist_ok=True)
+        project_record_path.write_text(render_project_record_toml_v3(toml_text), encoding="utf-8")
+        print(f"wrote {project_record_path}", file=sys.stderr)
     if args.ownership_output:
         profile_data = tomllib.loads(toml_text)
         ownership_text = render_team_ownership_markdown(args.project, profile_data)

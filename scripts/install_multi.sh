@@ -27,6 +27,7 @@ SEED_TEMPLATE=""
 SEED_ARCHETYPE="auto"
 SEED_FORCE=0
 SEED_TMP_DIR=""
+TEMPLATE_NAME="clawseat-minimal"
 
 usage() {
   cat <<EOF
@@ -42,6 +43,7 @@ Flags:
                       Unknown team names hard-fail.
   --seed-template t   Seed approved proposals before rendering. Supported:
                       multi-team-minimal. Used by the clawseat-solo alias.
+  --template-name n   Template name to embed in project.toml.
   --seed-archetype a  auto | generic | cartooner (default: auto).
   --seed-force        Overwrite existing approved proposals when seeding.
   --upgrade-team <t>  Incremental: re-render project.toml to include team <t>
@@ -61,6 +63,7 @@ while [ $# -gt 0 ]; do
     --seed-template) SEED_TEMPLATE="$2"; shift 2 ;;
     --seed-archetype) SEED_ARCHETYPE="$2"; shift 2 ;;
     --seed-force) SEED_FORCE=1; shift ;;
+    --template-name) TEMPLATE_NAME="$2"; shift 2 ;;
     --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --help|-h) usage 0 ;;
@@ -132,6 +135,7 @@ if [ -n "$UPGRADE_TEAM" ]; then
   echo "→ upgrade-team: rendering teams=$TEAMS_FILTER"
 fi
 PROFILE_OUT="$AGENTS_ROOT/profiles/${PROJECT}-profile-dynamic.toml"
+PROJECT_RECORD_OUT="$AGENTS_ROOT/projects/$PROJECT/project.toml"
 TEAM_OWNERSHIP_OUT="$AGENTS_ROOT/tasks/$PROJECT/TEAM_OWNERSHIP.md"
 RENDER_SCRIPT="$REPO_ROOT/core/scripts/render_project_toml_v3.py"
 VALIDATOR="$REPO_ROOT/core/lib/proposal_validator.py"
@@ -167,6 +171,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     --proposals-dir "$PROPOSALS_DIR" \
     ${REPO_ROOT_OVERRIDE:+--repo-root "$REPO_ROOT_OVERRIDE"} \
     ${TEAMS_FILTER:+--teams "$TEAMS_FILTER"} \
+    --template-name "$TEMPLATE_NAME" \
     --output -
   echo "→ dry-run; not writing"
   exit 0
@@ -178,6 +183,8 @@ mkdir -p "$(dirname "$PROFILE_OUT")"
   --proposals-dir "$PROPOSALS_DIR" \
   ${REPO_ROOT_OVERRIDE:+--repo-root "$REPO_ROOT_OVERRIDE"} \
   ${TEAMS_FILTER:+--teams "$TEAMS_FILTER"} \
+  --template-name "$TEMPLATE_NAME" \
+  --project-record-output "$PROJECT_RECORD_OUT" \
   --ownership-output "$TEAM_OWNERSHIP_OUT" \
   --output "$PROFILE_OUT"
 

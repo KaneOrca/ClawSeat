@@ -92,6 +92,9 @@ if ! plan_out="$(
   "$PYTHON_BIN" - "$REPO_ROOT" "$PROJECT" "$SEAT" "$AUTH_OVERRIDE" 2>&1 <<'PY'
 import shlex
 import sys
+import io
+from contextlib import redirect_stdout
+from types import SimpleNamespace
 
 repo_root, project, seat, auth_override = sys.argv[1:5]
 sys.path.insert(0, f"{repo_root}/core/scripts")
@@ -101,7 +104,30 @@ try:
     import agent_admin  # type: ignore
     from agent_admin_session_base import _engineer_profile_path  # type: ignore
 
-    session = agent_admin.resolve_engineer_session(seat, project_name=project)
+    def materialize_declared_session():
+        project_obj = agent_admin.load_project(project)
+        project_engineers = list(getattr(project_obj, "engineers", []) or [])
+        if project_engineers and seat not in project_engineers:
+            raise RuntimeError(
+                f"{seat} is not declared in project {project}; add the seat before restarting"
+            )
+        overrides = getattr(project_obj, "seat_overrides", {}) or {}
+        override = overrides.get(seat) or {}
+        tool = str(override.get("tool") or "claude")
+        mode = str(override.get("auth_mode") or override.get("mode") or "oauth")
+        provider = str(
+            override.get("provider")
+            or ("openai" if tool == "codex" else "google" if tool == "gemini" else "anthropic")
+        )
+        model = str(override.get("model") or "")
+        args = SimpleNamespace(engineer=seat, tool=tool, mode=mode, provider=provider)
+        with redirect_stdout(io.StringIO()):
+            return agent_admin.SWITCH_HANDLERS.create_declared_session_for_switch(project_obj, args, model)
+
+    try:
+        session = agent_admin.resolve_engineer_session(seat, project_name=project)
+    except Exception:
+        session = materialize_declared_session()
     launcher_auth = auth_override.strip() or agent_admin.SESSION_SERVICE._launcher_auth_for(session)
     if (
         not auth_override.strip()

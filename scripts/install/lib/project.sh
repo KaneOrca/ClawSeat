@@ -33,7 +33,7 @@ prompt_template_for_choice() {
   case "${1:-1}" in
     ""|1) printf '%s\n' "clawseat-engineering" ;;
     2) printf '%s\n' "clawseat-creative" ;;
-    3) printf '%s\n' "clawseat-solo" ;;
+    3) printf '%s\n' "clawseat-minimal" ;;
     *) return 1 ;;
   esac
 }
@@ -42,7 +42,7 @@ prompt_placeholder_for_template() {
   case "$1" in
     clawseat-engineering) printf '%s\n' "e.g. coding-project, webapp" ;;
     clawseat-creative)    printf '%s\n' "e.g. cartooner-project, creative-campaign" ;;
-    clawseat-solo)        printf '%s\n' "e.g. minimal-project, cartooner-front" ;;
+    clawseat-minimal|clawseat-solo) printf '%s\n' "e.g. minimal-project, cartooner-front" ;;
     *)                    printf '%s\n' "e.g. myproject, experiment-01" ;;
   esac
 }

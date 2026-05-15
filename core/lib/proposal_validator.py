@@ -194,6 +194,54 @@ def _seat_identity(seat: dict[str, Any]) -> str:
     return f"{role}-{instance}" if instance else role
 
 
+def normalize_review_model_fields(data: dict[str, Any]) -> tuple[str, bool | None, bool]:
+    """Return (review_model, dedicated_reviewer, used_legacy_mapping).
+
+    Early multi-team drafts used a nested mapping:
+
+      review_model:
+        dedicated_reviewer: false
+        planner_reviews: true
+
+    The canonical schema now stores `review_model` as an enum string plus a
+    top-level `dedicated_reviewer` boolean. Accept the old shape during
+    validation/render and normalize it so reinstalling older approved
+    proposals does not dead-end.
+    """
+    raw_review_model = data.get("review_model")
+    top_level_dedicated = data.get("dedicated_reviewer") if "dedicated_reviewer" in data else None
+    dedicated_reviewer = top_level_dedicated if isinstance(top_level_dedicated, bool) else None
+
+    if isinstance(raw_review_model, dict):
+        nested_dedicated = raw_review_model.get("dedicated_reviewer")
+        planner_reviews = raw_review_model.get("planner_reviews")
+        explicit_model = str(
+            raw_review_model.get("model")
+            or raw_review_model.get("mode")
+            or raw_review_model.get("type")
+            or ""
+        ).strip()
+
+        if explicit_model in VALID_REVIEW_MODEL:
+            review_model = explicit_model
+        elif nested_dedicated is False or planner_reviews is True:
+            review_model = "planner_owned"
+        elif nested_dedicated is True or planner_reviews is False:
+            review_model = "dedicated_reviewer"
+        else:
+            review_model = ""
+
+        if dedicated_reviewer is None and isinstance(nested_dedicated, bool):
+            dedicated_reviewer = nested_dedicated
+        if dedicated_reviewer is None and review_model == "planner_owned":
+            dedicated_reviewer = False
+        elif dedicated_reviewer is None and review_model == "dedicated_reviewer":
+            dedicated_reviewer = True
+        return review_model, dedicated_reviewer, True
+
+    return str(raw_review_model or "").strip(), dedicated_reviewer, False
+
+
 def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]:
     violations: list[str] = []
     team = str(data.get("team") or "").strip()
@@ -205,7 +253,17 @@ def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]
 
     if "autonomous" in data and not isinstance(data.get("autonomous"), bool):
         violations.append(f"{proposal_file.name}: autonomous must be a boolean")
-    review_model = str(data.get("review_model") or "").strip()
+    review_model, dedicated_reviewer, legacy_review_mapping = normalize_review_model_fields(data)
+    raw_review_model = data.get("review_model")
+    if legacy_review_mapping:
+        nested_dedicated = raw_review_model.get("dedicated_reviewer") if isinstance(raw_review_model, dict) else None
+        if "dedicated_reviewer" in raw_review_model and not isinstance(nested_dedicated, bool):
+            violations.append(f"{proposal_file.name}: review_model.dedicated_reviewer must be a boolean")
+        if not review_model:
+            violations.append(
+                f"{proposal_file.name}: legacy review_model mapping must imply "
+                "review_model='planner_owned' or 'dedicated_reviewer'"
+            )
     if review_model and review_model not in VALID_REVIEW_MODEL:
         violations.append(
             f"{proposal_file.name}: review_model={review_model!r} not in "
@@ -213,12 +271,12 @@ def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]
         )
     if "dedicated_reviewer" in data and not isinstance(data.get("dedicated_reviewer"), bool):
         violations.append(f"{proposal_file.name}: dedicated_reviewer must be a boolean")
-    if data.get("dedicated_reviewer") is False and review_model != "planner_owned":
+    if dedicated_reviewer is False and review_model != "planner_owned":
         violations.append(
             f"{proposal_file.name}: dedicated_reviewer=false requires "
             "review_model='planner_owned'"
         )
-    if review_model == "planner_owned" and data.get("dedicated_reviewer") is not False:
+    if review_model == "planner_owned" and dedicated_reviewer is not False:
         violations.append(
             f"{proposal_file.name}: review_model='planner_owned' requires "
             "dedicated_reviewer=false"
@@ -333,9 +391,10 @@ def _check_subteam_policy(
     planner_count = roles.count("planner")
     builder_count = roles.count("builder")
     reviewer_count = roles.count("reviewer")
+    review_model, dedicated_reviewer, _ = normalize_review_model_fields(data)
     planner_owned_review = (
-        str(data.get("review_model") or "").strip() == "planner_owned"
-        or data.get("dedicated_reviewer") is False
+        review_model == "planner_owned"
+        or dedicated_reviewer is False
     )
 
     if planner_count != 1:

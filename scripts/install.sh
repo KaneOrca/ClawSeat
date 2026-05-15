@@ -237,8 +237,9 @@ PY
         exit 0
         ;;
       --help|-h) cat <<'EOF'
-Usage: scripts/install.sh [--project <name>] [--mode single|multi --teams <csv>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--no-window] [--reset-harness-memory]
+Usage: scripts/install.sh [--project <name>] [--mode single|multi --teams <csv>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-minimal|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--no-window] [--reset-harness-memory]
 --mode multi --teams a,b,c   v3 multi-team flow (delegates to install_multi.sh; reads approved configs from tasks/<project>/_config-proposals/).
+--template clawseat-minimal  v3 MULTI_TEAM_MINIMAL; seeds planner+builder subteams plus quality-docs, then delegates to --mode multi.
 --template clawseat-solo     legacy alias for v3 MULTI_TEAM_MINIMAL; seeds planner+builder subteams plus quality-docs, then delegates to --mode multi.
 --repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.
 --detect-only prints one JSON environment summary and exits.
@@ -260,6 +261,7 @@ Non-TTY environments (agent-launcher sandbox, CI, detached agent sessions) must 
 Templates (--template):
   clawseat-engineering   5-seat engineering flow (memory + planner + builder + reviewer + patrol), gstack-bound
   clawseat-creative      5-seat cartooner-bound creative team (memory + writer + builder-image + builder-av + patrol)
+  clawseat-minimal       v3 MULTI_TEAM_MINIMAL (project-memory + one or more planner+builder subteams + quality-docs)
   clawseat-solo          legacy alias for MULTI_TEAM_MINIMAL (project-memory + one or more planner+builder subteams + quality-docs)
 EOF
         exit 0
@@ -275,12 +277,12 @@ EOF
     single|multi) ;;
     *) die 2 INVALID_MODE "--mode must be single | multi, got: $INSTALL_MODE" ;;
   esac
-  if [[ "$INSTALL_MODE" == "multi" && -z "$INSTALL_TEAMS" && "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-solo" ]]; then
+  if [[ "$INSTALL_MODE" == "multi" && -z "$INSTALL_TEAMS" && "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-minimal" && "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-solo" ]]; then
     die 2 INVALID_FLAGS "--mode multi requires --teams <csv> (e.g. core,content,shell)"
   fi
   case "$CLAWSEAT_TEMPLATE_NAME" in
-    clawseat-engineering|clawseat-creative|clawseat-solo) ;;
-    *) die 2 INVALID_TEMPLATE "--template must be clawseat-engineering | clawseat-creative | clawseat-solo, got: $CLAWSEAT_TEMPLATE_NAME" ;;
+    clawseat-engineering|clawseat-creative|clawseat-minimal|clawseat-solo) ;;
+    *) die 2 INVALID_TEMPLATE "--template must be clawseat-engineering | clawseat-creative | clawseat-minimal | clawseat-solo, got: $CLAWSEAT_TEMPLATE_NAME" ;;
   esac
   if [[ -n "$MEMORY_TOOL" ]]; then
     case "$MEMORY_TOOL" in
@@ -354,9 +356,13 @@ delegate_multi_team_install() {
   [[ -n "$INSTALL_TEAMS" ]] && multi_args+=("--teams" "$INSTALL_TEAMS")
   [[ "$DRY_RUN" == "1" ]] && multi_args+=("--dry-run")
   [[ -n "$REPO_ROOT_OVERRIDE" ]] && multi_args+=("--repo-root" "$REPO_ROOT_OVERRIDE")
-  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
-    multi_args+=("--seed-template" "multi-team-minimal" "--seed-archetype" "auto")
-    printf '==> clawseat-solo is a legacy alias for v3 MULTI_TEAM_MINIMAL; delegating to install_multi.sh\n' >&2
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" || "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
+    multi_args+=("--seed-template" "multi-team-minimal" "--seed-archetype" "auto" "--template-name" "clawseat-minimal")
+    if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
+      printf '==> clawseat-solo is a legacy alias for v3 MULTI_TEAM_MINIMAL; delegating to install_multi.sh\n' >&2
+    else
+      printf '==> clawseat-minimal uses v3 MULTI_TEAM_MINIMAL; delegating to install_multi.sh\n' >&2
+    fi
   else
     printf '==> v3 multi-team mode: delegating to install_multi.sh (teams=%s)\n' "$INSTALL_TEAMS" >&2
   fi
@@ -379,13 +385,13 @@ main() {
   if [[ "$INSTALL_MODE" == "multi" ]]; then
     delegate_multi_team_install "explicit --mode multi"
   fi
-  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" && "$_TEMPLATE_EXPLICIT" == "1" ]]; then
-    delegate_multi_team_install "explicit --template clawseat-solo"
+  if [[ ( "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" || "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ) && "$_TEMPLATE_EXPLICIT" == "1" ]]; then
+    delegate_multi_team_install "explicit --template $CLAWSEAT_TEMPLATE_NAME"
   fi
   self_update_check "$@"
   prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
-  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
-    delegate_multi_team_install "interactive clawseat-solo selection"
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-minimal" || "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
+    delegate_multi_team_install "interactive $CLAWSEAT_TEMPLATE_NAME selection"
   fi
   run_legacy_path_migration
   if [[ "$DRY_RUN" == "1" ]]; then
