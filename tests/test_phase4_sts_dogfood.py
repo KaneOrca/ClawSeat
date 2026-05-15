@@ -160,14 +160,62 @@ def test_install_multi_writes_team_ownership_sidecar(env_home):
 # ---------- Slice 2: brief CLI through canonical agent_admin entrypoint ----------
 
 
-def _run_agent_admin(env_home: Path, *args: str) -> subprocess.CompletedProcess:
+def _run_agent_admin(
+    env_home: Path,
+    *args: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
     """Invoke `python3 core/scripts/agent_admin.py ...` (canonical, not direct
     agent_admin_brief.py)."""
     return subprocess.run(
         ["python3", str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"), *args],
-        env={**os.environ, "CLAWSEAT_REAL_HOME": str(env_home)},
+        env={**os.environ, "CLAWSEAT_REAL_HOME": str(env_home), **(extra_env or {})},
         capture_output=True, text=True,
     )
+
+
+def _write_queue_wake_profile(
+    env_home: Path,
+    *,
+    project: str,
+    team: str = "core",
+    planner: str = "core-planner",
+) -> None:
+    profiles = env_home / ".agents" / "profiles"
+    profiles.mkdir(parents=True, exist_ok=True)
+    builder = f"{team}-builder"
+    (profiles / f"{project}-profile-dynamic.toml").write_text(
+        f'''profile_name = "{project}-profile-dynamic"
+project_name = "{project}"
+seats = ["memory", "{planner}", "{builder}"]
+
+[mode]
+team_structure = "multi"
+project_memory = "memory"
+
+[teams]
+{team} = {{ seats = ["{planner}", "{builder}"] }}
+
+[seat_roles]
+memory = "project-memory"
+{planner} = "planner"
+{builder} = "builder"
+''',
+        encoding="utf-8",
+    )
+
+
+def _write_fake_wake_script(tmp_path: Path, *, exit_code: int = 0) -> tuple[Path, Path]:
+    log_path = tmp_path / "wake.log"
+    script = tmp_path / "fake-send-and-verify.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$*\" >> \"$WAKE_LOG\"\n"
+        f"exit {exit_code}\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script, log_path
 
 
 def test_canonical_brief_queue_list_claim_show(env_home, tmp_path):
@@ -181,7 +229,8 @@ def test_canonical_brief_queue_list_claim_show(env_home, tmp_path):
                            "--project", project, "--team", team,
                            "--task-id", "STS-CORE-001",
                            "--objective", "Implement EffectExpression DSL v1.0 prototype",
-                           "--seats-required", "builder", "reviewer")
+                           "--seats-required", "builder", "reviewer",
+                           "--no-wake")
     assert r1.returncode == 0, f"queue failed: {r1.stderr}"
     assert "queued task STS-CORE-001" in r1.stdout
 
@@ -205,6 +254,62 @@ def test_canonical_brief_queue_list_claim_show(env_home, tmp_path):
     state = json.loads(r4.stdout)
     assert state["status"] == "task_claimed"
     assert state["actor"] == "planner@claude"
+
+
+def test_brief_queue_wakes_team_planner(env_home, tmp_path):
+    project = "sts-dogfood"
+    team = "core"
+    _write_queue_wake_profile(env_home, project=project, team=team)
+    send_script, wake_log = _write_fake_wake_script(tmp_path)
+
+    r = _run_agent_admin(
+        env_home,
+        "brief", "queue",
+        "--project", project, "--team", team,
+        "--task-id", "STS-CORE-002",
+        "--objective", "Wake the planner after queue append",
+        "--seats-required", "builder",
+        extra_env={
+            "CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT": str(send_script),
+            "WAKE_LOG": str(wake_log),
+        },
+    )
+
+    assert r.returncode == 0, r.stderr
+    assert "queued task STS-CORE-002" in r.stdout
+    assert "WAKE_OK target=core-planner" in r.stdout
+    sent = wake_log.read_text(encoding="utf-8")
+    assert "--project sts-dogfood core-planner" in sent
+    assert "[QUEUE-WAKE] sts-dogfood/core STS-CORE-002" in sent
+
+
+def test_brief_queue_reports_wake_failure_without_losing_task(env_home, tmp_path):
+    project = "sts-dogfood"
+    team = "core"
+    task_id = "STS-CORE-003"
+    _write_queue_wake_profile(env_home, project=project, team=team)
+    send_script, wake_log = _write_fake_wake_script(tmp_path, exit_code=42)
+
+    r = _run_agent_admin(
+        env_home,
+        "brief", "queue",
+        "--project", project, "--team", team,
+        "--task-id", task_id,
+        "--objective", "Keep durable task when wake fails",
+        "--seats-required", "builder",
+        extra_env={
+            "CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT": str(send_script),
+            "WAKE_LOG": str(wake_log),
+        },
+    )
+
+    assert r.returncode == 3
+    assert f"queued task {task_id}" in r.stdout
+    assert "HOOK_WAKE_FAILED target=core-planner" in r.stderr
+    assert (env_home / ".agents" / "tasks" / project / team / "brief" / f"{task_id}.md").exists()
+    queue_text = (env_home / ".agents" / "tasks" / project / team / "tasks.queue.jsonl").read_text(encoding="utf-8")
+    assert '"event_type": "task_created"' in queue_text
+    assert task_id in queue_text
 
 
 # ---------- Slice 3: contract publish + drift via library API ----------

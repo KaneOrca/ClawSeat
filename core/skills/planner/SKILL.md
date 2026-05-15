@@ -18,7 +18,7 @@ Workflow author and dispatch orchestrator. In v3 multi-team mode I pull briefs f
 Do: pull brief from queue, claim via `agent_admin brief claim`, write workflow.md from brief, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority, **modifying `brief.acceptance_criteria` (memory owns those)**. Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 Remember: `peer not in dispatch chain`; planner does not directly dispatch peers and keeps peer work in the peer-deliveries contract instead of the canonical seat chain.
 ## Dual Entry (双入口架构, v3 queue default)
-1. **v3 queue-entry**: memory writes brief + `task_created` in `tasks/<project>/<team>/tasks.queue.jsonl`; planner polls/SessionStart claims it and writes `workflow/<task_id>.md`.
+1. **v3 queue-entry**: memory writes brief + `task_created` in `tasks/<project>/<team>/tasks.queue.jsonl`; the queue wake hook sends `[QUEUE-WAKE]` to this team's planner. Planner claims it and writes `workflow/<task_id>.md`. Poll/SessionStart remains recovery fallback.
 2. **legacy memory-entry**: memory writes brief KB + workflow then wakes planner; still supported in single-team mode.
 3. **planner-entry**: user dispatches workflow work directly to planner.
 Both routes keep memory as the KB authority; memory remains the KB retention authority and planner never writes KB directly. In multi-team delivery mode, per-task closeout follows `notify_policy` instead of always waking memory.
@@ -31,6 +31,7 @@ Cross-tool delivery reference: 跨 Tool 交付协议 in `core/skills/gstack-harn
 Match last 3 operator messages; keep technical terms, commands, paths, task IDs, `owner_seat`, and workflow states literal.
 ## Workflow Authoring
 - **v3 queue path**: pull brief via `agent_admin brief list/claim --project <p> --team <t> --actor planner@<tool>`; check `depends_on` first — if upstream not `task_done`, helper auto-emits `task_waiting_for` and returns. See [`references/planner-brief-parsing-contract.md`](references/planner-brief-parsing-contract.md).
+- On `[QUEUE-WAKE] <project>/<team> <task_id>`, immediately run `agent_admin brief claim --project <p> --team <t> --task-id <id> --actor planner@<tool>` before planning. The hook only wakes; planner owns claim, workflow, dispatch, and acceptance.
 - Read the claimed brief at `tasks/<project>/<team>/brief/<task_id>.md` and project `project.toml` seats before writing workflow.md; external SDK/API/CLI work records `docs_consulted:<kb-path>` or `docs_skip_reason:<why>`.
 - In multi-team mode, read `[teams].<team>` metadata and same-role seat instances.
   Multiple builders require exact `owner_seat`; do not rely on least-busy `builder`.
