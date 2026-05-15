@@ -28,6 +28,7 @@ HARNESS_SCRIPTS_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "scrip
 TOOLS_SHARED_ROOT = REPO_ROOT / "core" / "templates" / "shared" / "TOOLS"
 
 _SPECIALIST_ROLES = frozenset({"builder", "reviewer", "patrol", "designer"})
+DEFAULT_QUALITY_GATE_DOC = "quality-docs/QUALITY.md"
 
 # Ensure `core/` is importable so bare `from resolve import ...` resolves
 # regardless of how this module is invoked (direct script vs import).
@@ -123,7 +124,7 @@ def render_protocol_reminder_lines(
             "1. **/clear before dispatch**: G1 closure / G2 context-relatedness / G3 idle; 三 gate 全过即发，先 /clear 再 dispatch；见 `core/skills/planner/SKILL.md:57`。",
             "2. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",
             "3. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
-            "4. **Post-DELIVERY relay memory**: same turn -> read DELIVERY -> verdict -> planner/DELIVERY.md -> send-and-verify memory",
+            "4. **Post-DELIVERY closeout**: read DELIVERY -> verdict -> planner/DELIVERY.md; in multi-team delivery mode notify memory only when queue is drained",
             "5. **Fan-out**: 2+ disjoint sub-goals -> workflow.md mode: parallel_subagents",
             "6. **Compact not Clear**: emit [COMPACT-REQUESTED] to preserve workflow.md state",
         ])
@@ -187,6 +188,18 @@ def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[s
     )
     if include_team_ownership:
         lines.append(f"{next_index}. `{tasks_root}/TEAM_OWNERSHIP.md`")
+        next_index += 1
+    quality_gate_path = ""
+    if engineer.role in {"memory", "project-memory", "memory-oracle"} and _is_multi_team_project(project.name):
+        quality_gate_path = _quality_gate_path_for_project(project.name, tasks_root)
+    elif engineer.role in {"planner", "planner-dispatcher"}:
+        quality_gate_path = _quality_gate_path_for_seat(
+            project.name,
+            str(getattr(session, "engineer_id", "") or ""),
+            tasks_root,
+        )
+    if quality_gate_path:
+        lines.append(f"{next_index}. `{quality_gate_path}`")
         next_index += 1
     if engineer.role in {"memory", "project-memory", "memory-oracle", "planner", "planner-dispatcher"}:
         lines.append(f"{next_index}. `{status_doc}`")
@@ -360,6 +373,73 @@ def _is_multi_team_project(project_name: str) -> bool:
     return isinstance(mode, dict) and str(mode.get("team_structure") or "single") == "multi"
 
 
+def _team_type_for(team_name: str, team_cfg: dict[str, Any]) -> str:
+    explicit = str(team_cfg.get("team_type") or "").strip()
+    if explicit:
+        return explicit
+    if team_name == "quality-docs" or bool(team_cfg.get("autonomous")):
+        return "quality-docs"
+    return "subteam"
+
+
+def _planner_mode_for(team_name: str, team_cfg: dict[str, Any]) -> str:
+    explicit = str(team_cfg.get("planner_mode") or "").strip()
+    if explicit:
+        return explicit
+    return "quality_campaign" if _team_type_for(team_name, team_cfg) == "quality-docs" else "delivery"
+
+
+def _notify_policy_for(team_name: str, team_cfg: dict[str, Any]) -> str:
+    explicit = str(team_cfg.get("notify_policy") or "").strip()
+    if explicit:
+        return explicit
+    return "never_notify_memory" if _team_type_for(team_name, team_cfg) == "quality-docs" else "queue_drained_only"
+
+
+def _quality_gate_doc_for(team_name: str, team_cfg: dict[str, Any]) -> str:
+    if _team_type_for(team_name, team_cfg) != "quality-docs":
+        return ""
+    return str(team_cfg.get("quality_gate_doc") or DEFAULT_QUALITY_GATE_DOC).strip()
+
+
+def _resolve_project_doc_path(tasks_root: str, doc_path: str) -> str:
+    if not doc_path:
+        return ""
+    if doc_path.startswith("/"):
+        return doc_path
+    return f"{tasks_root}/{doc_path.lstrip('/')}"
+
+
+def _quality_gate_path_for_project(project_name: str, tasks_root: str) -> str:
+    loaded = _load_dynamic_profile_data(project_name)
+    if loaded is None:
+        return ""
+    _profile_path, profile_data = loaded
+    teams = profile_data.get("teams") or {}
+    if not isinstance(teams, dict):
+        return ""
+    for team_name, team_cfg in teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        doc_path = _quality_gate_doc_for(str(team_name), team_cfg)
+        if doc_path:
+            return _resolve_project_doc_path(tasks_root, doc_path)
+    return ""
+
+
+def _quality_gate_path_for_seat(project_name: str, seat_id: str, tasks_root: str) -> str:
+    loaded = _load_dynamic_profile_data(project_name)
+    if loaded is None:
+        return ""
+    _profile_path, profile_data = loaded
+    team_info = _team_for_profile_seat(profile_data, seat_id)
+    if team_info is None:
+        return ""
+    team_name, team_cfg = team_info
+    doc_path = _quality_gate_doc_for(team_name, team_cfg)
+    return _resolve_project_doc_path(tasks_root, doc_path) if doc_path else ""
+
+
 def _render_runtime_fragment(override: dict[str, Any]) -> str:
     parts: list[str] = []
     for key in ("tool", "auth_mode", "provider", "model"):
@@ -389,6 +469,7 @@ def render_multi_team_project_ownership_lines(session: Any, project: Any) -> lis
         overrides = {}
 
     tasks_root = _resolve_tasks_root(project)
+    quality_gate_path = _quality_gate_path_for_project(project.name, tasks_root)
     lines = [
         "## Project Team Ownership",
         "",
@@ -397,19 +478,18 @@ def render_multi_team_project_ownership_lines(session: Any, project: Any) -> lis
         f"- Project memory: `{seat_id}`",
         f"- Ownership summary doc: `{tasks_root}/TEAM_OWNERSHIP.md`",
         "- Memory owns stable roster/ownership facts; team planners own per-task workflows.",
-        "",
-        "## Teams",
-        "",
     ]
+    if quality_gate_path:
+        lines.append(f"- Memory acceptance preflight: read quality gate `{quality_gate_path}` before commit/push.")
+    lines.extend(["", "## Teams", ""])
     for team_name, team_cfg in teams.items():
         if not isinstance(team_cfg, dict):
             continue
-        inferred_team_type = (
-            "quality-docs"
-            if str(team_name) == "quality-docs" or bool(team_cfg.get("autonomous"))
-            else "subteam"
-        )
-        team_type = str(team_cfg.get("team_type") or inferred_team_type).strip() or inferred_team_type
+        team_name_str = str(team_name)
+        team_type = _team_type_for(team_name_str, team_cfg)
+        planner_mode = _planner_mode_for(team_name_str, team_cfg)
+        notify_policy = _notify_policy_for(team_name_str, team_cfg)
+        quality_gate_doc = _quality_gate_doc_for(team_name_str, team_cfg)
         team_seats = [str(item) for item in team_cfg.get("seats") or []]
         ownership_paths = [
             str(item).strip()
@@ -425,7 +505,11 @@ def render_multi_team_project_ownership_lines(session: Any, project: Any) -> lis
             purpose = str(override.get("purpose") or "").strip()
             purpose_suffix = f" ({purpose})" if purpose else ""
             seat_fragments.append(f"{label}: `{managed_seat}`{purpose_suffix}")
-        team_bits = [f"type `{team_type}`"]
+        team_bits = [
+            f"type `{team_type}`",
+            f"planner_mode `{planner_mode}`",
+            f"notify_policy `{notify_policy}`",
+        ]
         if team_cfg.get("autonomous"):
             team_bits.append("autonomous")
         review_model = str(team_cfg.get("review_model") or "").strip()
@@ -436,11 +520,13 @@ def render_multi_team_project_ownership_lines(session: Any, project: Any) -> lis
         else:
             team_bits.append("paths not declared")
         lines.append(f"- `{team_name}`: " + "; ".join(team_bits))
+        if quality_gate_doc:
+            lines.append(f"  Quality gate: `{quality_gate_doc}`")
         if seat_fragments:
             lines.append("  Seats: " + "; ".join(seat_fragments))
         if team_type == "quality-docs":
             lines.append(
-                "  Boundary: continuous QA/docs only; no product code edits; findings route back to owning teams."
+                "  Boundary: continuous QA/docs only; no product code edits; findings are recorded for memory's pull-based gate."
             )
     return lines
 
@@ -455,6 +541,11 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
     if team_info is None:
         return []
     team_name, team_cfg = team_info
+    team_type = _team_type_for(team_name, team_cfg)
+    planner_mode = _planner_mode_for(team_name, team_cfg)
+    notify_policy = _notify_policy_for(team_name, team_cfg)
+    quality_gate_doc = _quality_gate_doc_for(team_name, team_cfg)
+    tasks_root = _resolve_tasks_root(project)
     team_seats = [str(item) for item in team_cfg.get("seats") or []]
     overrides = profile_data.get("seat_overrides") or {}
     if not isinstance(overrides, dict):
@@ -476,8 +567,13 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
         f"- Project mode: `multi`",
         f"- Your team: `{team_name}`",
         f"- Your seat: `{seat_id}` (`{current_role or 'role not declared'}`)",
+        f"- Team type: `{team_type}`",
+        f"- Planner mode: `{planner_mode}`",
+        f"- Notify policy: `{notify_policy}`",
         f"- Team queue: `~/.agents/tasks/{project.name}/{team_name}/tasks.queue.jsonl`",
     ]
+    if quality_gate_doc:
+        lines.append(f"- Quality gate doc: `{_resolve_project_doc_path(tasks_root, quality_gate_doc)}`")
     if ownership_paths:
         lines.append(
             "- Team ownership paths: "
@@ -518,7 +614,37 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
         marker = " (you)" if managed_seat == seat_id else ""
         lines.append(f"- `{managed_seat}`{marker}: " + "; ".join(details))
 
-    if current_role in {"planner", "planner-dispatcher"}:
+    if current_role in {"planner", "planner-dispatcher"} and planner_mode == "quality_campaign":
+        patrols = [
+            managed_seat
+            for managed_seat in team_seats
+            if _role_for_profile_seat(profile_data, managed_seat) == "patrol"
+        ]
+        lines.extend(["", "## Quality Campaign Rules", ""])
+        lines.extend(
+            [
+                "- Do not notify memory directly; update `QUALITY.md`, findings, campaigns, missions, and evidence instead.",
+                "- Design high-frequency patrol missions from dev queues, workflow docs, deliveries, git diff, flaky history, and open risks.",
+                "- After a clean mission, raise difficulty; after three clean rounds for one patrol/campaign, switch that patrol to a new attack surface.",
+                "- Research likely root cause for every finding, but do not edit product implementation or directly command dev teams.",
+                "- Memory pulls this quality gate before final acceptance, commit, or push.",
+            ]
+        )
+        if patrols:
+            lines.append("- Patrol seats: " + ", ".join(f"`{seat}`" for seat in patrols))
+        else:
+            lines.append("- No patrol seats are declared; ask memory for roster repair.")
+    elif current_role in {"planner", "planner-dispatcher"}:
+        lines.extend(["", "## Dev Planner Dispatch Rules", ""])
+        lines.extend(
+            [
+                "- Research the task, define verification/checklist first, then dispatch implementation to the exact owning builder seat.",
+                "- Prefer writing or naming acceptance tests before builder implementation; builder must not weaken planner acceptance tests.",
+                "- When builder delivery fails, send concrete rework to that builder until acceptance passes or the rework threshold is hit.",
+                "- After task PASS, append `task_done`, claim/continue the next queued task, and do not notify memory per task.",
+                "- Notify memory only when this team queue is drained or an exception needs memory/operator authority.",
+            ]
+        )
         lines.extend(["", "## Builder Assignment Rules", ""])
         if builders:
             lines.append(
@@ -1166,6 +1292,9 @@ def workspace_contract_payload(
         roster = Path(resolved_tasks_root) / "FE-003-SPECIALIST-ROSTER.md"
         if roster.exists():
             source_paths.append(str(roster))
+    for path in read_first_items:
+        if path not in source_paths:
+            source_paths.append(path)
     project_seat_map: list[str] = []
     for line in render_project_seat_map_lines(
         session,

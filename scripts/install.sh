@@ -239,6 +239,7 @@ PY
       --help|-h) cat <<'EOF'
 Usage: scripts/install.sh [--project <name>] [--mode single|multi --teams <csv>] [--repo-root <path>] [--force-repo-root <path>] [--template clawseat-engineering|clawseat-creative|clawseat-solo] [--memory-tool claude|codex|gemini] [--memory-model <model>] [--provider <mode|n>] [--all-api-provider <mode>] [--base-url <url> --api-key <key> [--model <name>]] [--provision-keys] [--reinstall|--force] [--uninstall <project>] [--enable-auto-patrol] [--load-all-skills] [--detect-only] [--dry-run] [--no-window] [--reset-harness-memory]
 --mode multi --teams a,b,c   v3 multi-team flow (delegates to install_multi.sh; reads approved configs from tasks/<project>/_config-proposals/).
+--template clawseat-solo     legacy alias for v3 MULTI_TEAM_MINIMAL; seeds planner+builder subteams plus quality-docs, then delegates to --mode multi.
 --repo-root sets the target project repo; --force-repo-root overrides the ClawSeat install code root.
 --detect-only prints one JSON environment summary and exits.
 --no-window skips native iTerm workers/memories windows; tmux seats still launch.
@@ -259,7 +260,7 @@ Non-TTY environments (agent-launcher sandbox, CI, detached agent sessions) must 
 Templates (--template):
   clawseat-engineering   5-seat engineering flow (memory + planner + builder + reviewer + patrol), gstack-bound
   clawseat-creative      5-seat cartooner-bound creative team (memory + writer + builder-image + builder-av + patrol)
-  clawseat-solo          3-seat minimal flow (memory + builder + planner), all OAuth
+  clawseat-solo          legacy alias for MULTI_TEAM_MINIMAL (project-memory + one or more planner+builder subteams + quality-docs)
 EOF
         exit 0
         ;;
@@ -274,7 +275,7 @@ EOF
     single|multi) ;;
     *) die 2 INVALID_MODE "--mode must be single | multi, got: $INSTALL_MODE" ;;
   esac
-  if [[ "$INSTALL_MODE" == "multi" && -z "$INSTALL_TEAMS" ]]; then
+  if [[ "$INSTALL_MODE" == "multi" && -z "$INSTALL_TEAMS" && "$CLAWSEAT_TEMPLATE_NAME" != "clawseat-solo" ]]; then
     die 2 INVALID_FLAGS "--mode multi requires --teams <csv> (e.g. core,content,shell)"
   fi
   case "$CLAWSEAT_TEMPLATE_NAME" in
@@ -345,30 +346,47 @@ compute_project_paths() {
   BOOTSTRAP_TEMPLATE_PATH="$BOOTSTRAP_TEMPLATE_DIR/template.toml"
 }
 
+delegate_multi_team_install() {
+  local reason="${1:-multi}"
+  local multi_script="$REPO_ROOT/scripts/install_multi.sh"
+  [[ -x "$multi_script" ]] || die 2 MISSING_SCRIPT "install_multi.sh not found at $multi_script"
+  local multi_args=("--project" "$PROJECT")
+  [[ -n "$INSTALL_TEAMS" ]] && multi_args+=("--teams" "$INSTALL_TEAMS")
+  [[ "$DRY_RUN" == "1" ]] && multi_args+=("--dry-run")
+  [[ -n "$REPO_ROOT_OVERRIDE" ]] && multi_args+=("--repo-root" "$REPO_ROOT_OVERRIDE")
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
+    multi_args+=("--seed-template" "multi-team-minimal" "--seed-archetype" "auto")
+    printf '==> clawseat-solo is a legacy alias for v3 MULTI_TEAM_MINIMAL; delegating to install_multi.sh\n' >&2
+  else
+    printf '==> v3 multi-team mode: delegating to install_multi.sh (teams=%s)\n' "$INSTALL_TEAMS" >&2
+  fi
+  [[ -n "$reason" ]] && printf '==> multi-team delegate reason: %s\n' "$reason" >&2
+  exec "$multi_script" "${multi_args[@]}"
+}
+
 main() {
   parse_args "$@"
   if [[ "$DETECT_ONLY" == "1" ]]; then
     detect_all
     exit 0
   fi
-  # v3 multi-team mode (Phase 1 minimal bridge — spec §12)
-  # Delegates to install_multi.sh; legacy single flow runs only when --mode=single (default).
-  if [[ "$INSTALL_MODE" == "multi" ]]; then
-    local multi_script="$SCRIPT_DIR/install_multi.sh"
-    [[ -x "$multi_script" ]] || die 2 MISSING_SCRIPT "install_multi.sh not found at $multi_script"
-    local multi_args=("--project" "$PROJECT")
-    [[ -n "$INSTALL_TEAMS" ]] && multi_args+=("--teams" "$INSTALL_TEAMS")
-    [[ "$DRY_RUN" == "1" ]] && multi_args+=("--dry-run")
-    [[ -n "$REPO_ROOT_OVERRIDE" ]] && multi_args+=("--repo-root" "$REPO_ROOT_OVERRIDE")
-    printf '==> v3 multi-team mode: delegating to install_multi.sh (teams=%s)\n' "$INSTALL_TEAMS" >&2
-    exec "$multi_script" "${multi_args[@]}"
-  fi
-  self_update_check "$@"
   if [[ -n "$UNINSTALL_PROJECT" ]]; then
     uninstall_project_registry_entry "$UNINSTALL_PROJECT"
     exit 0
   fi
+  # v3 multi-team mode (Phase 1 minimal bridge — spec §12)
+  # Delegates to install_multi.sh; legacy single flow runs only when --mode=single (default).
+  if [[ "$INSTALL_MODE" == "multi" ]]; then
+    delegate_multi_team_install "explicit --mode multi"
+  fi
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" && "$_TEMPLATE_EXPLICIT" == "1" ]]; then
+    delegate_multi_team_install "explicit --template clawseat-solo"
+  fi
+  self_update_check "$@"
   prompt_kind_first_flow; resolve_pending_seats; normalize_provider_choice
+  if [[ "$CLAWSEAT_TEMPLATE_NAME" == "clawseat-solo" ]]; then
+    delegate_multi_team_install "interactive clawseat-solo selection"
+  fi
   run_legacy_path_migration
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '[dry-run] CLAWSEAT_TEMPLATE_NAME=%s\n' "$CLAWSEAT_TEMPLATE_NAME" >&2

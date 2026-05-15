@@ -87,16 +87,27 @@ agent_admin brief done --project <p> --team <t> --task-id <id> --actor planner@<
 
 Memory consumes the queue state; it does not hand-edit queue events.
 
-## 5. Verdict + chain end
+## 5. Verdict + closeout policy
 
 Planner waits for:
 - mechanical verdict (immediate from executor exit code)
 - reviewer relay (existing 7-step loop; reviewer writes DELIVERY verdict)
 - operator answer (operator writes `__operator.json`)
 
-Only when all three resolve to PASS does planner relay chain-end to memory
-via `complete_handoff.py`. Any FAIL → planner emits `task_failed` event
-into queue and relays failure to memory.
+Only when all three resolve to PASS does planner close the brief:
+
+- `planner_mode=delivery` + `notify_policy=queue_drained_only`: append/verify
+  `task_done`, then claim the next team task. Do not notify memory per task.
+  Notify memory only when the team queue is drained or the planner is blocked by
+  memory/user authority. Memory owns final acceptance and commit/push.
+- `planner_mode=quality_campaign` + `notify_policy=never_notify_memory`:
+  update `quality-docs/QUALITY.md`, findings, missions, runs, and evidence;
+  never notify memory directly. Memory pulls the quality gate when awakened.
+- single-team / legacy / direct planner-entry: relay chain-end to memory via
+  `complete_handoff.py`.
+
+Any FAIL → planner emits `task_failed` into the queue and keeps the work inside
+the team loop unless it needs memory/user authority.
 
 ## 6. Forbidden modifications
 

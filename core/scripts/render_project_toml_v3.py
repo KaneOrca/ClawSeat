@@ -45,6 +45,7 @@ from proposal_validator import (  # noqa: E402
 )
 
 PROJECT_MEMORY_SEAT = "memory"
+DEFAULT_QUALITY_GATE_DOC = "quality-docs/QUALITY.md"
 
 
 def _load_yaml_proposal(path: Path) -> dict:
@@ -149,6 +150,9 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
         seats = _md_value_list(raw_team.get("seats"))
         ownership_paths = _md_value_list(raw_team.get("ownership_paths"))
         review_model = str(raw_team.get("review_model") or "").strip()
+        planner_mode = str(raw_team.get("planner_mode") or "").strip()
+        notify_policy = str(raw_team.get("notify_policy") or "").strip()
+        quality_gate_doc = str(raw_team.get("quality_gate_doc") or "").strip()
         autonomous = bool(raw_team.get("autonomous")) if "autonomous" in raw_team else False
         lines.extend([f"## {team_name}"])
         if team_type == "quality-docs":
@@ -162,6 +166,12 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
             lines.append("Autonomy: `true`; planner owns campaign design and patrol scheduling.")
         if review_model:
             lines.append(f"Review model: `{review_model}`")
+        if planner_mode:
+            lines.append(f"Planner mode: `{planner_mode}`")
+        if notify_policy:
+            lines.append(f"Notify policy: `{notify_policy}`")
+        if quality_gate_doc:
+            lines.append(f"Quality gate doc: `{quality_gate_doc}`")
         lines.append("Ownership paths:")
         if ownership_paths:
             lines.extend(f"- `{path}`" for path in ownership_paths)
@@ -186,7 +196,7 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
             lines.extend(
                 [
                     "- Does not edit product code or own implementation fixes.",
-                    "- Findings are assigned back to the owning development team with reproduction evidence.",
+                    "- Findings are recorded in QUALITY.md/findings and pulled by memory during acceptance.",
                     "- Patrols run assigned missions and report to `quality-docs-planner`.",
                 ]
             )
@@ -209,10 +219,23 @@ def _seat_id_for(team_name: str, seat: dict) -> str:
     return f"{team_name}-{role}-{instance}" if instance else f"{team_name}-{role}"
 
 
-def _team_metadata(data: dict) -> dict[str, object]:
-    metadata: dict[str, object] = {}
+def _team_metadata(data: dict, team_name: str) -> dict[str, object]:
+    explicit_team_type = str(data.get("team_type") or "").strip()
+    inferred_team_type = (
+        "quality-docs"
+        if team_name == "quality-docs" or bool(data.get("autonomous"))
+        else "subteam"
+    )
+    team_type = explicit_team_type or inferred_team_type
+    metadata: dict[str, object] = {"team_type": team_type}
+    if team_type == "quality-docs":
+        metadata["planner_mode"] = str(data.get("planner_mode") or "quality_campaign").strip()
+        metadata["notify_policy"] = str(data.get("notify_policy") or "never_notify_memory").strip()
+        metadata["quality_gate_doc"] = str(data.get("quality_gate_doc") or DEFAULT_QUALITY_GATE_DOC).strip()
+    else:
+        metadata["planner_mode"] = str(data.get("planner_mode") or "delivery").strip()
+        metadata["notify_policy"] = str(data.get("notify_policy") or "queue_drained_only").strip()
     for key in (
-        "team_type",
         "ownership_paths",
         "scaling_policy",
         "review_model",
@@ -220,8 +243,11 @@ def _team_metadata(data: dict) -> dict[str, object]:
         "autonomous",
         "loop",
         "stop_rule",
+        "quality_gate_doc",
     ):
         if key not in data:
+            continue
+        if key == "quality_gate_doc" and team_type != "quality-docs":
             continue
         value = data.get(key)
         if key == "autonomous":
@@ -330,7 +356,7 @@ def render_project_toml_v3(
             seat_overrides[seat_id] = override
         teams[team_name] = {
             "seats": team_seat_ids,
-            "metadata": _team_metadata(data),
+            "metadata": _team_metadata(data, team_name),
         }
 
     # Sanity: no duplicate seat ids across teams

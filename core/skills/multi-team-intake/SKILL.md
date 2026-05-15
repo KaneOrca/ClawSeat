@@ -51,6 +51,9 @@ only then rename or rewrite to `*__approved.yaml`.
 Memory designs the project group and briefs. Team planners design workflows.
 Memory does not write `workflow.md` and does not dispatch directly to builders.
 There is one project-level memory. Subteams never include memory seats.
+The old `clawseat-solo` idea is now this minimal subteam archetype: a
+`planner + builder` unit managed by the project-level memory, not a separate
+single-mode project.
 
 After the operator approves adding a seat or subteam to an already-installed
 project, switch to `clawseat-roster-admin`; do not edit project/profile TOML
@@ -70,6 +73,8 @@ Subteams are execution units:
 
 ```yaml
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 review_model: dedicated_reviewer
 dedicated_reviewer: true
 scaling_policy:
@@ -93,6 +98,10 @@ Rules:
    instead.
 7. Each subteam should declare `ownership_paths` so planner can route by module
    boundary.
+8. Dev planners do not notify memory per task. They research, write or name tests
+   or acceptance checks when practical, dispatch exact builders, review delivery,
+   loop rework, append `task_done`, and only wake memory when the team queue is
+   drained or an exception needs memory/user authority.
 
 ## Generic Topology Heuristic
 
@@ -112,7 +121,8 @@ Do not force all five. A small library might only need `runtime-platform` and
 ## Quality-Docs Rule
 
 `quality-docs` is autonomous. Its planner decides when and how to test; memory
-does not decide whether testing is needed. The team runs continuously:
+does not decide whether testing is needed. The team runs continuously and never
+notifies memory directly; memory pulls the gate doc when awakened:
 
 ```text
 quality-docs-planner
@@ -156,8 +166,9 @@ Planner loop:
 4. If a mission finds nothing, raise the next mission's difficulty.
 5. A patrol leaves one campaign only after three consecutive clean rounds for
    that campaign; then planner switches it to a new attack surface.
-6. Findings are assigned back to the owning development team for fixes. Patrols
-   do not edit product code.
+6. Findings are recorded in `quality-docs/QUALITY.md` and
+   `quality-docs/findings/<id>.md` with likely owner/root cause. Patrols do not
+   edit product code or directly command development teams.
 
 ## Proposal Fields
 
@@ -168,6 +179,8 @@ project: <project>
 team: <team>
 proposal_status: proposed
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - src/**
 scaling_policy:
@@ -190,6 +203,9 @@ Only autonomous teams such as `quality-docs` add:
 
 ```yaml
 team_type: quality-docs
+planner_mode: quality_campaign
+notify_policy: never_notify_memory
+quality_gate_doc: quality-docs/QUALITY.md
 autonomous: true
 loop: continuous
 stop_rule: campaign_clean_streak_3

@@ -47,6 +47,21 @@
               "enum": ["subteam", "quality-docs"],
               "description": "Template-level team kind. Project memory is not a subteam seat."
             },
+            "planner_mode": {
+              "type": "string",
+              "enum": ["delivery", "quality_campaign"],
+              "description": "Planner operating loop. delivery planners own dev workflow; quality_campaign planners own continuous QA campaigns."
+            },
+            "notify_policy": {
+              "type": "string",
+              "enum": ["queue_drained_only", "never_notify_memory"],
+              "description": "Whether planner wakes memory per task or only at a terminal queue/gate condition."
+            },
+            "quality_gate_doc": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Project-relative quality gate document, normally quality-docs/QUALITY.md."
+            },
             "ownership_paths": {
               "type": "array",
               "items": {"type": "string"},
@@ -104,6 +119,30 @@
               "then": {
                 "properties": {"dedicated_reviewer": {"const": false}},
                 "required": ["dedicated_reviewer"]
+              }
+            },
+            {
+              "if": {
+                "properties": {"team_type": {"const": "subteam"}},
+                "required": ["team_type"]
+              },
+              "then": {
+                "properties": {
+                  "planner_mode": {"const": "delivery"},
+                  "notify_policy": {"const": "queue_drained_only"}
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {"team_type": {"const": "quality-docs"}},
+                "required": ["team_type"]
+              },
+              "then": {
+                "properties": {
+                  "planner_mode": {"const": "quality_campaign"},
+                  "notify_policy": {"const": "never_notify_memory"}
+                }
               }
             }
           ]

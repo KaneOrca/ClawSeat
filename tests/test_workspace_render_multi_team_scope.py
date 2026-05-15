@@ -37,8 +37,8 @@ team_structure = "multi"
 project_memory = "memory"
 
 [teams]
-cartooner-front = { seats = ["cartooner-front-planner", "cartooner-front-builder-ui", "cartooner-front-builder-state", "cartooner-front-reviewer"], team_type = "subteam", ownership_paths = ["apps/web/src/components/**", "apps/web/src/store/**"], scaling_policy = { max_builders = 3, reviewer_required_when_builders_gte = 2, overflow_action = "propose_new_subteam", reviewer_fallback = "planner" } }
-quality-docs = { seats = ["quality-docs-planner", "quality-docs-patrol-fast", "quality-docs-patrol-human", "quality-docs-patrol-chaos"], team_type = "quality-docs", autonomous = true, loop = "continuous", stop_rule = "campaign_clean_streak_3" }
+cartooner-front = { seats = ["cartooner-front-planner", "cartooner-front-builder-ui", "cartooner-front-builder-state", "cartooner-front-reviewer"], team_type = "subteam", planner_mode = "delivery", notify_policy = "queue_drained_only", ownership_paths = ["apps/web/src/components/**", "apps/web/src/store/**"], scaling_policy = { max_builders = 3, reviewer_required_when_builders_gte = 2, overflow_action = "propose_new_subteam", reviewer_fallback = "planner" } }
+quality-docs = { seats = ["quality-docs-planner", "quality-docs-patrol-fast", "quality-docs-patrol-human", "quality-docs-patrol-chaos"], team_type = "quality-docs", planner_mode = "quality_campaign", notify_policy = "never_notify_memory", quality_gate_doc = "quality-docs/QUALITY.md", autonomous = true, loop = "continuous", stop_rule = "campaign_clean_streak_3" }
 
 [seat_roles]
 memory = "project-memory"
@@ -132,12 +132,16 @@ def test_multi_team_planner_workspace_shows_team_scope(
     assert f"- Profile: `{profile}`" in text
     assert "- Your team: `cartooner-front`" in text
     assert "- Your seat: `cartooner-front-planner` (`planner`)" in text
+    assert "- Planner mode: `delivery`" in text
+    assert "- Notify policy: `queue_drained_only`" in text
     assert "`apps/web/src/components/**`" in text
     assert "`apps/web/src/store/**`" in text
     assert "`cartooner-front-builder-ui`" in text
     assert "capabilities: `react`, `tailwind`, `electron-ui`" in text
     assert "`cartooner-front-builder-state`" in text
     assert "## Builder Assignment Rules" in text
+    assert "## Dev Planner Dispatch Rules" in text
+    assert "do not notify memory per task" in text
     assert "never dispatch to bare role `builder`" in text
     assert "exact `owner_seat`" in text
     assert "Reviewer gate: `cartooner-front-reviewer`" in text
@@ -227,15 +231,20 @@ def test_multi_team_memory_workspace_shows_project_ownership(
     assert "## Project Team Ownership" in text
     assert "- Project memory: `memory`" in text
     assert "TEAM_OWNERSHIP.md" in text
+    assert "QUALITY.md" in text
+    assert "Memory acceptance preflight" in text
     assert "`cartooner-front`" in text
     assert "`quality-docs`" in text
     assert "continuous QA/docs only" in text
+    assert "never_notify_memory" in text
     assert "quality-docs-patrol-chaos" in text
     assert payload["project_seat_map"]
     assert any("quality-docs" in item for item in payload["project_seat_map"])
     assert any("quality-docs-patrol-chaos" in item for item in payload["project_seat_map"])
     assert any("TEAM_OWNERSHIP.md" in item for item in payload["read_first"])
     assert any("TEAM_OWNERSHIP.md" in item for item in payload["source_paths"])
+    assert any("quality-docs/QUALITY.md" in item for item in payload["read_first"])
+    assert any("quality-docs/QUALITY.md" in item for item in payload["source_paths"])
 
 
 def test_team_ownership_read_first_is_multi_team_only(
@@ -265,3 +274,28 @@ memory = "project-memory"
 
     assert "STATUS.md" in text
     assert "TEAM_OWNERSHIP.md" not in text
+
+
+def test_quality_docs_planner_workspace_uses_campaign_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    _write_multi_profile(home)
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(engineer_id="quality-docs-planner")
+    project = SimpleNamespace(name="cartooner", engineers=[], repo_root="/repo/cartooner")
+    engineer = SimpleNamespace(role="planner")
+
+    text = "\n".join(workspace.render_project_seat_map_lines(session, project, engineer))
+    read_first = "\n".join(workspace.render_read_first_lines(session, project, engineer))
+
+    assert "- Your team: `quality-docs`" in text
+    assert "- Planner mode: `quality_campaign`" in text
+    assert "- Notify policy: `never_notify_memory`" in text
+    assert "## Quality Campaign Rules" in text
+    assert "Do not notify memory directly" in text
+    assert "`quality-docs-patrol-fast`" in text
+    assert "quality-docs/QUALITY.md" in read_first

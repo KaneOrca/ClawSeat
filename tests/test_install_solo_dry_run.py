@@ -9,8 +9,8 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 
 
-def test_solo_dry_run_passes(tmp_path: Path) -> None:
-    """install.sh --dry-run with clawseat-solo template exits 0."""
+def test_solo_dry_run_uses_multi_team_minimal(tmp_path: Path) -> None:
+    """clawseat-solo is a legacy alias for the v3 multi-team minimal render."""
     home = tmp_path / "home"
     home.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
@@ -37,5 +37,8 @@ def test_solo_dry_run_passes(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, f"dry-run failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     output = result.stdout + result.stderr
-    assert "CLAWSEAT_TEMPLATE_NAME=clawseat-solo" in output
-    assert "PENDING_SEATS=(builder planner)" in output
+    assert "legacy alias for v3 MULTI_TEAM_MINIMAL" in output
+    assert 'team_structure = "multi"' in output
+    assert "core-planner" in output
+    assert "core-builder-core" in output
+    assert "quality-docs-planner" in output

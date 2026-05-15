@@ -15,6 +15,10 @@ project: {project}
 team: quality-docs
 proposal_status: approved
 operator_approved_ts: 2026-05-14T00:00:00+00:00
+team_type: quality-docs
+planner_mode: quality_campaign
+notify_policy: never_notify_memory
+quality_gate_doc: quality-docs/QUALITY.md
 autonomous: true
 loop: continuous
 stop_rule: campaign_clean_streak_3
@@ -54,6 +58,8 @@ team: cartooner-front
 proposal_status: approved
 operator_approved_ts: 2026-05-14T00:00:00+00:00
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - apps/web/src/components/**
   - apps/web/src/store/**
@@ -88,6 +94,8 @@ team: creative-runtime
 proposal_status: approved
 operator_approved_ts: 2026-05-14T00:00:00+00:00
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - packages/runtime/**
 review_model: planner_owned
@@ -130,6 +138,10 @@ def test_render_supports_named_same_role_instances(tmp_path: Path) -> None:
     assert data["seat_roles"]["memory"] == "project-memory"
     assert data["seat_overrides"]["memory"]["tool"] == "codex"
     assert data["teams"]["quality-docs"]["autonomous"] is True
+    assert data["teams"]["quality-docs"]["team_type"] == "quality-docs"
+    assert data["teams"]["quality-docs"]["planner_mode"] == "quality_campaign"
+    assert data["teams"]["quality-docs"]["notify_policy"] == "never_notify_memory"
+    assert data["teams"]["quality-docs"]["quality_gate_doc"] == "quality-docs/QUALITY.md"
     assert data["teams"]["quality-docs"]["loop"] == "continuous"
     assert data["teams"]["quality-docs"]["stop_rule"] == "campaign_clean_streak_3"
     assert data["teams"]["quality-docs"]["seats"] == [
@@ -157,6 +169,8 @@ def test_render_preserves_subteam_scaling_and_ownership(tmp_path: Path) -> None:
 
     team = data["teams"]["cartooner-front"]
     assert team["team_type"] == "subteam"
+    assert team["planner_mode"] == "delivery"
+    assert team["notify_policy"] == "queue_drained_only"
     assert team["ownership_paths"] == [
         "apps/web/src/components/**",
         "apps/web/src/store/**",
@@ -227,6 +241,9 @@ def test_render_team_ownership_markdown_captures_quality_docs_and_lightweight_re
     assert "Does not edit product code" in doc
     assert "## creative-runtime" in doc
     assert "Review model: `planner_owned`" in doc
+    assert "Planner mode: `delivery`" in doc
+    assert "Notify policy: `queue_drained_only`" in doc
+    assert "Quality gate doc: `quality-docs/QUALITY.md`" in doc
     assert "Planner owns review because this lightweight subteam has no dedicated reviewer" in doc
 
 
@@ -475,6 +492,29 @@ estimated_monthly_cost_usd: { low: 0, high: 30 }
     assert any("max is 3" in v for v in report.violations)
 
 
+def test_validator_rejects_wrong_planner_mode_policy_combo(tmp_path: Path) -> None:
+    from proposal_validator import validate_proposal_file
+
+    subteam = tmp_path / "front__approved.yaml"
+    subteam.write_text(
+        _approved_subteam_yaml().replace("planner_mode: delivery", "planner_mode: quality_campaign"),
+        encoding="utf-8",
+    )
+    quality = tmp_path / "quality-docs__approved.yaml"
+    quality.write_text(
+        _approved_quality_docs_yaml().replace("notify_policy: never_notify_memory", "notify_policy: queue_drained_only"),
+        encoding="utf-8",
+    )
+
+    subteam_report = validate_proposal_file(subteam)
+    quality_report = validate_proposal_file(quality)
+
+    assert not subteam_report.ok
+    assert any("subteam requires planner_mode='delivery'" in v for v in subteam_report.violations)
+    assert not quality_report.ok
+    assert any("quality-docs requires notify_policy='never_notify_memory'" in v for v in quality_report.violations)
+
+
 def test_multi_team_intake_skill_documents_generic_quality_group() -> None:
     skill = REPO_ROOT / "core" / "skills" / "multi-team-intake" / "SKILL.md"
     reference = (
@@ -494,6 +534,11 @@ def test_multi_team_intake_skill_documents_generic_quality_group() -> None:
     assert "propose_new_subteam" in text
     assert "capabilities" in text
     assert "owner_seat" in text
+    assert "planner_mode: delivery" in text
+    assert "notify_policy: queue_drained_only" in text
+    assert "planner_mode: quality_campaign" in text
+    assert "notify_policy: never_notify_memory" in text
+    assert "QUALITY.md" in text
     assert "TEAM_OWNERSHIP.md" in text
     assert "not a second config source" in text
     assert "quality-docs" in text

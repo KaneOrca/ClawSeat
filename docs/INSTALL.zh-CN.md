@@ -40,7 +40,7 @@ bash ~/ClawSeat/scripts/install.sh --project <name>
 |------|---------|------|
 | `clawseat-engineering` | 5 | 工程类：memory + planner + builder + reviewer + patrol，绑 gstack skill |
 | `clawseat-creative` | 5 | 创意类（绑 cartooner skill）：memory + writer + builder-image + builder-av + patrol |
-| `clawseat-solo` | 3 | 极简协作，全 OAuth：memory + builder + planner-gemini |
+| `clawseat-solo` | v3 | legacy alias：seed `MULTI_TEAM_MINIMAL`，一个 project-memory 管 planner+builder 子项目组和 `quality-docs` |
 
 为什么使用 `install.sh`，而不是直接用 `agent_admin` 或 `agent-launcher.sh`：
 
@@ -279,6 +279,9 @@ bash scripts/install.sh --project myproj --template clawseat-creative --provider
 # v3 multi-team dry-run after memory has written approved team proposals
 bash scripts/install.sh --mode multi --project myproj --teams core,content --dry-run
 
+# 最小 v3 项目组：solo alias 会 seed MULTI_TEAM_MINIMAL proposals
+bash scripts/install.sh --project myproj --template clawseat-solo --dry-run
+
 # Forget remembered per-seat harness choices from a previous run
 bash scripts/install.sh --reset-harness-memory
 ```
@@ -290,7 +293,7 @@ bash scripts/install.sh --reset-harness-memory
 | `--project <name>` | 安装或重装指定 ClawSeat project。默认 `install`。 |
 | `--repo-root <path>` | 设置 seat cwd 使用的目标项目仓库。 |
 | `--force-repo-root <path>` | 多 worktree 自动选择错误时，强制指定 ClawSeat install code root。 |
-| `--template <clawseat-engineering\|clawseat-creative\|clawseat-solo>` | 选择 roster template。clawseat-engineering 5 seats；clawseat-creative 5 seats；clawseat-solo 3 seats。 |
+| `--template <clawseat-engineering\|clawseat-creative\|clawseat-solo>` | 选择 install template。`clawseat-solo` 现在是 v3 `MULTI_TEAM_MINIMAL` 兼容别名，不再是独立 single-mode roster。 |
 | `--memory-tool <claude\|codex\|gemini>` | 覆盖 primary memory seat tool。非 Claude tool 会跳过 Claude provider selection。 |
 | `--memory-model <model>` | 当 memory tool 支持显式 model 时设置 memory model。 |
 | `--provider <mode\|n>` | 通过 detected candidate number 或 mode 选择 memory-seat provider。 |
@@ -396,7 +399,7 @@ tmux capture-pane -t <session> -p -S - -E -
 
 1. Parse flags，解析 real user HOME，必要时选择 freshest ClawSeat worktree，并加载 `scripts/install/lib/`。
 2. 在 import `tomllib` 之前解析 Python >= 3.11。
-3. 解析 project template 和 roster：`clawseat-engineering` -> `memory, planner, builder, reviewer, patrol`；`clawseat-creative` -> `memory, writer, builder-image, builder-av, patrol`（绑 cartooner skill）；`clawseat-solo` -> `memory, builder, planner`。
+3. 解析 project template 和 roster：`clawseat-engineering` -> `memory, planner, builder, reviewer, patrol`；`clawseat-creative` -> `memory, writer, builder-image, builder-av, patrol`（绑 cartooner skill）；`clawseat-solo` -> v3 `MULTI_TEAM_MINIMAL`，seed planner+builder 子项目组和 `quality-docs` 后委托 `install_multi.sh`。
 4. 运行 legacy path migration 和 seat liveness reconciliation。
 5. 验证 host deps 并运行 `core/skills/memory-oracle/scripts/scan_environment.py --output ~/.agents/memory/`，
    生成 `machine/{credentials,network,openclaw,github,current_context}.json`。

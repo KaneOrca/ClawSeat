@@ -13,3 +13,6 @@ def test_planner_skill_requires_chain_end_relay_to_memory() -> None:
     assert "send-and-verify.sh --project <p> memory" not in text
     assert "wake-up only" in text
     assert "experience retention" in text
+    assert "queue_drained_only" in text
+    assert "no per-task memory relay" in text
+    assert "never_notify_memory" in text

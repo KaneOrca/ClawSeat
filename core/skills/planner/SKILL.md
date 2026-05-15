@@ -21,7 +21,7 @@ Remember: `peer not in dispatch chain`; planner does not directly dispatch peers
 1. **v3 queue-entry**: memory writes brief + `task_created` in `tasks/<project>/<team>/tasks.queue.jsonl`; planner polls/SessionStart claims it and writes `workflow/<task_id>.md`.
 2. **legacy memory-entry**: memory writes brief KB + workflow then wakes planner; still supported in single-team mode.
 3. **planner-entry**: user dispatches workflow work directly to planner.
-Both routes/all routes close by relaying planner verdict to memory; memory remains the KB retention authority and planner never writes KB directly.
+Both routes keep memory as the KB authority; memory remains the KB retention authority and planner never writes KB directly. In multi-team delivery mode, per-task closeout follows `notify_policy` instead of always waking memory.
 ## Capabilities
 Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, `core/skills/planner/references/spec-aware-dispatch.md`, and Official Docs Dispatch Gate.
 ## Output Schema
@@ -51,7 +51,9 @@ Match last 3 operator messages; keep technical terms, commands, paths, task IDs,
 - Use `mode=parallel_subagents` only for independent work with disjoint write scopes.
 - Fan-in by consuming every delivery before starting dependent steps.
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
-- **After all steps complete**: call `agent_admin acceptance run --project <p> --team <t> --task-id <id> --actor planner@<tool>` to execute brief `acceptance_criteria`; executor runs mechanical commands, routes reviewer items to reviewer seat, batches operator items for operator, and automatically appends `task_done` on aggregate PASS. If acceptance was completed outside that command path, call `agent_admin brief done --project <p> --team <t> --task-id <id> --actor planner@<tool>` before relaying chain end. Planner waits for verdict before relaying chain end.
+- **After all steps complete**: call `agent_admin acceptance run --project <p> --team <t> --task-id <id> --actor planner@<tool>` to execute brief `acceptance_criteria`; executor runs mechanical commands, routes reviewer items to reviewer seat, batches operator items for operator, and automatically appends `task_done` on aggregate PASS. If acceptance was completed outside that command path, call `agent_admin brief done --project <p> --team <t> --task-id <id> --actor planner@<tool>` before closeout. Planner waits for verdict before closeout and then follows `notify_policy`.
+- **Multi-team delivery mode** (`planner_mode=delivery`, `notify_policy=queue_drained_only`): planner researches, writes or names verification first when practical, dispatches exact builder seats, reviews delivery, sends rework until pass, appends `task_done`, then claims the next team task. Do not notify memory per task; notify memory only when this team queue is drained or an exception needs memory/user authority.
+- **Quality campaign mode** (`planner_mode=quality_campaign`, `notify_policy=never_notify_memory`): planner designs patrol missions, updates `quality-docs/QUALITY.md` and findings/evidence, raises difficulty after clean runs, and never notifies memory directly. Memory pulls the gate doc when awakened.
 
 ## Multi-Builder Assignment
 
@@ -103,16 +105,18 @@ or `complete_handoff.py`, planner MUST within the same turn:
 3. Update `~/.agents/tasks/<project>/planner/DELIVERY.md` with `task_id`,
    `source: planner`, `target: memory`, `status`, `verdict`, commit hash,
    branch, sweep count, and a one-line summary extracted from builder DELIVERY.
-4. Relay to memory with the canonical closeout helper:
+4. In single-team, legacy, or direct planner-entry route, relay to memory with:
    `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify`
    Use the canonical verdict from step 2. `send-and-verify.sh` is wake-up only and may follow the durable receipt when a separate nudge is needed; it is not the primary relay path.
+5. In multi-team delivery route, do not relay per task; mark/verify `task_done`, continue the team queue, and relay memory only when the queue is drained or blocked by memory/user authority.
 Why: if planner forms a verdict but idles waiting for user input, memory does
-not know the task is ready and the planner-to-memory chain breaks.
+not know the legacy task is ready and the planner-to-memory chain breaks.
 PASS 前必填 user_summary,简述本波 operator-visible 进度; relay 前核对 head_contains_commit.
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status. Planner self-closeout protocol: see [`core/references/planner-self-closeout-protocol.md`](../../references/planner-self-closeout-protocol.md).
+
 ### Chain End Relay to Memory (双入口都适用)
-After all specialists are approved and planner forms the verdict, planner-entry route must relay to memory with `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only.
+After all specialists are approved and planner forms the verdict, legacy/single-team and planner-entry route must relay to memory with `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only. Multi-team delivery route uses `queue_drained_only`: no per-task memory relay; when the queue is empty, send a compact drained summary for memory final acceptance/commit. Quality-docs route uses `never_notify_memory`: update QUALITY.md/findings only.
 ## Memory-driven Compaction Request
 
 planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and

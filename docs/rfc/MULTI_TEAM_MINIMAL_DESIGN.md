@@ -8,9 +8,10 @@ minimal multi-team template and the future memory-driven team-design skill.
 
 ## Goal
 
-`MULTI_TEAM_MINIMAL` is not a traditional standalone `templates/*.toml`
-runtime roster. It is a minimal multi-team proposal pack and intake workflow for
-v3:
+`MULTI_TEAM_MINIMAL` is the replacement semantics for the old `clawseat-solo`
+idea. A "solo" unit is now a team-local `planner + builder` development
+subteam, not a whole project with its own memory. The template is a minimal
+multi-team proposal pack and intake workflow for v3:
 
 1. A first project-level memory seat analyzes the target repo.
 2. Memory recommends a team topology and explains why.
@@ -18,7 +19,9 @@ v3:
    `~/.agents/tasks/<project>/_config-proposals/`.
 4. The operator approves proposals.
 5. `scripts/install.sh --mode multi --project <p> --teams <csv>` renders the
-   v3 profile and team workspaces.
+   v3 profile and team workspaces. For compatibility,
+   `scripts/install.sh --template clawseat-solo --project <p>` seeds this same
+   minimal proposal pack and delegates to `install_multi.sh`.
 
 The first project-level memory seat is a project-group architect. It is not a
 team-local memory. In the rendered v3 profile, it remains the top-level
@@ -29,7 +32,8 @@ and wake memory through the normal transport path.
 
 - Do not depend on `core/seat-templates/` for the first minimal version. The v3
   seat template catalog is still under development.
-- Do not add `MULTI_TEAM_MINIMAL` to the standalone `--template` whitelist.
+- Do not preserve a separate single-mode solo runtime. `clawseat-solo` remains
+  only as a legacy CLI alias for `MULTI_TEAM_MINIMAL`.
 - Do not require iTerm. Cartooner-integrated multi-team testing uses tmux and
   embedded terminals / `--no-window`.
 - Do not require reviewer for every subteam at first launch. A one-builder

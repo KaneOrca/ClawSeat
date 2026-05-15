@@ -26,10 +26,16 @@ failure modes.
 
 ## Subteam Scaling Policy
 
+`clawseat-solo` is no longer a separate single-mode runtime. Its useful part is
+the minimal dev subteam archetype below; multi-team can run many of these units
+under one project memory.
+
 Every normal subteam follows the same gate:
 
 ```yaml
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 review_model: dedicated_reviewer
 dedicated_reviewer: true
 scaling_policy:
@@ -50,6 +56,9 @@ Rules:
   `purpose`, and `capabilities`; these fields are the planner's routing hints
   for exact `owner_seat` selection.
 - A fourth builder is forbidden; memory must propose a new subteam instead.
+- Dev planner researches, defines verification first when practical, dispatches
+  exact builder seats, reviews delivery, loops rework, writes `task_done`, and
+  notifies memory only when its team queue is drained or blocked by authority.
 - Subteams must not declare a memory seat.
 - Applying an approved roster change is handled by `clawseat-roster-admin`, not
   by direct TOML edits.
@@ -77,6 +86,8 @@ project: <project>
 team: product-surface
 proposal_status: proposed
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - apps/web/src/components/**
   - apps/web/src/store/**
@@ -138,6 +149,8 @@ project: <project>
 team: runtime-platform
 proposal_status: proposed
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - apps/web/electron/src/main/**
   - apps/web/electron/src/preload/**
@@ -171,6 +184,8 @@ project: <project>
 team: domain-capability
 proposal_status: proposed
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - core/skills/**
   - skills/**
@@ -204,6 +219,8 @@ project: <project>
 team: orchestration-ops
 proposal_status: proposed
 team_type: subteam
+planner_mode: delivery
+notify_policy: queue_drained_only
 ownership_paths:
   - scripts/**
   - core/scripts/**
@@ -238,6 +255,9 @@ project: <project>
 team: quality-docs
 proposal_status: proposed
 team_type: quality-docs
+planner_mode: quality_campaign
+notify_policy: never_notify_memory
+quality_gate_doc: quality-docs/QUALITY.md
 autonomous: true
 loop: continuous
 stop_rule: campaign_clean_streak_3
@@ -301,10 +321,7 @@ cartooner-skills
 `quality-docs-planner` maintains:
 
 ```text
-docs/qa/TEST_STRATEGY.md
-docs/qa/TEST_MATRIX.md
-docs/qa/RISK_REGISTER.md
-docs/qa/STATUS.md
+~/.agents/tasks/<project>/quality-docs/QUALITY.md
 ~/.agents/tasks/<project>/quality-docs/campaigns/
 ~/.agents/tasks/<project>/quality-docs/missions/
 ~/.agents/tasks/<project>/quality-docs/runs/
@@ -312,4 +329,7 @@ docs/qa/STATUS.md
 ~/.agents/tasks/<project>/quality-docs/evidence/
 ```
 
-Every closed finding becomes a regression scenario in `TEST_MATRIX.md`.
+`QUALITY.md` is intentionally compact: `Gate: PASS|WATCH|BLOCK_COMMIT`, active
+findings, recent checks, next campaign, and links to detailed finding files.
+Every closed finding becomes a regression scenario in the relevant campaign or
+matrix doc when useful; avoid duplicating large logs in the top-level gate.

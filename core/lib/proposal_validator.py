@@ -37,6 +37,8 @@ VALID_PROVIDER = frozenset({"anthropic", "openai", "google", "minimax"})
 VALID_IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 VALID_TEAM_TYPE = frozenset({"subteam", "quality-docs"})
 VALID_REVIEW_MODEL = frozenset({"dedicated_reviewer", "planner_owned"})
+VALID_PLANNER_MODE = frozenset({"delivery", "quality_campaign"})
+VALID_NOTIFY_POLICY = frozenset({"queue_drained_only", "never_notify_memory"})
 
 # Known role catalog (post-review fix #2; spec §16.7.2 role catalog validation).
 # Source of truth: planner/builder/reviewer/patrol are the original 4 specialist
@@ -234,6 +236,51 @@ def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]
             f"{proposal_file.name}: team_type={team_type!r} not in "
             f"{sorted(VALID_TEAM_TYPE)}"
         )
+    effective_team_type = (
+        team_type
+        or (
+            "quality-docs"
+            if team == "quality-docs" or bool(data.get("autonomous"))
+            else "subteam"
+        )
+    )
+    planner_mode = str(data.get("planner_mode") or "").strip()
+    if planner_mode and planner_mode not in VALID_PLANNER_MODE:
+        violations.append(
+            f"{proposal_file.name}: planner_mode={planner_mode!r} not in "
+            f"{sorted(VALID_PLANNER_MODE)}"
+        )
+    notify_policy = str(data.get("notify_policy") or "").strip()
+    if notify_policy and notify_policy not in VALID_NOTIFY_POLICY:
+        violations.append(
+            f"{proposal_file.name}: notify_policy={notify_policy!r} not in "
+            f"{sorted(VALID_NOTIFY_POLICY)}"
+        )
+    if "quality_gate_doc" in data:
+        quality_gate_doc = data.get("quality_gate_doc")
+        if not isinstance(quality_gate_doc, str) or not quality_gate_doc.strip():
+            violations.append(f"{proposal_file.name}: quality_gate_doc must be a non-empty string")
+    if effective_team_type == "quality-docs":
+        if planner_mode and planner_mode != "quality_campaign":
+            violations.append(
+                f"{proposal_file.name}: quality-docs requires "
+                "planner_mode='quality_campaign'"
+            )
+        if notify_policy and notify_policy != "never_notify_memory":
+            violations.append(
+                f"{proposal_file.name}: quality-docs requires "
+                "notify_policy='never_notify_memory'"
+            )
+    elif effective_team_type == "subteam":
+        if planner_mode and planner_mode != "delivery":
+            violations.append(
+                f"{proposal_file.name}: subteam requires planner_mode='delivery'"
+            )
+        if notify_policy and notify_policy != "queue_drained_only":
+            violations.append(
+                f"{proposal_file.name}: subteam requires "
+                "notify_policy='queue_drained_only'"
+            )
 
     if "ownership_paths" in data:
         paths = data.get("ownership_paths")

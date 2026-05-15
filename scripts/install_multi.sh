@@ -2,11 +2,12 @@
 # ClawSeat v3 multi-team minimal install (Phase 1).
 #
 # Renders v3 project.toml from approved config proposals + creates
-# workspace skeleton. This is the Phase 1 minimal path; full install.sh
-# integration with --mode multi flag is Phase 4.
+# workspace skeleton. Can also seed the built-in MULTI_TEAM_MINIMAL proposal
+# pack used by the legacy clawseat-solo alias.
 #
 # Usage:
 #   bash scripts/install_multi.sh --project <name> [--repo-root <path>]
+#   bash scripts/install_multi.sh --project <name> --seed-template multi-team-minimal
 #
 # Prerequisites:
 #   tasks/<project>/_config-proposals/<team>__approved.yaml for each team
@@ -22,11 +23,16 @@ REPO_ROOT_OVERRIDE=""
 TEAMS_FILTER=""
 DRY_RUN=0
 UPGRADE_TEAM=""
+SEED_TEMPLATE=""
+SEED_ARCHETYPE="auto"
+SEED_FORCE=0
+SEED_TMP_DIR=""
 
 usage() {
   cat <<EOF
 Usage: $0 --project <name> [--teams <csv>] [--repo-root <path>] [--dry-run]
        $0 --project <name> --upgrade-team <team> [--dry-run]
+       $0 --project <name> --seed-template multi-team-minimal [--teams <csv>] [--dry-run]
 
 Render v3 project.toml from approved config proposals.
 Prerequisite: \$HOME/.agents/tasks/<project>/_config-proposals/<team>__approved.yaml exists.
@@ -34,6 +40,10 @@ Prerequisite: \$HOME/.agents/tasks/<project>/_config-proposals/<team>__approved.
 Flags:
   --teams <csv>       Optional comma-separated filter (default: all approved teams).
                       Unknown team names hard-fail.
+  --seed-template t   Seed approved proposals before rendering. Supported:
+                      multi-team-minimal. Used by the clawseat-solo alias.
+  --seed-archetype a  auto | generic | cartooner (default: auto).
+  --seed-force        Overwrite existing approved proposals when seeding.
   --upgrade-team <t>  Incremental: re-render project.toml to include team <t>
                       while preserving existing teams. Requires the new team's
                       __approved.yaml to be present. Existing teams discovered
@@ -48,6 +58,9 @@ while [ $# -gt 0 ]; do
     --project) PROJECT="$2"; shift 2 ;;
     --teams) TEAMS_FILTER="$2"; shift 2 ;;
     --upgrade-team) UPGRADE_TEAM="$2"; shift 2 ;;
+    --seed-template) SEED_TEMPLATE="$2"; shift 2 ;;
+    --seed-archetype) SEED_ARCHETYPE="$2"; shift 2 ;;
+    --seed-force) SEED_FORCE=1; shift ;;
     --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --help|-h) usage 0 ;;
@@ -63,6 +76,32 @@ fi
 REAL_HOME="${CLAWSEAT_REAL_HOME:-$HOME}"
 AGENTS_ROOT="$REAL_HOME/.agents"
 PROPOSALS_DIR="$AGENTS_ROOT/tasks/$PROJECT/_config-proposals"
+
+if [ -n "$SEED_TEMPLATE" ]; then
+  case "$SEED_TEMPLATE" in
+    multi-team-minimal) ;;
+    *) echo "unknown seed template: $SEED_TEMPLATE" >&2; exit 2 ;;
+  esac
+  case "$SEED_ARCHETYPE" in
+    auto|generic|cartooner) ;;
+    *) echo "--seed-archetype must be auto | generic | cartooner" >&2; exit 2 ;;
+  esac
+  if [ "$DRY_RUN" -eq 1 ]; then
+    SEED_TMP_DIR="$(mktemp -d)"
+    trap 'rm -rf "$SEED_TMP_DIR"' EXIT
+    PROPOSALS_DIR="$SEED_TMP_DIR/_config-proposals"
+  fi
+  seed_args=(
+    "--project" "$PROJECT"
+    "--output-dir" "$PROPOSALS_DIR"
+    "--repo-root" "${REPO_ROOT_OVERRIDE:-$REPO_ROOT}"
+    "--archetype" "$SEED_ARCHETYPE"
+  )
+  [ -n "$TEAMS_FILTER" ] && seed_args+=("--teams" "$TEAMS_FILTER")
+  [ "$SEED_FORCE" -eq 1 ] && seed_args+=("--force")
+  echo "→ seeding $SEED_TEMPLATE proposals${TEAMS_FILTER:+ (teams=$TEAMS_FILTER)}"
+  "$PYTHON_BIN" "$REPO_ROOT/core/scripts/seed_multi_team_minimal.py" "${seed_args[@]}"
+fi
 
 # --upgrade-team: derive --teams from existing team dirs + new team
 if [ -n "$UPGRADE_TEAM" ]; then
