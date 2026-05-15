@@ -331,6 +331,7 @@ class TemplateHandlers:
             engineer,
             project.name,
             template_name=str(getattr(project, "template_name", "") or ""),
+            seat_id=str(getattr(session, "engineer_id", "") or ""),
         )
         dispatch_playbook_lines = self.hooks.render_dispatch_playbook_lines(session, project, engineer)
         contract_payload = self.hooks.workspace_contract_payload(
