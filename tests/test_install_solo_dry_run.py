@@ -12,7 +12,9 @@ _REPO = Path(__file__).resolve().parents[1]
 def test_solo_dry_run_uses_multi_team_minimal(tmp_path: Path) -> None:
     """clawseat-solo is a legacy alias for the v3 multi-team minimal render."""
     home = tmp_path / "home"
+    repo_root = tmp_path / "generic-app"
     home.mkdir(parents=True, exist_ok=True)
+    repo_root.mkdir()
     result = subprocess.run(
         [
             "bash",
@@ -22,6 +24,8 @@ def test_solo_dry_run_uses_multi_team_minimal(tmp_path: Path) -> None:
             "test-solo",
             "--template",
             "clawseat-solo",
+            "--repo-root",
+            str(repo_root),
         ],
         cwd=_REPO,
         capture_output=True,
@@ -50,7 +54,9 @@ def test_solo_dry_run_uses_multi_team_minimal(tmp_path: Path) -> None:
 def test_minimal_dry_run_uses_multi_team_minimal(tmp_path: Path) -> None:
     """clawseat-minimal is the canonical v3 multi-team minimal install template."""
     home = tmp_path / "home"
+    repo_root = tmp_path / "generic-app"
     home.mkdir(parents=True, exist_ok=True)
+    repo_root.mkdir()
     result = subprocess.run(
         [
             "bash",
@@ -60,6 +66,8 @@ def test_minimal_dry_run_uses_multi_team_minimal(tmp_path: Path) -> None:
             "test-minimal",
             "--template",
             "clawseat-minimal",
+            "--repo-root",
+            str(repo_root),
         ],
         cwd=_REPO,
         capture_output=True,
