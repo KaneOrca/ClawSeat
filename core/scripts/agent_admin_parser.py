@@ -794,6 +794,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         help="Optional path to pre-written brief markdown (overrides skeleton).",
     )
     brief_queue.add_argument("--force", action="store_true", help="Overwrite existing brief.")
+    brief_queue.add_argument(
+        "--no-wake",
+        action="store_true",
+        help="Append the queue event without waking the team planner.",
+    )
     brief_queue.set_defaults(func=hooks.cmd_brief_queue)
 
     brief_list = brief_sub.add_parser(

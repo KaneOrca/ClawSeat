@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ from queue_io import (  # noqa: E402
     query_pending,
     read_current_state,
 )
+from profile_loader_v3 import ProfileV3Error, load_profile_v3  # noqa: E402
 from real_home import real_user_home  # noqa: E402
 
 try:
@@ -71,6 +73,12 @@ _TASK_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 class InputValidationError(RuntimeError):
     pass
+
+
+class WakeHookError(RuntimeError):
+    def __init__(self, reason: str, *, target: str = "") -> None:
+        super().__init__(reason)
+        self.target = target
 
 
 def _validate_identifier(value: str, kind: str) -> None:
@@ -153,6 +161,61 @@ def _project_team_root(project: str, team: str) -> Path:
 
 def _queue_path(project: str, team: str) -> Path:
     return _project_team_root(project, team) / "tasks.queue.jsonl"
+
+
+def _profile_path(project: str) -> Path:
+    return _agents_root() / "profiles" / f"{project}-profile-dynamic.toml"
+
+
+def _send_script_path() -> Path:
+    override = os.environ.get("CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT", "").strip()
+    if override:
+        return Path(override)
+    return _REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
+
+
+def _one_line_detail(text: str, *, limit: int = 240) -> str:
+    compact = " ".join(str(text or "").split())
+    if len(compact) > limit:
+        return compact[: limit - 3] + "..."
+    return compact or "unknown"
+
+
+def _planner_seat_for_team(project: str, team: str) -> str:
+    try:
+        profile = load_profile_v3(_profile_path(project))
+        team_name = team if profile.is_multi() else "default"
+        seats = profile.seats_of(team_name)
+    except ProfileV3Error as exc:
+        raise WakeHookError(f"profile resolution failed: {exc}") from exc
+
+    planners = [seat for seat in seats if profile.seat_roles.get(seat) == "planner"]
+    if not planners:
+        raise WakeHookError(f"team {team!r} has no planner seat")
+    if len(planners) > 1:
+        raise WakeHookError(f"team {team!r} has multiple planner seats: {planners}")
+    return planners[0]
+
+
+def _wake_team_planner(project: str, team: str, task_id: str) -> str:
+    target = _planner_seat_for_team(project, team)
+    send_script = _send_script_path()
+    if not send_script.exists():
+        raise WakeHookError(f"send script not found: {send_script}", target=target)
+
+    message = (
+        f"[QUEUE-WAKE] {project}/{team} {task_id}; "
+        "run brief claim, then plan workflow."
+    )
+    result = subprocess.run(
+        ["bash", str(send_script), "--project", project, target, message],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = _one_line_detail(result.stderr or result.stdout or f"exit {result.returncode}")
+        raise WakeHookError(detail, target=target)
+    return target
 
 
 def _list_teams(project: str) -> list[str]:
@@ -344,6 +407,16 @@ def cmd_queue(args: argparse.Namespace) -> int:
     print(f"  brief: {brief}")
     print(f"  queue: {queue}")
     print(f"  seq:   {result['seq']}")
+    if args.no_wake:
+        print("WAKE_SKIPPED (--no-wake)")
+        return 0
+    try:
+        target = _wake_team_planner(project, team, task_id)
+    except WakeHookError as exc:
+        target = exc.target or "<unresolved>"
+        print(f"HOOK_WAKE_FAILED target={target} reason={exc}", file=sys.stderr)
+        return 3
+    print(f"WAKE_OK target={target}")
     return 0
 
 
@@ -569,6 +642,8 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--brief-content-file", default=None, dest="brief_content_file",
                    help="Optional path to pre-written brief markdown (overrides skeleton).")
     q.add_argument("--force", action="store_true", help="Overwrite existing brief.")
+    q.add_argument("--no-wake", action="store_true",
+                   help="Append the queue event without waking the team planner.")
     q.set_defaults(func=cmd_queue)
 
     l = sub.add_parser("list", help="List tasks for a team (default: pending only)")
