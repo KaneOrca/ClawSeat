@@ -110,8 +110,38 @@ def test_memory_workspace_claude_renders_claude_skill_paths() -> None:
 
 def test_codex_memory_workspace_gets_memory_docs_for_cross_tool_migration() -> None:
     rendered = _handlers().render_template_text("codex", _session("codex"), _project())
+    text = rendered["AGENTS.md"]
 
     assert "CLAUDE.md" in rendered
     assert "GEMINI.md" in rendered
-    assert "L3 hub" in rendered["AGENTS.md"]
-    assert "return to planner" not in rendered["AGENTS.md"].lower()
+    assert "Project Memory Seat - Codex" in text
+    assert "L3 hub" in text
+    assert "Primary instruction file:" in text
+    assert "~/.codex/" in text
+    assert "Codex has no Claude Code Stop hook" in text
+    assert "complete_handoff.py" in text
+    assert "send-and-verify.sh" in text
+    assert "TEAM_OWNERSHIP.md" in text
+    assert "quality-docs/QUALITY.md" in text
+    assert "~/.gemini/skills/" not in text
+    assert "Gemini logs" not in text
+    assert "return to planner" not in text.lower()
+
+
+def test_memory_workspace_all_supported_tools_render_tool_specific_contracts() -> None:
+    cases = {
+        "claude": ("CLAUDE.md", "Project Memory Seat - Claude", "Claude settings", "~/.agents/skills/"),
+        "codex": ("AGENTS.md", "Project Memory Seat - Codex", "Codex config", "~/.codex/"),
+        "gemini": ("GEMINI.md", "Project Memory Seat - Gemini", "Gemini logs", "~/.gemini/skills/"),
+    }
+
+    for tool, (doc_name, title, path_label, tool_path) in cases.items():
+        rendered = _handlers().render_template_text(tool, _session(tool), _project())
+        text = rendered[doc_name]
+
+        assert title in text
+        assert path_label in text
+        assert tool_path in text
+        assert "dispatch_task.py" in text
+        assert "complete_handoff.py" in text
+        assert "send-and-verify.sh" in text

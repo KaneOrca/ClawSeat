@@ -533,7 +533,7 @@ class TemplateHandlers:
                 str(engineer.role or "").startswith("cartooner-")
                 or template_name_str in _CARTOONER_TEMPLATE_NAMES
             )
-            memory_variant = "cartooner" if is_cartooner_memory else ("claude" if tool == "claude" else "gemini")
+            memory_variant = "cartooner" if is_cartooner_memory else tool
             memory_doc = self._render_workspace_memory_template(
                 memory_variant,
                 session=session,
