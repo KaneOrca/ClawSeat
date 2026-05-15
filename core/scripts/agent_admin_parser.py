@@ -28,6 +28,7 @@ class ParserHooks:
     cmd_session_name: Callable[[Any], int]
     cmd_project_open: Callable[[Any], int]
     cmd_seat_resume: Callable[[Any], int]
+    cmd_seat_liveness: Callable[[Any], int]
     cmd_project_current: Callable[[Any], int]
     cmd_project_use: Callable[[Any], int]
     cmd_project_create: Callable[[Any], int]
@@ -83,6 +84,7 @@ class ParserHooks:
     cmd_brief_list: Callable[[Any], int]
     cmd_brief_claim: Callable[[Any], int]
     cmd_brief_show: Callable[[Any], int]
+    cmd_brief_done: Callable[[Any], int]
     # v3 acceptance executor (Phase 2, spec §4.7)
     cmd_acceptance_run: Callable[[Any], int]
 
@@ -449,6 +451,21 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     )
     seat_resume.set_defaults(func=hooks.cmd_seat_resume)
 
+    seat_liveness = seat_sub.add_parser(
+        "liveness",
+        help="Show live seats for a project from heartbeat/state records.",
+    )
+    seat_liveness.add_argument("--project", required=True)
+    seat_liveness.add_argument("--seat", default=None, help="Optional seat/role filter.")
+    seat_liveness.add_argument(
+        "--max-age-seconds",
+        type=int,
+        default=300,
+        help="Heartbeat freshness window in seconds (default: 300).",
+    )
+    seat_liveness.add_argument("--json", action="store_true", dest="as_json")
+    seat_liveness.set_defaults(func=hooks.cmd_seat_liveness)
+
     # P1 layered-model: machine ... (§3).
     machine = sub.add_parser("machine", help="Machine-layer operations.")
     machine_sub = machine.add_subparsers(dest="machine_command", required=True)
@@ -811,6 +828,26 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     brief_show.add_argument("--task-id", required=True, dest="task_id")
     brief_show.set_defaults(func=hooks.cmd_brief_show)
 
+    brief_done = brief_sub.add_parser(
+        "done",
+        help="Mark a brief task_done PASS after planner final closeout.",
+    )
+    brief_done.add_argument("--project", required=True)
+    brief_done.add_argument("--team", required=True)
+    brief_done.add_argument("--task-id", required=True, dest="task_id")
+    brief_done.add_argument(
+        "--actor",
+        required=True,
+        help="Format: <role>@<tool>, e.g. planner@claude",
+    )
+    brief_done.add_argument(
+        "--verdict",
+        default="PASS",
+        choices=["PASS"],
+        help="Only PASS is accepted for task_done.",
+    )
+    brief_done.set_defaults(func=hooks.cmd_brief_done)
+
     # v3 acceptance executor (Phase 2, spec §4.7)
     acceptance = sub.add_parser(
         "acceptance",
@@ -831,6 +868,16 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     acceptance_run.add_argument("--cwd", default=None, help="Working dir for mechanical commands")
     acceptance_run.add_argument("--profile", default=None, dest="profile",
                                 help="Profile path for reviewer dispatch (default: ~/.agents/profiles/<project>-profile-dynamic.toml)")
+    acceptance_run.add_argument(
+        "--actor",
+        default="planner@claude",
+        help="Queue actor for automatic task_done on aggregate PASS.",
+    )
+    acceptance_run.add_argument(
+        "--skip-queue-done",
+        action="store_true",
+        help="Do not append task_done when aggregate acceptance verdict is PASS.",
+    )
     acceptance_run.set_defaults(func=hooks.cmd_acceptance_run)
 
     identity = sub.add_parser("identity", help="Tool identity list/show operations.")

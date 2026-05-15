@@ -21,15 +21,14 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+_CORE_LIB = REPO_ROOT / "core" / "lib"
+if str(_CORE_LIB) not in sys.path:
+    sys.path.insert(0, str(_CORE_LIB))
+from real_home import real_user_home  # noqa: E402
 
 
 def _agents_root() -> Path:
-    return Path(
-        os.environ.get(
-            "CLAWSEAT_REAL_HOME",
-            os.environ.get("HOME", str(Path.home())),
-        )
-    ).expanduser() / ".agents"
+    return real_user_home() / ".agents"
 
 
 def install_sessionstart_hook(workspace: Path, project: str, team: str, tool: str) -> Path:

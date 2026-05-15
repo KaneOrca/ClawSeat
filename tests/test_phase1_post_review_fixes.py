@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "core" / "lib"))
 sys.path.insert(0, str(REPO_ROOT / "core" / "scripts"))
 
-from queue_io import VALID_TRANSITIONS, QueueError, append_event  # noqa: E402
+from queue_io import VALID_TRANSITIONS, QueueError, append_event, read_current_state  # noqa: E402
 
 
 # ---------- Finding #1: render preserves model field ----------
@@ -326,6 +326,255 @@ def test_finding7_skeleton_has_nonempty_required_fields(tmp_path, monkeypatch):
     assert len(data["seats_required"]) >= 1, "seats_required must have minItems 1"
     assert isinstance(data["acceptance_criteria"]["mechanical"], list)
     assert len(data["acceptance_criteria"]["mechanical"]) >= 1
+
+
+def test_brief_queue_uses_real_user_home_under_sandbox_home(tmp_path, monkeypatch):
+    """Sandbox HOME must not strand v3 brief queues under identity HOME."""
+    from agent_admin_brief import build_parser, cmd_claim, cmd_queue
+
+    real_home = tmp_path / "real-home"
+    sandbox_home = tmp_path / ".agent-runtime" / "identities" / "claude" / "home"
+    real_home.mkdir(parents=True)
+    sandbox_home.mkdir(parents=True)
+    monkeypatch.delenv("CLAWSEAT_REAL_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(sandbox_home))
+    monkeypatch.setenv("AGENT_HOME", str(real_home))
+
+    parser = build_parser()
+    assert (
+        cmd_queue(
+            parser.parse_args(
+                ["queue", "--project", "p", "--team", "t", "--task-id", "T1",
+                 "--objective", "real-home"]
+            )
+        )
+        == 0
+    )
+    rc = cmd_claim(
+        parser.parse_args(
+            ["claim", "--project", "p", "--team", "t", "--task-id", "T1",
+             "--actor", "planner@claude"]
+        )
+    )
+
+    assert rc == 0
+    assert (real_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl").exists()
+    assert not (sandbox_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl").exists()
+
+
+def test_brief_done_advances_created_task_to_pass(tmp_path, monkeypatch):
+    from agent_admin_brief import build_parser, cmd_done, cmd_queue
+    from queue_io import read_current_state, read_events
+
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    parser = build_parser()
+    assert (
+        cmd_queue(
+            parser.parse_args(
+                ["queue", "--project", "p", "--team", "t", "--task-id", "Tdone",
+                 "--objective", "done"]
+            )
+        )
+        == 0
+    )
+
+    rc = cmd_done(
+        parser.parse_args(
+            ["done", "--project", "p", "--team", "t", "--task-id", "Tdone",
+             "--actor", "planner@claude"]
+        )
+    )
+
+    queue_path = tmp_path / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    assert rc == 0
+    assert [event["event_type"] for event in read_events(queue_path)] == [
+        "task_created",
+        "task_claimed",
+        "task_in_progress",
+        "task_done",
+    ]
+    state = read_current_state(queue_path)["Tdone"]
+    assert state.status == "task_done"
+    assert state.verdict == "PASS"
+
+
+def test_brief_done_refuses_unmet_dependencies(tmp_path, monkeypatch):
+    from agent_admin_brief import build_parser, cmd_claim, cmd_done, cmd_queue
+
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    parser = build_parser()
+    assert (
+        cmd_queue(
+            parser.parse_args(
+                [
+                    "queue",
+                    "--project", "p",
+                    "--team", "t",
+                    "--task-id", "DOWN",
+                    "--objective", "blocked",
+                    "--depends-on", "UP",
+                ]
+            )
+        )
+        == 0
+    )
+    assert (
+        cmd_claim(
+            parser.parse_args(
+                ["claim", "--project", "p", "--team", "t", "--task-id", "DOWN",
+                 "--actor", "planner@claude"]
+            )
+        )
+        == 3
+    )
+
+    rc = cmd_done(
+        parser.parse_args(
+            ["done", "--project", "p", "--team", "t", "--task-id", "DOWN",
+             "--actor", "planner@claude"]
+        )
+    )
+
+    queue_path = tmp_path / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    assert rc == 3
+    assert read_current_state(queue_path)["DOWN"].status == "task_waiting_for"
+
+
+def test_agent_admin_acceptance_run_marks_queue_done_on_pass(tmp_path):
+    brief_content = tmp_path / "brief.md"
+    brief_content.write_text(
+        """---
+task_id: Taccept
+project: p
+team: t
+created: '2026-05-15T00:00:00+00:00'
+created_by: memory
+objective: pass acceptance
+acceptance_criteria:
+  mechanical:
+    - "true"
+  reviewer: []
+  operator: []
+seats_required: [builder]
+fuzz_required: false
+priority: P2
+notify_on_completion: [memory]
+---
+
+# body
+""",
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "CLAWSEAT_SUPPRESS_TOOL_BIN_WARNING": "1",
+        "CLAWSEAT_REAL_HOME": str(tmp_path),
+    }
+    agent_admin = REPO_ROOT / "core" / "scripts" / "agent_admin.py"
+
+    queued = subprocess.run(
+        [
+            sys.executable,
+            str(agent_admin),
+            "brief",
+            "queue",
+            "--project", "p",
+            "--team", "t",
+            "--task-id", "Taccept",
+            "--objective", "pass acceptance",
+            "--brief-content-file", str(brief_content),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert queued.returncode == 0, queued.stderr
+
+    accepted = subprocess.run(
+        [
+            sys.executable,
+            str(agent_admin),
+            "acceptance",
+            "run",
+            "--project", "p",
+            "--team", "t",
+            "--task-id", "Taccept",
+            "--actor", "planner@claude",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    assert "aggregate: PASS" in accepted.stdout
+
+    queue_path = tmp_path / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    state = read_current_state(queue_path)["Taccept"]
+    assert state.status == "task_done"
+    assert state.verdict == "PASS"
+
+
+def test_agent_admin_seat_liveness_filters_by_seat_id(tmp_path):
+    import sqlite3
+    from datetime import datetime, timezone
+
+    db_path = tmp_path / "state.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE seats (
+              project TEXT,
+              seat_id TEXT,
+              role TEXT,
+              tool TEXT,
+              auth_mode TEXT,
+              provider TEXT,
+              status TEXT,
+              last_heartbeat TEXT,
+              session_name TEXT,
+              workspace TEXT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO seats VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "p",
+                "builder-1",
+                "builder",
+                "codex",
+                "oauth",
+                "openai",
+                "live",
+                datetime.now(timezone.utc).isoformat(),
+                "p-builder-1-codex",
+                "/tmp/ws",
+            ),
+        )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"),
+            "seat",
+            "liveness",
+            "--project", "p",
+            "--seat", "builder-1",
+            "--json",
+        ],
+        env={**os.environ, "CLAWSEAT_STATE_DB": str(db_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    rows = json.loads(proc.stdout)
+    assert rows and rows[0]["seat_id"] == "builder-1"
 
 
 def test_finding_A_waiting_for_retry_succeeds_after_upstream_done(tmp_path, monkeypatch):

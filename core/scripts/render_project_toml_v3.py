@@ -22,6 +22,11 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORE_LIB = _REPO_ROOT / "core" / "lib"
 if str(_CORE_LIB) not in sys.path:
@@ -78,6 +83,126 @@ def _toml_value(value: object) -> str:
     return _toml_quote(str(value))
 
 
+def _md_value_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _role_label(role: str, override: dict[str, object]) -> str:
+    instance = str(override.get("instance") or "").strip()
+    if instance:
+        return f"{role}-{instance}"
+    return role
+
+
+def render_team_ownership_markdown(project: str, profile_data: dict[str, object]) -> str:
+    """Render the current-project TEAM_OWNERSHIP.md summary from v3 profile data.
+
+    This is intentionally descriptive. Runtime decisions still come from the
+    approved YAML/profile TOML; the doc gives memory and planners a compact SSOT
+    to reread after restart or compaction.
+    """
+    mode = profile_data.get("mode") if isinstance(profile_data.get("mode"), dict) else {}
+    teams = profile_data.get("teams") if isinstance(profile_data.get("teams"), dict) else {}
+    seat_roles = profile_data.get("seat_roles") if isinstance(profile_data.get("seat_roles"), dict) else {}
+    overrides = profile_data.get("seat_overrides") if isinstance(profile_data.get("seat_overrides"), dict) else {}
+    project_memory = str(mode.get("project_memory") or PROJECT_MEMORY_SEAT).strip() or PROJECT_MEMORY_SEAT
+
+    lines: list[str] = [
+        f"# {project} Team Ownership",
+        "",
+        "Generated from the approved v3 team config and dynamic profile.",
+        "This file is descriptive only; `project.toml` / approved YAML remain runtime authority.",
+        "",
+        "## project-memory",
+        "Mission: project-level memory, intake, stable team ownership, dispatch briefs, and cross-team coordination.",
+        "Ownership paths:",
+        "- project-wide context and routing metadata",
+        "Seats:",
+        f"- project-memory: `{project_memory}`",
+        "Boundaries:",
+        "- Does not perform subteam implementation, direct specialist dispatch, or per-task builder assignment.",
+        "- Maintains this document after approved roster or ownership changes.",
+        "",
+    ]
+
+    if not teams:
+        lines.extend(
+            [
+                "## Teams",
+                "No v3 teams are declared in the profile.",
+                "",
+            ]
+        )
+        return "\n".join(lines).rstrip() + "\n"
+
+    for team_name, raw_team in teams.items():
+        if not isinstance(raw_team, dict):
+            continue
+        inferred_team_type = (
+            "quality-docs"
+            if str(team_name) == "quality-docs" or bool(raw_team.get("autonomous"))
+            else "subteam"
+        )
+        team_type = str(raw_team.get("team_type") or inferred_team_type).strip() or inferred_team_type
+        seats = _md_value_list(raw_team.get("seats"))
+        ownership_paths = _md_value_list(raw_team.get("ownership_paths"))
+        review_model = str(raw_team.get("review_model") or "").strip()
+        autonomous = bool(raw_team.get("autonomous")) if "autonomous" in raw_team else False
+        lines.extend([f"## {team_name}"])
+        if team_type == "quality-docs":
+            lines.append(
+                "Mission: autonomous continuous QA, human-path simulation, chaos/risk testing, evidence, and QA docs."
+            )
+        else:
+            lines.append("Mission: own planning and delivery for the declared module/layer boundary.")
+        lines.append(f"Team type: `{team_type}`")
+        if autonomous:
+            lines.append("Autonomy: `true`; planner owns campaign design and patrol scheduling.")
+        if review_model:
+            lines.append(f"Review model: `{review_model}`")
+        lines.append("Ownership paths:")
+        if ownership_paths:
+            lines.extend(f"- `{path}`" for path in ownership_paths)
+        else:
+            lines.append("- Not declared; planner must ask memory to clarify before broad dispatch.")
+        lines.append("Seats:")
+        for seat_id in seats:
+            role = str(seat_roles.get(seat_id) or "unknown").strip() or "unknown"
+            override = overrides.get(seat_id) if isinstance(overrides.get(seat_id), dict) else {}
+            label = _role_label(role, override)
+            detail_parts: list[str] = []
+            purpose = str(override.get("purpose") or "").strip()
+            if purpose:
+                detail_parts.append(purpose)
+            capabilities = _md_value_list(override.get("capabilities"))
+            if capabilities:
+                detail_parts.append("capabilities: " + ", ".join(f"`{item}`" for item in capabilities))
+            detail = "; " + "; ".join(detail_parts) if detail_parts else ""
+            lines.append(f"- {label}: `{seat_id}`{detail}")
+        lines.append("Boundaries:")
+        if team_type == "quality-docs":
+            lines.extend(
+                [
+                    "- Does not edit product code or own implementation fixes.",
+                    "- Findings are assigned back to the owning development team with reproduction evidence.",
+                    "- Patrols run assigned missions and report to `quality-docs-planner`.",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "- Does not own paths outside the declared ownership paths unless memory updates this doc.",
+                    "- Per-task builder assignment belongs in that task's `workflow.md`, not in this document.",
+                ]
+            )
+            if review_model == "planner_owned":
+                lines.append("- Planner owns review because this lightweight subteam has no dedicated reviewer.")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _seat_id_for(team_name: str, seat: dict) -> str:
     role = str(seat["role"]).strip()
     instance = str(seat.get("instance") or "").strip()
@@ -90,6 +215,8 @@ def _team_metadata(data: dict) -> dict[str, object]:
         "team_type",
         "ownership_paths",
         "scaling_policy",
+        "review_model",
+        "dedicated_reviewer",
         "autonomous",
         "loop",
         "stop_rule",
@@ -98,6 +225,8 @@ def _team_metadata(data: dict) -> dict[str, object]:
             continue
         value = data.get(key)
         if key == "autonomous":
+            metadata[key] = bool(value)
+        elif key == "dedicated_reviewer":
             metadata[key] = bool(value)
         elif key == "ownership_paths" and isinstance(value, list):
             metadata[key] = [str(item).strip() for item in value if str(item).strip()]
@@ -287,6 +416,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--teams", default=None,
                         help="Comma-separated team filter (default: all approved). "
                              "Unknown teams hard-fail.")
+    parser.add_argument(
+        "--ownership-output",
+        default=None,
+        help="Optional path for generated TEAM_OWNERSHIP.md sidecar.",
+    )
     args = parser.parse_args(argv)
 
     teams_filter = None
@@ -314,6 +448,13 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output).write_text(toml_text, encoding="utf-8")
         print(f"wrote {args.output}", file=sys.stderr)
+    if args.ownership_output:
+        profile_data = tomllib.loads(toml_text)
+        ownership_text = render_team_ownership_markdown(args.project, profile_data)
+        ownership_path = Path(args.ownership_output)
+        ownership_path.parent.mkdir(parents=True, exist_ok=True)
+        ownership_path.write_text(ownership_text, encoding="utf-8")
+        print(f"wrote {ownership_path}", file=sys.stderr)
     return 0
 
 

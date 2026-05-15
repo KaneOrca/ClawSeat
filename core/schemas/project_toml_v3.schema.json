@@ -63,6 +63,15 @@
               },
               "additionalProperties": false
             },
+            "review_model": {
+              "type": "string",
+              "enum": ["dedicated_reviewer", "planner_owned"],
+              "description": "Acceptance review topology. planner_owned is only for lightweight one-builder subteams."
+            },
+            "dedicated_reviewer": {
+              "type": "boolean",
+              "description": "False means the subteam planner owns review for a lightweight one-builder team."
+            },
             "autonomous": {
               "type": "boolean",
               "description": "Team owns an autonomous work loop instead of only memory-queued briefs."
@@ -75,7 +84,29 @@
               "type": "string",
               "description": "Autonomous campaign stop rule, e.g. campaign_clean_streak_3."
             }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {"dedicated_reviewer": {"const": false}},
+                "required": ["dedicated_reviewer"]
+              },
+              "then": {
+                "properties": {"review_model": {"const": "planner_owned"}},
+                "required": ["review_model"]
+              }
+            },
+            {
+              "if": {
+                "properties": {"review_model": {"const": "planner_owned"}},
+                "required": ["review_model"]
+              },
+              "then": {
+                "properties": {"dedicated_reviewer": {"const": false}},
+                "required": ["dedicated_reviewer"]
+              }
+            }
+          ]
         }
       },
       "additionalProperties": false

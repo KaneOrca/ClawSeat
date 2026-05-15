@@ -79,6 +79,7 @@ def test_memory_workspace_claude_renders_l3_hub_without_worker_vocab() -> None:
     assert "L3 hub" in text
     assert "RFC-002 §2.2" in text
     assert "project.toml" in text
+    assert "TEAM_OWNERSHIP.md" in text
     assert "seat_overrides" in text
     assert "specialist" not in text.lower()
     assert "return to planner" not in text.lower()
@@ -91,6 +92,7 @@ def test_memory_workspace_gemini_renders_tool_specific_paths() -> None:
     assert "~/.gemini/skills/" in text
     assert "~/.gemini/log/gemini-tui.log" in text
     assert "/run-bash-in-repo" in text
+    assert "TEAM_OWNERSHIP.md" in text
     assert "~/.agents/skills/" not in text
 
 
@@ -99,6 +101,7 @@ def test_memory_workspace_claude_renders_claude_skill_paths() -> None:
     text = rendered["CLAUDE.md"]
 
     assert "~/.agents/skills/" in text
+    assert "TEAM_OWNERSHIP.md" in text
     assert "~/.gemini/skills/" not in text
 
 

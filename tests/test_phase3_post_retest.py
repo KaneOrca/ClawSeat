@@ -326,6 +326,34 @@ def test_retest7_sessionstart_hook_uses_canonical_shape(tmp_path):
     assert any(h.get("type") == "command" for h in entry["hooks"])
 
 
+def test_queue_poll_uses_real_user_home_under_sandbox_home(tmp_path, monkeypatch):
+    from queue_io import append_event, read_current_state
+    from queue_poll import poll_team
+
+    real_home = tmp_path / "real-home"
+    sandbox_home = tmp_path / ".agent-runtime" / "identities" / "claude" / "home"
+    queue = real_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    append_event(
+        queue,
+        {
+            "event_type": "task_created",
+            "actor": "memory",
+            "task_id": "Tpoll",
+            "brief_path": "tasks/p/t/brief/Tpoll.md",
+        },
+    )
+    monkeypatch.delenv("CLAWSEAT_REAL_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(sandbox_home))
+    monkeypatch.setenv("AGENT_HOME", str(real_home))
+
+    result = poll_team("p", "t", "planner@claude")
+
+    assert result is not None
+    assert result["verdict"] == "claimed"
+    assert read_current_state(queue)["Tpoll"].status == "task_claimed"
+    assert not (sandbox_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl").exists()
+
+
 # ---------- #8: combinatorial coverage ----------
 
 

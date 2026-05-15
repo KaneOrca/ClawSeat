@@ -81,6 +81,39 @@ estimated_monthly_cost_usd: {{ low: 0, high: 30 }}
 """
 
 
+def _approved_lightweight_subteam_yaml(project: str = "p") -> str:
+    return f"""---
+project: {project}
+team: creative-runtime
+proposal_status: approved
+operator_approved_ts: 2026-05-14T00:00:00+00:00
+team_type: subteam
+ownership_paths:
+  - packages/runtime/**
+review_model: planner_owned
+dedicated_reviewer: false
+scaling_policy:
+  max_builders: 3
+  reviewer_required_when_builders_gte: 2
+  overflow_action: propose_new_subteam
+  reviewer_fallback: planner
+seats:
+  - role: planner
+    tool: claude
+    provider: anthropic
+    auth_mode: oauth_token
+    rationale: plans and owns review for the lightweight runtime team
+  - role: builder
+    instance: runtime
+    tool: codex
+    provider: openai
+    auth_mode: oauth
+    rationale: implements runtime work
+estimated_monthly_cost_usd: {{ low: 0, high: 30 }}
+---
+"""
+
+
 def test_render_supports_named_same_role_instances(tmp_path: Path) -> None:
     from render_project_toml_v3 import render_project_toml_v3
 
@@ -140,6 +173,61 @@ def test_render_preserves_subteam_scaling_and_ownership(tmp_path: Path) -> None:
         "zustand",
         "vibe-canvas",
     ]
+
+
+def test_render_supports_lightweight_planner_owned_review_subteam(tmp_path: Path) -> None:
+    from proposal_validator import validate_proposal_file
+    from render_project_toml_v3 import render_project_toml_v3
+
+    proposals = tmp_path / "_config-proposals"
+    proposals.mkdir()
+    proposal = proposals / "creative-runtime__approved.yaml"
+    proposal.write_text(_approved_lightweight_subteam_yaml(), encoding="utf-8")
+
+    report = validate_proposal_file(proposal)
+    assert report.ok, report.violations
+
+    data = tomllib.loads(render_project_toml_v3(project="p", proposals_dir=proposals))
+    team = data["teams"]["creative-runtime"]
+    assert team["review_model"] == "planner_owned"
+    assert team["dedicated_reviewer"] is False
+    assert team["seats"] == [
+        "creative-runtime-planner",
+        "creative-runtime-builder-runtime",
+    ]
+
+
+def test_render_team_ownership_markdown_captures_quality_docs_and_lightweight_review(
+    tmp_path: Path,
+) -> None:
+    from render_project_toml_v3 import (
+        render_project_toml_v3,
+        render_team_ownership_markdown,
+    )
+
+    proposals = tmp_path / "_config-proposals"
+    proposals.mkdir()
+    (proposals / "quality-docs__approved.yaml").write_text(
+        _approved_quality_docs_yaml(),
+        encoding="utf-8",
+    )
+    (proposals / "creative-runtime__approved.yaml").write_text(
+        _approved_lightweight_subteam_yaml(),
+        encoding="utf-8",
+    )
+
+    profile_text = render_project_toml_v3(project="p", proposals_dir=proposals)
+    doc = render_team_ownership_markdown("p", tomllib.loads(profile_text))
+
+    assert "# p Team Ownership" in doc
+    assert "project.toml` / approved YAML remain runtime authority" in doc
+    assert "## quality-docs" in doc
+    assert "autonomous continuous QA" in doc
+    assert "quality-docs-patrol-chaos" in doc
+    assert "Does not edit product code" in doc
+    assert "## creative-runtime" in doc
+    assert "Review model: `planner_owned`" in doc
+    assert "Planner owns review because this lightweight subteam has no dedicated reviewer" in doc
 
 
 def test_validator_rejects_duplicate_same_role_without_instance(tmp_path: Path) -> None:
@@ -246,6 +334,82 @@ estimated_monthly_cost_usd: { low: 0, high: 30 }
     report = validate_proposal_file(proposal)
     assert not report.ok
     assert any("must declare a reviewer" in v for v in report.violations)
+
+
+def test_validator_rejects_planner_owned_review_with_multiple_builders(tmp_path: Path) -> None:
+    from proposal_validator import validate_proposal_file
+
+    proposal = tmp_path / "front__approved.yaml"
+    proposal.write_text(
+        """---
+project: p
+team: front
+proposal_status: approved
+operator_approved_ts: 2026-05-14T00:00:00+00:00
+team_type: subteam
+ownership_paths: [apps/web/src/**]
+review_model: planner_owned
+dedicated_reviewer: false
+scaling_policy:
+  max_builders: 3
+  reviewer_required_when_builders_gte: 2
+  overflow_action: propose_new_subteam
+  reviewer_fallback: planner
+seats:
+  - role: planner
+    tool: claude
+    provider: anthropic
+    auth_mode: oauth_token
+    rationale: plans
+  - role: builder
+    instance: one
+    tool: codex
+    provider: openai
+    auth_mode: oauth
+    rationale: one
+  - role: builder
+    instance: two
+    tool: codex
+    provider: openai
+    auth_mode: oauth
+    rationale: two
+  - role: reviewer
+    tool: codex
+    provider: openai
+    auth_mode: oauth
+    rationale: reviews
+estimated_monthly_cost_usd: { low: 0, high: 30 }
+---
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_proposal_file(proposal)
+    assert not report.ok
+    assert any("planner_owned" in v and "exactly one builder" in v for v in report.violations)
+
+
+def test_validator_requires_explicit_planner_owned_pair_for_lightweight_review(tmp_path: Path) -> None:
+    from proposal_validator import validate_proposal_file
+
+    missing_model = tmp_path / "missing-model__approved.yaml"
+    missing_model.write_text(
+        _approved_lightweight_subteam_yaml().replace("review_model: planner_owned\n", ""),
+        encoding="utf-8",
+    )
+    missing_flag = tmp_path / "missing-flag__approved.yaml"
+    missing_flag.write_text(
+        _approved_lightweight_subteam_yaml().replace("dedicated_reviewer: false\n", ""),
+        encoding="utf-8",
+    )
+
+    report_model = validate_proposal_file(missing_model)
+    report_flag = validate_proposal_file(missing_flag)
+
+    assert not report_model.ok
+    assert any("dedicated_reviewer=false requires review_model='planner_owned'" in v for v in report_model.violations)
+    assert not report_flag.ok
+    assert any("review_model='planner_owned' requires dedicated_reviewer=false" in v for v in report_flag.violations)
 
 
 def test_validator_rejects_four_builder_subteam(tmp_path: Path) -> None:

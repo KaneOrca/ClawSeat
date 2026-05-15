@@ -38,6 +38,7 @@ from queue_io import (  # noqa: E402
     query_pending,
     read_current_state,
 )
+from real_home import real_user_home  # noqa: E402
 
 try:
     import yaml  # type: ignore
@@ -143,12 +144,7 @@ def _validate_external_brief_content(
 
 
 def _agents_root() -> Path:
-    return Path(
-        os.environ.get(
-            "CLAWSEAT_REAL_HOME",
-            os.environ.get("HOME", str(Path.home())),
-        )
-    ).expanduser() / ".agents"
+    return real_user_home() / ".agents"
 
 
 def _project_team_root(project: str, team: str) -> Path:
@@ -193,6 +189,25 @@ def _resolve_cross_team_upstream(
         if task_id in state:
             return team, state[task_id].status
     return None
+
+
+def _unmet_dependencies(
+    project: str,
+    team: str,
+    state: dict,
+    depends_on: list[str],
+) -> list[str]:
+    unmet: list[str] = []
+    for upstream_id in depends_on:
+        up = state.get(upstream_id)
+        if up is not None:
+            if up.status != "task_done":
+                unmet.append(upstream_id)
+            continue
+        cross = _resolve_cross_team_upstream(project, team, upstream_id)
+        if cross is None or cross[1] != "task_done":
+            unmet.append(upstream_id)
+    return unmet
 
 
 def _brief_path(project: str, team: str, task_id: str) -> Path:
@@ -391,16 +406,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
     # Post-retest #5: check depends_on across ALL teams in the project.
     # Local queue checked first; if absent, fall through to cross-team scan.
-    unmet = []
-    for upstream_id in ts.depends_on:
-        up = state.get(upstream_id)
-        if up is not None:
-            if up.status != "task_done":
-                unmet.append(upstream_id)
-            continue
-        cross = _resolve_cross_team_upstream(args.project, args.team, upstream_id)
-        if cross is None or cross[1] != "task_done":
-            unmet.append(upstream_id)
+    unmet = _unmet_dependencies(args.project, args.team, state, ts.depends_on)
 
     if unmet:
         for up_id in unmet:
@@ -465,6 +471,80 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_done(args: argparse.Namespace) -> int:
+    """Mark a brief task as done by appending the official queue events.
+
+    The command is intentionally tolerant of older rehearsal/task flows that
+    reached a durable handoff PASS before the queue was advanced. It preserves
+    queue_io's state machine by appending any missing intermediate states
+    instead of bypassing validation.
+    """
+    try:
+        _validate_cli_inputs(args.project, args.team, args.task_id)
+    except InputValidationError as exc:
+        print(f"input validation failed: {exc}", file=sys.stderr)
+        return 2
+
+    queue = _queue_path(args.project, args.team)
+    state = read_current_state(queue)
+    ts = state.get(args.task_id)
+    if ts is None:
+        print(f"task_id {args.task_id!r} not in queue", file=sys.stderr)
+        return 2
+
+    actor = args.actor
+    if ts.status == "task_done":
+        if ts.verdict == "PASS":
+            print(f"task {args.task_id} already done")
+            return 0
+        print(
+            f"task_id {args.task_id!r} is done with verdict {ts.verdict!r}, not PASS",
+            file=sys.stderr,
+        )
+        return 2
+
+    unmet = _unmet_dependencies(args.project, args.team, state, ts.depends_on)
+    if unmet:
+        print(
+            f"task_id {args.task_id!r} still blocked on upstream: {unmet}",
+            file=sys.stderr,
+        )
+        return 3
+
+    plan: list[str]
+    if ts.status in ("task_created", "task_waiting_for"):
+        plan = ["task_claimed", "task_in_progress", "task_done"]
+    elif ts.status == "task_claimed":
+        plan = ["task_in_progress", "task_done"]
+    elif ts.status == "task_in_progress":
+        plan = ["task_done"]
+    else:
+        print(
+            f"task_id {args.task_id!r} is in state {ts.status!r}, not completable",
+            file=sys.stderr,
+        )
+        return 2
+
+    last_result: dict | None = None
+    for event_type in plan:
+        event = {
+            "event_type": event_type,
+            "actor": actor,
+            "task_id": args.task_id,
+        }
+        if event_type == "task_done":
+            event["verdict"] = "PASS"
+        try:
+            last_result = append_event(queue, event)
+        except QueueError as exc:
+            print(f"done append failed: {exc}", file=sys.stderr)
+            return 1
+
+    seq = last_result["seq"] if last_result else "?"
+    print(f"done {args.task_id} (seq {seq}, verdict PASS)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="agent_admin_brief",
@@ -510,6 +590,16 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--team", required=True)
     s.add_argument("--task-id", required=True, dest="task_id")
     s.set_defaults(func=cmd_show)
+
+    d = sub.add_parser("done", help="Append task_done PASS for a brief task")
+    d.add_argument("--project", required=True)
+    d.add_argument("--team", required=True)
+    d.add_argument("--task-id", required=True, dest="task_id")
+    d.add_argument("--actor", required=True,
+                   help="Format: <role>@<tool>, e.g. planner@claude")
+    d.add_argument("--verdict", default="PASS", choices=["PASS"],
+                   help="Only PASS is accepted for task_done.")
+    d.set_defaults(func=cmd_done)
 
     return p
 

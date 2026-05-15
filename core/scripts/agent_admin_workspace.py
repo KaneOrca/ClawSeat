@@ -181,7 +181,17 @@ def render_read_first_lines(session: Any, project: Any, engineer: Any) -> list[s
         f"3. `{tasks_doc}`",
     ]
     next_index = 4
-    if engineer.role in {"frontstage-supervisor", "planner-dispatcher"}:
+    include_team_ownership = (
+        engineer.role in {"memory", "project-memory", "memory-oracle", "planner", "planner-dispatcher"}
+        and _is_multi_team_project(project.name)
+    )
+    if include_team_ownership:
+        lines.append(f"{next_index}. `{tasks_root}/TEAM_OWNERSHIP.md`")
+        next_index += 1
+    if engineer.role in {"memory", "project-memory", "memory-oracle", "planner", "planner-dispatcher"}:
+        lines.append(f"{next_index}. `{status_doc}`")
+        next_index += 1
+    if engineer.role in {"frontstage-supervisor"}:
         lines.append(f"{next_index}. `{status_doc}`")
         next_index += 1
     if engineer.role == "planner-dispatcher":
@@ -333,6 +343,23 @@ def _team_for_profile_seat(profile_data: dict[str, Any], seat_id: str) -> tuple[
     return None
 
 
+def _is_project_memory_seat(profile_data: dict[str, Any], seat_id: str) -> bool:
+    mode = profile_data.get("mode") or {}
+    if not isinstance(mode, dict) or str(mode.get("team_structure") or "single") != "multi":
+        return False
+    project_memory = str(mode.get("project_memory") or "memory").strip() or "memory"
+    return seat_id == project_memory
+
+
+def _is_multi_team_project(project_name: str) -> bool:
+    loaded = _load_dynamic_profile_data(project_name)
+    if loaded is None:
+        return False
+    _profile_path, profile_data = loaded
+    mode = profile_data.get("mode") or {}
+    return isinstance(mode, dict) and str(mode.get("team_structure") or "single") == "multi"
+
+
 def _render_runtime_fragment(override: dict[str, Any]) -> str:
     parts: list[str] = []
     for key in ("tool", "auth_mode", "provider", "model"):
@@ -340,6 +367,82 @@ def _render_runtime_fragment(override: dict[str, Any]) -> str:
         if value:
             parts.append(f"{key}={value}")
     return ", ".join(parts) if parts else "runtime not declared"
+
+
+def render_multi_team_project_ownership_lines(session: Any, project: Any) -> list[str]:
+    loaded = _load_dynamic_profile_data(project.name)
+    if loaded is None:
+        return []
+    profile_path, profile_data = loaded
+    seat_id = str(getattr(session, "engineer_id", "") or "").strip()
+    if not _is_project_memory_seat(profile_data, seat_id):
+        return []
+
+    teams = profile_data.get("teams") or {}
+    if not isinstance(teams, dict):
+        return []
+    roles = profile_data.get("seat_roles") or {}
+    if not isinstance(roles, dict):
+        roles = {}
+    overrides = profile_data.get("seat_overrides") or {}
+    if not isinstance(overrides, dict):
+        overrides = {}
+
+    tasks_root = _resolve_tasks_root(project)
+    lines = [
+        "## Project Team Ownership",
+        "",
+        f"- Profile: `{profile_path}`",
+        f"- Project mode: `multi`",
+        f"- Project memory: `{seat_id}`",
+        f"- Ownership summary doc: `{tasks_root}/TEAM_OWNERSHIP.md`",
+        "- Memory owns stable roster/ownership facts; team planners own per-task workflows.",
+        "",
+        "## Teams",
+        "",
+    ]
+    for team_name, team_cfg in teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        inferred_team_type = (
+            "quality-docs"
+            if str(team_name) == "quality-docs" or bool(team_cfg.get("autonomous"))
+            else "subteam"
+        )
+        team_type = str(team_cfg.get("team_type") or inferred_team_type).strip() or inferred_team_type
+        team_seats = [str(item) for item in team_cfg.get("seats") or []]
+        ownership_paths = [
+            str(item).strip()
+            for item in team_cfg.get("ownership_paths") or []
+            if str(item).strip()
+        ]
+        seat_fragments: list[str] = []
+        for managed_seat in team_seats:
+            role = str(roles.get(managed_seat) or "unknown").strip() or "unknown"
+            override = overrides.get(managed_seat) if isinstance(overrides.get(managed_seat), dict) else {}
+            instance = str(override.get("instance") or "").strip()
+            label = f"{role}-{instance}" if instance else role
+            purpose = str(override.get("purpose") or "").strip()
+            purpose_suffix = f" ({purpose})" if purpose else ""
+            seat_fragments.append(f"{label}: `{managed_seat}`{purpose_suffix}")
+        team_bits = [f"type `{team_type}`"]
+        if team_cfg.get("autonomous"):
+            team_bits.append("autonomous")
+        review_model = str(team_cfg.get("review_model") or "").strip()
+        if review_model:
+            team_bits.append(f"review `{review_model}`")
+        if ownership_paths:
+            team_bits.append("paths " + ", ".join(f"`{path}`" for path in ownership_paths))
+        else:
+            team_bits.append("paths not declared")
+        lines.append(f"- `{team_name}`: " + "; ".join(team_bits))
+        if seat_fragments:
+            lines.append("  Seats: " + "; ".join(seat_fragments))
+        if team_type == "quality-docs":
+            lines.append(
+                "  Boundary: continuous QA/docs only; no product code edits; findings route back to owning teams."
+            )
+    return lines
 
 
 def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
@@ -450,7 +553,12 @@ def render_project_seat_map_lines(
     project_engineers: dict[str, Any] | None = None,
     engineer_order: list[str] | None = None,
 ) -> list[str]:
+    memory_lines = render_multi_team_project_ownership_lines(session, project)
+    if memory_lines:
+        return memory_lines
     lines = render_multi_team_scope_lines(session, project)
+    if lines and engineer.role in {"planner", "planner-dispatcher"}:
+        return lines
     if engineer.role not in {"frontstage-supervisor", "planner-dispatcher"}:
         return lines
     engineers = project_engineers or {}
@@ -1042,6 +1150,15 @@ def workspace_contract_payload(
     ]
     if engineer.role in {"frontstage-supervisor", "planner-dispatcher"}:
         source_paths.append(f"{resolved_tasks_root}/STATUS.md")
+    include_team_ownership = (
+        engineer.role in {"memory", "project-memory", "memory-oracle", "planner", "planner-dispatcher"}
+        and _is_multi_team_project(project.name)
+    )
+    if include_team_ownership:
+        source_paths.append(f"{resolved_tasks_root}/TEAM_OWNERSHIP.md")
+    if engineer.role in {"memory", "project-memory", "memory-oracle", "planner", "planner-dispatcher"}:
+        if f"{resolved_tasks_root}/STATUS.md" not in source_paths:
+            source_paths.append(f"{resolved_tasks_root}/STATUS.md")
     if engineer.role == "frontstage-supervisor":
         candidate = Path(project.repo_root) / "KODER.md"
         if candidate.exists():
@@ -1049,17 +1166,20 @@ def workspace_contract_payload(
         roster = Path(resolved_tasks_root) / "FE-003-SPECIALIST-ROSTER.md"
         if roster.exists():
             source_paths.append(str(roster))
-    project_seat_map = [
-        line[2:]
-        for line in render_project_seat_map_lines(
-            session,
-            project,
-            engineer,
-            project_engineers=project_engineers,
-            engineer_order=engineer_order,
-        )
-        if line.startswith("- ")
-    ]
+    project_seat_map: list[str] = []
+    for line in render_project_seat_map_lines(
+        session,
+        project,
+        engineer,
+        project_engineers=project_engineers,
+        engineer_order=engineer_order,
+    ):
+        if line.startswith("- "):
+            project_seat_map.append(line[2:])
+            continue
+        stripped = line.strip()
+        if stripped.startswith(("Seats:", "Boundary:")):
+            project_seat_map.append(stripped)
     return {
         "engineer_id": session.engineer_id,
         "project": project.name,

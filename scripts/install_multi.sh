@@ -93,6 +93,7 @@ if [ -n "$UPGRADE_TEAM" ]; then
   echo "→ upgrade-team: rendering teams=$TEAMS_FILTER"
 fi
 PROFILE_OUT="$AGENTS_ROOT/profiles/${PROJECT}-profile-dynamic.toml"
+TEAM_OWNERSHIP_OUT="$AGENTS_ROOT/tasks/$PROJECT/TEAM_OWNERSHIP.md"
 RENDER_SCRIPT="$REPO_ROOT/core/scripts/render_project_toml_v3.py"
 VALIDATOR="$REPO_ROOT/core/lib/proposal_validator.py"
 
@@ -138,6 +139,7 @@ mkdir -p "$(dirname "$PROFILE_OUT")"
   --proposals-dir "$PROPOSALS_DIR" \
   ${REPO_ROOT_OVERRIDE:+--repo-root "$REPO_ROOT_OVERRIDE"} \
   ${TEAMS_FILTER:+--teams "$TEAMS_FILTER"} \
+  --ownership-output "$TEAM_OWNERSHIP_OUT" \
   --output "$PROFILE_OUT"
 
 # Step 4: workspace skeleton dirs (only for teams included in render)
@@ -179,4 +181,5 @@ EOF
 echo ""
 echo "v3 multi-mode render complete:"
 echo "  profile: $PROFILE_OUT"
+echo "  ownership: $TEAM_OWNERSHIP_OUT"
 echo "  workspace: $AGENTS_ROOT/tasks/$PROJECT/"

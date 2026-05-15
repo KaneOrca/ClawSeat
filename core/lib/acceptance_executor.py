@@ -29,6 +29,7 @@ _SCHEMA_PATH = REPO_ROOT / "core" / "schemas" / "brief.schema.json"
 # Ensure sibling lib modules importable when called as standalone
 if str(REPO_ROOT / "core" / "lib") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "core" / "lib"))
+from real_home import real_user_home  # noqa: E402
 
 try:
     import yaml  # type: ignore
@@ -63,12 +64,7 @@ class RouteResult:
 
 
 def _agents_root() -> Path:
-    return Path(
-        os.environ.get(
-            "CLAWSEAT_REAL_HOME",
-            os.environ.get("HOME", str(Path.home())),
-        )
-    ).expanduser() / ".agents"
+    return real_user_home() / ".agents"
 
 
 def _utc_now() -> str:

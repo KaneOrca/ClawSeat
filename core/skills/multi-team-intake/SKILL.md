@@ -70,6 +70,8 @@ Subteams are execution units:
 
 ```yaml
 team_type: subteam
+review_model: dedicated_reviewer
+dedicated_reviewer: true
 scaling_policy:
   max_builders: 3
   reviewer_required_when_builders_gte: 2
@@ -81,8 +83,9 @@ Rules:
 
 1. A subteam has exactly one planner.
 2. A subteam has 1-3 builders.
-3. With 1 builder, reviewer is optional and planner performs spec/delivery
-   review fallback.
+3. With 1 builder, reviewer is optional. If omitted, set
+   `review_model: planner_owned` and `dedicated_reviewer: false`; planner
+   performs spec/delivery review fallback.
 4. With 2-3 builders, reviewer is mandatory.
 5. With 2-3 builders, every builder seat must declare `instance`, `purpose`,
    and `capabilities` so the subteam planner can choose exact `owner_seat`.

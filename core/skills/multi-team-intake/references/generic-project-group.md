@@ -30,6 +30,8 @@ Every normal subteam follows the same gate:
 
 ```yaml
 team_type: subteam
+review_model: dedicated_reviewer
+dedicated_reviewer: true
 scaling_policy:
   max_builders: 3
   reviewer_required_when_builders_gte: 2
@@ -40,8 +42,9 @@ scaling_policy:
 Rules:
 
 - `planner + builder-core` is the minimal subteam.
-- With one builder, reviewer is optional; planner performs spec review and
-  delivery review fallback.
+- With one builder, reviewer is optional. If omitted, set
+  `review_model: planner_owned` and `dedicated_reviewer: false`; planner
+  performs spec review and delivery review fallback.
 - With two or three builders, reviewer is mandatory.
 - With two or three builders, each builder must have a distinct `instance`,
   `purpose`, and `capabilities`; these fields are the planner's routing hints

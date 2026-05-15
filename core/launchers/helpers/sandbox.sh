@@ -249,6 +249,7 @@ for candidate in (source_path, existing_runtime_path):
 
 data["hasCompletedOnboarding"] = True
 data["hasSeenWelcome"] = True
+data["skipDangerousModePermissionPrompt"] = True
 version = data.get("lastOnboardingVersion")
 if not isinstance(version, str) or not version.strip():
     data["lastOnboardingVersion"] = "99.99.99"
@@ -399,6 +400,7 @@ if target_path.exists():
 
 data["hasCompletedOnboarding"] = True
 data["hasSeenWelcome"] = True
+data["skipDangerousModePermissionPrompt"] = True
 version = data.get("lastOnboardingVersion")
 if not isinstance(version, str) or not version.strip():
     data["lastOnboardingVersion"] = "99.99.99"

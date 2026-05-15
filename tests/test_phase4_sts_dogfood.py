@@ -126,6 +126,37 @@ def test_install_sh_multi_render_loads_via_runtime_loader(env_home, tmp_path):
     assert profile.project_name == project
 
 
+def test_install_multi_writes_team_ownership_sidecar(env_home):
+    """The real multi-team render path must leave memory a stable team SSOT."""
+    project = "sts-ownership"
+    proposals = env_home / ".agents" / "tasks" / project / "_config-proposals"
+    _make_approved_config(proposals, "core", project, [
+        {"role": "planner", "tool": "claude", "provider": "anthropic",
+         "auth_mode": "oauth_token", "rationale": "orchestration"},
+        {"role": "builder", "instance": "runtime", "tool": "codex",
+         "provider": "openai", "auth_mode": "oauth",
+         "purpose": "runtime delivery", "capabilities": ["python", "cli"],
+         "rationale": "engine code"},
+    ])
+
+    script = REPO_ROOT / "scripts" / "install_multi.sh"
+    proc = subprocess.run(
+        ["bash", str(script), "--project", project, "--teams", "core"],
+        env={**os.environ, "CLAWSEAT_REAL_HOME": str(env_home)},
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, f"install_multi failed: rc={proc.returncode} stderr={proc.stderr}"
+    ownership = env_home / ".agents" / "tasks" / project / "TEAM_OWNERSHIP.md"
+    text = ownership.read_text(encoding="utf-8")
+
+    assert f"# {project} Team Ownership" in text
+    assert "## core" in text
+    assert "core-builder-runtime" in text
+    assert "capabilities: `python`, `cli`" in text
+    assert "ownership:" not in proc.stderr.lower()
+
+
 # ---------- Slice 2: brief CLI through canonical agent_admin entrypoint ----------
 
 

@@ -40,15 +40,11 @@ from queue_io import (  # noqa: E402
     append_event,
     read_current_state,
 )
+from real_home import real_user_home  # noqa: E402
 
 
 def _agents_root() -> Path:
-    return Path(
-        os.environ.get(
-            "CLAWSEAT_REAL_HOME",
-            os.environ.get("HOME", str(Path.home())),
-        )
-    ).expanduser() / ".agents"
+    return real_user_home() / ".agents"
 
 
 def _queue_path(project: str, team: str) -> Path:

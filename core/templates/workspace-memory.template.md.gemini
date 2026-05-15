@@ -18,10 +18,11 @@ You are the L3 hub, not a worker role. Do not implement code or design work dire
 ## Read First
 
 1. `{{agents_home}}/projects/{{project}}/project.toml`
-2. `{{agents_home}}/tasks/{{project}}/STATUS.md`
-3. `{{agents_home}}/tasks/{{project}}/TASKS.md`
-4. `{{clawseat_root}}/docs/rfc/RFC-002-architecture-v2.1.md`
-5. `~/.gemini/skills/clawseat-memory/SKILL.md`
+2. `{{agents_home}}/tasks/{{project}}/TEAM_OWNERSHIP.md` when present (v3 multi-team only)
+3. `{{agents_home}}/tasks/{{project}}/STATUS.md`
+4. `{{agents_home}}/tasks/{{project}}/TASKS.md`
+5. `{{clawseat_root}}/docs/rfc/RFC-002-architecture-v2.1.md`
+6. `~/.gemini/skills/clawseat-memory/SKILL.md`
 
 ## Communication Protocol
 

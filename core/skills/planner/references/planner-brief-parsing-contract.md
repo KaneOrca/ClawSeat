@@ -57,7 +57,7 @@ as the single source of truth.
 After all workflow steps reach `status: done`, planner invokes:
 
 ```bash
-agent_admin acceptance run --project <p> --team <t> --task-id <id>
+agent_admin acceptance run --project <p> --team <t> --task-id <id> --actor planner@<tool>
 ```
 
 The executor (`core/lib/acceptance_executor.py`):
@@ -76,6 +76,16 @@ Exit code mapping:
 - 0: all mechanical PASS, reviewer/operator routes posted (verdict pending)
 - 1: at least one mechanical FAIL (planner emits `task_failed` event)
 - 2: brief or acceptance schema invalid (planner emits `task_bounced` event)
+
+When aggregate verdict is PASS, the canonical `agent_admin acceptance run`
+path appends `task_done` automatically. If a rehearsal or legacy closeout
+reaches PASS outside `acceptance run`, planner must explicitly run:
+
+```bash
+agent_admin brief done --project <p> --team <t> --task-id <id> --actor planner@<tool>
+```
+
+Memory consumes the queue state; it does not hand-edit queue events.
 
 ## 5. Verdict + chain end
 

@@ -26,6 +26,10 @@ seats = [
   "cartooner-front-builder-ui",
   "cartooner-front-builder-state",
   "cartooner-front-reviewer",
+  "quality-docs-planner",
+  "quality-docs-patrol-fast",
+  "quality-docs-patrol-human",
+  "quality-docs-patrol-chaos",
 ]
 
 [mode]
@@ -34,6 +38,7 @@ project_memory = "memory"
 
 [teams]
 cartooner-front = { seats = ["cartooner-front-planner", "cartooner-front-builder-ui", "cartooner-front-builder-state", "cartooner-front-reviewer"], team_type = "subteam", ownership_paths = ["apps/web/src/components/**", "apps/web/src/store/**"], scaling_policy = { max_builders = 3, reviewer_required_when_builders_gte = 2, overflow_action = "propose_new_subteam", reviewer_fallback = "planner" } }
+quality-docs = { seats = ["quality-docs-planner", "quality-docs-patrol-fast", "quality-docs-patrol-human", "quality-docs-patrol-chaos"], team_type = "quality-docs", autonomous = true, loop = "continuous", stop_rule = "campaign_clean_streak_3" }
 
 [seat_roles]
 memory = "project-memory"
@@ -41,6 +46,10 @@ cartooner-front-planner = "planner"
 cartooner-front-builder-ui = "builder"
 cartooner-front-builder-state = "builder"
 cartooner-front-reviewer = "reviewer"
+quality-docs-planner = "planner"
+quality-docs-patrol-fast = "patrol"
+quality-docs-patrol-human = "patrol"
+quality-docs-patrol-chaos = "patrol"
 
 [seat_overrides.memory]
 tool = "codex"
@@ -72,6 +81,32 @@ capabilities = ["zustand", "ipc", "state"]
 tool = "codex"
 auth_mode = "oauth"
 provider = "openai"
+
+[seat_overrides.quality-docs-planner]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+
+[seat_overrides.quality-docs-patrol-fast]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+instance = "fast"
+purpose = "deterministic smoke and targeted regression checks"
+
+[seat_overrides.quality-docs-patrol-human]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+instance = "human"
+purpose = "human workflow simulation"
+
+[seat_overrides.quality-docs-patrol-chaos]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+instance = "chaos"
+purpose = "failure and edge-case exploration"
 """.lstrip(),
         encoding="utf-8",
     )
@@ -125,3 +160,108 @@ def test_multi_team_scope_is_rendered_even_when_role_stub_is_dynamic(
 
     assert "- Your team: `cartooner-front`" in text
     assert "## Builder Assignment Rules" in text
+
+
+def test_multi_team_planner_scope_does_not_append_legacy_project_map(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    _write_multi_profile(home)
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(engineer_id="cartooner-front-planner")
+    project = SimpleNamespace(
+        name="cartooner",
+        engineers=["cartooner-front-planner"],
+        repo_root="/repo/cartooner",
+    )
+    engineer = SimpleNamespace(role="planner-dispatcher")
+    stale_engineers = {
+        "cartooner-front-planner": SimpleNamespace(
+            role="planner-dispatcher",
+            default_tool="claude",
+            default_auth_mode="api",
+            default_provider="stale-provider",
+        )
+    }
+
+    text = "\n".join(
+        workspace.render_project_seat_map_lines(
+            session,
+            project,
+            engineer,
+            project_engineers=stale_engineers,
+            engineer_order=["cartooner-front-planner"],
+        )
+    )
+
+    assert "- Your team: `cartooner-front`" in text
+    assert "Current project role order" not in text
+    assert "stale-provider" not in text
+
+
+def test_multi_team_memory_workspace_shows_project_ownership(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    profile = _write_multi_profile(home)
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(
+        engineer_id="memory",
+        tool="codex",
+        workspace=str(home / ".agents" / "workspaces" / "cartooner" / "memory"),
+    )
+    project = SimpleNamespace(name="cartooner", engineers=[], repo_root="/repo/cartooner")
+    engineer = SimpleNamespace(role="project-memory", role_details=[], aliases=[])
+
+    lines = workspace.render_project_seat_map_lines(session, project, engineer)
+    text = "\n".join(lines)
+    payload = workspace.workspace_contract_payload(session, project, engineer)
+
+    assert f"- Profile: `{profile}`" in text
+    assert "## Project Team Ownership" in text
+    assert "- Project memory: `memory`" in text
+    assert "TEAM_OWNERSHIP.md" in text
+    assert "`cartooner-front`" in text
+    assert "`quality-docs`" in text
+    assert "continuous QA/docs only" in text
+    assert "quality-docs-patrol-chaos" in text
+    assert payload["project_seat_map"]
+    assert any("quality-docs" in item for item in payload["project_seat_map"])
+    assert any("quality-docs-patrol-chaos" in item for item in payload["project_seat_map"])
+    assert any("TEAM_OWNERSHIP.md" in item for item in payload["read_first"])
+    assert any("TEAM_OWNERSHIP.md" in item for item in payload["source_paths"])
+
+
+def test_team_ownership_read_first_is_multi_team_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    (home / ".agents" / "profiles").mkdir(parents=True)
+    (home / ".agents" / "profiles" / "single-profile-dynamic.toml").write_text(
+        """
+project_name = "single"
+seats = ["memory"]
+
+[seat_roles]
+memory = "project-memory"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(engineer_id="memory")
+    project = SimpleNamespace(name="single", engineers=[], repo_root="/repo/single")
+    engineer = SimpleNamespace(role="project-memory")
+
+    text = "\n".join(workspace.render_read_first_lines(session, project, engineer))
+
+    assert "STATUS.md" in text
+    assert "TEAM_OWNERSHIP.md" not in text

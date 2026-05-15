@@ -36,6 +36,7 @@ VALID_AUTH_MODE = frozenset({"oauth", "oauth_token", "api"})
 VALID_PROVIDER = frozenset({"anthropic", "openai", "google", "minimax"})
 VALID_IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 VALID_TEAM_TYPE = frozenset({"subteam", "quality-docs"})
+VALID_REVIEW_MODEL = frozenset({"dedicated_reviewer", "planner_owned"})
 
 # Known role catalog (post-review fix #2; spec §16.7.2 role catalog validation).
 # Source of truth: planner/builder/reviewer/patrol are the original 4 specialist
@@ -202,6 +203,24 @@ def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]
 
     if "autonomous" in data and not isinstance(data.get("autonomous"), bool):
         violations.append(f"{proposal_file.name}: autonomous must be a boolean")
+    review_model = str(data.get("review_model") or "").strip()
+    if review_model and review_model not in VALID_REVIEW_MODEL:
+        violations.append(
+            f"{proposal_file.name}: review_model={review_model!r} not in "
+            f"{sorted(VALID_REVIEW_MODEL)}"
+        )
+    if "dedicated_reviewer" in data and not isinstance(data.get("dedicated_reviewer"), bool):
+        violations.append(f"{proposal_file.name}: dedicated_reviewer must be a boolean")
+    if data.get("dedicated_reviewer") is False and review_model != "planner_owned":
+        violations.append(
+            f"{proposal_file.name}: dedicated_reviewer=false requires "
+            "review_model='planner_owned'"
+        )
+    if review_model == "planner_owned" and data.get("dedicated_reviewer") is not False:
+        violations.append(
+            f"{proposal_file.name}: review_model='planner_owned' requires "
+            "dedicated_reviewer=false"
+        )
     for key in ("loop", "stop_rule"):
         if key not in data:
             continue
@@ -267,6 +286,10 @@ def _check_subteam_policy(
     planner_count = roles.count("planner")
     builder_count = roles.count("builder")
     reviewer_count = roles.count("reviewer")
+    planner_owned_review = (
+        str(data.get("review_model") or "").strip() == "planner_owned"
+        or data.get("dedicated_reviewer") is False
+    )
 
     if planner_count != 1:
         violations.append(
@@ -284,6 +307,16 @@ def _check_subteam_policy(
         violations.append(
             f"{proposal_file.name}: subteam with {builder_count} builders "
             "must declare a reviewer"
+        )
+    if planner_owned_review and builder_count != 1:
+        violations.append(
+            f"{proposal_file.name}: review_model='planner_owned' is only valid "
+            "for lightweight subteams with exactly one builder"
+        )
+    if planner_owned_review and reviewer_count > 0:
+        violations.append(
+            f"{proposal_file.name}: review_model='planner_owned' must not declare "
+            "a dedicated reviewer seat"
         )
     if reviewer_count > 1:
         violations.append(

@@ -17,26 +17,11 @@ Workflow author and dispatch orchestrator. In v3 multi-team mode I pull briefs f
 ## Boundary
 Do: pull brief from queue, claim via `agent_admin brief claim`, write workflow.md from brief, assign_owner, fan-out/fan-in, delivery consumption, SWALLOW fallback, operator intake 双入口. Don't: code, project config/profile/seat lifecycle, memory authority, **modifying `brief.acceptance_criteria` (memory owns those)**. Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 Remember: `peer not in dispatch chain`; planner does not directly dispatch peers and keeps peer work in the peer-deliveries contract instead of the canonical seat chain.
-## Dual Entry (双入口架构, 2026-04-30 BK; v3 queue path added 2026-05-14)
-
-ClawSeat supports two entry points:
-
-1. **v3 queue-entry (default in multi-team mode)**: memory writes brief +
-   appends `task_created` event to `tasks/<project>/<team>/tasks.queue.jsonl`
-   via `agent_admin brief queue`. Planner pulls via 60s poll or SessionStart
-   hook; calls `agent_admin brief claim` to take ownership; writes
-   `tasks/<project>/<team>/workflow/<task_id>.md` from the brief.
-2. user -> memory -> planner -> ... (legacy memory-entry: memory writes brief KB,
-   creates workflow.md, then wakes planner; still supported in single-team mode)
-3. user -> planner -> ... (planner-entry: user dispatches workflow work
-   directly to planner; planner decomposes it to specialists)
-
-Both routes share the same chain endpoint: when the chain closes, planner
-relays to memory so memory can synthesize KB retention. Standard Post-DELIVERY Relay
-covers memory-entry; Chain End Relay covers planner-entry.
-
-memory remains the KB retention authority. planner does not write KB directly;
-it relays the chain-end summary to memory for synthesis.
+## Dual Entry (双入口架构, v3 queue default)
+1. **v3 queue-entry**: memory writes brief + `task_created` in `tasks/<project>/<team>/tasks.queue.jsonl`; planner polls/SessionStart claims it and writes `workflow/<task_id>.md`.
+2. **legacy memory-entry**: memory writes brief KB + workflow then wakes planner; still supported in single-team mode.
+3. **planner-entry**: user dispatches workflow work directly to planner.
+Both routes/all routes close by relaying planner verdict to memory; memory remains the KB retention authority and planner never writes KB directly.
 ## Capabilities
 Use `core/references/seat-capabilities.md`, `core/references/skill-catalog.md`, `core/skills/planner/references/workflow-doc-schema.md`, `core/skills/gstack-harness/references/communication-protocol.md`, `core/skills/planner/references/collaboration-rules.md`, `core/skills/planner/references/spec-aware-dispatch.md`, and Official Docs Dispatch Gate.
 ## Output Schema
@@ -56,7 +41,8 @@ Match last 3 operator messages; keep technical terms, commands, paths, task IDs,
 - Read the lazy skill catalog cache at `~/.agents/cache/skill-catalog.json`; rebuild with `core/scripts/rebuild_skill_catalog.py` when stale or missing.
 - Validate every step against `core/skills/planner/references/workflow-doc-schema.md`.
 - **Acceptance fields are immutable**: `brief.acceptance_criteria.{mechanical,reviewer,operator}` are written by memory and copied verbatim into workflow.md if needed; planner MUST NOT add/remove/edit acceptance items. If brief acceptance is unrunnable, emit `task_bounced` event via `agent_admin brief` instead of editing.
-- Use `query_seat_liveness(project)` before each workflow render.
+- Use `agent_admin seat liveness --project <p> --json` (or the Python helper
+  `query_seat_liveness(project)`) before each workflow render.
 - Enforce 派工首选 by calling `assign_owner(step_owner_role, seats_available, project)`.
 - Dispatch directly to a live specialist when one matches `owner_role`.
 - Attempt restart through the liveness gate before any SWALLOW fallback.
@@ -65,7 +51,7 @@ Match last 3 operator messages; keep technical terms, commands, paths, task IDs,
 - Use `mode=parallel_subagents` only for independent work with disjoint write scopes.
 - Fan-in by consuming every delivery before starting dependent steps.
 - Keep commands, retry limits, artifacts, and notifications in workflow.md, not in SKILL text.
-- **After all steps complete**: call `agent_admin acceptance run --project <p> --team <t> --task-id <id>` to execute brief `acceptance_criteria`; executor runs mechanical commands, routes reviewer items to reviewer seat, batches operator items for operator. Planner waits for verdict before relaying chain end.
+- **After all steps complete**: call `agent_admin acceptance run --project <p> --team <t> --task-id <id> --actor planner@<tool>` to execute brief `acceptance_criteria`; executor runs mechanical commands, routes reviewer items to reviewer seat, batches operator items for operator, and automatically appends `task_done` on aggregate PASS. If acceptance was completed outside that command path, call `agent_admin brief done --project <p> --team <t> --task-id <id> --actor planner@<tool>` before relaying chain end. Planner waits for verdict before relaying chain end.
 
 ## Multi-Builder Assignment
 
@@ -84,48 +70,10 @@ When a team has multiple builders:
 See [core/references/workflow-collaboration-protocol.md](../../references/workflow-collaboration-protocol.md) — 7-step read→find→start→execute→write→done→notify loop; pull fallback via `agent_admin task list-pending`; failure → notify blocked roles, do NOT retry silently.
 
 ## /clear before dispatch protocol
-
-Before task N+1 to worker W, planner MUST pass all gates before `/clear`:
-
-1. **Closure**: task N has both `handoffs/<task_N>__<W>__planner.json.consumed`
-   and `<W>/DELIVERY.md`; otherwise dispatch directly.
-2. **Context-relatedness**: if task N and N+1 share material context, dispatch
-   directly; planner judgment is authoritative and recoverable from workflow.md.
-3. **Idle**: `tmux capture-pane -t $(agentctl session-name <W> --project <project>) -p | tail -8`
-   shows waiting prompt (`❯`) and no active marker (`Cogitated`, `Thinking`,
-   `Working`, `Misting`, token counter, spinner).
-
-All three pass -> `/clear`, wait 2s, dispatch. Any failure -> dispatch without
-`/clear`. This mirrors memory's planner `/compact` idle pattern.
+Before task N+1 to worker W, `/clear` only when all gates pass: task N has consumed handoff + `DELIVERY.md`; N and N+1 are not materially related; pane tail shows idle prompt and no active marker. Then `/clear`, wait 2s, dispatch. Any failed gate -> dispatch without `/clear`.
 
 ## Strict Fan-in: verify specialist .consumed receipts (mandatory)
-
-Before forming a verdict on a multi-specialist workflow, planner MUST verify
-every specialist OO closeout two-step actually completed:
-
-```bash
-for seat in $(seats_in_workflow); do
-  receipt="$HOME/.agents/tasks/<project>/patrol/handoffs/<task_id>__${seat}__planner.json.consumed"
-  [[ -f "$receipt" ]] || verdict=BLOCKED reason="${seat} missing .consumed receipt - OO step 1 (complete_handoff.py) not run"
-done
-```
-
-If any `.consumed` file is missing, step verdict is `BLOCKED`; relay the
-BLOCKED reason to memory before any retry or re-dispatch.
-The receipt field contract for those handoff files lives in
-[`core/skills/gstack-harness/references/handoff-receipt-schema.md`](../gstack-harness/references/handoff-receipt-schema.md).
-
-Exceptions:
-- planner self-loop steps where planner did not dispatch itself.
-- steps with explicit `test_policy=N/A` and no handoff JSON created.
-
-Inline DELIVERY.md read does NOT substitute for `.consumed`. A specialist
-writing DELIVERY.md without `complete_handoff.py` violates OO rule and must be
-caught here, not silently accepted.
-
-Why: koder rehearsal 2026-04-30 showed designer wrote DELIVERY but skipped
-`complete_handoff.py`; strict fan-in prevents planner from reporting false
-consumption.
+Before any multi-specialist verdict, verify every dispatched specialist produced `handoffs/<task_id>__<seat>__planner.json.consumed`; Inline `DELIVERY.md` read does NOT substitute for consumed receipts. Missing receipt means OO step 1 (`complete_handoff.py`) was skipped => `BLOCKED`, relay reason to memory before retry/re-dispatch. Exceptions: planner self-loop steps and explicit `test_policy=N/A` steps with no handoff JSON. Receipt schema: [`core/skills/gstack-harness/references/handoff-receipt-schema.md`](../gstack-harness/references/handoff-receipt-schema.md).
 
 ### SUPERSEDED claims
 
@@ -163,31 +111,8 @@ not know the task is ready and the planner-to-memory chain breaks.
 PASS 前必填 user_summary,简述本波 operator-visible 进度; relay 前核对 head_contains_commit.
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status. Planner self-closeout protocol: see [`core/references/planner-self-closeout-protocol.md`](../../references/planner-self-closeout-protocol.md).
-### Chain End Relay to Memory (双入口都适用, 2026-04-30 BK)
-
-Regardless of whether the chain started through memory-entry or planner-entry,
-when all specialists are approved and planner forms the chain verdict, planner
-MUST relay to memory:
-
-```bash
-complete_handoff.py --source planner --target memory --task-id <id> \
-  --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> \
-  --notify
-```
-
-Include a brief summary for memory to synthesize into KB:
-
-- operator intent
-- implementation summary
-- key decisions made
-
-memory-entry route: Standard Post-DELIVERY Relay already covers this.
-planner-entry route: this section is the mandate; planner self-drives the final
-memory relay after chain closeout via `complete_handoff.py`. `send-and-verify.sh`
-remains wake-up only.
-
-Why: memory is the L3 Reflector for orphan knowledge and experience retention.
-Any chain that does not reach memory loses reusable experience.
+### Chain End Relay to Memory (双入口都适用)
+After all specialists are approved and planner forms the verdict, planner-entry route must relay to memory with `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only.
 ## Memory-driven Compaction Request
 
 planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and

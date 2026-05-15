@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -90,6 +91,8 @@ from agent_admin_brief import cmd_queue as brief_queue
 from agent_admin_brief import cmd_list as brief_list
 from agent_admin_brief import cmd_claim as brief_claim
 from agent_admin_brief import cmd_show as brief_show
+from agent_admin_brief import cmd_done as brief_done
+from liveness_gate import query_seat_liveness
 
 # v3 acceptance executor (Phase 2, spec §4.7)
 _CORE_LIB_PATH = REPO_ROOT / "core" / "lib"
@@ -891,6 +894,29 @@ def cmd_seat_resume(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.seat_resume(args)
 
 
+def cmd_seat_liveness(args: argparse.Namespace) -> int:
+    rows = query_seat_liveness(args.project, max_age_seconds=args.max_age_seconds)
+    if args.seat:
+        rows = [
+            row for row in rows
+            if row.get("seat_id") == args.seat
+            or row.get("role") == args.seat
+            or row.get("session_name") == args.seat
+        ]
+    if args.as_json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return 0
+    if not rows:
+        print(f"no live seats for project {args.project}")
+        return 0
+    for row in rows:
+        print(
+            f"{row.get('role', '-')}\t{row.get('session_name', '-')}\t"
+            f"{row.get('status', '-')}\t{row.get('last_heartbeat_ts', '-')}"
+        )
+    return 0
+
+
 def cmd_project_resume(args: argparse.Namespace) -> int:
     return COMMAND_HANDLERS.project_resume(args)
 
@@ -1221,6 +1247,10 @@ def cmd_brief_show(args: argparse.Namespace) -> int:
     return brief_show(args)
 
 
+def cmd_brief_done(args: argparse.Namespace) -> int:
+    return brief_done(args)
+
+
 def cmd_acceptance_run(args: argparse.Namespace) -> int:
     try:
         results = _run_acceptance(
@@ -1242,6 +1272,18 @@ def cmd_acceptance_run(args: argparse.Namespace) -> int:
         pending = sum(1 for i in r.items if i.result == "pending")
         print(f"{route}: {r.verdict} (pass={passed} fail={failed} pending={pending})")
     print(f"aggregate: {verdict}")
+    if verdict == "PASS" and not getattr(args, "skip_queue_done", False):
+        done_rc = brief_done(
+            argparse.Namespace(
+                project=args.project,
+                team=args.team,
+                task_id=args.task_id,
+                actor=args.actor,
+                verdict="PASS",
+            )
+        )
+        if done_rc != 0:
+            return done_rc
     return 1 if verdict == "FAIL" else 0
 
 
@@ -1287,6 +1329,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_session_name=cmd_session_name,
     cmd_project_open=cmd_project_open,
     cmd_seat_resume=cmd_seat_resume,
+    cmd_seat_liveness=cmd_seat_liveness,
     cmd_project_current=cmd_project_current,
     cmd_project_use=cmd_project_use,
     cmd_project_create=cmd_project_create,
@@ -1335,6 +1378,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_brief_list=cmd_brief_list,
     cmd_brief_claim=cmd_brief_claim,
     cmd_brief_show=cmd_brief_show,
+    cmd_brief_done=cmd_brief_done,
     cmd_acceptance_run=cmd_acceptance_run,
     cmd_tui=cmd_tui,
     cmd_project_koder_bind=cmd_project_koder_bind,

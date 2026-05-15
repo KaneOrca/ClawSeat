@@ -47,6 +47,7 @@ def test_prepare_claude_home_materializes_local_settings_and_skills_dirs(tmp_pat
     assert not runtime_claude_json.is_symlink()
     runtime_data = json.loads(runtime_claude_json.read_text(encoding="utf-8"))
     assert runtime_data["hasCompletedOnboarding"] is True
+    assert runtime_data["skipDangerousModePermissionPrompt"] is True
 
     runtime_settings = runtime_home / ".claude" / "settings.json"
     runtime_skills = runtime_home / ".claude" / "skills"
@@ -129,6 +130,7 @@ def test_prepare_claude_home_materializes_local_onboarding_file_when_real_home_i
     assert not runtime_claude_json.is_symlink()
     assert runtime_data["hasCompletedOnboarding"] is True
     assert runtime_data["hasSeenWelcome"] is True
+    assert runtime_data["skipDangerousModePermissionPrompt"] is True
     assert runtime_data["lastOnboardingVersion"] == "1.2.3"
     assert runtime_data["customFlag"] == "keep-me"
     real_data = json.loads((real_home / ".claude.json").read_text(encoding="utf-8"))
@@ -170,6 +172,7 @@ def test_prepare_claude_home_seeds_onboarding_stub_when_real_file_missing(tmp_pa
     assert runtime_claude_json.is_file()
     assert not runtime_claude_json.is_symlink()
     assert '"hasCompletedOnboarding": true' in runtime_claude_json.read_text(encoding="utf-8")
+    assert '"skipDangerousModePermissionPrompt": true' in runtime_claude_json.read_text(encoding="utf-8")
 
 
 def test_prepare_claude_host_oauth_state_patches_only_host_onboarding_and_trust(tmp_path: Path) -> None:
@@ -202,6 +205,7 @@ def test_prepare_claude_host_oauth_state_patches_only_host_onboarding_and_trust(
     data = json.loads((real_home / ".claude.json").read_text(encoding="utf-8"))
     assert data["hasCompletedOnboarding"] is True
     assert data["hasSeenWelcome"] is True
+    assert data["skipDangerousModePermissionPrompt"] is True
     assert data["lastOnboardingVersion"] == "2.1.126"
     assert data["projects"][str(workdir)]["hasTrustDialogAccepted"] is True
     assert data["projects"][str(workdir)]["hasCompletedProjectOnboarding"] is True
@@ -240,5 +244,6 @@ def test_run_claude_runtime_oauth_branch_seeds_host_onboarding_before_exec(tmp_p
     data = json.loads(log_file.read_text(encoding="utf-8"))
     assert data["hasCompletedOnboarding"] is True
     assert data["hasSeenWelcome"] is True
+    assert data["skipDangerousModePermissionPrompt"] is True
     assert data["projects"][str(workdir)]["hasTrustDialogAccepted"] is True
     assert data["projects"][str(workdir)]["hasCompletedProjectOnboarding"] is True
