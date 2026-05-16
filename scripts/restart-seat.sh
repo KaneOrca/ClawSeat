@@ -86,6 +86,87 @@ cleanup_custom_env_file() {
 }
 trap cleanup_custom_env_file EXIT
 
+# Backfill the seat's `.claude/settings.local.json` with a Stop hook pointing
+# at memory-stop-hook.sh. Without this hook fired, the auto-resume read in
+# core/launchers/runtimes/*.sh never has a `<seat>.session` file to read,
+# so every restart cold-starts even though the resume read path is wired up.
+# Idempotent: merges with existing settings (preserves workspace_label etc.)
+# and skips if the same hook script is already registered.
+ensure_stop_hook() {
+  local workspace="$1"
+  local repo_root="$2"
+  local settings_dir="$workspace/.claude"
+  local settings_file="$settings_dir/settings.local.json"
+  local hook_path="$repo_root/scripts/hooks/memory-stop-hook.sh"
+
+  if [[ ! -d "$workspace" ]]; then
+    echo "  warn:      workspace missing, skipping stop-hook backfill: $workspace" >&2
+    return 0
+  fi
+  if [[ ! -f "$hook_path" ]]; then
+    echo "  warn:      stop-hook script missing, skipping: $hook_path" >&2
+    return 0
+  fi
+
+  mkdir -p "$settings_dir" 2>/dev/null || true
+  [[ -f "$settings_file" ]] || printf '{}' > "$settings_file"
+
+  "$PYTHON_BIN" - "$settings_file" "$hook_path" <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+hook_path = sys.argv[2]
+hook_cmd = f"bash {hook_path}"
+
+try:
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+except (FileNotFoundError, json.JSONDecodeError):
+    data = {}
+if not isinstance(data, dict):
+    data = {}
+
+hooks = data.setdefault("hooks", {})
+if not isinstance(hooks, dict):
+    hooks = {}
+    data["hooks"] = hooks
+
+stop_list = hooks.setdefault("Stop", [])
+if not isinstance(stop_list, list):
+    stop_list = []
+    hooks["Stop"] = stop_list
+
+# Idempotent check: skip if any existing entry already points at our hook
+already = any(
+    isinstance(entry, dict)
+    and isinstance(entry.get("hooks"), list)
+    and any(
+        isinstance(h, dict)
+        and isinstance(h.get("command"), str)
+        and hook_path in h["command"]
+        for h in entry["hooks"]
+    )
+    for entry in stop_list
+)
+if not already:
+    stop_list.append({
+        "matcher": "",
+        "hooks": [
+            {
+                "type": "command",
+                "command": hook_cmd,
+                "timeout": 10,
+            }
+        ],
+    })
+    settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print("injected")
+else:
+    print("present")
+PY
+}
+
 # Build the launch plan through agent_admin internals — single source of truth
 # for provider SSOT, launcher auth labels, and custom env overlays.
 if ! plan_out="$(
@@ -193,6 +274,12 @@ if "$TMUX_BIN" has-session -t "=$SESSION_NAME" 2>/dev/null; then
 else
   echo "  status:    no existing session"
 fi
+
+# Ensure the seat's Claude settings register our Stop hook so
+# launcher_write_active_session_id fires on each clean exit (enabling
+# auto-resume on next restart). Status line surfaces injected/present/skip.
+hook_status="$(ensure_stop_hook "$WORKSPACE" "$REPO_ROOT" 2>/dev/null || true)"
+echo "  stop-hook: ${hook_status:-skipped}"
 
 # agent-launcher.sh --headless creates the tmux session itself (don't wrap
 # in `tmux new-session`). It validates inputs, wires env (HOME, CODEX_HOME,
