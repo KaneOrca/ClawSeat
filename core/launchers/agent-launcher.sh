@@ -189,7 +189,16 @@ validate_top_level_inputs() {
 
 
 exec_agent_shell_command() {
-  local -a cmd=(bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
+  # tmux new-session doesn't propagate non-allowlisted env vars from the
+  # caller to the spawned shell, so we embed cartooner-supplied binary
+  # overrides into the command string itself. Caller (cartooner Electron)
+  # exports these; non-cartooner invocations leave them unset and the
+  # runtimes/*.sh fall back to PATH resolution.
+  local -a env_prefix=()
+  if [[ -n "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-}" ]]; then
+    env_prefix+=("CARTOONER_CLAUDE_CODE_EXECUTABLE=$CARTOONER_CLAUDE_CODE_EXECUTABLE")
+  fi
+  local -a cmd=(env ${env_prefix[@]+"${env_prefix[@]}"} bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
   if [[ -n "$CUSTOM_ENV_FILE" ]]; then
     cmd+=(--custom-env-file "$CUSTOM_ENV_FILE")
   fi

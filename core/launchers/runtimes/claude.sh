@@ -106,7 +106,12 @@ run_claude_runtime() {
     # that as an active nested session and exits immediately, which makes the
     # tmux seat disappear before restart-seat can observe it.
     unset CLAUDECODE
-    exec claude --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
+    # CARTOONER_CLAUDE_CODE_EXECUTABLE: when set (cartooner-spawned seats),
+    # bypass PATH resolution and exec the absolute binary directly. Avoids
+    # the pnpm sh wrapper layer that otherwise sits between tmux pane and
+    # native claude (process tree integrity for ClawSeat's pane_pid checks).
+    # Falls back to PATH `claude` for non-cartooner invocations.
+    exec "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-claude}" --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
   fi
 
   local secret_file="" runtime_dir
@@ -242,5 +247,6 @@ run_claude_runtime() {
   echo "────────────────────────────────────────"
   [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
   unset CLAUDECODE
-  exec claude --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
+  # See oauth branch above for CARTOONER_CLAUDE_CODE_EXECUTABLE rationale.
+  exec "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-claude}" --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
 }
