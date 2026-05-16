@@ -135,3 +135,31 @@ launcher_resume_banner() {
   local when="${2:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
   printf 'Resuming session %s from %s\n' "$session_id" "$when"
 }
+
+# Crash-recovery fallbacks for auto-resume. The .session file only gets
+# written when the Stop hook fires (clean exit). When the seat dies hard
+# (tmux killed, server reaped, system reboot), the hook never runs — so
+# we read the tool's own cwd-scoped session store instead and fall back
+# to --continue / resume --last. Both tools write their session files
+# continuously as the conversation progresses, surviving any crash.
+
+_has_claude_cwd_history() {
+  local home_for_claude="$1" cwd="$2"
+  [[ -n "$home_for_claude" && -n "$cwd" ]] || return 1
+  # Claude Code stores sessions at ~/.claude/projects/<encoded>/*.jsonl
+  # where <encoded> = cwd with both '/' AND '.' replaced by '-'. Confirmed
+  # against on-disk samples: /Users/ywf/.agents/... -> -Users-ywf--agents-...
+  # (the double-dash comes from /. -> --).
+  cwd="${cwd%/}"
+  local encoded
+  encoded="$(printf '%s\n' "$cwd" | tr '/.' '--')"
+  compgen -G "$home_for_claude/.claude/projects/${encoded}/*.jsonl" >/dev/null 2>&1
+}
+
+_has_codex_history() {
+  local codex_home="$1"
+  [[ -n "$codex_home" && -d "$codex_home/sessions" ]] || return 1
+  # `codex resume --last` filters by cwd internally, so we just need to
+  # confirm any rollout exists. Empty result → no recoverable history.
+  [[ -n "$(find "$codex_home/sessions" -maxdepth 5 -name 'rollout-*.jsonl' -print -quit 2>/dev/null)" ]]
+}

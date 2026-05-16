@@ -91,6 +91,15 @@ run_claude_runtime() {
     if [[ "${CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST:-}" == "1" ]]; then
       echo " Host-managed OAuth: yes (Claude Desktop wrapper)"
     fi
+    # Crash-recovery fallback: if Stop hook didn't fire (seat killed before
+    # clean exit) but cwd has prior Claude history, --continue picks up the
+    # most recent conversation. Only used when no precise --resume <uuid>
+    # is available from the hook-written .session file.
+    if [[ -z "$resume_label" && "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]] \
+        && _has_claude_cwd_history "$HOME" "$workdir"; then
+      resume_args=(--continue)
+      resume_label="--continue (latest in cwd)"
+    fi
     echo "────────────────────────────────────────"
     [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
     # Parent Codex/Claude sessions can export CLAUDECODE. Claude Code treats
@@ -224,6 +233,12 @@ run_claude_runtime() {
   echo " Endpoint:   ${ANTHROPIC_BASE_URL:-default}"
   echo " HOME:       $HOME"
   echo " AGENT_HOME: $AGENT_HOME"
+  # Crash-recovery fallback — see oauth branch comment above.
+  if [[ -z "$resume_label" && "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]] \
+      && _has_claude_cwd_history "$HOME" "$workdir"; then
+    resume_args=(--continue)
+    resume_label="--continue (latest in cwd)"
+  fi
   echo "────────────────────────────────────────"
   [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
   unset CLAUDECODE
