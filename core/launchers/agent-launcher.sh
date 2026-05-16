@@ -16,6 +16,17 @@
 
 set -euo pipefail
 
+# Seat sessions live on the default tmux socket and are managed by this
+# launcher from *outside* tmux. If invoked while $TMUX is set (e.g. the
+# operator runs `restart-seat.sh` from inside a tmux pane, or the host
+# desktop app inherits TMUX from its launching shell), `tmux new-session`
+# below either refuses with "sessions should be nested with care" or
+# nests the new server inside the caller's pane — both break seat
+# lifecycle. Strip the inherited env up front so every downstream tmux
+# call lands on the outer/server we own. (`send-and-verify.sh` defends
+# per-invocation with `env -u TMUX`; this is the launcher-side mirror.)
+unset TMUX TMUX_PANE
+
 REAL_HOME="$HOME"
 LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCHER_REPO_ROOT="$(cd "$LAUNCHER_DIR/../.." && pwd)"
