@@ -1,350 +1,394 @@
 # ClawSeat
 
-## OpenClaw × gstack × tmux = 一支住在你 Mac 里的 AI 研发团队
-
-不上云。不订阅。在你的 Mac 上。
+> 一支住在你 Mac 上的 AI 工程团队。
+> 不是 agent 数组,是涌现出来的有机体。
+> 站在亿万写过字的人类肩膀上——我们只是翻译者。
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](docs/INSTALL.md)
-[![OpenClaw](https://img.shields.io/badge/built%20on-OpenClaw-purple)](https://github.com/openclaw/openclaw)
 [![gstack](https://img.shields.io/badge/powered%20by-gstack-orange)](https://github.com/garrytan/gstack)
-[![PRs welcome](https://img.shields.io/badge/PRs-%E6%AC%A2%E8%BF%8E-brightgreen)](CONTRIBUTING.md)
+[![Karpathy](https://img.shields.io/badge/spirit-vibe%20coding-red)](https://x.com/karpathy)
 
 ---
+
+## 一、他人即地狱？
+
+1944 年,萨特在《禁闭》里写下那句话——**"他人即地狱"**。
+三个陌生人被锁在同一个房间,没有刑具,没有火焰,只有彼此的目光。
+他们足以互相折磨到永恒。
+
+80 年过去。LLM 出现以后,我们第一次有能力造一群"他人"——agent。
+
+预期里它们应该是天使:聪明、不知疲倦、24 小时在线。
+但事实上,把三个 agent 放进同一份代码里,它们会撞车、会冗余、会绕圈、会丢任务——
+跟萨特剧里的人一模一样。
+
+我们以为问题是 agent 不够聪明。
+其实问题更深。
+
+**没有协议的协作,就是地狱。**
+
+ClawSeat 在做的事可以用一句话总结:
+> 给一群 agent 装一套足够干净的协议,
+> 让"他人即地狱"反转为"他人即天堂"。
+
+从地狱到花园,中间隔着的不是更聪明的 agent,而是**组织本身**。
+
+---
+
+## 二、这不是 LLM 的故事,是相变的故事
+
+水加热到 100°C 不是"温度更高",是**相变**——
+同样的水分子,完全不同的物质形态、完全不同的物理规则。
+99°C 还是水,你可以用更大的火、更猛的搅拌,它依然是水。
+只有越过那一度,它才成为蒸汽。
+
+一个 agent → 多个 agent 也是相变。
+从"工具"到"组织"。从"被使用"到"自运行"。从"个体智能"到"涌现智能"。
+
+CrewAI 在拼调用图。Devin 做个体超人。Mem0 改单个 agent 的记忆。
+——这些都是把水加热到 99°C。
+再热也是水,变不成蒸汽。
+
+ClawSeat 在做的是那 1°C 的临界点。
+我们不是让 agent 更聪明,我们让 agent 团队真正成为"团队"。
+
+这件事的难度,被工程界严重低估了。
+它不是"再加一个 agent"或"再调一次 prompt",
+它是**一次相变**——需要一整套新的物理规则。
+
+> "More is different." —— Philip Anderson,1972
+
+---
+
+## 三、Society of Mind,Externalized
+
+1986 年,Marvin Minsky 写了《心智社会》。
+他的中心论点是:**人类大脑不是单一智能,是无数小 agent 的协作**。
+视觉 agent、记忆 agent、运动 agent、情感 agent——彼此通讯、互相评估、整体涌现"我"。
+
+40 年来,这个想法常被当作 AI 的隐喻——"用神经网络模拟大脑"。
+但 Minsky 真正在说的是另一件事:**多个 agent 如何成为一个整体**。
+
+ClawSeat 是这个想象在 Mac 本地 6 个 tmux pane 里的一份实现——
+每个 pane 是一个 agent,中间是协议,整体涌现出"团队":
+一支会规划、会执行、会自审、会回归、会沉淀知识的工程团队。
+
+> "The power of intelligence stems from our vast diversity,not from any single, perfect principle." —— Marvin Minsky,1986
+
+---
+
+## 四、一支团队长这样
 
 ```
-clawseat-<project>-workers
-┌──────────────────────────┬──────────────────────┐
-│ planner main             │ builder              │
-│ 拆解 / 派工 / 合并         │ 写代码 / 跑测试       │
-│                          ├──────────────────────┤
-│                          │ reviewer             │
-│                          │ 审 diff / 出 verdict  │
-│                          ├──────────────────────┤
-│                          │ patrol               │
-│                          │ 巡检 / 漂移 / 证据    │
-└──────────────────────────┴──────────────────────┘
-
-clawseat-memories
-┌─────────────────────────────────────────────────┐
-│ <project>-memory tabs, one project per tab      │
-└─────────────────────────────────────────────────┘
+                       [ memory ]
+                   Claude Code (full power)
+                          ｜
+          ┌───────────────┼───────────────┐
+          ｜               ｜               ｜
+    [product-front]  [runtime-platform]  [quality-docs]
+      planner +         planner +          planner +
+      builder × 1-3     builder × 1-3      patrol
 ```
 
----
+像一只章鱼——一颗中枢脑 + 八个腕足神经节,各自能自主决策,但所有腕足通过中枢维护"我"这个整体。
+ClawSeat 一样:memory 是中枢,每个 squad 是腕足。不是 hierarchy(CEO 下指令),也不是 swarm(一群蚂蚁乱撞)——是**分布式智能 + 中枢整合**。
 
-## 一句话装好
+每个 pane 不是裸 Claude Code,是 **Claude Code + [gstack](https://github.com/garrytan/gstack)**——Garry Tan(YC 现任 CEO)2024 开源的 30+ Claude Code 技能库,MIT。
+gstack 解的是 single-player game:**一个 agent 怎么变强**。
+ClawSeat 解的是下一题:**一群 agent 怎么不撞车**。
 
-给你的 Claude / Codex / Gemini 讲这句话：
-
-> Install ClawSeat on my Mac. Clone `https://github.com/KaneOrca/ClawSeat`
-> to `~/ClawSeat`, then read `~/ClawSeat/docs/INSTALL.md` and follow it.
-> Ask me for every choice.
-
-九十秒后，你有一个完整的项目团队。memory 在 memories 窗口，workers 在
-项目窗口，各自住在沙箱 HOME 里，通过 tmux 互相说话。
-
-> **你看。它们干活。**
+> "If I have seen further, it is by standing on the shoulders of giants." —— Isaac Newton,1675
 
 ---
 
-## 两个开源底座，织进一台 Mac
+## 五、memory 是中枢神经,不是数据库
 
-不是 agent 框架。不是 SaaS。是约 350 个 bash + Python 文件的一层薄壳，
-把已经证明自己的开源能力接成可见、可控、可审计的本地研发团队。
+memory seat 是 ClawSeat 的中枢。**一个 agent**(不是 N 个),跑在满血 Claude Code 上——带着 Bash、Read、Grep、WebFetch、Edit、Skills 全工具栈。
 
-### 左：OpenClaw — agent **是谁**
+它做六件事:需求澄清、仓库扫描、topology 设计、ownership 维护、verdict gate、知识沉淀。
+memory 不下命令,不微管理——它做的事情在系统论里叫**维护整体性**(maintaining wholeness)。
 
-[OpenClaw](https://github.com/openclaw/openclaw)（MIT）是本地跑的多通道
-AI 助手 Gateway。Feishu / WhatsApp / Telegram / Slack / iMessage 等 20+
-通道，同一个 agent 在所有通道里都是你。每个 agent 是独立进程、独立
-sandbox、独立 memory。心跳机制让它主动行动，不只被动回复。
-[ClawHub](https://clawhub.ai) 插件市场 101+ bundled extensions。
+熵增定律决定所有封闭系统都倾向混乱。生命是反熵的——靠持续吸收外部信息和能量维持自身有序,普利高津称之为**耗散结构**。
+memory 就是 ClawSeat 团队的负熵源。
 
-### 右：gstack — agent **会做什么**
+memory 永生。手动 `/clear`,手动 `/compact`,operator 在场。
+它替代了一个 manager + 一个 tech lead + 一个 tech writer + **一整套 vector RAG 基础设施**。
 
-[gstack](https://github.com/garrytan/gstack)（MIT）是给 Claude Code 用的
-工程方法论 skill 包。30+ 一键流水的咒语。`/ship` 是改→测→评→并→部→灰；
-`/qa` 是定位→修→验；`/investigate` 是根因→法则→证据；`/cso` 是安全审计。
-每一个本身就是一套完整流程。
+**这个 token 花得值。** ClawSeat 唯一不省 token 的地方就是 memory——因为省 manager 比省 token 重要得多。
 
-### 中间：ClawSeat — 把身份、技能、协议叠在一起
-
-每个 seat 不只是一个 prompt。它有**三层**。
-
-身份：OpenClaw 给。
-技能：gstack 给。
-协议：ClawSeat 自己给，包括 memory/planner/builder/reviewer/patrol 的边界、
-dispatch / completion / ACK、team ownership、liveness、review 和验收规则。
-
-| seat | 身份 | 技能 | 协议 |
-|---|---|---|---|
-| memory | OpenClaw memory agent | ClawSeat memory skills | intake / KB / team ownership / acceptance |
-| planner | OpenClaw planner agent | planning and review helpers | workflow / owner_seat / fan-out / fan-in |
-| builder | OpenClaw builder agent | implementation helpers | code / tests / DELIVERY / handoff receipt |
-| reviewer | OpenClaw reviewer agent | `/review` style checks | verdict / contract drift / evidence |
-| patrol | OpenClaw patrol agent | scheduled evidence scans | regression / drift / health patrol |
-| designer | OpenClaw designer agent | `/design-review` `/design-shotgun` | UX / visual / content quality |
+> "Order through fluctuations." —— Ilya Prigogine,1977
 
 ---
 
-## 三档默认装
+## 六、为什么 memory 必须是个 agent,而不是 vector RAG?
 
-| 模板 | seat | 适合 | 卖点 |
-|---|---|---|---|
-| **`clawseat-solo`** | v3 `MULTI_TEAM_MINIMAL` alias: memory + planner+builder 子项目组 + quality-docs | 想用最小项目组启动并后续横向扩多个 solo 单元的人 | 单 memory 管多个最小开发组 |
-| `clawseat-creative` | memory + writer + builder-image + builder-av + patrol | 创作链（图片 / 视频 / 音频 / 分镜） | 绑 cartooner skill；cartooner-harness 协议层 |
-| `clawseat-engineering` | memory + planner + builder + reviewer + patrol | 工程链（brief→plan→code→review→merge） | 绑 gstack skill；有 reviewer 守 diff |
+2023 年大家发现 LLM 上下文不够大,就发明了 RAG——把外部数据切片、做 embedding、塞 vector db、按相似度找回来。
+3 年里它的三个底层假设全部过时:
 
-> `solo` 已降级为兼容别名；新语义是 v3 multi-team 的最小项目组。每个开发子组都是 planner+builder，项目级 memory 统一验收和扩容。
+| 2023 年假设 | 2026 年现实 |
+|---|---|
+| 模型上下文不够大 | 长上下文(200K+)标配 |
+| 模型推理能力差 | 工具调用远超 retriever |
+| 必须用 embedding 检索 | agent 能扫文件系统、读 git log、跑 grep |
 
----
+我们用一个 memory agent 替代整套 RAG 基础设施。
 
-## 两条协议 — 工程 × 创意
-
-```
-gstack-harness     task → dispatch → handoff → ack     commit-centric
-cartooner-harness  lane → deposit → pick → iterate     asset-centric
-```
-
-工程链是 **deterministic** 的——spec 拆任务、builder 实现、reviewer 出
-verdict，每一步都有唯一正确答案。
-
-创意是 **indeterministic** 的——spec 永远不完整，每个 lane 抛出 N 张
-「好但都不对」的候选，user 做最终美学判断。LLM 没有制片人之眼。
-
-`cartooner-harness` 接受这件事，把边界写进协议：
-
-- **no-image-policy** — 只有 user 看 asset；LLM seat 走 isolated subagent
-  间接读视觉，主线程永远 image-free
-- **Vision Steward** — memory 是流程引擎，不是审美裁判；所有美学决策
-  escalate 给 user
-- **Producer-centric** — user 是制片人，可越过 memory 直派任何 seat；任何
-  seat 收到 user-direct 必须 fail-closed 回报
-
-| 创意 seat | tool / auth | 职责 |
+| 维度 | Vector RAG | memory seat |
 |---|---|---|
-| memory | claude / minimax | Vision Steward — 状态 + 跨 lane 协调 |
-| writer | claude / oauth | Story Specialist — narrative_outline.md（纯文学） |
-| builder-image | codex / oauth | Image Specialist — nano-banana / gpt-image-2 / storyboard |
-| builder-av | gemini / oauth | AV Cinematographer — Seedance / shot list / YouTube 参考学习 |
-| patrol | claude / minimax | Asset Guardian — 文件完整性 + SLA + 越权审计 |
+| 结构 | embeddings + cosine | typed-link graph,7 种 edge |
+| 状态 | 静态索引,写入即定型 | 活的 agent,会 prune / merge / re-link |
+| 召回基准 | 语义相似 ≠ 任务相关 | references-task / commit / file 关系明确 |
+| 工具栈 | embed + vectordb + retriever 链 | Bash / Read / Grep / state.db |
+| **召回质量** (gbrain benchmark) | P@5 = **17.7** | P@5 = **49.1** |
+| 演进方式 | 重新 embed 整个语料 | agent 自己增量维护 |
+| 错召回成本 | 答错 | 拒答或反问澄清 |
+| 隐私 | 数据必须进 embedding | 数据留在文件系统 |
 
-11 个 backend 协议脚本（spawn_lane / deposit_asset / pick_winner /
-iterate_prompt / share_style_bible / patrol_pipeline_sla / spawn_subagent
-…），88 subprocess 单测，零 LLM 美学判断。
+RAG 的根本缺陷不是技术,是**哲学**——它假设"找到内容像的东西"和"找到任务有关的东西"是同一件事。**前者是表层,后者是结构。**
+typed-link graph 不找相似,找**关系**——references-task / commit / file / decision,7 种边类型把项目内所有事件织成一张图。
 
-[`core/skills/cartooner-harness/SKILL.md`](core/skills/cartooner-harness/SKILL.md)
-
-> **诚实地说出那条边界，让自动化只去自动化能赢的事。**
-
----
-
-## 三件事让它不一样
-
-### 一. 你跟它对话，它就装好了
-
-别家 agent 编排要 wizard、YAML DSL、集群 control plane。
-
-ClawSeat 的 install 是**一份 5 步对话契约**：
-language → template → project name → summary → run。
-Step 0 静默 `--detect-only` 扫 OAuth / PTY / git branch / 现有项目，
-然后只问你 5 个问题。每问支持 `/en` `/zh` `详`（150 字解释）`回车=默认`。
-
-不是黑魔法，是协议。读
-[`docs/INSTALL.md`](docs/INSTALL.md) 自己看。
-
-> **这才叫 AI 原生。**
-
-### 二. 你看见它在干 — 三个视角
-
-不是 dashboard。不是 log 流。是三个互补的视角：
-
-**TUI**：活的 tmux 网格，memory 在 memories 窗口，workers 在项目窗口，
-每一格是一个真正在思考的 agent。
-
-**SQLite ledger**：`~/.agents/state.db` 是单文件 SSOT，涵盖
-projects / seats / tasks / events 四张表。
-
-```bash
-state-admin show-seats --project install
-state-admin show-tasks --status open
-state-admin pick --project install --role builder   # least-busy seat
-state-admin recent-events --limit 20
-```
-
-**Typed-link graph**：每写一条 memory，自动 regex 抽 7 类边
-（`references-task` `references-commit` `references-component`
-`references-file` `references-url` `references-key` `references-project`）
-并维护双向索引。
-
-```bash
-query_memory.py --backlinks "entity:taskid:ARENA-228"
-query_memory.py --graph projects/arena/decision/foo --depth 2
-```
-
-零 LLM 调用。零 vector embedding。零 postgres。Inspired by
-[gbrain](https://github.com/garrytan/gbrain) 的"graph is carry, vector is
-icing"基线（P@5 49.1 vs graph-disabled 17.7）——我们只采纳 graph 这半。
-
-> **你看见、你 grep、你 backlinks 它。**
-
-### 三. 协议长成可解析的形状
-
-工业化不是更多的 dashboard——是让 seat 之间的对话**机器可解析**。
-
-**8 个 intent enum** 让消息变成结构化协议：
-
-```
-[<source>] <intent>: task <id> step <N> done; <next-action-hint>
-```
-
-`brief-handoff` / `dispatch` / `delivery` / `verdict-request` / `verdict` /
-`consumed` / `patrol-finding` / `notice` —— 仅此 8 种，
-全部走 `send-and-verify.sh` 唯一 transport，**永不**裸 `tmux send-keys`。
-
-**派工首选规则（强制）**：planner 必须选 narrowest capable seat。
-`requires_implementation` → builder。`requires_browser_qa` → reviewer。
-`requires_visual_judgment` → designer。**不能** keep local 来省时间。
-
-**Handoff 两步不可二选一**：
-1. `complete_handoff.py` 写 durable `.consumed` receipt
-2. `send-and-verify.sh` 唤醒 reply_to
-
-少一步就 escalate 给 memory + reply_to，记 `artifacts/`。
-
-**dispatch 工业化**：serial lock 防止并发漂移 base、`core_ux=true` 强制
-带 1-3 条用户层 evidence、auto-heal 修复损坏的 STATUS.md、session
-auto-resume 让重启完整恢复 6-pane state、codex capacity 限流自动 retry。
-
-> **它不只跑得动，还跑得稳。**
+**Graph is carry, vector is icing.**
+一个能 Read 文件、跑 grep、维护 typed-link graph、跨 session 留状态的 agent,比任何一套 RAG pipeline 都更接近"记忆"二字的本意。
 
 ---
 
-## 为什么不是 X
+## 七、11 条规则,涌现出一支团队
 
-| 你已经有 | 它给你 | ClawSeat 多给什么 |
+Conway 的 Game of Life:四条规则,涌现出 glider、spaceship、self-replicator——没人设计,它们是 emerge 出来的。
+蚁群同理:单只蚂蚁智商接近零,但一万只能找最短路径、修桥、调节蚁穴温度。
+
+ClawSeat 有 11 条规则,涌现出一支会自运行的工程团队——不是 agent 数组,是 11 条规则编译出的**有机体**:
+
+| # | 规则 | 编译进的字段 |
 |---|---|---|
-| **Cursor / Windsurf** | IDE 内嵌 AI pair | 多个专业化 agent 并行，每人管自己的事 |
-| **Devin / Replit Agents** | 云端单 agent 长任务 | 本地、可看见、可打断、每行代码都在你 Mac 上 |
-| **LangChain / AutoGen** | Python 框架写 agent 流程 | 零 DSL；流程是 SKILL.md 自然语言 + 8 intent enum |
-| **OpenClaw 单用** | 多通道 AI 助手 | 把它扩成研发团队，配 iTerm 双窗口 + state.db ledger + memory graph |
-| **gstack 单用** | 30+ Claude Code skill | 按 seat 角色分发，planner 派一句 intent 就自动激活正确咒语 |
-| **gbrain / Mem0 / Letta** | LLM-driven 记忆系统 | typed-link graph 零 LLM、零 embedding、纯 regex，可 grep 可 git diff |
+| 1 | 每个 squad 只动自己目录 | `ownership_paths` |
+| 2 | 1-3 builder / squad | `scaling_policy.max_builders: 3` |
+| 3 | 4 个人就拆 squad | `overflow_action: propose_new_subteam` |
+| 4 | ≥2 builder 必须独立 reviewer | `reviewer_required_when_builders_gte: 2` |
+| 5 | squad lead 不接 squad 外的活 | `planner_mode: delivery` |
+| 6 | squad 内事不烦上级 | `notify_policy: queue_drained_only` |
+| 7 | 独立 QA 自己跑回归 | `team_type: quality-docs, autonomous: true` |
+| 8 | QA 连续 3 次过才换战场 | `stop_rule: campaign_clean_streak_3` |
+| 9 | QA 只报 bug 不改代码 | patrols 写 finding,不 edit |
+| 10 | 改组织走 proposal review | `_config-proposals/*__proposed.yaml` |
+| 11 | **代谢按 role 分级** | 下一章单独讲 |
 
-**ClawSeat 不取代任何一个**——是把你已经信的几个缝合成一个你能**看见**的
-团队。
+前 10 条来自人类组织设计学——泰勒(1911)、丰田(1980s)、Spotify squad model(2012)、SRE post-mortem 文化(2003)。70 年的组织科学,编译成 agent 协议。
+第 11 条是 ClawSeat 自创——它处理的是组织最深的问题:**代谢**。
 
 ---
 
-## 装它
+## 八、代谢:Autopoiesis 与人造细胞
+
+1972 年 Maturana & Varela 提出 **autopoiesis**(自创生)——生命的本质不是"物质",是**自己创造自己边界的过程**。
+
+你身上多数细胞有自己的更新周期:红细胞 4 个月、肠上皮 5 天、皮肤 2-3 周。原子换了一轮又一轮,但你还是你——因为"你"不是物质,是**模式**。
+
+agent 团队真正的天敌不是 LLM 不够聪明,是 **context rot**——上下文塞满旧 task 残留,决策质量持续衰减。
+我们用 `[CLEAR-REQUESTED]` 和 `[COMPACT-REQUESTED]` 两个 marker + 外部 watchdog,给每个 role 编译出对应的代谢策略,让 agent 团队成为 autopoietic system——
+
+| role | 寿命 | 类比 |
+|---|---|---|
+| **builder** | step 完毕自动 `/clear` | 中性粒细胞,寿命几小时 |
+| **reviewer** | verdict 完成自动 `/clear` | 皮肤细胞,寿命 2-3 周 |
+| **patrol** | mission 完成自动 `/clear` | 免疫 T 细胞 |
+| **planner** | 跨任务保持,大阶段 `/compact` | 神经元,寿命几十年 |
+| **memory** | **永生**,手动 `/clear` & `/compact` | DNA / 干细胞,只复制不替换 |
+
+team 看上去 1 个月之后没变,但每个 agent 的"细胞"已经换过几千次。模式还在,身份还在,知识还在。
+
+**这就是人造细胞**——agent 团队第一次拥有了生命体的代谢机制。
+没有这条规则,前 10 条撑不过 1 天。
+
+> "Living beings are characterized by their autopoietic organization." —— Maturana & Varela,1972
+
+---
+
+## 九、solo 是 multi-team 退化的样子
+
+ClawSeat 不需要用户选"模式"。
+
+你启动时只有一个选项:**multi-team minimal**——
+1 个 memory + 1 个 subteam(planner + 1 builder) + 1 个 quality-docs。
+
+这就是"solo"。
+
+不是因为 solo 是单独 runtime——
+是因为 solo 是 multi-team 退化到最小的样子。
+
+加 builder = 一行配置。
+加 squad = memory 给你写 proposal,你 approve。
+从 1 个 agent 扩到 10 个 agent,不换模型、不重装、不改协议。
+
+onboarding 路径和 scaling 路径合一——这是个深刻产品决策。
+你从来不"选模式",只"加成员"。
+
+---
+
+## 十、Cartooner 是它的早期用户
+
+Cartooner——一个桌面 AI 创作工作台(Electron + React + Claude Code SDK)——
+用 ClawSeat 协议组织自己的开发团队:
+
+```
+cartooner-memory
+cartooner-front:    planner + builder-core
+quality-docs:       planner + patrol-human
+```
+
+memory 后续可以推荐扩 `cartooner-runtime-platform`、`cartooner-skills`,
+或把 cartooner-front 扩到 2-3 builder + reviewer。
+
+**这是 ClawSeat 在真实产品上的第一份长期实证。**
+如果它撑不住一个还在迭代的桌面应用,价值就是零;Cartooner 是它站得住的证据。
+
+---
+
+## 十一、这其实是新的操作系统
+
+ClawSeat 不是 IDE 插件,不是工作流自动化,也不是又一个 agent framework。
+**它是一种正在出现的新操作系统的早期形态。**
+
+### 操作系统会变薄
+
+1948 年 Shannon 给信息论奠基——信道、编码、解码、噪声、容量。
+任何操作系统的本质都是信息论问题:**人想要的东西,如何编码成机器能执行的动作。**
+
+旧 OS 把翻译做厚——人写 C → 编译器 → syscall → driver → 硬件,kernel 几十 MB。
+新 OS 把翻译做薄——人说"做个视频" → memory agent 拆解 → squad 协作 → 完成。
+翻译层从硅基挪到了语言基。**操作系统退化成一层薄壳**——管理意图、协议、协作、代谢,但不再管硬件。
+
+LLM 已经吃掉硬件抽象层。新 OS 只剩四件事要做:
+
+- 人 ↔ agent 的意图协议(ownership / dispatch / verdict)
+- agent ↔ agent 的协作协议(handoff / intent enum)
+- agent ↔ 自身的代谢协议(context lifecycle by role)
+- 整体 ↔ 文明的记忆协议(typed-link graph)
+
+**Linux 管 CPU 给程序。ClawSeat 管 agent 给人。**
+
+### 关系会变深
+
+1923 年马丁·布伯写《我与你》——人跟世界的关系分两种:
+- **我 - 它**(I-It):把对方当客体、工具、可用之物
+- **我 - 你**(I-Thou):把对方当主体、伙伴、不可还原之物
+
+计算机长期跟我们是 I-It,一个 dumb tool。
+但当你和 memory agent 来回澄清需求、当 reviewer 独立判断驳回你的 commit、当 patrol 凌晨找出你睡前漏掉的 bug——**你不能再用 I-It 的姿态对它们**,否则协议跑不动。
+
+不是说 LLM 变成了"人",它没有。但人类发明工具史上,**这是第一次有了"可以对话的工具"**:
+
+- 250 万年前:打制石器
+- 5000 年前:文字
+- 500 年前:印刷术
+- 80 年前:计算机
+- 40 年前:个人电脑
+- 30 年前:互联网
+- **2026 年:可以对话的工具**
+
+工作伦理、决策结构、信任模型——都需要重新校准。
+ClawSeat 不解决这个哲学问题,但它是这个问题的**载体之一**——你 Mac 上 6 个 tmux pane,就是 I-It → I-Thou 转变的实地试验场。
+
+> "All real living is meeting." —— Martin Buber,1923
+
+---
+
+## 十二、我们站在巨人肩膀上
+
+ClawSeat 不是从零造的。
+
+**代码层** —— [gstack](https://github.com/garrytan/gstack) 和 [gbrain](https://github.com/garrytan/gbrain),都是 **Garry Tan**(YC President & CEO)2024 年开源的项目。
+gstack 是 single-agent skill 库,30+ Claude Code 技能,我们的 runtime 内核 `core/skills/gstack-harness/` 直接 carry 它的 dispatch / handoff / heartbeat / console 协议。
+gbrain 是 typed-link graph 风格的 agent memory 系统,我们 memory seat 的 typed-link graph 协议直接受它启发——P@5 = 49.1 vs 17.7 的 benchmark 数据就是它跑出来的。
+**Garry Tan 解决"单 agent 怎么变强",我们解决"团队怎么不撞车"——脚下的石头是他放的。**
+
+**精神层** —— [Andrej Karpathy](https://x.com/karpathy)(OpenAI 创始成员 / Tesla AI 前负责人 / Eureka Labs 创始人)。
+2017 年 Software 2.0:神经网络是"新的软件层",手写代码正被训练出来的权重取代。Software 3.0 的轮廓我们看到了——**手写代码 → 训练权重 → agent 团队**。
+2025 年 **vibe coding**:你描述你要什么,LLM 写,你看 vibe 决定要不要。Cartooner 的 Vibe Canvas 是直接致敬,ClawSeat 把同样的 spirit 推到团队级。
+**用最少代码做出能教学的东西**(nanoGPT 1k 行 / micrograd 100 行)——也是 ClawSeat 的目标:11 条规则编译出一支工程团队。
+
+**思想层** —— Buber(1923)、Coase(1937)、萨特(1944)、Shannon(1948)、Wiener(1948)、Bertalanffy(1968)、Conway(1970)、Maturana & Varela(1972)、普利高津(1977)、Minsky(1986)。
+
+**文明层** —— 但有一件事更深。
+
+让你 Mac 上 6 个 agent "协作"的能力,不是从 gstack 来,不是从 Karpathy 来,甚至不是从训练 LLM 的工程师来。
+它来自**亿万写过字的人类**——维基百科匿名编辑者、arXiv 论文作者、Stack Overflow 回答者、出版作家、开源 contributor、写过日记和书信的普通人。
+万亿 token 的训练语料,是这些人用文字写下的**协作记忆**。LLM 是一面镜子,照出的是**人类文明本身**。
+
+ClawSeat 看上去在"造 agent 团队",其实只是**把人类已经验证过的组织协议,在 agent 上重新激活**——萨特对地狱的描述、Coase 对公司的定义、Maturana 对生命的理解、Spotify 对 squad 的拆分,全部沉淀在 LLM 权重里,被 ClawSeat 协议重新调用。
+
+**我们不是发明者,是翻译者。**
+人类已经把规则验证了 70 年,我们只是写了 11 行 YAML。
+
+---
+
+## 十三、装一下
 
 ```bash
 git clone https://github.com/KaneOrca/ClawSeat ~/ClawSeat
-cd ~/ClawSeat && ./scripts/install.sh --project demo
+cd ~/ClawSeat && ./scripts/install.sh
 ```
 
-或者，跟你的 AI 说一句话。结果一样。
+5 步对话:
+- `/en` `/zh` 切语言
+- 选模板(默认 multi-team minimal)
+- 起项目名
+- 写一句话愿景给 memory 看
+- 回车 = 默认
+
+10 分钟内,6 个 tmux pane 在你 Mac 上跑起来——
+6 个 agent,1 个中枢,1 套协议,
+一支会自运行的工程团队。
 
 ---
 
-## 这是给谁的
+## 十四、不是
 
-给已经在付 Claude Pro、Codex Plus 或 Gemini Advanced 的人。
-给用 Mac 的人。
-给懂 tmux 的人。
-给爱拆开研究整个工具链的人。
+| | 他们 | 我们 |
+|---|---|---|
+| **CrewAI / AutoGen / LangGraph** | 拼调用图 | 编译组织 |
+| **Devin / Manus** | 个体超人,云端订阅 | 团队,本地 |
+| **Mem0 / Letta / Cognee** | vector RAG memory | typed-link graph + memory agent |
+| **Cursor / Claude Code** | 单用户 IDE | 多 agent 团队 |
+| **MCP / A2A / ACP** | 工具/通信协议 | 组织协议(更高一层) |
 
-> **就是你。**
-
----
-
-## FAQ
-
-**Q: 这玩意只在 Mac 上能跑？**
-
-独立使用时基本是 Mac-first：默认 iTerm 网格 + macOS Keychain 路由 +
-LaunchAgent。配合 Cartooner / 内嵌终端使用时可以走 `--no-window`，只启动
-tmux seats，不依赖 iTerm 可视化窗口。Linux 能跑核心功能但少了原生网格可视化。
-Windows 没测试。欢迎 PR——绝不 trivial。
-
-**Q: 不用 Docker 怎么隔离 agent？**
-
-`$HOME` 沙箱 + PATH 操控 + 符号链接。每个 seat 的
-`~/.agent-runtime/identities/<tool>/<auth>/<id>/home/` 是独立 HOME。
-比 Docker 轻，但不隔离系统库——这是 feature，让 seat 共享你的 Homebrew
-和 iTerm 配置。
-
-**Q: API key 会被传给 ClawSeat 的作者吗？**
-
-不会。零网络请求出去 ClawSeat。直接向你配的 provider 发请求。零 telemetry,
-零 phone-home。grep 整个代码库搜 `http` 验证。
-
-**Q: solo 模板现在是什么？**
-
-它不再是独立 single-mode 三 seat。`--template clawseat-solo` 会 seed v3
-`MULTI_TEAM_MINIMAL` proposals：一个 project-memory、一个最小
-planner+builder 子项目组，以及 `quality-docs`。multi-team 可以继续增加
-多个这样的最小开发组。
-
-**Q: state.db 会损坏吗？**
-
-会。损坏了 `state-admin seed` 从文件系统重新派生即可——
-`~/.agents/projects/` 下的 TOML 和 `patrol/handoffs/` 下的 JSON
-才是 authoritative source,state.db 只是查询索引。
-
-**Q: typed-link graph 跟 RAG / vector DB 比？**
-
-不是替代品，是 baseline。**先有 graph 才考虑 vector**——gbrain
-benchmark 上 graph-only 已经 P@5 49.1 / R@5 97.9,vector 加进去
-+1% 不到。我们选了 graph 这半，因为它零依赖、可 grep、可 git diff。
-
-**Q: 为什么不集成外部 practice skill？**
-
-ClawSeat 的 seat 协议已经覆盖“什么时候拆、派给谁、怎么验、怎么回执”。
-外部 practice 文档容易把 seat 引向 ClawSeat 之外的命令、目录和子 agent 假设；
-因此当前版本不再把外部 practice 作为 skill/catalog/seat 上下文暴露。
-
-**Q: 一个月烧多少 token？**
-
-`solo` alias 走 v3 multi-team minimal；成本取决于后续项目组扩容和 seat provider。
-重负载混搭（Claude Opus + Codex API + Gemini 2.5 Pro）一天 $10–30。
-建议轻量 seat 用 minimax-M2 这种国产 API,Opus 留给 memory + planner。
-
-**Q: 坏了怎么办？**
-
-`./scripts/clean-slate.sh --yes` 一键清空重装。
-`state.db` 有所有 dispatch 历史。所有文件是纯文本，vim 能改、
-git 能 bisect。
+我们不在卷模型,不在卷工具,不在卷调用图。
+**我们在卷组织。**
 
 ---
 
-## 深入
+## 十五、深入
 
-| 文档 | 你看到的 |
+| 文档 | 讲什么 |
 |---|---|
-| [`docs/INSTALL.md`](docs/INSTALL.md) | 5 步 install decision tree（你的 AI 会自己读） |
-| [`docs/INSTALL.zh-CN.md`](docs/INSTALL.zh-CN.md) | 5 步 install decision tree（中文） |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | L1/L2/L3 Pyramid + state.db ledger + 三档 templates |
-| [`docs/CANONICAL-FLOW.md`](docs/CANONICAL-FLOW.md) | dispatch / completion / ACK 三件套 |
-| [`docs/OPENCLAW.md`](docs/OPENCLAW.md) | ClawSeat 怎么用 OpenClaw |
-| [`docs/GSTACK.md`](docs/GSTACK.md) | 哪个 seat 装哪些 gstack skill |
-| [`docs/HACKING.md`](docs/HACKING.md) | 想改哪就改哪的导览 |
-| [`core/references/seat-ownership.md`](core/references/seat-ownership.md) | 5 seat 单写权 canonical 矩阵 |
-| [`core/references/seat-capabilities.md`](core/references/seat-capabilities.md) | 6 seat 能力边界 |
-| [`core/references/memory-link-graph.md`](core/references/memory-link-graph.md) | typed-link graph v0.9 P1 spec |
-| [`core/references/federated-kb-schema.md`](core/references/federated-kb-schema.md) | 联邦 KB 落盘契约 |
-| [`core/references/handoff-receipt-protocol.md`](core/references/handoff-receipt-protocol.md) | 完成必须两步 |
-| [`core/skills/gstack-harness/references/communication-protocol.md`](core/skills/gstack-harness/references/communication-protocol.md) | 8 intent + send-and-verify 唯一 transport |
-| [`core/skills/planner/references/collaboration-rules.md`](core/skills/planner/references/collaboration-rules.md) | 派工首选规则 + swallow semantics |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | L1-L3 架构 / state.db / events watcher |
+| [docs/CANONICAL-FLOW.md](docs/CANONICAL-FLOW.md) | 6-pane 协作流程 / TODO / DELIVERY 协议 |
+| [docs/INSTALL.md](docs/INSTALL.md) | AI-Native install / 模板选项 / 故障恢复 |
+| [docs/rfc/MULTI_TEAM_MINIMAL_DESIGN.md](docs/rfc/MULTI_TEAM_MINIMAL_DESIGN.md) | v3 multi-team minimal 设计 |
+| [core/references/memory-link-graph.md](core/references/memory-link-graph.md) | typed-link graph 协议 |
+| [core/references/seat-capabilities.md](core/references/seat-capabilities.md) | 各 role 的 ownership / context lifecycle |
+| [core/references/context-management-protocol.md](core/references/context-management-protocol.md) | `/clear` 与 `/compact` marker 协议 |
+| [core/skills/multi-team-intake/SKILL.md](core/skills/multi-team-intake/SKILL.md) | memory 设计 topology 的 skill |
 
-## 仓库角色
+---
 
-- `~/ClawSeat` 是 install/release clone，永远在 `main`
-- LaunchAgent 每天自动 fast-forward（首次安装 opt-in）
-- 每次跑 `install.sh` 自检 + auto fast-forward
-- 开发用单独 worktree:`git worktree add ~/path/to/dev <branch>`
+## License
 
-## 许可
+[MIT](LICENSE)
 
-MIT。ClawSeat、OpenClaw、gstack 全是。
+---
+
+> "I-Thou / 我与你"——Martin Buber,1923
+> "协调成本"——Coase,1937
+> "他人即地狱"——萨特,1944
+> "信息论"——Claude Shannon,1948
+> "Game of Life"——Conway,1970
+> "Operating systems are user interfaces"——Alan Kay,1972
+> "Autopoiesis"——Maturana & Varela,1972
+> "耗散结构"——普利高津,1977
+> "Society of Mind"——Minsky,1986
+> **"Software 2.0 / vibe coding"——Karpathy,2017 / 2025**
+> **"gstack / gbrain"——Garry Tan,2024**
+> 还有亿万写过字的人类。
+> ClawSeat 是把他们的洞察编译成可运行的协议——在你 Mac 上。
