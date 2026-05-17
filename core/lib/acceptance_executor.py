@@ -29,6 +29,10 @@ _SCHEMA_PATH = REPO_ROOT / "core" / "schemas" / "brief.schema.json"
 # Ensure sibling lib modules importable when called as standalone
 if str(REPO_ROOT / "core" / "lib") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "core" / "lib"))
+from acceptance_criteria import (  # noqa: E402
+    criterion_command_and_text as _shared_criterion_command_and_text,
+    criterion_is_shell_runnable,
+)
 from real_home import real_user_home  # noqa: E402
 
 try:
@@ -147,13 +151,10 @@ def _load_brief(brief_path: Path) -> dict:
 
 def _criterion_command_and_text(criterion: Any) -> tuple[str, str]:
     """Normalize a criterion entry to (display_text, shell_command)."""
-    if isinstance(criterion, str):
-        return criterion, criterion
-    if isinstance(criterion, dict):
-        cmd = criterion.get("command") or criterion.get("criterion") or ""
-        text = criterion.get("description") or cmd
-        return str(text), str(cmd)
-    raise AcceptanceError(f"unrecognized criterion shape: {criterion!r}")
+    try:
+        return _shared_criterion_command_and_text(criterion)
+    except ValueError as exc:
+        raise AcceptanceError(str(exc)) from exc
 
 
 def _criterion_route(criterion: Any) -> str:
@@ -243,15 +244,23 @@ def run_mechanical(
         env.update(env_overrides)
 
     any_fail = False
+    any_executed = False
     for idx, item in enumerate(mech):
         text, cmd = _criterion_command_and_text(item)
-        if not cmd:
-            result.items.append(ItemResult(criterion=text, result="skipped"))
+        if not cmd or not criterion_is_shell_runnable(item):
+            result.items.append(
+                ItemResult(
+                    criterion=text,
+                    result="skipped",
+                    command="not_shell_runnable",
+                )
+            )
             continue
         stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
         stderr_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
         start = time.monotonic()
         try:
+            any_executed = True
             proc = subprocess.run(
                 cmd,
                 shell=True,
@@ -298,7 +307,7 @@ def run_mechanical(
                 )
             )
 
-    result.verdict = "FAIL" if any_fail else "PASS"
+    result.verdict = "FAIL" if any_fail or not any_executed else "PASS"
     return result
 
 
