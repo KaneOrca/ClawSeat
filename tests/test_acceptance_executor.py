@@ -20,6 +20,8 @@ from acceptance_executor import (  # noqa: E402
     run_acceptance,
     run_mechanical,
     _resolve_task_worktree,
+    _get_main_worktree_root,
+    _redirect_cd_to_worktree,
 )
 
 
@@ -374,3 +376,102 @@ acceptance_criteria:
         f"got result={item.result!r} — worktree CWD was not resolved"
     )
     assert results["mechanical"].verdict == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# cf018 REPAIR: absolute cd prefix redirect
+# ---------------------------------------------------------------------------
+
+def test_redirect_cd_to_worktree_rewrites_main_root(tmp_path):
+    """_redirect_cd_to_worktree rewrites cd to main root → task worktree."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = f"cd {main_root} && npm test"
+    result = _redirect_cd_to_worktree(cmd, main_root, task_wt)
+    assert str(task_wt) in result
+    assert str(main_root) not in result
+    assert "npm test" in result
+
+
+def test_redirect_cd_to_worktree_rewrites_subdir(tmp_path):
+    """_redirect_cd_to_worktree rewrites cd to main subdir → task worktree subdir."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = f"cd {main_root}/apps/web && pnpm test"
+    result = _redirect_cd_to_worktree(cmd, main_root, task_wt)
+    assert f"{task_wt}/apps/web" in result
+    assert str(main_root) not in result
+
+
+def test_redirect_cd_to_worktree_leaves_unrelated_path(tmp_path):
+    """_redirect_cd_to_worktree leaves cd to unrelated absolute path intact."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = "cd /usr/local/bin && ls"
+    result = _redirect_cd_to_worktree(cmd, main_root, task_wt)
+    assert result == cmd
+
+
+def test_redirect_cd_to_worktree_leaves_relative_cmd(tmp_path):
+    """_redirect_cd_to_worktree leaves commands without absolute cd unchanged."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = "npm test"
+    assert _redirect_cd_to_worktree(cmd, main_root, task_wt) == cmd
+
+
+def test_get_main_worktree_root_returns_none_for_plain_dir(tmp_path):
+    """_get_main_worktree_root returns None when no .git file present."""
+    assert _get_main_worktree_root(tmp_path) is None
+
+
+def test_acceptance_uses_task_worktree_for_absolute_cd_command(env_home, tmp_path):
+    """cf018 REPAIR regression: absolute cd to main root must redirect to task worktree.
+
+    al541-shaped scenario: mechanical command is 'cd /main/repo && test -f SENTINEL'.
+    Sentinel exists only in task worktree. Without redirect → FAIL; with → PASS.
+    We use _redirect_cd_to_worktree directly via run_mechanical with explicit
+    main_root injection to avoid needing a real git worktree in tests.
+    """
+    from pathlib import Path
+    from acceptance_executor import run_mechanical, RouteResult
+
+    # Set up task worktree with sentinel
+    task_wt = tmp_path / "task-wt"
+    task_wt.mkdir()
+    (task_wt / "SENTINEL_al541").write_text("present", encoding="utf-8")
+
+    # Fake main root (no sentinel here)
+    main_root = tmp_path / "main-repo"
+    main_root.mkdir()
+
+    acc_dir = env_home / ".agents" / "tasks" / "p" / "t" / "acceptance"
+    brief = {
+        "acceptance_criteria": {
+            "mechanical": [f"cd {main_root} && test -f SENTINEL_al541"]
+        }
+    }
+
+    # Without redirect: runs in main_root → fails (no sentinel)
+    result_no_redirect = run_mechanical(
+        brief, acc_dir, "TAL541_no", cwd=None,
+        pre_split_mech=[f"cd {main_root} && test -f SENTINEL_al541"],
+    )
+    assert result_no_redirect.verdict == "FAIL", (
+        "without worktree redirect, command should fail (sentinel not in main root)"
+    )
+
+    # With redirect applied manually (simulating the full pipeline):
+    # The redirect rewrites 'cd /main-repo &&...' to 'cd /task-wt &&...'
+    redirected_cmd = _redirect_cd_to_worktree(
+        f"cd {main_root} && test -f SENTINEL_al541", main_root, task_wt
+    )
+    assert str(task_wt) in redirected_cmd
+
+    result_with_redirect = run_mechanical(
+        brief, acc_dir, "TAL541_yes", cwd=task_wt,
+        pre_split_mech=[redirected_cmd],
+    )
+    assert result_with_redirect.verdict == "PASS", (
+        "with worktree redirect, command must pass (sentinel found in task worktree)"
+    )

@@ -260,6 +260,13 @@ def run_mechanical(
             continue
         # cf015 Fix 1: normalize non-portable pipe-negation before execution
         cmd = normalize_pipe_negation(cmd)
+        # cf018 REPAIR: redirect explicit absolute cd prefixes to task worktree.
+        # Commands like 'cd /main/repo && ...' bypass the cwd parameter and run
+        # in the main worktree. Rewrite to the equivalent task worktree path.
+        if cwd is not None:
+            main_root = _get_main_worktree_root(cwd)
+            if main_root is not None:
+                cmd = _redirect_cd_to_worktree(cmd, main_root, cwd)
         # cf015 Fix 2: bare git diff --name-only scans dirty working-tree state;
         # fail with a diagnostic rather than running a command that produces
         # unreliable results.
@@ -490,6 +497,58 @@ def _resolve_task_worktree(task_id: str, agents_root: Path, project: str) -> Pat
         if wt and Path(wt).is_dir():
             return Path(wt)
     return None
+
+
+def _get_main_worktree_root(wt_path: Path) -> Path | None:
+    """cf018 REPAIR: find the main repo root from a git worktree .git file.
+
+    A git worktree has a .git file (not dir) containing:
+      gitdir: /main/.git/worktrees/<name>
+    Walking up two levels from that path gives /main/.git, then /main.
+    Returns None when wt_path is not a git worktree or the path is unreadable.
+    """
+    git_file = wt_path / ".git"
+    if not git_file.is_file():
+        return None
+    try:
+        content = git_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not content.startswith("gitdir:"):
+        return None
+    gitdir = Path(content[7:].strip())
+    # gitdir = /main/.git/worktrees/<name> → parent.parent = /main/.git → parent = /main
+    try:
+        main_root = gitdir.parent.parent.parent
+        if (main_root / ".git").is_dir():
+            return main_root
+    except (IndexError, OSError):
+        pass
+    return None
+
+
+def _redirect_cd_to_worktree(cmd: str, main_root: Path, task_wt: Path) -> str:
+    """cf018 REPAIR: redirect absolute cd prefixes from main repo root to task worktree.
+
+    Commands like 'cd /Users/ywf/coding/cartooner && npm test' must run in the
+    task worktree, not the main worktree. When the cd target is main_root or a
+    subdirectory, the path is rewritten to the equivalent path under task_wt.
+
+    Only the leading 'cd /abs/path' is rewritten; the rest of the command is
+    left intact. Commands without an absolute cd prefix are returned unchanged.
+    """
+    import re as _re
+    m = _re.match(r'^(cd\s+)(/[^\s;&|]+)(.*)', cmd.strip())
+    if not m:
+        return cmd
+    cd_kw, abs_path_str, rest = m.groups()
+    abs_path = Path(abs_path_str)
+    try:
+        rel = abs_path.relative_to(main_root)
+        new_path = task_wt / rel
+        return f"{cd_kw}{new_path}{rest}"
+    except ValueError:
+        return cmd  # not under main_root — leave unchanged
 
 
 def run_acceptance(
