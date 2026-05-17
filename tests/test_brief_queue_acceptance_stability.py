@@ -71,35 +71,37 @@ def _write_fake_wake_script(tmp_path: Path) -> tuple[Path, Path]:
     return script, log_path
 
 
-def test_generated_todo_brief_defers_wake_and_blocks_claim(tmp_path, monkeypatch, capsys):
+def test_generated_skeleton_brief_is_immediately_wake_ready(tmp_path, monkeypatch, capsys):
+    """cf017: skeleton brief now contains the portable scope-guard command.
+
+    Generated briefs are immediately acceptance-ready and send WAKE_OK (not
+    WAKE_DEFERRED) because the skeleton mechanical criterion is a real runnable
+    command instead of a TODO placeholder.
+    """
     monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    _write_profile(tmp_path, project="p", team="t")
     send_script, wake_log = _write_fake_wake_script(tmp_path)
     monkeypatch.setenv("CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT", str(send_script))
     monkeypatch.setenv("WAKE_LOG", str(wake_log))
     parser = build_parser()
 
     rc = cmd_queue(parser.parse_args([
-        "queue", "--project", "p", "--team", "t", "--task-id", "Ttodo",
-        "--objective", "Queue a skeleton brief before criteria are ready",
+        "queue", "--project", "p", "--team", "t", "--task-id", "Tready",
+        "--objective", "Skeleton brief with portable scope-guard criterion",
     ]))
     out = capsys.readouterr()
 
-    assert rc == 0
-    assert "WAKE_DEFERRED reason=" in out.out
-    assert not wake_log.exists()
+    assert rc == 0, f"expected rc=0, got rc={rc}; output: {out.out}"
+    assert "WAKE_OK" in out.out, f"expected WAKE_OK; output: {out.out}"
+    assert wake_log.exists(), "wake must be sent for a scope-guard skeleton brief"
 
+    # The generated brief is also immediately claimable (no acceptance_criteria block)
     claim_rc = cmd_claim(parser.parse_args([
-        "claim", "--project", "p", "--team", "t", "--task-id", "Ttodo",
+        "claim", "--project", "p", "--team", "t", "--task-id", "Tready",
         "--actor", "planner@claude",
     ]))
-    claim_out = capsys.readouterr()
-
-    assert claim_rc == 3
-    assert "blocked on acceptance_criteria" in claim_out.out
-    queue = tmp_path / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
-    state = read_current_state(queue)["Ttodo"]
-    assert state.status == "task_waiting_for"
-    assert state.waiting_for == "acceptance_criteria"
+    capsys.readouterr()
+    assert claim_rc == 0, f"skeleton brief should be claimable; got rc={claim_rc}"
 
 
 def test_no_wake_remains_explicit_even_when_criteria_incomplete(tmp_path, monkeypatch, capsys):
