@@ -514,6 +514,16 @@ def run_acceptance(
     op_receipt = acceptance_dir / f"{task_id}__operator.json"
     _write_receipt(op_receipt, project, team, task_id, results["operator"])
 
+    # cf013: auto-reconcile reviewer section from any routed __accept_review handoff.
+    # Checks patrol/handoffs for {task_id}__accept_review__*__memory.json; if found with
+    # APPROVED/APPROVED_WITH_NITS → updates reviewer receipt to PASS; FAIL/CHANGES_REQUESTED
+    # → FAIL. Historical handoff files are never touched. Works on both first-run dispatch
+    # and re-runs against an already-dispatched task.
+    handoffs_dir = _agents_root() / "tasks" / project / "patrol" / "handoffs"
+    reconciled_reviewer = reconcile_reviewer_acceptance(task_id, acceptance_dir, handoffs_dir=handoffs_dir)
+    if reconciled_reviewer is not None:
+        results["reviewer"] = reconciled_reviewer
+
     return results
 
 
@@ -731,17 +741,158 @@ def _write_receipt(path: Path, project: str, team: str, task_id: str, result: Ro
 
 
 def aggregate_verdict(results: dict[str, RouteResult]) -> str:
-    """PASS only when mechanical PASS and reviewer/operator are PASS or PENDING (empty).
+    """PASS only when all routes are PASS (or empty). FAIL on any route FAIL. PENDING otherwise.
 
-    FAIL if mechanical FAIL. PENDING if mechanical PASS but reviewer/operator
-    has work outstanding.
+    Priority: FAIL > PENDING > PASS. Mechanical FAIL blocks immediately. Reviewer or
+    operator FAIL also blocks (e.g. CHANGES_REQUESTED reconciled into FAIL). PENDING
+    when mechanical PASS but reviewer/operator work outstanding.
     """
     mech = results.get("mechanical")
     if mech is None or mech.verdict == "FAIL":
         return "FAIL"
+    if any(r.verdict == "FAIL" for r in results.values()):
+        return "FAIL"
     if any(r.verdict == "PENDING" for r in results.values()):
         return "PENDING"
     return "PASS"
+
+
+# Reviewer verdicts that map to acceptance PASS
+_REVIEWER_APPROVED_VERDICTS = frozenset({"APPROVED", "APPROVED_WITH_NITS"})
+# Reviewer verdicts that map to acceptance FAIL (block parent aggregate)
+_REVIEWER_BLOCKED_VERDICTS = frozenset({"FAIL", "CHANGES_REQUESTED", "REJECTED"})
+
+
+def load_route_result_from_receipt(receipt_path: Path) -> RouteResult | None:
+    """Load a RouteResult from a persisted JSON receipt. Returns None if missing/unreadable."""
+    try:
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    route = str(data.get("route", "reviewer"))
+    verdict = str(data.get("verdict", "PENDING"))
+    items = []
+    for item_dict in data.get("items") or []:
+        items.append(
+            ItemResult(
+                criterion=str(item_dict.get("criterion", "")),
+                result=str(item_dict.get("result", "pending")),
+                command=item_dict.get("command"),
+                exit_code=item_dict.get("exit_code"),
+                stdout_path=item_dict.get("stdout_path"),
+                stderr_path=item_dict.get("stderr_path"),
+                runtime_ms=item_dict.get("runtime_ms"),
+                dispatch_receipt=item_dict.get("dispatch_receipt"),
+            )
+        )
+    rr = RouteResult(route=route, verdict=verdict)
+    rr.items = items
+    return rr
+
+
+def _find_accept_review_handoff(task_id: str, handoffs_dir: Path) -> dict | None:
+    """Scan handoffs_dir for a reviewer completion receipt for {task_id}__accept_review.
+
+    Returns the parsed JSON dict of the first matching completion handoff, or None.
+    Matching pattern: {task_id}__accept_review__*__memory.json  (reviewer → memory).
+    Receipt must have kind=completion and verdict present.
+    """
+    if not handoffs_dir.is_dir():
+        return None
+    prefix = f"{task_id}__accept_review__"
+    suffix = "__memory.json"
+    for entry in sorted(handoffs_dir.iterdir()):
+        name = entry.name
+        if not name.startswith(prefix) or not name.endswith(suffix):
+            continue
+        try:
+            data = json.loads(entry.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("kind") != "completion":
+            continue
+        verdict = data.get("verdict")
+        if verdict and (
+            verdict in _REVIEWER_APPROVED_VERDICTS or verdict in _REVIEWER_BLOCKED_VERDICTS
+        ):
+            return data
+    return None
+
+
+def reconcile_reviewer_acceptance(
+    task_id: str,
+    acceptance_dir: Path,
+    handoffs_dir: Path | None = None,
+    project: str | None = None,
+) -> RouteResult | None:
+    """Reconcile the reviewer section of the acceptance aggregate from a routed receipt.
+
+    When the reviewer submits an __accept_review completion with APPROVED/APPROVED_WITH_NITS,
+    the parent aggregate reviewer section should transition from PENDING to PASS.
+    FAIL/CHANGES_REQUESTED/REJECTED keeps it blocked (verdict = FAIL).
+
+    The reviewer receipt file is updated in-place; historical item data is preserved
+    and reconciliation metadata is appended. Historical accept_review handoff files
+    are never deleted.
+
+    Returns the updated RouteResult if reconciliation happened, or None if:
+    - no accept_review handoff found
+    - reviewer section is already PASS or FAIL (nothing to reconcile)
+    - reviewer receipt file missing
+    """
+    receipt_path = acceptance_dir / f"{task_id}__reviewer.json"
+    route_result = load_route_result_from_receipt(receipt_path)
+    if route_result is None:
+        return None
+    if route_result.verdict != "PENDING":
+        return route_result
+
+    # Determine handoffs directory
+    if handoffs_dir is None and project is not None:
+        handoffs_dir = _agents_root() / "tasks" / project / "patrol" / "handoffs"
+
+    if handoffs_dir is None:
+        return None
+
+    handoff = _find_accept_review_handoff(task_id, handoffs_dir)
+    if handoff is None:
+        return None
+
+    reviewer_verdict = str(handoff.get("verdict", ""))
+    if reviewer_verdict in _REVIEWER_APPROVED_VERDICTS:
+        new_verdict = "PASS"
+    elif reviewer_verdict in _REVIEWER_BLOCKED_VERDICTS:
+        new_verdict = "FAIL"
+    else:
+        return None
+
+    # Update items: mark pending items as reconciled
+    for item in route_result.items:
+        if item.result == "pending":
+            item.result = "pass" if new_verdict == "PASS" else "fail"
+
+    route_result.verdict = new_verdict
+
+    # Persist updated receipt, carrying reconciliation audit trail
+    try:
+        existing = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+
+    existing["verdict"] = new_verdict
+    existing["reconciled_at"] = _utc_now()
+    existing["reconciled_verdict"] = reviewer_verdict
+    existing["accept_review_handoff"] = str(handoff.get("task_id", f"{task_id}__accept_review"))
+    existing["items"] = [i.to_dict() for i in route_result.items]
+    existing["summary"] = {
+        "total": len(route_result.items),
+        "pass": sum(1 for i in route_result.items if i.result == "pass"),
+        "fail": sum(1 for i in route_result.items if i.result == "fail"),
+        "pending": sum(1 for i in route_result.items if i.result == "pending"),
+    }
+
+    receipt_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    return route_result
 
 
 def main(argv: list[str] | None = None) -> int:
