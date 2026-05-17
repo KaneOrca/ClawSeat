@@ -470,6 +470,12 @@ def cmd_queue(args: argparse.Namespace) -> int:
     if not acceptance_ready:
         print(f"WAKE_DEFERRED reason={acceptance_reason}")
         return 0
+    # Defer gracefully when no profile is configured yet; HOOK_WAKE_FAILED is
+    # reserved for delivery failures on an otherwise-ready profile.
+    profile_path = _profile_path(project)
+    if not profile_path.exists():
+        print(f"WAKE_DEFERRED reason=profile_not_found:{profile_path}")
+        return 0
     try:
         target = _wake_team_planner(project, team, task_id)
     except WakeHookError as exc:
