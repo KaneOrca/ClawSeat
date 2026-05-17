@@ -277,3 +277,62 @@ def test_already_pass_not_overwritten(env_home):
     # Second reconcile: already PASS, returns it unchanged
     r2 = reconcile_reviewer_acceptance(task_id, acc_dir, handoffs_dir=handoffs)
     assert r2 is not None and r2.verdict == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Test 5: CLI-level regression — run_acceptance() auto-reconciles on re-run
+# ---------------------------------------------------------------------------
+
+def test_run_acceptance_auto_reconciles_on_second_call(env_home):
+    """run_acceptance() must auto-reconcile reviewer from __accept_review handoff.
+
+    Reproduces the reviewer finding: second call still returned PENDING before fix.
+    """
+    project, team, task_id = "p", "t", "TCLI1"
+    _write_brief(env_home, project, team, task_id)
+
+    # First run: reviewer dispatched, aggregate PENDING
+    results1 = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+    assert results1["reviewer"].verdict == "PENDING"
+    assert aggregate_verdict(results1) == "PENDING"
+
+    # Reviewer submits APPROVED handoff
+    handoffs = _handoffs_dir(env_home, project)
+    _write_accept_review_handoff(handoffs, task_id, "t-reviewer", "APPROVED")
+
+    # Second run: run_acceptance() must auto-reconcile reviewer → PASS
+    results2 = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+    assert results2["reviewer"].verdict == "PASS", (
+        "run_acceptance() must auto-reconcile APPROVED __accept_review handoff; "
+        f"got reviewer.verdict={results2['reviewer'].verdict!r}"
+    )
+    assert aggregate_verdict(results2) == "PASS"
+
+
+def test_run_acceptance_auto_reconciles_fail_on_second_call(env_home):
+    """run_acceptance() must also reconcile CHANGES_REQUESTED → FAIL verdict."""
+    project, team, task_id = "p", "t", "TCLI2"
+    _write_brief(env_home, project, team, task_id)
+
+    run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+
+    handoffs = _handoffs_dir(env_home, project)
+    _write_accept_review_handoff(handoffs, task_id, "t-reviewer", "CHANGES_REQUESTED")
+
+    results2 = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+    assert results2["reviewer"].verdict == "FAIL"
+    assert aggregate_verdict(results2) == "FAIL"
+
+
+def test_run_acceptance_first_call_with_existing_handoff_reconciles(env_home):
+    """If __accept_review handoff exists before first run, first call must reconcile."""
+    project, team, task_id = "p", "t", "TCLI3"
+    _write_brief(env_home, project, team, task_id)
+
+    # Pre-create APPROVED handoff before any acceptance run
+    handoffs = _handoffs_dir(env_home, project)
+    _write_accept_review_handoff(handoffs, task_id, "t-reviewer", "APPROVED")
+
+    results = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+    assert results["reviewer"].verdict == "PASS"
+    assert aggregate_verdict(results) == "PASS"

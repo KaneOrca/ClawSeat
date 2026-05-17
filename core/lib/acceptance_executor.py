@@ -514,6 +514,16 @@ def run_acceptance(
     op_receipt = acceptance_dir / f"{task_id}__operator.json"
     _write_receipt(op_receipt, project, team, task_id, results["operator"])
 
+    # cf013: auto-reconcile reviewer section from any routed __accept_review handoff.
+    # Checks patrol/handoffs for {task_id}__accept_review__*__memory.json; if found with
+    # APPROVED/APPROVED_WITH_NITS → updates reviewer receipt to PASS; FAIL/CHANGES_REQUESTED
+    # → FAIL. Historical handoff files are never touched. Works on both first-run dispatch
+    # and re-runs against an already-dispatched task.
+    handoffs_dir = _agents_root() / "tasks" / project / "patrol" / "handoffs"
+    reconciled_reviewer = reconcile_reviewer_acceptance(task_id, acceptance_dir, handoffs_dir=handoffs_dir)
+    if reconciled_reviewer is not None:
+        results["reviewer"] = reconciled_reviewer
+
     return results
 
 
