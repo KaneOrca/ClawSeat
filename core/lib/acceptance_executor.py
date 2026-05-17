@@ -265,6 +265,15 @@ def run_mechanical(
         # unreliable results.
         if has_bare_git_diff_name_only(cmd):
             any_fail = True
+            # Write diagnostic before constructing ItemResult so stderr_path is populated
+            diag_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
+            diag_p.parent.mkdir(parents=True, exist_ok=True)
+            diag_p.write_text(
+                "[acceptance_executor] bare 'git diff --name-only' without an explicit "
+                "base..head range scans dirty working-tree state. "
+                "Use 'git diff origin/main...HEAD --name-only' or equivalent.\n",
+                encoding="utf-8",
+            )
             result.items.append(
                 ItemResult(
                     criterion=text,
@@ -273,17 +282,8 @@ def run_mechanical(
                     exit_code=-1,
                     runtime_ms=0,
                     stdout_path=None,
-                    stderr_path=None,
+                    stderr_path=str(diag_p),
                 )
-            )
-            # Record diagnostic in a synthetic stderr file
-            diag_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
-            diag_p.parent.mkdir(parents=True, exist_ok=True)
-            diag_p.write_text(
-                "[acceptance_executor] bare 'git diff --name-only' without an explicit "
-                "base..head range scans dirty working-tree state. "
-                "Use 'git diff origin/main...HEAD --name-only' or equivalent.\n",
-                encoding="utf-8",
             )
             continue
         stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"

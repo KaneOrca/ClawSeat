@@ -244,6 +244,47 @@ def test_executor_bare_git_diff_writes_diagnostic(env_home):
     assert "bare" in content or "git diff" in content or "working-tree" in content
 
 
+def test_executor_bare_git_diff_diagnostic_in_receipt(env_home):
+    """REPAIR: stderr_path in canonical mechanical receipt must be non-None for bare git diff."""
+    project, team, task_id = "p", "t", "TRECEIPT"
+    _write_brief(env_home, project, team, task_id, [
+        "true",
+        "git diff --name-only",
+    ])
+    results = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+
+    # Verify ItemResult has stderr_path populated (not None)
+    bare_item = next(
+        (i for i in results["mechanical"].items if "git diff" in (i.command or "")),
+        None,
+    )
+    assert bare_item is not None, "bare git diff item must be present"
+    assert bare_item.stderr_path is not None, (
+        "stderr_path must be set on bare git diff ItemResult so diagnostic appears in receipt"
+    )
+    assert Path(bare_item.stderr_path).exists(), "diagnostic file must exist at stderr_path"
+
+    # Verify canonical mechanical receipt JSON contains stderr_path for that item
+    acc_dir = env_home / ".agents" / "tasks" / project / team / "acceptance"
+    receipt = json.loads((acc_dir / f"{task_id}__mechanical.json").read_text(encoding="utf-8"))
+    receipt_items = {i.get("command", ""): i for i in receipt["items"]}
+    bare_receipt_item = receipt_items.get("git diff --name-only") or next(
+        (v for k, v in receipt_items.items() if "git diff" in k), None
+    )
+    assert bare_receipt_item is not None, "bare git diff must appear in mechanical receipt"
+    assert bare_receipt_item.get("stderr_path") is not None, (
+        "stderr_path must be present in canonical receipt JSON for bare git diff item"
+    )
+
+    # Verify consolidated mechanical log contains diagnostic text
+    log_path = acc_dir / f"{task_id}__mechanical.log"
+    assert log_path.exists(), "__mechanical.log must be written"
+    log_content = log_path.read_text(encoding="utf-8")
+    assert "bare" in log_content or "working-tree" in log_content or "git diff" in log_content, (
+        "diagnostic text must appear in consolidated mechanical log"
+    )
+
+
 def test_executor_ranged_git_diff_accepted(env_home):
     """git diff with explicit range must not be blocked."""
     project, team, task_id = "p", "t", "TRANGE"
