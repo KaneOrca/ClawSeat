@@ -193,18 +193,19 @@ def test_brief_ready_accepts_ranged_git_diff():
 # ---------------------------------------------------------------------------
 
 def test_executor_normalizes_pipe_negation(env_home):
-    """run_acceptance() should auto-normalize | ! rg and the criterion passes."""
+    """run_acceptance() should auto-normalize | ! grep and the criterion passes.
+
+    Uses grep (POSIX, always available) rather than rg so the test runs in CI
+    environments where ripgrep is not installed.
+    `echo x | ! grep nomatch` → after normalize → `echo x | grep -v nomatch`
+    → exit 0 because 'x' does not match 'nomatch'.
+    """
     project, team, task_id = "p", "t", "TPIPE"
-    # We cannot easily inject an __accept_review handoff here, but we can
-    # verify the transformed command is accepted (no syntax error on run).
-    # Use a command whose normalized form succeeds: `echo x | ! rg nomatch`
-    # → after normalize: `echo x | rg -v nomatch` → exit 0 when no match
     _write_brief(env_home, project, team, task_id, [
-        "echo x | ! rg nomatch_pattern_xyz123"
+        "echo x | ! grep nomatch_pattern_xyz123"
     ])
     results = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
     item = results["mechanical"].items[0]
-    # After normalization the command is valid and should pass
     assert item.result == "pass", (
         f"normalized pipe-negation should yield pass; got result={item.result!r}, "
         f"command={item.command!r}"
