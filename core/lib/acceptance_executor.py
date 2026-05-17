@@ -32,6 +32,8 @@ if str(REPO_ROOT / "core" / "lib") not in sys.path:
 from acceptance_criteria import (  # noqa: E402
     criterion_command_and_text as _shared_criterion_command_and_text,
     criterion_is_shell_runnable,
+    has_bare_git_diff_name_only,
+    normalize_pipe_negation,
 )
 from real_home import real_user_home  # noqa: E402
 
@@ -254,6 +256,34 @@ def run_mechanical(
                     result="skipped",
                     command="not_shell_runnable",
                 )
+            )
+            continue
+        # cf015 Fix 1: normalize non-portable pipe-negation before execution
+        cmd = normalize_pipe_negation(cmd)
+        # cf015 Fix 2: bare git diff --name-only scans dirty working-tree state;
+        # fail with a diagnostic rather than running a command that produces
+        # unreliable results.
+        if has_bare_git_diff_name_only(cmd):
+            any_fail = True
+            result.items.append(
+                ItemResult(
+                    criterion=text,
+                    result="fail",
+                    command=cmd,
+                    exit_code=-1,
+                    runtime_ms=0,
+                    stdout_path=None,
+                    stderr_path=None,
+                )
+            )
+            # Record diagnostic in a synthetic stderr file
+            diag_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
+            diag_p.parent.mkdir(parents=True, exist_ok=True)
+            diag_p.write_text(
+                "[acceptance_executor] bare 'git diff --name-only' without an explicit "
+                "base..head range scans dirty working-tree state. "
+                "Use 'git diff origin/main...HEAD --name-only' or equivalent.\n",
+                encoding="utf-8",
             )
             continue
         stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
