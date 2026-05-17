@@ -19,6 +19,7 @@ from acceptance_executor import (  # noqa: E402
     route_reviewer,
     run_acceptance,
     run_mechanical,
+    _resolve_task_worktree,
 )
 
 
@@ -280,3 +281,96 @@ acceptance_criteria:
     mech_receipt = json.loads((acceptance_dir / "T8__mechanical.json").read_text())
     assert mech_receipt["verdict"] == "PASS"
     assert mech_receipt["summary"]["pass"] == 1
+
+
+# ---------------------------------------------------------------------------
+# cf018: worktree CWD auto-resolution
+# ---------------------------------------------------------------------------
+
+def _write_dispatch_receipt(
+    env_home: Path,
+    project: str,
+    task_id: str,
+    worktree_path: Path,
+) -> Path:
+    """Write a fake dispatch receipt with expected_worktree_path."""
+    handoffs = env_home / ".agents" / "tasks" / project / "patrol" / "handoffs"
+    handoffs.mkdir(parents=True, exist_ok=True)
+    receipt_path = handoffs / f"{task_id}__planner__builder.json"
+    receipt_path.write_text(
+        json.dumps({
+            "kind": "dispatch",
+            "task_id": task_id,
+            "source": "planner",
+            "target": "builder",
+            "expected_worktree_path": str(worktree_path),
+        }),
+        encoding="utf-8",
+    )
+    return receipt_path
+
+
+def test_resolve_task_worktree_returns_path_when_exists(env_home, tmp_path):
+    """_resolve_task_worktree returns the dispatch-receipt worktree when it exists."""
+    agents_root = env_home / ".agents"
+    wt = tmp_path / "task-wt"
+    wt.mkdir()
+    _write_dispatch_receipt(env_home, "p", "TWR1", wt)
+    resolved = _resolve_task_worktree("TWR1", agents_root, "p")
+    assert resolved == wt
+
+
+def test_resolve_task_worktree_returns_none_when_absent(env_home, tmp_path):
+    """_resolve_task_worktree returns None when worktree path does not exist."""
+    agents_root = env_home / ".agents"
+    wt = tmp_path / "missing-wt"  # does not exist
+    _write_dispatch_receipt(env_home, "p", "TWR2", wt)
+    resolved = _resolve_task_worktree("TWR2", agents_root, "p")
+    assert resolved is None
+
+
+def test_resolve_task_worktree_returns_none_when_no_receipt(env_home):
+    """_resolve_task_worktree returns None when no handoffs exist."""
+    agents_root = env_home / ".agents"
+    resolved = _resolve_task_worktree("TWR_NONE", agents_root, "p")
+    assert resolved is None
+
+
+def test_run_acceptance_uses_task_worktree_not_main(env_home, tmp_path):
+    """cf018 regression: acceptance must run mechanical commands in task worktree.
+
+    Creates two directories: a fake 'main worktree' (no sentinel) and a
+    fake 'task worktree' (has sentinel). Brief command checks the sentinel.
+    Without the fix the command would run in the Python process CWD and fail;
+    with the fix it runs in the task worktree and passes.
+    """
+    project, team, task_id = "p", "t", "TCF018"
+
+    # Task worktree has a sentinel file
+    task_wt = tmp_path / "task-wt"
+    task_wt.mkdir()
+    (task_wt / "SENTINEL_cf018").write_text("present", encoding="utf-8")
+
+    # Write dispatch receipt pointing at task_wt
+    _write_dispatch_receipt(env_home, project, task_id, task_wt)
+
+    # Brief: verify sentinel exists (passes only in task worktree)
+    _write_brief(env_home, project, team, task_id, f"""
+task_id: {task_id}
+project: {project}
+team: {team}
+objective: worktree CWD test
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "test -f SENTINEL_cf018"
+""")
+
+    # run_acceptance with no explicit cwd — must auto-resolve to task_wt
+    results = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+    item = results["mechanical"].items[0]
+    assert item.result == "pass", (
+        f"acceptance must run in task worktree where SENTINEL_cf018 exists; "
+        f"got result={item.result!r} — worktree CWD was not resolved"
+    )
+    assert results["mechanical"].verdict == "PASS"

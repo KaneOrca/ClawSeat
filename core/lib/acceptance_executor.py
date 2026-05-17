@@ -463,6 +463,35 @@ def _validate_brief_matches_cli(brief: dict, project: str, team: str, task_id: s
         raise AcceptanceError("brief vs CLI mismatch: " + "; ".join(mismatches))
 
 
+def _resolve_task_worktree(task_id: str, agents_root: Path, project: str) -> Path | None:
+    """cf018: resolve the task's dedicated worktree from dispatch receipt.
+
+    Scans patrol/handoffs for a dispatch receipt whose task_id matches and
+    whose expected_worktree_path exists on disk. Returns that path so
+    mechanical commands run against the task's actual code, not whatever
+    branch is active in the main worktree.
+
+    Returns None when no matching receipt is found or no worktree exists.
+    """
+    handoffs_dir = agents_root / "tasks" / project / "patrol" / "handoffs"
+    if not handoffs_dir.is_dir():
+        return None
+    prefix = f"{task_id}__"
+    for entry in sorted(handoffs_dir.iterdir()):
+        if not entry.name.startswith(prefix) or not entry.name.endswith(".json"):
+            continue
+        try:
+            data = json.loads(entry.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("kind") != "dispatch":
+            continue
+        wt = data.get("expected_worktree_path")
+        if wt and Path(wt).is_dir():
+            return Path(wt)
+    return None
+
+
 def run_acceptance(
     project: str,
     team: str,
@@ -499,6 +528,12 @@ def run_acceptance(
         dispatch_fn = lambda packet: _default_reviewer_dispatch(  # noqa: E731
             packet, profile_path=profile_path, agents_root=agents_root, project=project
         )
+
+    # cf018: auto-resolve task worktree when caller did not provide cwd.
+    # Mechanical commands must evaluate the task's actual code, not whatever
+    # branch happens to be checked out in the main worktree.
+    if cwd is None:
+        cwd = _resolve_task_worktree(task_id, agents_root, project)
 
     # Round 4 #A: split criteria once by route, pass to each route helper
     final_mech, final_rev, final_op = _split_by_route(brief)
