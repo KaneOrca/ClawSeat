@@ -40,6 +40,7 @@ from queue_io import (  # noqa: E402
     read_current_state,
 )
 from acceptance_criteria import (  # noqa: E402
+    SCOPE_GUARD_PORTABLE_TEMPLATE,
     brief_acceptance_ready,
     load_brief_frontmatter,
     load_brief_frontmatter_text,
@@ -311,6 +312,24 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _default_scope_guard_command(repo_root: Path | None = None) -> str:
+    """Return the portable scope-guard mechanical command for a generated brief skeleton.
+
+    Uses SCOPE_GUARD_PORTABLE_TEMPLATE with a standard forbidden-file spec and
+    the supplied (or auto-detected) repo_root. Produced command is shell-safe:
+    explicit origin/main...HEAD range and python3 filtering (no pipe-negation).
+    """
+    root = str(repo_root or _REPO_ROOT.parent)
+    forbidden_spec = (
+        "[('tasks.queue.jsonl','/handoffs/'),('WORKSPACE_CONTRACT.toml',''),"
+        "('project.toml',''),('TEAM_OWNERSHIP.md',''),('QUALITY.md','quality-docs/')]"
+    )
+    return SCOPE_GUARD_PORTABLE_TEMPLATE.format(
+        repo_root=root,
+        forbidden_spec=forbidden_spec,
+    )
+
+
 def cmd_queue(args: argparse.Namespace) -> int:
     """Append task_created event + write brief markdown skeleton.
 
@@ -365,7 +384,7 @@ def cmd_queue(args: argparse.Namespace) -> int:
             "depends_on": list(args.depends_on or []),
             "acceptance_criteria": {
                 "mechanical": [
-                    "TODO: replace with a real mechanical command before dispatch"
+                    _default_scope_guard_command(),
                 ],
                 "reviewer": [],
                 "operator": [],

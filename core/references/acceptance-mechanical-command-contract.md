@@ -32,12 +32,16 @@ The importable constant `SCOPE_GUARD_PORTABLE_TEMPLATE` in `core/lib/acceptance_
 
 ## Shell Portability Rules for Mechanical Commands
 
-| Pattern | Status | Portable Alternative |
-|---------|--------|----------------------|
-| `cmd \| ! grep X` | Invalid POSIX | `cmd \| grep -v X` |
-| `cmd \| ! rg X` | Invalid POSIX | `cmd \| rg -v X` |
-| `git diff --name-only \| …` | Scans working tree | `git diff origin/main...HEAD --name-only \| …` |
-| `git diff --name-only` alone | Scans working tree | `git diff origin/main...HEAD --name-only` |
+Do not use pipe-bang syntax (a `!` immediately after a `|` pipe) to negate a
+filter command — it is not valid POSIX sh and is fragile in bash.
+Do not use `git diff --name-only` without an explicit range — it compares the
+working tree and picks up unrelated dirty state.
+
+| Construct to avoid | Portable replacement |
+|--------------------|----------------------|
+| Pipe-bang negation: negate via `!` after a pipe | `cmd \| grep -v PATTERN` or `cmd \| rg -v PATTERN` |
+| Branch diff without range (`--name-only` alone) | `git diff origin/main...HEAD --name-only` |
+| Branch diff without range piped to a filter | `git diff origin/main...HEAD --name-only \| …` |
 
 ## Validation
 
