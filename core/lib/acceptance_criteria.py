@@ -187,6 +187,21 @@ def has_bare_git_diff_name_only(command: str) -> bool:
     return False
 
 
+# cf017: canonical portable scope-guard command for forbidden-file checks.
+# Memory/planner should use this template (with FORBIDDEN_PATHS substituted) when
+# generating the "no forbidden files touched" mechanical acceptance criterion.
+# It uses an explicit base..head range (not a bare working-tree diff) and Python
+# filtering (not shell pipe-negation), so it is POSIX-portable and shell-safe.
+SCOPE_GUARD_PORTABLE_TEMPLATE = (
+    "cd {repo_root} && "
+    "git diff --name-only origin/main...HEAD | "
+    r'python3 -c "import sys; bad=[p.strip() for p in sys.stdin if p.strip() and'
+    r' any(p.strip().endswith(f) or (k in p.strip()) for f,k in'
+    r" {forbidden_spec})];"
+    r' print(\"\n\".join(bad)); raise SystemExit(1 if bad else 0)"'
+)
+
+
 def brief_acceptance_ready(brief: dict[str, Any]) -> tuple[bool, str]:
     acceptance = brief.get("acceptance_criteria")
     if not isinstance(acceptance, dict):

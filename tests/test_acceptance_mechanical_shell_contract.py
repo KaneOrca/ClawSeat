@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "core" / "lib"))
 
 from acceptance_criteria import (  # noqa: E402
+    SCOPE_GUARD_PORTABLE_TEMPLATE,
     brief_acceptance_ready,
     has_bare_git_diff_name_only,
     has_invalid_pipe_negation,
@@ -296,3 +297,44 @@ def test_executor_ranged_git_diff_accepted(env_home):
     ])
     results = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
     assert results["mechanical"].verdict == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# cf017: portable scope-guard template contract
+# ---------------------------------------------------------------------------
+
+def test_scope_guard_portable_template_is_importable():
+    """SCOPE_GUARD_PORTABLE_TEMPLATE must be importable and non-empty."""
+    assert SCOPE_GUARD_PORTABLE_TEMPLATE
+    assert isinstance(SCOPE_GUARD_PORTABLE_TEMPLATE, str)
+
+
+def test_scope_guard_portable_template_has_explicit_range():
+    """Template must use an explicit base..head range, not a bare diff."""
+    assert not has_bare_git_diff_name_only(SCOPE_GUARD_PORTABLE_TEMPLATE), (
+        "SCOPE_GUARD_PORTABLE_TEMPLATE must not contain bare git diff without a range"
+    )
+
+
+def test_scope_guard_portable_template_has_no_pipe_negation():
+    """Template must not contain pipe-negation syntax."""
+    assert not has_invalid_pipe_negation(SCOPE_GUARD_PORTABLE_TEMPLATE), (
+        "SCOPE_GUARD_PORTABLE_TEMPLATE must not contain pipe-negation (| !)"
+    )
+
+
+def test_scope_guard_portable_template_uses_python_filter():
+    """Template should use python3 for filtering (POSIX-portable)."""
+    assert "python3" in SCOPE_GUARD_PORTABLE_TEMPLATE
+
+
+def test_acceptance_mechanical_command_contract_reference_exists():
+    """Canonical reference doc for mechanical command contract must exist."""
+    ref_path = REPO_ROOT / "core" / "references" / "acceptance-mechanical-command-contract.md"
+    assert ref_path.exists(), (
+        "core/references/acceptance-mechanical-command-contract.md must exist "
+        "to document portable scope-guard patterns"
+    )
+    content = ref_path.read_text(encoding="utf-8")
+    assert "origin/main...HEAD" in content, "reference must document explicit range pattern"
+    assert "SCOPE_GUARD_PORTABLE_TEMPLATE" in content, "reference must mention the importable template"
