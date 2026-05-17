@@ -26,6 +26,27 @@ def env_home(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _write_ready_brief(home: Path, project: str, team: str, task_id: str) -> None:
+    brief = home / ".agents" / "tasks" / project / team / "brief" / f"{task_id}.md"
+    brief.parent.mkdir(parents=True, exist_ok=True)
+    brief.write_text(
+        f"""---
+task_id: {task_id}
+project: {project}
+team: {team}
+objective: "queue poll ready brief"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+---
+
+# Brief
+""",
+        encoding="utf-8",
+    )
+
+
 # ---------- Contract publish + drift ----------
 
 
@@ -142,6 +163,8 @@ def test_queue_poll_claims_oldest_pending(env_home, tmp_path):
 
     queue = env_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
     queue.parent.mkdir(parents=True)
+    _write_ready_brief(env_home, "p", "t", "T1")
+    _write_ready_brief(env_home, "p", "t", "T2")
     append_event(queue, {"event_type": "task_created", "actor": "memory",
                          "task_id": "T1", "brief_path": "brief/T1.md"})
     append_event(queue, {"event_type": "task_created", "actor": "memory",
@@ -159,6 +182,8 @@ def test_queue_poll_blocks_on_unmet_dependency(env_home, tmp_path):
 
     queue = env_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
     queue.parent.mkdir(parents=True)
+    _write_ready_brief(env_home, "p", "t", "UP")
+    _write_ready_brief(env_home, "p", "t", "DOWN")
     append_event(queue, {"event_type": "task_created", "actor": "memory",
                          "task_id": "UP", "brief_path": "brief/UP.md"})
     append_event(queue, {"event_type": "task_created", "actor": "memory",
@@ -181,6 +206,8 @@ def test_queue_poll_retries_waiting_after_upstream_done(env_home, tmp_path):
 
     queue = env_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
     queue.parent.mkdir(parents=True)
+    _write_ready_brief(env_home, "p", "t", "UP")
+    _write_ready_brief(env_home, "p", "t", "DOWN")
     # Pre-arrange: UP done, DOWN waiting_for
     append_event(queue, {"event_type": "task_created", "actor": "memory",
                          "task_id": "UP", "brief_path": "brief/UP.md"})
