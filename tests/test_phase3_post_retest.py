@@ -20,6 +20,31 @@ sys.path.insert(0, str(REPO_ROOT / "core" / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "core" / "skills" / "planner" / "scripts"))
 
 
+def _write_ready_brief_content(path: Path, *, project: str, team: str, task_id: str) -> None:
+    path.write_text(
+        f"""---
+task_id: {task_id}
+project: {project}
+team: {team}
+objective: ready acceptance
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+---
+
+# body
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_ready_queue_brief(home: Path, *, project: str, team: str, task_id: str) -> None:
+    brief = home / ".agents" / "tasks" / project / team / "brief" / f"{task_id}.md"
+    brief.parent.mkdir(parents=True, exist_ok=True)
+    _write_ready_brief_content(brief, project=project, team=team, task_id=task_id)
+
+
 # ---------- #1: render output compatible with real load_profile ----------
 
 
@@ -240,8 +265,14 @@ def test_retest5_cross_team_depends_unblocks_when_done(tmp_path, monkeypatch):
 
     parser = build_parser()
     # Upstream in core team
+    core_brief = tmp_path / "core-up.md"
+    down_brief = tmp_path / "con-down.md"
+    _write_ready_brief_content(core_brief, project="p", team="core", task_id="CORE-UP")
+    _write_ready_brief_content(down_brief, project="p", team="content", task_id="CON-DOWN")
     cmd_queue(parser.parse_args(["queue", "--project", "p", "--team", "core",
-                                  "--task-id", "CORE-UP", "--objective", "u"]))
+                                  "--task-id", "CORE-UP", "--objective", "u",
+                                  "--brief-content-file", str(core_brief),
+                                  "--no-wake"]))
     # Drive CORE-UP to done
     core_queue = tmp_path / ".agents" / "tasks" / "p" / "core" / "tasks.queue.jsonl"
     append_event(core_queue, {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "CORE-UP"})
@@ -251,7 +282,9 @@ def test_retest5_cross_team_depends_unblocks_when_done(tmp_path, monkeypatch):
     # Downstream in content team with depends_on CORE-UP
     cmd_queue(parser.parse_args(["queue", "--project", "p", "--team", "content",
                                   "--task-id", "CON-DOWN", "--objective", "d",
-                                  "--depends-on", "CORE-UP"]))
+                                  "--depends-on", "CORE-UP",
+                                  "--brief-content-file", str(down_brief),
+                                  "--no-wake"]))
 
     # Claim should succeed (cross-team resolution)
     rc = cmd_claim(parser.parse_args(["claim", "--project", "p", "--team", "content",
@@ -264,12 +297,20 @@ def test_retest5_cross_team_blocks_when_upstream_pending(tmp_path, monkeypatch):
     from agent_admin_brief import build_parser, cmd_claim, cmd_queue
 
     parser = build_parser()
+    core_brief = tmp_path / "core-up.md"
+    down_brief = tmp_path / "con-down.md"
+    _write_ready_brief_content(core_brief, project="p", team="core", task_id="CORE-UP")
+    _write_ready_brief_content(down_brief, project="p", team="content", task_id="CON-DOWN")
     cmd_queue(parser.parse_args(["queue", "--project", "p", "--team", "core",
-                                  "--task-id", "CORE-UP", "--objective", "u"]))
+                                  "--task-id", "CORE-UP", "--objective", "u",
+                                  "--brief-content-file", str(core_brief),
+                                  "--no-wake"]))
     # Don't advance CORE-UP — still task_created
     cmd_queue(parser.parse_args(["queue", "--project", "p", "--team", "content",
                                   "--task-id", "CON-DOWN", "--objective", "d",
-                                  "--depends-on", "CORE-UP"]))
+                                  "--depends-on", "CORE-UP",
+                                  "--brief-content-file", str(down_brief),
+                                  "--no-wake"]))
     rc = cmd_claim(parser.parse_args(["claim", "--project", "p", "--team", "content",
                                        "--task-id", "CON-DOWN", "--actor", "planner@claude"]))
     assert rc == 3, "claim must report waiting_for when cross-team upstream pending"
@@ -333,6 +374,7 @@ def test_queue_poll_uses_real_user_home_under_sandbox_home(tmp_path, monkeypatch
     real_home = tmp_path / "real-home"
     sandbox_home = tmp_path / ".agent-runtime" / "identities" / "claude" / "home"
     queue = real_home / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    _write_ready_queue_brief(real_home, project="p", team="t", task_id="Tpoll")
     append_event(
         queue,
         {
