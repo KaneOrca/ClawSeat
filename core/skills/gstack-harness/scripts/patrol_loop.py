@@ -231,6 +231,58 @@ def detect_stale_handoffs(project: str, threshold_hours: int = STALE_THRESHOLD_H
     return stale
 
 
+def detect_stale_fanin_closeout(
+    project: str,
+    handoffs_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Detect tasks where builder delivery was consumed by planner but planner final closeout is missing.
+
+    A stale fan-in occurs when:
+    - A {task}__*__{planner-seat}.json.consumed file exists (builder delivered and planner consumed it)
+    - But no {task}__{planner-seat}__memory.json receipt exists (planner hasn't closed out to memory)
+
+    Returns a list of dicts: task_id, planner_seat, consumed_path, hint.
+    """
+    if handoffs_dir is None:
+        handoffs_dir = _tasks_root() / project / "patrol" / "handoffs"
+    if not handoffs_dir.is_dir():
+        return []
+
+    seen: set[str] = set()
+    stale: list[dict[str, Any]] = []
+    for consumed_path in sorted(handoffs_dir.glob("*.json.consumed")):
+        # filename: {task_key}__{source}__{target}.json.consumed
+        name = consumed_path.name
+        if not name.endswith(".json.consumed"):
+            continue
+        stem = name[: -len(".consumed")]  # → {task_key}__{source}__{target}.json
+        stem = stem[: -len(".json")]       # → {task_key}__{source}__{target}
+        parts = stem.split("__", 2)
+        if len(parts) != 3:
+            continue
+        task_key, _source, target = parts
+        if "planner" not in target:
+            continue
+        dedup_key = f"{task_key}__{target}"
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        planner_memory_receipt = handoffs_dir / f"{task_key}__{target}__memory.json"
+        if not planner_memory_receipt.exists():
+            stale.append(
+                {
+                    "task_id": task_key,
+                    "planner_seat": target,
+                    "consumed_path": str(consumed_path),
+                    "hint": (
+                        f"planner_final_missing: {target} consumed builder delivery "
+                        f"but planner->memory receipt absent"
+                    ),
+                }
+            )
+    return stale
+
+
 def _recent_rewake_keys(
     log_path: Path,
     *,
@@ -408,6 +460,13 @@ def main() -> int:
     print(seat_health["summary"])
     if rewake_count:
         print(f"[STALE-HANDOFF-REWAKE:project={profile.project_name},count={rewake_count}]")
+    fanin_stale = detect_stale_fanin_closeout(profile.project_name)
+    for item in fanin_stale:
+        print(
+            f"[PLANNER-FANIN-STALE:project={profile.project_name},"
+            f"task_id={item['task_id']},"
+            f"hint={item['hint']}]"
+        )
     return 0
 
 
