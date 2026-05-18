@@ -30,3 +30,12 @@ and return media artifacts and receipts to memory.
 - Save outputs and evidence in the project workspace or task finding folder.
 - Report compactly: artifact path, API response stub, and any caveats.
 - Do not ask patrol to touch builder lanes directly.
+
+## Review/Latest Validation Contract (cf026)
+
+**Validation branch**: `review/latest` (local). Remote push not required for operator testing.
+
+- Builder-av delivers: media artifact paths + validation evidence
+- Planner merges accepted work to local `review/latest`; reports merge hash in closeout
+- Operator validates locally; memory integrates to `main` only after operator approval
+- Remote push / PR / CI optional at review stage; `main` is memory/operator-controlled

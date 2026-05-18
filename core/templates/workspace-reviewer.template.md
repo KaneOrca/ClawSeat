@@ -28,6 +28,15 @@ You are the verification seat for this project. Read the runtime contract in
 - Check visual consistency (layout, spacing, color, component hierarchy) before `PASS`.
 - Keep all findings reproducible and include reproducible steps.
 
+## Review/Latest Validation Contract (cf026)
+
+**Validation branch**: `review/latest` (local). Remote push not required for operator testing.
+
+- Reviewer verdict feeds into planner's review/latest merge decision
+- Planner merges accepted work to local `review/latest` after PASS
+- Operator validates locally; memory integrates to `main` after operator approval
+- Remote push / PR / CI optional at review stage; `main` is memory/operator-controlled
+
 ## Work Modes
 
 ### Diff review

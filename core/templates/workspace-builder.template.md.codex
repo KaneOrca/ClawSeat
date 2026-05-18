@@ -32,3 +32,13 @@ outputs and receipts to memory.
 - Write concise receipts with output paths and validation notes.
 - Keep generated assets under the project workspace or task finding folder.
 - Do not hand off by direct seat pokes; use the project delivery protocol.
+
+## Review/Latest Validation Contract (cf026)
+
+**Validation branch**: `review/latest` (local). Remote push not required for operator testing.
+
+- Builder delivers: task branch commit hash + tests passing evidence
+- Planner merges accepted work to local `review/latest`; reports merge hash or blocked reason in closeout
+- Operator validates locally on `review/latest`
+- Memory integrates to `main` only after operator approval
+- Remote push / PR / CI optional unless explicitly requested; `main` is memory/operator-controlled
