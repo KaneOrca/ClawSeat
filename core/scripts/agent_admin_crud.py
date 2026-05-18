@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent_admin_crud_base import HOME, CrudHooks, _update_profile_seat
+from agent_admin_crud_base import HOME, CrudHooks, _update_profile_seat, require_caller_authority
 from agent_admin_crud_bootstrap import BootstrapCrud
 from agent_admin_crud_engineer import EngineerCrud
 from agent_admin_crud_project import ProjectCrud
@@ -18,6 +18,9 @@ class CrudHandlers:
         self.engineer = EngineerCrud(hooks)
         self.bootstrap = BootstrapCrud(hooks)
         self.validation = ValidationCrud(hooks)
+
+    def _require_escalation_authority(self, action: str) -> None:
+        require_caller_authority("escalation", action, self.hooks.error_cls)
 
     def project_open(self, args: Any) -> int:
         return self.project.project_open(args)
@@ -47,24 +50,30 @@ class CrudHandlers:
         return self.bootstrap.project_bootstrap(args)
 
     def engineer_create(self, args: Any) -> int:
+        self._require_escalation_authority("engineer create")
         return self.engineer.engineer_create(args)
 
     def engineer_delete(self, args: Any) -> int:
+        self._require_escalation_authority("engineer delete")
         return self.engineer.engineer_delete(args)
 
     def engineer_rename(self, args: Any) -> int:
+        self._require_escalation_authority("engineer rename")
         return self.engineer.engineer_rename(args)
 
     def engineer_rebind(self, args: Any) -> int:
+        self._require_escalation_authority("engineer rebind")
         return self.engineer.engineer_rebind(args)
 
     def engineer_refresh_workspace(self, args: Any) -> int:
         return self.engineer.engineer_refresh_workspace(args)
 
     def engineer_regenerate_workspace(self, args: Any) -> int:
+        self._require_escalation_authority("engineer regenerate-workspace")
         return self.engineer.engineer_regenerate_workspace(args)
 
     def engineer_secret_set(self, args: Any) -> int:
+        self._require_escalation_authority("engineer secret-set")
         return self.engineer.engineer_secret_set(args)
 
     def project_bind(self, args: Any) -> int:
@@ -103,6 +112,7 @@ if __name__ == "__main__":
     _role = (_a.role or "").strip() or _a.seat_id.split("-")[0]
     _rebind = _a.command == "engineer_rebind"
     try:
+        require_caller_authority("escalation", f"profile update ({_a.command})", RuntimeError)
         _update_profile_seat(
             _profile_path,
             _a.seat_id,

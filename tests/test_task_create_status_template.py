@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -105,6 +111,11 @@ def _remove_dispatch_log_section(text: str) -> str:
     return text.split(_DISPATCH_LOG, 1)[0].rstrip() + "\n"
 
 
+def _audit_dir(profile: Path) -> Path:
+    data = tomllib.loads(profile.read_text(encoding="utf-8"))
+    return Path(data["handoff_dir"]) / "audit"
+
+
 def test_task_create_status_template_supports_dispatch_log_append(tmp_path: Path) -> None:
     home = tmp_path / "home"
     task_id = "bd-status-template"
@@ -139,11 +150,18 @@ def test_task_create_repairs_missing_status_dispatch_log_and_dispatch_fallback_w
     profile.write_text(_profile_text(tmp_path, status), encoding="utf-8")
     warned = _run_dispatch(profile, "bd-dispatch-missing-section")
     assert warned.returncode == 0
-    assert "STATUS.md dispatch log append skipped" in warned.stderr
-    assert "section missing" in warned.stderr
+    assert "INFO: STATUS.md dispatch-log section auto-healed" in warned.stderr
+    assert "STATUS.md dispatch log append skipped" not in warned.stderr
+    assert "planner dispatched bd-dispatch-missing-section to builder" in status.read_text(
+        encoding="utf-8"
+    )
+    audit_files = sorted(_audit_dir(profile).glob("dispatch-log-heal-*.json"))
+    assert len(audit_files) == 1
+    audit = json.loads(audit_files[0].read_text(encoding="utf-8"))
+    assert audit["task_id"] == "bd-dispatch-missing-section"
 
     repaired = _run_task_create(home, task_id)
     assert repaired.returncode == 0, repaired.stderr
     repaired_text = status.read_text(encoding="utf-8")
     assert _DISPATCH_LOG in repaired_text
-    assert _DISPATCH_COMMENT in repaired_text
+    assert "auto-healed by dispatch_task.py" in repaired_text

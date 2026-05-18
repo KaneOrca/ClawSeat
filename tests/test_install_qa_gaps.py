@@ -15,7 +15,6 @@ _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
 _LAUNCHER = _REPO / "core" / "launchers" / "agent-launcher.sh"
 _TEMPLATE = _REPO / "core" / "templates" / "gstack-harness" / "template.toml"
-_INIT_SPECIALIST = _REPO / "core" / "skills" / "clawseat-install" / "scripts" / "init_specialist.py"
 
 sys.path.insert(0, str(_REPO / "core" / "scripts"))
 import agent_admin  # noqa: E402
@@ -92,9 +91,9 @@ def test_migrate_project_profile_adds_patrol(tmp_path: Path) -> None:
         project_toml_text="\n".join(
             [
                 'name = "qa-gaps"',
-                'template_name = "clawseat-creative"',
-                'engineers = ["memory", "planner", "builder", "designer"]',
-                'monitor_engineers = ["planner", "builder", "designer"]',
+                'template_name = "clawseat-engineering"',
+                'engineers = ["memory", "planner", "builder", "reviewer"]',
+                'monitor_engineers = ["memory", "planner", "builder", "reviewer"]',
                 "monitor_max_panes = 4",
                 "",
                 "[seat_overrides.builder]",
@@ -106,9 +105,9 @@ def test_migrate_project_profile_adds_patrol(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     migrated = tomllib.loads(project_toml.read_text(encoding="utf-8"))
-    assert migrated["engineers"] == ["memory", "planner", "builder", "designer", "patrol"]
-    assert migrated["monitor_engineers"] == ["planner", "builder", "designer", "memory", "patrol"]
-    assert migrated["monitor_max_panes"] == 4
+    assert migrated["engineers"] == ["memory", "planner", "builder", "reviewer", "patrol"]
+    assert migrated["monitor_engineers"] == ["memory", "planner", "builder", "reviewer", "patrol"]
+    assert migrated["monitor_max_panes"] == 5
     assert migrated["seat_overrides"]["builder"]["provider"] == "openai"
     assert migrated["seat_overrides"]["patrol"]["auth_mode"] == "api"
     assert migrated["seat_overrides"]["patrol"]["provider"] == "minimax"
@@ -127,9 +126,9 @@ def test_migrate_project_profile_skips_if_patrol_present(tmp_path: Path) -> None
     original = "\n".join(
         [
             'name = "qa-gaps"',
-            'template_name = "clawseat-creative"',
-            'engineers = ["memory", "planner", "builder", "designer", "patrol"]',
-            'monitor_engineers = ["memory", "planner", "builder", "designer", "patrol"]',
+            'template_name = "clawseat-engineering"',
+            'engineers = ["memory", "planner", "builder", "reviewer", "patrol"]',
+            'monitor_engineers = ["memory", "planner", "builder", "reviewer", "patrol"]',
             "monitor_max_panes = 5",
             "",
             "[seat_overrides.memory]",
@@ -155,10 +154,10 @@ def test_migrate_project_profile_skips_if_patrol_present(tmp_path: Path) -> None
             'model = "MiniMax-M2.7-highspeed"',
             'base_url = "https://api.minimaxi.com/anthropic"',
             "",
-            "[seat_overrides.designer]",
-            'tool = "gemini"',
+            "[seat_overrides.reviewer]",
+            'tool = "claude"',
             'auth_mode = "oauth"',
-            'provider = "google"',
+            'provider = "anthropic"',
             "",
         ]
     )
@@ -178,7 +177,7 @@ def test_install_dry_run_registers_memory_tmux_with_tool_suffix(tmp_path: Path) 
     assert "--tmux-name qa-gaps-memory-codex" in combined
 
 
-def test_gstack_harness_template_has_patrol(tmp_path: Path) -> None:
+def test_gstack_harness_template_has_patrol() -> None:
     template = tomllib.loads(_TEMPLATE.read_text(encoding="utf-8"))
     patrol_specs = [eng for eng in template["engineers"] if eng.get("id") == "patrol"]
 
@@ -189,39 +188,6 @@ def test_gstack_harness_template_has_patrol(tmp_path: Path) -> None:
     assert patrol_specs[0]["provider"] == "minimax"
     assert patrol_specs[0]["model"] == "MiniMax-M2.7-highspeed"
     assert patrol_specs[0]["base_url"] == "https://api.minimaxi.com/anthropic"
-
-    profile = tmp_path / "profile.toml"
-    workspace_root = tmp_path / "workspaces"
-    (workspace_root / "patrol").mkdir(parents=True)
-    profile.write_text(
-        "\n".join(
-            [
-                'project_name = "qa-gaps"',
-                f'workspace_root = "{workspace_root}"',
-                'heartbeat_owner = "koder"',
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(_INIT_SPECIALIST),
-            "--profile",
-            str(profile),
-            "--seat",
-            "patrol",
-            "--force",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert (workspace_root / "patrol" / "IDENTITY.md").exists()
 
 
 def test_agent_launcher_session_has_tool_suffix(tmp_path: Path) -> None:
@@ -304,8 +270,27 @@ def test_workers_recipe_4_pane_labels() -> None:
     assert [pane["label"] for pane in payload["panes"]] == ["planner", "builder", "designer", "patrol"]
 
 
-def test_agent_admin_engineer_create_uses_patrol_minimax_defaults() -> None:
+def test_agent_admin_engineer_create_uses_patrol_minimax_defaults(tmp_path: Path, monkeypatch) -> None:
     from agent_admin_crud import CrudHandlers
+
+    caller_profile = tmp_path / "caller.toml"
+    caller_profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = false",
+                "escalation_authority = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(caller_profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
 
     created_sessions: list[dict[str, object]] = []
     write_project_calls: list[object] = []

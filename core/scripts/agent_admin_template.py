@@ -90,10 +90,10 @@ def _load_role_skill_content(
 
     Returns (role_name, body_without_frontmatter) or None when no role
     mapping exists or the SKILL.md file is missing. Resolution order:
-      1. role_hint (e.g. "creative-builder") when the seat's template role
-         differs from its generic seat-id (e.g. "builder").  If the hint's
-         SKILL.md exists it takes precedence so creative/engineering template
-         seats load the right contract.
+      1. role_hint (e.g. "builder-image") when the seat's template role
+         differs from its generic seat-id (e.g. "builder"). If the hint's
+         SKILL.md exists it takes precedence so creative-template lane seats
+         load the right contract.
       2. seat_skill_mapping.role_skill_for_seat(seat_id) — handles suffixed
          ids like `builder-1 -> builder` and `memory -> memory-oracle`.
     YAML frontmatter (leading `---` block) is stripped so the embedded
@@ -122,21 +122,56 @@ def _load_role_skill_content(
             return result
 
     try:
-        from seat_skill_mapping import role_skill_for_seat
+        from seat_skill_mapping import role_skill_for_hint, role_skill_for_seat
     except ModuleNotFoundError:
         return None
+    if role_hint:
+        role_name = role_skill_for_hint(role_hint)
+        if role_name:
+            result = _read_skill(role_name)
+            if result is not None:
+                return result
     role_name = role_skill_for_seat(seat_id)
     if not role_name:
         return None
     return _read_skill(role_name)
 
 
+_CARTOONER_TEMPLATE_NAMES = frozenset({"clawseat-creative"})
+_CARTOONER_SHARED_SEATS = frozenset({"memory", "patrol"})
+
+
+def _resolve_cartooner_role_hint(
+    seat_id: str,
+    role_hint: str | None,
+    template_name: str | None,
+) -> str | None:
+    """Override role_hint for memory/patrol when the project is cartooner-bound.
+
+    memory + patrol are seat ids shared between engineering and creative
+    templates. Their global engineer.toml carries the engineering role
+    ('project-memory' / 'qa') so seat_skill_mapping resolves to the
+    engineering role contract (memory-oracle / patrol). For cartooner
+    projects, override to cartooner-harness so the loaded canonical
+    contract matches the protocol the seat actually runs.
+    """
+    template = (template_name or "").strip()
+    if template not in _CARTOONER_TEMPLATE_NAMES:
+        return role_hint
+    normalized = (seat_id or "").strip().lower()
+    if normalized in _CARTOONER_SHARED_SEATS:
+        return "cartooner-harness"
+    return role_hint
+
+
 def _role_skill_section_lines(
     repo_root: Path,
     seat_id: str,
     role_hint: str | None = None,
+    template_name: str | None = None,
 ) -> list[str]:
     """Render the `## Role SKILL (canonical)` block, or [] when no skill."""
+    role_hint = _resolve_cartooner_role_hint(seat_id, role_hint, template_name)
     info = _load_role_skill_content(repo_root, seat_id, role_hint)
     if not info:
         return []
@@ -166,12 +201,12 @@ class TemplateHooks:
     project_template_context: Callable[[Any], tuple[dict[str, Any], list[str], list[dict[str, object]]] | None]
     q: Callable[[str], str]
     render_authority_lines: Callable[[Any], list[str]]
-    render_protocol_reminder_lines: Callable[[Any, str], list[str]]
+    render_protocol_reminder_lines: Callable[..., list[str]]
     render_read_first_lines: Callable[[Any, Any, Any], list[str]]
     render_harness_runtime_lines: Callable[[Any], list[str]]
     render_project_seat_map_lines: Callable[..., list[str]]
     render_seat_boundary_lines: Callable[[Any, Any], list[str]]
-    render_communication_protocol_lines: Callable[[Any, str], list[str]]
+    render_communication_protocol_lines: Callable[..., list[str]]
     render_dispatch_playbook_lines: Callable[[Any, Any, Any], list[str]]
     render_loaded_skills_lines: Callable[[Any, str], list[str]]
     render_optional_skills_catalog: Callable[[list[dict[str, object]]], str]
@@ -292,7 +327,12 @@ class TemplateHandlers:
             engineer_order=engineer_order,
         )
         seat_boundary_lines = self.hooks.render_seat_boundary_lines(session, engineer)
-        communication_protocol_lines = self.hooks.render_communication_protocol_lines(engineer, project.name)
+        communication_protocol_lines = self.hooks.render_communication_protocol_lines(
+            engineer,
+            project.name,
+            template_name=str(getattr(project, "template_name", "") or ""),
+            seat_id=str(getattr(session, "engineer_id", "") or ""),
+        )
         dispatch_playbook_lines = self.hooks.render_dispatch_playbook_lines(session, project, engineer)
         contract_payload = self.hooks.workspace_contract_payload(
             session,
@@ -315,7 +355,7 @@ class TemplateHandlers:
         role_line = self.hooks.render_role_line(engineer, True)
         if role_line:
             codex_lines.append(role_line)
-        codex_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role)])
+        codex_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role, template_name=str(getattr(project, "template_name", "") or ""))])
         if engineer.role_details:
             codex_lines.extend(["", *self.hooks.render_role_details_lines(engineer)])
         if engineer.aliases:
@@ -338,7 +378,7 @@ class TemplateHandlers:
         )
         if engineer.skills:
             codex_lines.extend(["", *self.hooks.render_loaded_skills_lines(engineer, session.engineer_id)])
-        codex_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
+        codex_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or "")))
 
         tasks_root = getattr(project, "tasks_root", f"{repo_root}/.tasks")
         profile_display = getattr(project, "profile_path", "")
@@ -359,7 +399,7 @@ class TemplateHandlers:
         role_text_line = self.hooks.render_role_line(engineer, False)
         if role_text_line:
             claude_lines.append(role_text_line)
-        claude_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role)])
+        claude_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role, template_name=str(getattr(project, "template_name", "") or ""))])
         if engineer.role_details:
             claude_lines.extend(["", *self.hooks.render_role_details_lines(engineer)])
         if engineer.aliases:
@@ -376,7 +416,7 @@ class TemplateHandlers:
         claude_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             claude_lines.extend(["", *dispatch_playbook_lines])
-        claude_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
+        claude_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or "")))
 
         gemini_lines = [
             f"# {session.engineer_id}",
@@ -390,7 +430,7 @@ class TemplateHandlers:
         ]
         if role_text_line:
             gemini_lines.append(role_text_line)
-        gemini_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role)])
+        gemini_lines.extend(["", *self.hooks.render_protocol_reminder_lines(engineer, engineer.role, template_name=str(getattr(project, "template_name", "") or ""))])
         if engineer.role_details:
             gemini_lines.extend(["", *self.hooks.render_role_details_lines(engineer)])
         if engineer.aliases:
@@ -407,7 +447,7 @@ class TemplateHandlers:
         gemini_lines.extend(["", *seat_boundary_lines, "", *communication_protocol_lines])
         if dispatch_playbook_lines:
             gemini_lines.extend(["", *dispatch_playbook_lines])
-        gemini_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None))
+        gemini_lines.extend(_role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or "")))
 
         workspace_notes_lines = [
             "# Workspace Notes",
@@ -488,9 +528,13 @@ class TemplateHandlers:
             template_map.setdefault(tool, {})["HEARTBEAT_MANIFEST.toml"] = heartbeat_manifest_text
         rendered = template_map.get(tool, {})
         if session.engineer_id == "memory":
-            memory_reminder_lines = self.hooks.render_protocol_reminder_lines(engineer, engineer.role)
-            is_cartooner_memory = str(engineer.role or "").startswith("cartooner-")
-            memory_variant = "cartooner" if is_cartooner_memory else ("claude" if tool == "claude" else "gemini")
+            memory_reminder_lines = self.hooks.render_protocol_reminder_lines(engineer, engineer.role, template_name=str(getattr(project, "template_name", "") or ""))
+            template_name_str = str(getattr(project, "template_name", "") or "")
+            is_cartooner_memory = (
+                str(engineer.role or "").startswith("cartooner-")
+                or template_name_str in _CARTOONER_TEMPLATE_NAMES
+            )
+            memory_variant = "cartooner" if is_cartooner_memory else tool
             memory_doc = self._render_workspace_memory_template(
                 memory_variant,
                 session=session,
@@ -500,7 +544,7 @@ class TemplateHandlers:
             memory_doc = _insert_after_first_metadata_block(memory_doc, memory_reminder_lines)
             if not is_cartooner_memory:
                 role_skill = "\n".join(
-                    _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None)
+                    _role_skill_section_lines(_REPO_ROOT, session.engineer_id, role_hint=engineer.role or None, template_name=str(getattr(project, "template_name", "") or ""))
                 )
                 if role_skill:
                     memory_doc = memory_doc.rstrip() + "\n" + role_skill + "\n"

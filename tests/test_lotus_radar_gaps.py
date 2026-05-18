@@ -21,16 +21,23 @@ if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
 
-def _run_agent_admin(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_agent_admin(
+    home: Path,
+    *args: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "CLAWSEAT_REAL_HOME": str(home),
+        "PYTHONPATH": f"{REPO / 'core' / 'skills' / 'gstack-harness' / 'scripts'}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+    }
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, str(AGENT_ADMIN), *args],
         capture_output=True,
         text=True,
-        env={
-            **os.environ,
-            "CLAWSEAT_REAL_HOME": str(home),
-            "PYTHONPATH": f"{REPO / 'core' / 'skills' / 'gstack-harness' / 'scripts'}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-        },
+        env=env,
         check=False,
     )
 
@@ -48,10 +55,10 @@ def test_project_create_generates_complete_project_toml(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     data = _load_toml(home / ".agents" / "projects" / "lotus-radar" / "project.toml")
-    assert data["template_name"] == "cartooner-creative"
+    assert data["template_name"] == "clawseat-engineering"
     assert data["window_mode"] == "split-2"
-    assert data["monitor_max_panes"] == 4
-    assert data["engineers"] == ["memory", "writer", "visual", "patrol"]
+    assert data["monitor_max_panes"] == 5
+    assert data["engineers"] == ["memory", "planner", "builder", "reviewer", "patrol"]
     assert data["monitor_engineers"] == data["engineers"]
     assert set(data["seat_overrides"]) == set(data["engineers"])
 
@@ -77,7 +84,35 @@ def test_role_skill_uses_clawseat_root(tmp_path: Path) -> None:
     repo = tmp_path / "not-clawseat"
     repo.mkdir()
     assert _run_agent_admin(home, "project", "create", "foo", str(repo)).returncode == 0
-    result = _run_agent_admin(home, "engineer", "create", "patrol", "foo", "--no-monitor")
+    caller_profile = home / ".agents" / "caller.toml"
+    caller_profile.parent.mkdir(parents=True, exist_ok=True)
+    caller_profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = false",
+                "escalation_authority = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    result = _run_agent_admin(
+        home,
+        "engineer",
+        "create",
+        "patrol",
+        "foo",
+        "--no-monitor",
+        extra_env={
+            "CLAWSEAT_ENGINEER_PROFILE": str(caller_profile),
+            "CLAWSEAT_ENGINEER_ID": "planner",
+            "CLAWSEAT_SEAT": "planner",
+        },
+    )
 
     assert result.returncode == 0, result.stderr
     claude_md = home / ".agents" / "workspaces" / "foo" / "patrol" / "CLAUDE.md"

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 import textwrap
 from pathlib import Path
@@ -34,23 +33,9 @@ if _CORE_LIB not in sys.path:
 # ─────────────────────────────────────────────────────────────────────
 
 from machine_config import load_machine, list_openclaw_tenants, validate_tenant  # noqa: E402
+from tmux import tmux_session_alive as _tmux_has_session  # noqa: E402
 
 USE_REAL_ENGINE = True
-
-
-# ─────────────────────────────────────────────────────────────────────
-# tmux session probe — used to mark which memory/ancestor/etc. session is alive
-# ─────────────────────────────────────────────────────────────────────
-
-def _tmux_has_session(name: str) -> bool:
-    if not shutil.which("tmux"):
-        return False
-    import subprocess
-    return subprocess.run(
-        ["tmux", "has-session", "-t", f"={name}"],
-        capture_output=True,
-        check=False,
-    ).returncode == 0
 
 
 def _read_tenant_binding(tenant: Any) -> str | None:

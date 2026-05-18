@@ -19,7 +19,6 @@ personal copies in sync.
 | `agent-launcher.sh` | Main unified launcher — validates explicit CLI inputs, creates/reuses tmux sessions, and prepares isolated runtime homes. |
 | `agent-launcher-common.sh` | Shared deterministic helpers: launcher state path, recent-dir tracking, directory normalization, slug generation. |
 | `agent-launcher-discover.py` | API-key discovery across env vars / secret files for claude / codex / gemini. |
-| `agent-launcher-fuzzy.py` | Deterministic matcher utility for directory / choice ranking (kept for compatibility helpers and env-driven roots). |
 | `claude.sh` | Thin wrapper → `agent-launcher.sh --tool claude`. |
 | `codex.sh` | Thin wrapper → `agent-launcher.sh --tool codex`. |
 | `gemini.sh` | Thin wrapper → `agent-launcher.sh --tool gemini`. |

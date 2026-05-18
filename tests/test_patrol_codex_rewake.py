@@ -21,7 +21,7 @@ def _write_stale_handoff(
     task_id: str,
     *,
     target: str = "builder",
-    age_seconds: int = 3 * 3600,
+    age_seconds: int = (patrol_loop.STALE_THRESHOLD_HOURS + 1) * 3600,
 ) -> Path:
     handoffs = home / ".agents" / "tasks" / "demo" / "patrol" / "handoffs"
     handoffs.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,7 @@ def test_re_wake_codex_working_fresh_handoff_skips_rewake(
 
     monkeypatch.setattr(patrol_loop.subprocess, "run", fake_run)
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 0
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 0
     assert not any("capture-pane" in _cmd_as_text(cmd) for cmd in calls)
     assert not any("send-and-verify.sh" in _cmd_as_text(cmd) for cmd in calls)
 
@@ -88,7 +88,7 @@ def test_re_wake_codex_working_stale_handoff_unblocks_then_sends(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    _write_stale_handoff(home, "codex-working", target="builder", age_seconds=3 * 3600)
+    _write_stale_handoff(home, "codex-working", target="builder")
     calls: list[list[str] | str] = []
     capture_count = 0
 
@@ -109,7 +109,7 @@ def test_re_wake_codex_working_stale_handoff_unblocks_then_sends(
     monkeypatch.setattr(patrol_loop.subprocess, "run", fake_run)
     monkeypatch.setattr(patrol_loop.time, "sleep", lambda *_: None)
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 1
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 1
     send_calls = [cmd for cmd in calls if "send-and-verify.sh" in _cmd_as_text(cmd)]
     assert len(send_calls) == 1
     assert any("send-keys" in _cmd_as_text(cmd) for cmd in calls)
@@ -133,7 +133,7 @@ def test_re_wake_codex_idle_sends_taskqueue_message(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr(patrol_loop.subprocess, "run", fake_run)
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 1
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 1
     send_calls = [cmd for cmd in calls if "send-and-verify.sh" in _cmd_as_text(cmd)]
     assert len(send_calls) == 1
     send_cmd = send_calls[0]
@@ -157,7 +157,7 @@ def test_re_wake_codex_background_terminal_running_skips_rewake(
 
     monkeypatch.setattr(patrol_loop.subprocess, "run", fake_run)
 
-    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=2) == 0
+    assert patrol_loop.re_wake_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS) == 0
     assert any("capture-pane" in _cmd_as_text(cmd) for cmd in calls)
     assert not any("send-and-verify.sh" in _cmd_as_text(cmd) for cmd in calls)
 

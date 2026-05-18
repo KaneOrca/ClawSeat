@@ -56,6 +56,7 @@ module installed (`pip install --user iterm2`).
 from __future__ import annotations
 
 import asyncio
+import re
 import json
 import shlex
 import sys
@@ -435,6 +436,65 @@ async def _tab_session_name(tab: Any) -> str:
     return ""
 
 
+async def _tab_current_job(tab: Any) -> str:
+    """Return the current foreground job name of the tab's current session.
+    iTerm exposes this as the `jobName` variable (e.g. "tmux", "zsh", "node").
+    Returns "" when unavailable — caller treats that as "unknown / not dead"."""
+    session = getattr(tab, "current_session", None)
+    if session is None:
+        return ""
+    # Test fakes set a `current_job` attribute directly; honor it first.
+    job = getattr(session, "current_job", None)
+    if isinstance(job, str) and job.strip():
+        return job.strip()
+    getter = getattr(session, "async_get_variable", None)
+    if getter is None:
+        return ""
+    for var_name in ("jobName", "session.jobName"):
+        try:
+            value = await getter(var_name)
+        except Exception:  # noqa: BLE001 best-effort SDK metadata lookup
+            value = ""
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+# Job names that indicate the tab is still inside a tmux client (attach is alive).
+# Anything else (zsh, bash, sh, fish, etc.) means tmux attach has exited.
+_TMUX_CLIENT_JOB_PREFIXES = ("tmux",)
+
+
+def _job_indicates_tmux_client(job_name: str) -> bool:
+    if not job_name:
+        return False
+    lower = job_name.lower()
+    return any(lower.startswith(prefix) for prefix in _TMUX_CLIENT_JOB_PREFIXES)
+
+
+def _command_is_tmux_attach(command: str) -> bool:
+    """Heuristic: command opens a tmux client (attach, attach-session, a, etc.)."""
+    if not command:
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    saw_tmux = False
+    for token in tokens:
+        if not saw_tmux:
+            if token == "tmux" or token.endswith("/tmux"):
+                saw_tmux = True
+            continue
+        if token in {"attach", "attach-session", "a", "at"}:
+            return True
+        if token.startswith("-"):
+            continue
+        # First non-flag token after tmux that isn't an attach verb → not attach.
+        return False
+    return False
+
+
 def _expected_session_substr(spec: dict[str, str]) -> str:
     command = spec.get("command", "")
     if not command:
@@ -450,6 +510,17 @@ def _expected_session_substr(spec: dict[str, str]) -> str:
             if token.startswith(prefix):
                 return token[len(prefix):].lstrip("=")
     return ""
+
+
+def _memory_session_alive(project_name: str, session_name: str, expected_session: str) -> bool:
+    if not project_name or not session_name:
+        return False
+    if expected_session and expected_session not in session_name:
+        return False
+    return re.fullmatch(
+        rf"^{re.escape(project_name)}-memory(?:-(?:claude|codex|gemini))?$",
+        session_name,
+    ) is not None
 
 
 def _session_name_matches(session_name: str, expected_tab_name: str, expected_session: str) -> bool:
@@ -489,18 +560,64 @@ async def _tab_matches_expected(tab: Any, spec: dict[str, str]) -> tuple[bool, s
     )
 
 
-async def _find_existing_tab(window: Any, spec: dict[str, str]) -> tuple[bool, str | None]:
-    detection_failure = None
+async def _tab_attach_died(tab: Any, spec: dict[str, str]) -> bool:
+    """True iff the tab's marker matches the spec name AND the tab's
+    launching tmux-attach command is no longer the foreground job. This is
+    the "marker says X but tmux client exited" state — caller should reuse
+    the tab and re-send the command rather than create a new tab."""
+    expected_name = spec.get("name", "")
+    if not expected_name:
+        return False
+    command = spec.get("command", "")
+    if not _command_is_tmux_attach(command):
+        return False  # only meaningful for tmux-attach style commands
+    try:
+        tab_name = await _tab_name(tab)
+    except Exception:  # noqa: BLE001 best-effort metadata lookup
+        return False
+    if tab_name != expected_name:
+        return False
+    job = await _tab_current_job(tab)
+    if not job:
+        return False  # unknown → don't claim it's dead
+    return not _job_indicates_tmux_client(job)
+
+
+async def _find_existing_tab(
+    window: Any, spec: dict[str, str]
+) -> tuple[bool, Any | None, str | None]:
+    """Scan existing tabs for one that matches spec.
+
+    Returns (matched, reuse_tab, detection_failure):
+      matched=True  → fully attached and working; skip.
+      reuse_tab=<tab> → marker matches but the launching tmux-attach has
+                       exited; caller should reuse the tab and re-send
+                       the command (not create a new tab).
+      detection_failure=<msg> → marker matches but session-name doesn't
+                                (different tmux session); caller will
+                                create a new tab.
+    """
+    detection_failure: str | None = None
+    reuse_tab: Any | None = None
     for tab in getattr(window, "tabs", []) or []:
+        # Check attach-died FIRST: a tab whose marker matches but whose
+        # tmux-attach has exited would otherwise pass _tab_matches_expected
+        # via the session_name==marker fallback, and we'd incorrectly skip
+        # it instead of re-sending the attach.
+        if reuse_tab is None and await _tab_attach_died(tab, spec):
+            reuse_tab = tab
+            continue
         matched, failure = await _tab_matches_expected(tab, spec)
         if matched:
-            return True, None
+            return True, None, None
         if failure and detection_failure is None:
             detection_failure = failure
-    return False, detection_failure
+    return False, reuse_tab, detection_failure
 
 
-async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None:
+async def _mark_tab(tab: Any, spec: dict[str, str]) -> None:
+    """Set tab/session title and user.tab_name marker. Cheap, does not enter
+    tmux control mode — safe to run during Phase 1 before any command runs."""
     session = getattr(tab, "current_session", None)
     if session is None:
         raise RuntimeError(f"tab {spec['name']!r} has no current session")
@@ -523,6 +640,14 @@ async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None
             await setter("user.tab_name", spec["name"])
         except Exception:  # noqa: BLE001 metadata is best-effort
             pass
+
+
+async def _configure_tab(tab: Any, spec: dict[str, str], delay_s: float) -> None:
+    """Send the command to a tab whose marker has already been set by _mark_tab.
+    This is the Phase 2 step that triggers tmux control mode on attach."""
+    session = getattr(tab, "current_session", None)
+    if session is None:
+        raise RuntimeError(f"tab {spec['name']!r} has no current session")
 
     if delay_s > 0:
         await asyncio.sleep(delay_s)
@@ -592,27 +717,41 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
     # immediately after creation.
     handled_tab_ids: set[int] = set()
 
+    # Phase 1: create all tabs before sending any commands.
+    # Sending tmux-attach via async_send_text to an already-created tab causes
+    # iTerm to enter tmux control mode, which invalidates the window's Python
+    # API handle — subsequent async_create_tab calls fail with INVALID_WINDOW_ID.
+    # Fix: materialize every tab object first, then configure (send commands) in
+    # a second pass after all tabs exist.
+    pending: list[tuple[Any, dict[str, str], str, str]] = []  # (tab, spec, status, reason)
     try:
         for spec in tabs:
             status = "created"
             reason = ""
             if ensure and not created_window:
-                matched, detection_failure = await _find_existing_tab(window, spec)
+                matched, reuse_tab, detection_failure = await _find_existing_tab(window, spec)
                 if matched:
                     tabs_skipped += 1
                     tab_results.append({"status": "skipped", "tab": spec["name"]})
-                    # Mark the matched tab as handled so prune skips it.
                     for existing_tab in getattr(window, "tabs", []) or []:
                         ok, _ = await _tab_matches_expected(existing_tab, spec)
                         if ok:
                             handled_tab_ids.add(id(existing_tab))
                             break
                     continue
+                if reuse_tab is not None:
+                    # Marker matches but the previous tmux-attach has died
+                    # (its tmux session was killed/restarted). Reuse the
+                    # existing tab and re-send the command in Phase 2.
+                    await _mark_tab(reuse_tab, spec)
+                    pending.append((reuse_tab, spec, "reattached", ""))
+                    handled_tab_ids.add(id(reuse_tab))
+                    continue
                 if detection_failure:
                     status = "detect-failure"
                     reason = detection_failure
 
-            if created_window and tabs_created == 0 and getattr(window, "current_tab", None) is not None:
+            if created_window and len(pending) == 0 and getattr(window, "current_tab", None) is not None:
                 tab = window.current_tab
             else:
                 try:
@@ -650,8 +789,17 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                         "window_id": getattr(window, "window_id", ""),
                     }
 
-            await _configure_tab(tab, spec, delay_s)
+            # Set marker (title + user.tab_name) immediately so that
+            # _find_existing_tab in subsequent specs doesn't mistake this
+            # freshly created (but unconfigured) tab for a stale ghost.
+            await _mark_tab(tab, spec)
+            pending.append((tab, spec, status, reason))
             handled_tab_ids.add(id(tab))
+
+        # Phase 2: configure all tabs (send commands) now that the window
+        # structure is fully built and no more async_create_tab calls are needed.
+        for tab, spec, status, reason in pending:
+            await _configure_tab(tab, spec, delay_s)
             tabs_created += 1
             entry = {"status": status, "tab": spec["name"]}
             if reason:
@@ -697,6 +845,18 @@ async def _build_tabs_layout(connection: Any, payload: dict[str, Any]) -> dict[s
                 continue
             matching_spec = spec_by_name.get(tab_name)
             if matching_spec is not None:
+                expected_session = _expected_session_substr(matching_spec)
+                try:
+                    session_name = await _tab_session_name(tab)
+                except Exception:  # noqa: BLE001 best-effort metadata lookup
+                    session_name = ""
+                if _memory_session_alive(tab_name, session_name, expected_session):
+                    print(
+                        f"INFO: prune skipped live memory tab={tab_name} "
+                        f"session={session_name}",
+                        file=sys.stderr,
+                    )
+                    continue
                 # Marker matches a spec; verify session.name agrees before sparing the tab.
                 matched, _ = await _tab_matches_expected(tab, matching_spec)
                 if matched:

@@ -1,10 +1,9 @@
 """Shared conflict-handling helpers for seat bootstrap scripts.
 
-Both init_koder.py (frontstage) and init_specialist.py (planner / builder /
-reviewer / patrol / designer / memory) write IDENTITY / SOUL / MEMORY (and, for
-koder, TOOLS / AGENTS / WORKSPACE_CONTRACT) into an existing workspace that
+init_koder.py (frontstage) writes IDENTITY / SOUL / MEMORY (and
+TOOLS / AGENTS / WORKSPACE_CONTRACT) into an existing workspace that
 OpenClaw or agent_admin has already created. The pre-write conflict
-handling is identical between the two, so it lives here.
+handling lives here.
 
 Public surface:
 

@@ -20,7 +20,8 @@ def test_install_md_decision_tree_steps_have_required_schema() -> None:
     text = EN.read_text(encoding="utf-8")
     for step in range(4):
         section = _step_section(text, f"Step {step}")
-        for marker in ("**WHAT**", "**WHY default**", "**CONFIRM**", "**ON-FAIL**"):
+        why_marker = "**WHY**" if step == 1 else "**WHY default**"
+        for marker in ("**WHAT**", why_marker, "**CONFIRM**", "**ON-FAIL**"):
             assert marker in section, f"{marker} missing in Step {step}"
 
 

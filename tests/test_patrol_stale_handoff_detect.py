@@ -39,14 +39,14 @@ def test_detect_stale_handoffs_skips_fresh_and_consumed(tmp_path: Path, monkeypa
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
     fresh = _handoff(home, "fresh", age_hours=1)
-    stale = _handoff(home, "stale", age_hours=3)
-    older = _handoff(home, "older", age_hours=5)
-    consumed = _handoff(home, "consumed", age_hours=5, consumed=True)
+    stale = _handoff(home, "stale", age_hours=patrol_loop.STALE_THRESHOLD_HOURS + 1)
+    older = _handoff(home, "older", age_hours=patrol_loop.STALE_THRESHOLD_HOURS + 2)
+    consumed = _handoff(home, "consumed", age_hours=patrol_loop.STALE_THRESHOLD_HOURS + 2, consumed=True)
 
-    result = patrol_loop.detect_stale_handoffs("demo", threshold_hours=2)
+    result = patrol_loop.detect_stale_handoffs("demo", threshold_hours=patrol_loop.STALE_THRESHOLD_HOURS)
 
     assert [item["task_id"] for item in result] == ["older", "stale"]
     assert {item["target"] for item in result} == {"builder"}
-    assert all(item["age_hours"] >= 2 for item in result)
+    assert all(item["age_hours"] >= patrol_loop.STALE_THRESHOLD_HOURS for item in result)
     assert str(fresh) not in {item["json_path"] for item in result}
     assert str(consumed) not in {item["json_path"] for item in result}

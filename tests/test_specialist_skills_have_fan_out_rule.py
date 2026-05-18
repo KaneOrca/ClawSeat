@@ -7,9 +7,6 @@ _REPO = Path(__file__).resolve().parents[1]
 
 _SPECIALIST_SKILLS = [
     "builder",
-    "creative-builder",
-    "creative-designer",
-    "creative-planner",
     "designer",
     "patrol",
     "reviewer",
@@ -25,11 +22,4 @@ def test_specialist_skills_document_disjoint_fan_out_rule() -> None:
         text = _skill_text(skill)
         assert "fan-out" in text, skill
         assert "disjoint" in text, skill
-        assert "sub-agent-fan-out.md" in text, skill
-
-
-def test_creative_planner_fan_out_rule_is_not_designer_chapter_only() -> None:
-    text = _skill_text("creative-planner")
-    assert "designer 章节" not in text
-    assert "任何 owner_role specialist" in text
-    assert "disjoint files / disjoint tests / disjoint research lanes / multi-part" in text
+        assert "seat-ownership.md" in text, skill

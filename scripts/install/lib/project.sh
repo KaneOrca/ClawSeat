@@ -31,20 +31,18 @@ _prompt_i18n_get() {
 
 prompt_template_for_choice() {
   case "${1:-1}" in
-    ""|1) printf '%s\n' "clawseat-creative" ;;
-    2) printf '%s\n' "clawseat-engineering" ;;
-    3) printf '%s\n' "clawseat-solo" ;;
-    4) printf '%s\n' "cartooner-creative" ;;
+    ""|1) printf '%s\n' "clawseat-engineering" ;;
+    2) printf '%s\n' "clawseat-creative" ;;
+    3) printf '%s\n' "clawseat-minimal" ;;
     *) return 1 ;;
   esac
 }
 
 prompt_placeholder_for_template() {
   case "$1" in
-    clawseat-creative)    printf '%s\n' "e.g. cartooner, artistic-tool" ;;
     clawseat-engineering) printf '%s\n' "e.g. coding-project, webapp" ;;
-    clawseat-solo)        printf '%s\n' "e.g. minimal-solo, creative-side-project" ;;
-    cartooner-creative)    printf '%s\n' "e.g. carto-project, cartooner-campaign" ;;
+    clawseat-creative)    printf '%s\n' "e.g. cartooner-project, creative-campaign" ;;
+    clawseat-minimal|clawseat-solo) printf '%s\n' "e.g. minimal-project, cartooner-front" ;;
     *)                    printf '%s\n' "e.g. myproject, experiment-01" ;;
   esac
 }
@@ -61,7 +59,7 @@ prompt_kind_first_flow() {
   printf '\n%s\n' "$(_prompt_i18n_get kind_first_prompt '选择项目类型 / Choose project mode:')" >&2
   printf '  %s\n' "$(_prompt_i18n_get kind_first_creative '1) 创作项目 (5 seat: memory + planner + builder + patrol + designer)  [default]')" >&2
   printf '  %s\n' "$(_prompt_i18n_get kind_first_engineering '2) 工程项目 (6 seat: + reviewer 独立审查)')" >&2
-  printf '  %s\n' "$(_prompt_i18n_get kind_first_solo '3) 极简协作 (3 seat: memory + builder + planner-gemini, all OAuth)')" >&2
+  printf '  %s\n' "$(_prompt_i18n_get kind_first_solo '3) 极简项目组 (v3 multi-team: memory + planner+builder subteam + quality-docs)')" >&2
   printf '  %s\n' "$(_prompt_i18n_get kind_first_cartooner '4) Cartooner 创作席位 (4 seat: memory+writer+visual+patrol，工具混合)')" >&2
   printf '%s\n' "$(_prompt_i18n_get kind_first_recommend '推荐★：创作项目；理由：覆盖 planner/builder/patrol/designer，最适合首次安装。')" >&2
 
@@ -1171,7 +1169,7 @@ tmpl = Template(Path(sys.argv[1]).read_text(encoding="utf-8")).safe_substitute(
     PENDING_SEATS_HUMAN=sys.argv[8],
     PRIMARY_SESSION_NAME=sys.argv[9],
 )
-tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-creative")
+tmpl = tmpl.replace("{CLAWSEAT_TEMPLATE_NAME}", sys.argv[6] if len(sys.argv) > 6 else "clawseat-engineering")
 out = Path(sys.argv[2]); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(tmpl, encoding="utf-8")
 PY
     chmod 600 "$BRIEF_PATH" || die 30 BRIEF_CHMOD_FAILED "unable to chmod $BRIEF_PATH"

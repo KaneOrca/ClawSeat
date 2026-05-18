@@ -35,7 +35,7 @@ def test_project_bootstrap_supports_repo_root_single_file_template(tmp_path: Pat
             "project",
             "bootstrap",
             "--template",
-            "cartooner-creative",
+            "clawseat-creative",
             "--local",
             str(local_toml),
         ],
@@ -55,13 +55,13 @@ def test_project_bootstrap_supports_repo_root_single_file_template(tmp_path: Pat
     agents_root = home / ".agents"
     project_toml = agents_root / "projects" / "spawn49" / "project.toml"
     assert project_toml.is_file()
-    assert 'template_name = "cartooner-creative"' in project_toml.read_text(encoding="utf-8")
+    assert 'template_name = "clawseat-creative"' in project_toml.read_text(encoding="utf-8")
 
     session_tomls = sorted((agents_root / "sessions" / "spawn49").glob("*/session.toml"))
     engineer_tomls = sorted((agents_root / "engineers").glob("*/engineer.toml"))
 
-    assert len(session_tomls) == 4
-    assert len(engineer_tomls) == 4
+    assert len(session_tomls) == 5
+    assert len(engineer_tomls) == 5
     assert {
         path.parent.name for path in session_tomls
-    } == {"memory", "writer", "visual", "patrol"}
+    } == {"memory", "writer", "builder-image", "builder-av", "patrol"}

@@ -112,8 +112,7 @@ is legacy; v0.7 reframes koder as the Feishu reverse channel — see §Mental Mo
 | Project | `memory`, `planner`, `builder`, `reviewer`, `patrol` | tmux `<project>-<seat>`; memory lives in the shared memories window, workers live in the per-project workers window; memory owns lifecycle; numbered/fan-out sessions are optional extensions |
 
 Verification uses the canonical `patrol` seat. Legacy verification-seat names
-were removed on 2026-04-29; migrate old project state with
-`scripts/migrate-qa-to-patrol.sh`.
+were removed on 2026-04-29.
 
 Legacy v1 profile templates are no longer shipped in-tree — they depended on
 `heartbeat_*` fields the v2 validator rejects. Current v0.7 install is
@@ -201,7 +200,6 @@ These are NOT user-facing entry points. They are called from L1 / L2 / Phase-A:
 | Script | Called by | Purpose |
 |---|---|---|
 | `init_koder.py` | `apply-koder-overlay.sh` | Destructive overlay onto an OpenClaw agent workspace |
-| `init_specialist.py` | legacy v0.5 / migration paths | Materialize a specialist seat workspace |
 | `install_memory_hook.py` | `install.sh` Step 7.5 | Install Stop hook into memory's workspace |
 | `install_planner_hook.py` | `memory` Phase-A B3.5 | Install Stop hook into planner's workspace |
 
@@ -246,7 +244,7 @@ Recent structural changes:
 - **2026-04 — core/migration/ layer** — houses `*_dynamic.py` scripts that replace the legacy harness scripts for profiles with `[dynamic_roster].enabled = true`. Traffic flows through `core/transport/transport_router.py` so callers never pick the wrong path by hand.
 - **2026-04 — transport/payload consolidation (audit P0/P1)** — `build_notify_payload` extracted into `_task_io.py`, rendering/validation for codex provider config moved into a typed `CodexProviderConfig` dataclass, shells/*/adapter_shim.py collapsed onto `_shim_base.py`.
 - **2026-04 — install.sh enhancements** — `--repo-root` flag (FR-7) allows installing a project pointing to a different business repo (separate from the ClawSeat root); `--reset-harness-memory` clears per-seat harness choice history (FR-1 `last-harness.toml` persistence). `CLAWSEAT_FEISHU_ENABLED=0` env var disables all Feishu sends globally (send_delegation_report, planner stop-hook, announce helpers).
-- **2026-04 — project templates** — `--template` flag selects one of three built-in rosters: `cartooner-creative` (4-seat), `clawseat-engineering` (5-seat with reviewer), or `clawseat-solo` (3-seat). `PENDING_SEATS` and `seat_order` are now read dynamically from the template TOML; per-seat tool/auth/provider override each seat is carried into `project-local.toml`.
+- **2026-04 — project templates** — `--template` flag selects built-in install flows. `clawseat-engineering` and `clawseat-creative` are v2 flat rosters; `clawseat-solo` is now a legacy alias for v3 `MULTI_TEAM_MINIMAL`, where one project memory manages planner+builder subteams plus `quality-docs`.
 
 ### Project Templates
 
@@ -254,31 +252,36 @@ Three built-in project templates in `templates/`:
 
 | Template | Seats | Count | Use case |
 |----------|-------|-------|----------|
-| `cartooner-creative` | memory writer visual patrol | 4 | Creative chain with direct memory/operator collaboration |
-| `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review) |
-| `clawseat-solo` | memory (claude oauth) + builder (codex oauth) + planner (gemini oauth) | 3 | Minimal collaboration chain with standard brief -> workflow -> dispatch -> verdict cycle |
+| `clawseat-engineering` | memory planner builder reviewer patrol | 5 | Engineering chain with reviewer (QA + visual review); seats use gstack-harness protocol + gstack skills |
+| `clawseat-creative` | memory writer builder-image builder-av patrol | 5 | Cartooner-bound creative team for short films, short dramas, MV; seats use cartooner skills (image / video / audio / storyboard / design / prompt); cartooner-harness protocol layer |
+| `clawseat-solo` | project-memory + planner+builder subteam + quality-docs | v3 | Legacy alias for `MULTI_TEAM_MINIMAL`; one memory can manage many minimal solo units |
 
-### Solo Template (Minimal 3-Seat)
+### Solo Alias (Minimal v3 Project Group)
 
-`clawseat-solo` is a 3-seat alternative for minimal OAuth-only collaboration:
+`clawseat-solo` no longer has independent single-mode semantics. It is the
+legacy CLI alias for v3 `MULTI_TEAM_MINIMAL`: it seeds approved proposals and
+delegates to `install_multi.sh`. The reusable "solo" piece is the team-local
+planner+builder unit:
 
-| Seat | Tool | Role |
-|------|------|------|
-| memory | claude oauth | L3 hub, brief authoring, verdict |
-| builder | codex oauth | Implementation |
-| planner | gemini oauth | Workflow orchestration, dispatch |
+| Unit | Role |
+|------|------|
+| project-memory | top-level intake, team ownership, final acceptance |
+| subteam planner | research, workflow, exact builder dispatch, review/rework loop |
+| subteam builder | implementation and evidence |
+| quality-docs | continuous quality gate pulled by memory |
 
-No reviewer, patrol, or designer seats. Memory delegates orchestration to planner;
-builder self-reviews; memory issues final verdict. All seats use OAuth - no API
-keys required.
+Multi-team can run multiple planner+builder units under the same memory. If a
+subteam grows past one builder it needs a reviewer; past three builders, memory
+creates another subteam.
 
-**Cartooner template seat responsibilities:**
-- `writer` (claude/oauth): deep creative writing and dialog craft on memory handoff
-- `visual` (gemini/oauth): storyboard, concept art, visual direction
-- `patrol` (claude/minimax): scheduled or memory-requested evidence collection; reports without modifying project state
-- `designer` row is intentionally not part of `cartooner-creative`; creative output is coordinated through memory + writer + visual.
+**Creative template seat responsibilities** (`clawseat-creative`, cartooner-harness-bound):
+- `memory` (claude/minimax-api, **Vision Steward**): no-image-policy; maintains PROJECT_INDEX / generation_log via metadata only; coordinates lanes; escalates aesthetic decisions to user. MiniMax chosen for high-frequency long-session work without OAuth quota pressure.
+- `writer` (claude/oauth, **Story Specialist**): pure literary — narrative_outline.md (scenes / dialogue / character beats); never writes shot lists or prompts. Claude OAuth chosen for strongest Chinese narrative quality.
+- `builder-image` (codex/oauth, **Image Specialist**): reads shot_list.toml + style_bible; translates each shot into model-specific image prompt; runs cartooner-image / -storyboard / -design with nano-banana / gpt-image-2 fallback.
+- `builder-av` (gemini/oauth, **AV Cinematographer**): owns shot_list authoring AND av generation. Gemini chosen for one killer feature: YouTube ingestion via reference-learning subagent (master cinematographer reference learning).
+- `patrol` (claude/minimax-api, **Asset Guardian**): file-level integrity only — PROJECT_INDEX schema, asset existence / size / hash, cartooner pipeline SLA monitoring; never reads asset content.
 
-**Capability skill layer** (`core/skills/cs-*/`): tool-agnostic interface contracts (WHAT, not HOW). cs-classify routes long-form vs short-form; cs-structure runs the Hollywood Writers Room (Agent Teams); cs-write executes long-form content; cs-score applies rubric-based scoring. Workflow composition is the planner's responsibility, not the skills'.
+> The creative template uses `cartooner-harness` (not `gstack-harness`) as its protocol layer. The creative workflow's primitives (lane / deposit / pick / iterate) differ structurally from the engineering chain's (dispatch / handoff / ack), so the protocol layers are intentionally split. See `core/skills/cartooner-harness/SKILL.md`.
 
 Still outside ClawSeat by design:
 

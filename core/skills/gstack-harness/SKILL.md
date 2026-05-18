@@ -21,6 +21,7 @@ stable harness runtime:
 Project profiles may also define project-local seat runtime overrides, so the
 same stable seat ids can map to different tool/auth/provider choices per
 project without changing the role model.
+Writing boundaries: see [`core/references/seat-ownership.md`](../../references/seat-ownership.md).
 
 ## Use this skill when
 
@@ -47,7 +48,7 @@ Do not load every reference by default. Start from the project profile under
     Feishu-side async sink or koder overlay is active; otherwise CLI-only flow
     stays on handoff JSON + state.db events
 - parallel execution of independent sub-tasks
-  - [Sub-agent fan-out](references/sub-agent-fan-out.md)
+  - fan out independent sub-tasks through the seat's agent-dispatch primitive, then serialize only the final cross-check / delivery step
 - console / patrol / reminder review
   - [Console model](references/console-model.md)
   - [Heartbeat policy](references/heartbeat-policy.md)
@@ -151,8 +152,8 @@ Keep those under:
   disjoint tests, or investigate disjoint code paths, the receiving seat must
   fan them out via its agent-dispatch primitive (Claude Code `Agent` tool,
   Codex subagent, Gemini subagent) and only serialize the final cross-check /
-  delivery step. See [Sub-agent fan-out](references/sub-agent-fan-out.md) for
-  the trigger rules, pattern, and anti-patterns.
+  delivery step. Fan-out rules, pattern, and anti-patterns are summarized in
+  the dispatch playbook and seat dispatch docs.
 - Treat dynamic-roster fields as separate concerns:
   - `seats` = canonical roster
   - `materialized_seats` = seats that get precreated workspace/task scaffolding

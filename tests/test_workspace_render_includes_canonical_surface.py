@@ -29,5 +29,5 @@ def test_workspace_render_includes_canonical_dispatch_receipt_and_fanout_surface
     assert "Fan-out Default" in text
     assert "2+" in text
     assert "fan-out" in text
-    assert "sub-agent-fan-out.md" in text
+    assert "fan out independent sub-goals via the seat dispatch primitive" in text
     assert "or `complete_handoff.py`" not in text

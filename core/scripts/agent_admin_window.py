@@ -14,6 +14,13 @@ from typing import Any
 
 import projects_registry
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CORE_LIB = str(_REPO_ROOT / "core" / "lib")
+if _CORE_LIB not in sys.path:
+    sys.path.insert(0, _CORE_LIB)
+
+from tmux import tmux_session_alive as _tmux_session_alive_shared  # noqa: E402
+
 
 class AgentAdminWindowError(Exception):
     pass
@@ -28,7 +35,6 @@ TMUX_COMMAND_TIMEOUT_SECONDS = 8.0
 TMUX_COMMAND_RETRY_DELAY_SECONDS = 1.0
 ITERM_SCRIPT_APPS = ("iTerm", "iTerm2")
 ITERM_SCRIPT_RETRIES = 3
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 _ITERM_PANES_DRIVER = Path(__file__).resolve().with_name("iterm_panes_driver.py")
 _WAIT_FOR_SEAT_SCRIPT = _REPO_ROOT / "scripts" / "wait-for-seat.sh"
 _GRID_WINDOW_TITLE_PREFIX = "clawseat-"
@@ -108,16 +114,7 @@ def tmux_with_retry(
 
 
 def tmux_has_session(session: str) -> bool:
-    try:
-        result = tmux_with_retry(
-            ["has-session", "-t", session],
-            label=f"tmux_has_session({session})",
-            check=False,
-            retries=1,
-        )
-        return result.returncode == 0
-    except AgentAdminWindowError:
-        return False
+    return _tmux_session_alive_shared(session, timeout=TMUX_COMMAND_TIMEOUT_SECONDS)
 
 
 def tmux_window_panes(window_target: str) -> list[dict[str, int | str]]:
@@ -549,12 +546,22 @@ def open_memory_window() -> dict[str, Any]:
     return {"status": "skipped", "reason": "global memory window retired"}
 
 
+def _should_refresh_memories(
+    *,
+    rebuild: bool,
+    open_memory: bool,
+    refresh_memories: bool,
+) -> bool:
+    return (open_memory or refresh_memories) or not rebuild
+
+
 def open_grid_window(
     project: Any,
     *,
     recover: bool = False,
     rebuild: bool = False,
     open_memory: bool = False,
+    refresh_memories: bool = False,
 ) -> dict[str, Any]:
     template_name = str(getattr(project, "template_name", "") or "")
     if _project_primary_seat_id(project) == "memory":
@@ -568,11 +575,34 @@ def open_grid_window(
             result = run_iterm_panes_driver(build_workers_payload(project))
             result["recovered"] = False
             result["rebuilt"] = bool(rebuild)
-        result["memories"] = ensure_memories_pane(project)
-        result["memory"] = {
-            "status": "skipped",
-            "reason": "v2 minimal uses memories tabs",
-        }
+        if _should_refresh_memories(
+            rebuild=rebuild,
+            open_memory=open_memory,
+            refresh_memories=refresh_memories,
+        ):
+            result["memories"] = ensure_memories_pane(project)
+        else:
+            print(
+                "agent_admin_window: DEPRECATED: --rebuild no longer refreshes memories by default. "
+                "This legacy behavior is deprecated: use --refresh-memories (or --open-memory) "
+                "to restore legacy behavior.",
+                file=sys.stderr,
+            )
+            result["memories"] = {
+                "status": "skipped",
+                "reason": "rebuild defaults to workers-only",
+            }
+
+        result["memory"] = open_memory_window()
+
+        worker_count = len(_project_grid_seat_ids(project))
+        worker_seats = worker_count
+        if worker_seats <= 0:
+            worker_seats = 1
+        result["summary"] = (
+            f"window open-grid: rebuilt project={project.name} seats={worker_seats} "
+            f"{'memories=touched' if result['memories'].get('status') == 'ok' else 'memories=skipped'}"
+        )
         return result
 
     if template_name not in _V1_GRID_TEMPLATES:

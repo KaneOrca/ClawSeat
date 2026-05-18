@@ -27,7 +27,7 @@ sys.path.insert(0, str(_SCRIPTS))
 def test_no_hardcoded_ywf_user_path_in_core():
     """No /Users/ywf absolute path must appear in the T1-modified runtime files.
 
-    Scoped to the 5 files touched by T1-A/B/C (not generated-doc files like
+    Scoped to the 4 files touched by T1-A/B/C (not generated-doc files like
     init_koder.py which embed example shell invocations in their output strings).
     """
     t1_files = [
@@ -35,7 +35,6 @@ def test_no_hardcoded_ywf_user_path_in_core():
         _GSTACK_SCRIPTS / "migrate_profile.py",
         _SCRIPTS / "agent_admin_config.py",
         _SCRIPTS / "agent_admin_runtime.py",
-        _SCRIPTS / "iterm_tmux_selftest.py",
     ]
     hits = []
     for py in t1_files:

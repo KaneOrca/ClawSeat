@@ -3,17 +3,27 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import fcntl
+import json
 import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from _utils import CONSUMED_RE, TASK_ROW_RE, ensure_parent, read_text, utc_now_iso, write_text
+from _utils import (
+    CONSUMED_RE,
+    TASK_ROW_RE,
+    ensure_parent,
+    read_text,
+    utc_now_iso,
+    write_json,
+    write_text,
+)
 
 
 DISPATCH_LOG_HEADER = "## dispatch log (append-only, last 20)"
 DISPATCH_LOG_LIMIT = 20
+DISPATCH_LOG_HEAL_NOTE = "<!-- auto-healed by dispatch_task.py -->"
 
 
 def build_notify_message(
@@ -158,7 +168,19 @@ def _dispatch_log_bounds(lines: list[str]) -> tuple[int, int]:
     return start, end
 
 
-def append_status_dispatch_log(path: Path, line: str) -> bool:
+def _dispatch_log_heal_audit_path(audit_dir: Path, task_id: str) -> Path:
+    stamp = utc_now_iso().replace(":", "").replace("-", "").replace("+", "p")
+    safe_task_id = re.sub(r"[^A-Za-z0-9._-]+", "-", task_id)
+    return audit_dir / f"dispatch-log-heal-{safe_task_id}-{stamp}.json"
+
+
+def append_status_dispatch_log(
+    path: Path,
+    line: str,
+    *,
+    task_id: str | None = None,
+    audit_dir: Path | None = None,
+) -> bool:
     """Append one line to STATUS.md dispatch log, keeping the newest 20 entries.
 
     This is deliberately best-effort: callers use it as a noncritical side
@@ -169,6 +191,10 @@ def append_status_dispatch_log(path: Path, line: str) -> bool:
         with _dispatch_log_lock(path):
             text = read_text(path)
             lines = text.splitlines()
+            healed = False
+            if DISPATCH_LOG_HEADER not in lines:
+                healed = True
+                lines = lines + ["", DISPATCH_LOG_HEAL_NOTE, "", DISPATCH_LOG_HEADER]
             start, end = _dispatch_log_bounds(lines)
             entries = [
                 item
@@ -182,6 +208,18 @@ def append_status_dispatch_log(path: Path, line: str) -> bool:
             if end < len(lines):
                 new_lines += [""] + lines[end:]
             _atomic_write_text(path, "\n".join(new_lines))
+        if healed:
+            print("INFO: STATUS.md dispatch-log section auto-healed", file=sys.stderr)
+            if audit_dir is not None and task_id:
+                write_json(
+                    _dispatch_log_heal_audit_path(Path(audit_dir), task_id),
+                    {
+                        "reason": "section_absent",
+                        "task_id": task_id,
+                        "status_path": str(path),
+                        "healed_at": utc_now_iso(),
+                    },
+                )
         return True
     except Exception as exc:  # noqa: BLE001 side effect must never break dispatch
         print(f"warn: STATUS.md dispatch log append skipped: {exc}", file=sys.stderr)
@@ -197,12 +235,25 @@ def append_status_dispatch_event(
     verdict: str | None = None,
     commit: str | None = None,
     test_policy: str | None = None,
+    finding_id: str | None = None,
+    hypothesis_counter: int | None = None,
+    rca_override: bool = False,
+    core_ux: bool = False,
+    audit_dir: Path | None = None,
     timestamp: str | None = None,
 ) -> bool:
     ts = timestamp or _local_now_iso()
     extras = []
     if test_policy:
         extras.append(f"test_policy={test_policy}")
+    if finding_id:
+        extras.append(f"finding_id={finding_id}")
+    if hypothesis_counter is not None:
+        extras.append(f"hypothesis_counter={hypothesis_counter}")
+    if rca_override:
+        extras.append("rca_override=true")
+    if core_ux:
+        extras.append("core_ux=true")
     if target:
         suffix = f" {' '.join(extras)}" if extras else ""
         line = f"- {ts}: {source} dispatched {task_id} to {target}{suffix}"
@@ -213,7 +264,7 @@ def append_status_dispatch_event(
             extras.append(f"commit={commit}")
         suffix = f" {' '.join(extras)}" if extras else ""
         line = f"- {ts}: {source} ack {task_id}{suffix}"
-    return append_status_dispatch_log(path, line)
+    return append_status_dispatch_log(path, line, task_id=task_id, audit_dir=audit_dir)
 
 
 def write_todo(
@@ -264,6 +315,10 @@ def write_delivery(
     user_summary: str | None = None,
     next_action: str | None = None,
     correlation_id: str | None = None,
+    branch: str | None = None,
+    commit: str | None = None,
+    sweep_count: int | str | None = None,
+    core_ux_gate: str | None = None,
 ) -> None:
     lines = [
         f"task_id: {task_id}",
@@ -274,6 +329,12 @@ def write_delivery(
     ]
     if correlation_id:
         lines.append(f"correlation_id: {correlation_id}")
+    if branch:
+        lines.append(f"branch: {branch}")
+    if commit:
+        lines.append(f"commit: {commit}")
+    if sweep_count is not None:
+        lines.append(f"sweep_count: {sweep_count}")
     lines += [
         "",
         f"# Delivery: {title}",
@@ -290,6 +351,8 @@ def write_delivery(
         lines.extend(["", f"UserSummary: {user_summary.strip()}"])
     if next_action:
         lines.extend(["", f"NextAction: {next_action.strip()}"])
+    if core_ux_gate:
+        lines.extend(["", f"core_ux_gate: {core_ux_gate}"])
     write_text(path, "\n".join(lines))
 
 
@@ -373,6 +436,11 @@ def append_task_to_queue(
     review_required: bool = False,
     correlation_id: str | None = None,
     test_policy: str | None = None,
+    core_ux: bool = False,
+    finding_id: str | None = None,
+    hypothesis_fix_counter: int | None = None,
+    hypothesis_fix_counter_exceeded: bool = False,
+    rca_override: bool | None = None,
 ) -> None:
     existing = read_text(path)
 
@@ -404,6 +472,17 @@ def append_task_to_queue(
         entry_lines.append(f"correlation_id: {correlation_id}")
     if test_policy:
         entry_lines.append(f"test_policy: {test_policy}")
+    if core_ux:
+        entry_lines.append("core_ux: true")
+    if finding_id:
+        entry_lines.append(f"finding_id: {finding_id}")
+    if hypothesis_fix_counter is not None:
+        entry_lines.append(f"hypothesis_fix_counter: {hypothesis_fix_counter}")
+        entry_lines.append(
+            f"hypothesis_fix_counter_exceeded: {'true' if hypothesis_fix_counter_exceeded else 'false'}"
+        )
+    if rca_override is not None:
+        entry_lines.append(f"rca_override: {'true' if rca_override else 'false'}")
     entry_lines += [
         "",
         "### Objective",

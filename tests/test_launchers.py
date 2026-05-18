@@ -18,7 +18,6 @@ _LAUNCHERS = _REPO / "core" / "launchers"
 _DETERMINISTIC_LAUNCHER_SOURCES = (
     "agent-launcher.sh",
     "agent-launcher-common.sh",
-    "agent-launcher-fuzzy.py",
     "helpers/auth.sh",
     "helpers/env.sh",
     "helpers/sandbox.sh",
@@ -47,7 +46,6 @@ _FORBIDDEN_INTERACTIVE_PATTERNS = (
     "agent-launcher.sh",
     "agent-launcher-common.sh",
     "agent-launcher-discover.py",
-    "agent-launcher-fuzzy.py",
     "claude.sh",
     "codex.sh",
     "gemini.sh",
@@ -264,79 +262,6 @@ def test_dry_run_defaults_dir_and_session_from_cwd(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert f"dir:      {workspace.resolve()}" in result.stdout
     assert "session:  claude-oauth_token-agent-launcher-workspace" in result.stdout
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Fuzzy picker — env override lists take effect
-# ─────────────────────────────────────────────────────────────────────
-
-def _load_fuzzy_module(env: dict[str, str] | None = None):
-    """Import agent-launcher-fuzzy.py under controlled env."""
-    spec = importlib.util.spec_from_file_location(
-        "agent_launcher_fuzzy",
-        str(_LAUNCHERS / "agent-launcher-fuzzy.py"),
-    )
-    module = importlib.util.module_from_spec(spec)
-    # Apply env just for the exec phase
-    saved = {}
-    try:
-        for k, v in (env or {}).items():
-            saved[k] = os.environ.get(k)
-            os.environ[k] = v
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-
-
-def test_fuzzy_root_specs_from_env():
-    m = _load_fuzzy_module({"CLAWSEAT_LAUNCHER_ROOTS": "/tmp:7,/var:3"})
-    roots = m.ROOT_SPECS
-    assert (Path("/tmp"), 7) in roots
-    assert (Path("/var"), 3) in roots
-
-
-def test_fuzzy_favorites_from_env():
-    m = _load_fuzzy_module({"CLAWSEAT_LAUNCHER_FAVORITES": "/tmp,/var/log"})
-    assert m.FAVORITES == ["/tmp", "/var/log"]
-
-
-def test_fuzzy_defaults_are_home_relative(tmp_path):
-    """Without env override, defaults must be under the caller's HOME."""
-    m = _load_fuzzy_module({"HOME": str(tmp_path), "REAL_HOME": str(tmp_path)})
-    for root, _ in m.ROOT_SPECS:
-        assert str(root).startswith(str(tmp_path)), (
-            f"fuzzy root {root} is not under HOME {tmp_path}"
-        )
-    for fav in m.FAVORITES:
-        assert fav.startswith(str(tmp_path)), (
-            f"fuzzy favorite {fav} is not under HOME {tmp_path}"
-        )
-
-
-def test_fuzzy_script_runs_under_system_python3(tmp_path: Path):
-    root = tmp_path / "repos"
-    target = root / "alpha-launcher"
-    target.mkdir(parents=True)
-
-    result = _run([
-        "python3",
-        str(_LAUNCHERS / "agent-launcher-fuzzy.py"),
-        "--query", "alpha",
-        "--limit", "1",
-    ], env={
-        "HOME": str(tmp_path),
-        "REAL_HOME": str(tmp_path),
-        "CLAWSEAT_LAUNCHER_ROOTS": f"{root}:2",
-        "CLAWSEAT_LAUNCHER_FAVORITES": "",
-    })
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(target.resolve())
 
 
 # ─────────────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@
 | A. [DONE] 全局 memory 单例 | `machine-memory-claude` | v2 已无全局 memory（每项目自带） | 🟡 MEDIUM (M4 才删) |
 | B. [DONE] 单窗 6-pane 心智 | `六宫格`, `6-pane`, `six-pane` | v2 是 workers + memories 双窗 | 🟠 HIGH (心智混乱) |
 | C. [DONE] ancestor 命名 | `ancestor`（应为 `memory` seat） | v2 RFC §1 始祖 = memory seat | 🟠 HIGH (大量文档/skill 漂移) |
-| D. [DONE] v1 配置物件 | `PROJECT_BINDING.toml`, `WORKSPACE_CONTRACT.toml` | v2 用 `project.toml` + `project-local.toml` | 🟡 MEDIUM |
+| D. [PARTIAL] v1 配置物件 | `PROJECT_BINDING.toml`, `WORKSPACE_CONTRACT.toml` | v2 用 `project.toml` + `project-local.toml` | 🟡 MEDIUM |
 | E. [DONE] verification roster | `planner/builder/reviewer/patrol/designer` | v2 minimal 是 template-driven；verification seat 统一为 `patrol` | 🟢 CLOSED |
 | F. [DONE] install-ancestor 硬编码 | `install-ancestor`, `install_ancestor` | v2 是 `install-memory` | 🟡 MEDIUM (issue #3/#12 部分覆盖) |
 
@@ -91,9 +91,8 @@
 - `core/skills/clawseat/SKILL.md`
 - `core/skills/clawseat-koder/SKILL.md`
 - `core/skills/planner/SKILL.md` — 提到 ancestor 的部分
-- `core/skills/reviewer/SKILL.md` / `qa/SKILL.md` / `designer/SKILL.md`
-- `core/skills/cs/SKILL.md` / `cs-structure/SKILL.md`
-- `core/skills/creative-planner/SKILL.md`
+- `core/skills/reviewer/SKILL.md` / `designer/SKILL.md`
+- `core/skills/cs/SKILL.md`
 - `core/skills/gstack-harness/SKILL.md` + `scripts/_common.py` + `scripts/_utils.py` + `scripts/complete_handoff.py`
 
 **文档**:
@@ -110,7 +109,9 @@
 
 ---
 
-## D. [DONE] v1 配置物件 `PROJECT_BINDING.toml` / `WORKSPACE_CONTRACT.toml`
+## D. [PARTIAL] v1 配置物件 `PROJECT_BINDING.toml` / `WORKSPACE_CONTRACT.toml`
+
+> **2026-05-12 audit**: 实际代码仍以 `PROJECT_BINDING.toml` 为 SSOT（`core/lib/project_binding.py::BINDING_FILE_NAME`），未完成迁移；本条目状态保留待统一决策。见 `docs/rfc/AUDIT-2026-05-12-CODE-QUALITY.md` §6 / §10.7。
 
 **v2 决议**: 项目配置在 `~/.agents/projects/<project>/project.toml` + `project-local.toml`；不再用 PROJECT_BINDING / WORKSPACE_CONTRACT。
 
@@ -132,7 +133,7 @@
 
 ## E. [DONE-fully] verification roster 漂移（HH 2026-04-29 清扫）
 
-**v2 决议**: minimal = template-driven；engineering/creative 模板可以保留更多 specialist。verification seat 的唯一 canonical id 是 `patrol`；旧 verification-seat 别名于 2026-04-29 移除。
+**v2 决议**: minimal = template-driven；engineering 模板可以保留更多 specialist。verification seat 的唯一 canonical id 是 `patrol`；旧 verification-seat 别名于 2026-04-29 移除。
 
 **2026-04-29 已落地**:
 - `core/scripts/patrol_alias.py` 删除；`agent_admin_resolve.py` 不再做 verification-seat alias resolve。

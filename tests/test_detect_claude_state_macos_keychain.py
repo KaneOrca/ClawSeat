@@ -39,6 +39,35 @@ exit 44
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "ANTHROPIC_API_KEY": "",
         "CLAUDE_API_KEY": "",
+        "CLAUDE_CODE_OAUTH_TOKEN": "",
+        "OPENAI_API_KEY": "",
+        "GEMINI_API_KEY": "",
+        "GOOGLE_API_KEY": "",
+    }
+    result = subprocess.run(
+        ["bash", "-c", f"source {shlex.quote(str(DETECT))}; detect_oauth_states"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["claude"] == "oauth"
+
+
+def test_detect_claude_state_uses_oauth_token_env(tmp_path: Path) -> None:
+    """Claude Code OAuth token env var should map to oauth state."""
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "CLAWSEAT_ROOT": str(REPO),
+        "CLAWSEAT_TEST_OSTYPE": "linux-gnu",
+        "ANTHROPIC_API_KEY": "",
+        "CLAUDE_API_KEY": "",
+        "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-TEST",
         "OPENAI_API_KEY": "",
         "GEMINI_API_KEY": "",
         "GOOGLE_API_KEY": "",

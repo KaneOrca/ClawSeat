@@ -217,51 +217,6 @@ def test_session_rename_kills_only_project_scoped_source_sessions(monkeypatch, t
     assert killed == ["=demo-qa-claude"]
 
 
-def test_migrate_script_rewrites_files_and_moves_secret(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    project_toml = home / ".agents" / "projects" / "install" / "project.toml"
-    profile_toml = home / ".agents" / "profiles" / "install-profile-dynamic.toml"
-    secret = home / ".agents" / "secrets" / "claude" / "minimax" / "qa.env"
-    project_toml.parent.mkdir(parents=True)
-    profile_toml.parent.mkdir(parents=True)
-    secret.parent.mkdir(parents=True)
-    project_toml.write_text('engineers = ["planner", "qa"]\n[seat_overrides.qa]\nprovider = "minimax"\n', encoding="utf-8")
-    profile_toml.write_text('seats = ["planner", "qa"]\n', encoding="utf-8")
-    secret.write_text("ANTHROPIC_AUTH_TOKEN=sk-" + "C" * 24 + "\n", encoding="utf-8")
-
-    result = subprocess.run(
-        ["bash", str(REPO / "scripts" / "migrate-qa-to-patrol.sh"), "install"],
-        env={"HOME": str(home), "CLAWSEAT_REAL_HOME": str(home), "PATH": "/usr/bin:/bin:/opt/homebrew/bin"},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert '"qa"' not in project_toml.read_text(encoding="utf-8")
-    assert "[seat_overrides.patrol]" in project_toml.read_text(encoding="utf-8")
-    assert "[seat_overrides.patrol]" in profile_toml.read_text(encoding="utf-8")
-    assert not secret.exists()
-    assert (secret.parent / "patrol.env").is_file()
-
-
-def test_migrate_script_creates_backups(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    project_toml = home / ".agents" / "projects" / "install" / "project.toml"
-    project_toml.parent.mkdir(parents=True)
-    project_toml.write_text('engineers = ["qa"]\n', encoding="utf-8")
-
-    subprocess.run(
-        ["bash", str(REPO / "scripts" / "migrate-qa-to-patrol.sh"), "install"],
-        env={"HOME": str(home), "CLAWSEAT_REAL_HOME": str(home), "PATH": "/usr/bin:/bin:/opt/homebrew/bin"},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert list(project_toml.parent.glob("project.toml.bak.*"))
-
-
 def test_removed_alias_module_is_absent() -> None:
     assert not (SCRIPTS / "patrol_alias.py").exists()
 

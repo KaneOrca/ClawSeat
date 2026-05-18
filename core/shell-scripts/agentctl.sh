@@ -20,6 +20,12 @@ if command -v python3.12 >/dev/null 2>&1; then
   PYTHON_BIN="$(command -v python3.12)"
 elif command -v python3.11 >/dev/null 2>&1; then
   PYTHON_BIN="$(command -v python3.11)"
+elif [ -x /opt/homebrew/bin/python3.12 ]; then
+  PYTHON_BIN=/opt/homebrew/bin/python3.12
+elif [ -x /opt/homebrew/bin/python3.11 ]; then
+  PYTHON_BIN=/opt/homebrew/bin/python3.11
+elif [ -x /usr/local/bin/python3.12 ]; then
+  PYTHON_BIN=/usr/local/bin/python3.12
 elif command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="$(command -v python3)"
 else

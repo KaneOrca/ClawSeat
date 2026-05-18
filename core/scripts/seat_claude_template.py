@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import tomllib
 from pathlib import Path
 
 from core.lib.real_home import real_user_home
@@ -23,6 +24,18 @@ def engineer_root(engineers_root: Path, seat_id: str) -> Path:
 
 def template_root(engineers_root: Path, seat_id: str) -> Path:
     return engineer_root(engineers_root, seat_id) / ".claude-template"
+
+
+def role_hint_from_engineer(engineers_root: Path, seat_id: str) -> str | None:
+    path = engineer_root(engineers_root, seat_id) / "engineer.toml"
+    if not path.is_file():
+        return None
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    role = str(data.get("role", "") or "").strip()
+    return role or None
 
 
 def render_settings_for_seat(seat_id: str, clawseat_root: Path | None = None) -> dict[str, object]:
@@ -53,9 +66,11 @@ def ensure_seat_claude_template(
     engineers_root: Path,
     seat_id: str,
     *,
+    role_hint: str | None = None,
     clawseat_root: Path | None = None,
 ) -> Path:
     clawseat_root = (clawseat_root or REPO_ROOT).resolve()
+    role_hint = role_hint or role_hint_from_engineer(engineers_root, seat_id)
     root = template_root(engineers_root, seat_id)
     skills_root = root / "skills"
     root.mkdir(parents=True, exist_ok=True)
@@ -63,7 +78,7 @@ def ensure_seat_claude_template(
         shutil.rmtree(skills_root)
     skills_root.mkdir(parents=True, exist_ok=True)
 
-    for skill_name in skill_names_for_seat(seat_id):
+    for skill_name in skill_names_for_seat(seat_id, role_hint=role_hint):
         source_dir = clawseat_root / "core" / "skills" / skill_name
         if not source_dir.is_dir():
             raise FileNotFoundError(f"seat template skill not found for {seat_id}: {source_dir}")
@@ -90,11 +105,14 @@ def copy_seat_claude_template_to_runtime(
     seat_id: str,
     runtime_claude_root: Path,
     *,
+    role_hint: str | None = None,
     clawseat_root: Path | None = None,
 ) -> Path:
+    role_hint = role_hint or role_hint_from_engineer(engineers_root, seat_id)
     template_dir = ensure_seat_claude_template(
         engineers_root,
         seat_id,
+        role_hint=role_hint,
         clawseat_root=clawseat_root,
     )
     runtime_claude_root.mkdir(parents=True, exist_ok=True)
@@ -123,6 +141,7 @@ def _parse_args() -> argparse.Namespace:
         default=str(REPO_ROOT),
         help="ClawSeat checkout used to source core/skills/*.",
     )
+    parser.add_argument("--role-hint", help="Optional engineer role hint, e.g. planner-dispatcher.")
     return parser.parse_args()
 
 
@@ -131,6 +150,7 @@ def main() -> int:
     root = ensure_seat_claude_template(
         Path(args.engineers_root).expanduser().resolve(),
         args.seat,
+        role_hint=args.role_hint,
         clawseat_root=Path(args.clawseat_root).expanduser().resolve(),
     )
     print(root)

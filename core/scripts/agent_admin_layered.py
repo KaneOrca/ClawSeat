@@ -18,7 +18,6 @@ import argparse
 import os
 import re
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +35,7 @@ for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "core" / "lib")):
         sys.path.insert(0, _p)
 
 from real_home import real_user_home  # noqa: E402
+from tmux import tmux_session_alive as _tmux_session_alive_shared  # noqa: E402
 from project_binding import (  # noqa: E402
     ProjectBinding,
     ProjectBindingError,
@@ -56,6 +56,18 @@ except ImportError:  # pragma: no cover — fallback when builder-1 hasn't lande
 
     def validate_profile_v2(*_a, **_kw):  # type: ignore[no-redef]
         raise ImportError("core.lib.profile_validator unavailable")
+
+try:
+    from profile_loader_v3 import ProfileV3Error, load_profile_v3  # type: ignore[import-not-found]
+    _V3_LOADER_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _V3_LOADER_AVAILABLE = False
+
+    class ProfileV3Error(RuntimeError):  # type: ignore[no-redef]
+        pass
+
+    def load_profile_v3(*_a, **_kw):  # type: ignore[no-redef]
+        raise ImportError("core.lib.profile_loader_v3 unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -351,14 +363,7 @@ def cmd_project_koder_bind(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 def _tmux_session_alive(name: str) -> bool:
-    try:
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", name],
-            capture_output=True, timeout=3,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+    return _tmux_session_alive_shared(name, timeout=3.0)
 
 
 def describe_memory(cfg=None) -> list[str]:
@@ -458,6 +463,41 @@ def cmd_project_seat_list(args: argparse.Namespace) -> int:
 
 def cmd_project_validate(args: argparse.Namespace) -> int:
     path = project_profile_path(args.project)
+    try:
+        with path.open("rb") as handle:
+            raw_profile = tomllib.load(handle)
+    except FileNotFoundError:
+        print(f"error: profile not found: {path}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"error: failed to read profile {path}: {exc}", file=sys.stderr)
+        return 1
+
+    mode = raw_profile.get("mode") if isinstance(raw_profile, dict) else {}
+    if isinstance(mode, dict) and str(mode.get("team_structure") or "").strip() == "multi":
+        if not _V3_LOADER_AVAILABLE:
+            print(
+                "error: core.lib.profile_loader_v3 not importable; "
+                "v3 multi-team project validate requires the v3 loader.",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            profile = load_profile_v3(path)
+        except ProfileV3Error as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if profile.project_name != args.project:
+            print(
+                f"error: profile project_name={profile.project_name!r} "
+                f"does not match requested project {args.project!r}",
+                file=sys.stderr,
+            )
+            return 1
+        teams = ", ".join(sorted(profile.teams)) if profile.teams else "(none)"
+        print(f"ok: {path} (v3 multi; seats={len(profile.seats)}; teams={teams})")
+        return 0
+
     if not _VALIDATOR_AVAILABLE:
         print(
             "error: core.lib.profile_validator not importable; "

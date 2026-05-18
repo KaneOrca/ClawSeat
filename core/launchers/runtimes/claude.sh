@@ -34,6 +34,17 @@ run_claude_runtime() {
   local workdir="$2"
   local session_name="$3"
   local mode_label="Claude Code"
+  local -a resume_args=()
+  local resume_label=""
+  local resume_session_id=""
+
+  if [[ "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]]; then
+    resume_session_id="$(launcher_read_active_session_id "${CLAWSEAT_SEAT:-}" 2>/dev/null || true)"
+    if [[ -n "$resume_session_id" ]]; then
+      resume_args=(--resume "$resume_session_id")
+      resume_label="$resume_session_id"
+    fi
+  fi
 
   if [[ "$auth_mode" == "oauth" ]]; then
     # "oauth" in ClawSeat is not "launcher does OAuth" — it's "reuse the
@@ -66,6 +77,7 @@ run_claude_runtime() {
     # Re-apply preserved host env after the wipe.
     eval "$_oauth_host_env_snapshot"
     seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
+    prepare_claude_host_oauth_state "$HOME" "$workdir"
     cd "$workdir"
     echo "────────────────────────────────────────"
     echo " Claude Code · Host OAuth (reuse)"
@@ -79,8 +91,27 @@ run_claude_runtime() {
     if [[ "${CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST:-}" == "1" ]]; then
       echo " Host-managed OAuth: yes (Claude Desktop wrapper)"
     fi
+    # Crash-recovery fallback: if Stop hook didn't fire (seat killed before
+    # clean exit) but cwd has prior Claude history, --continue picks up the
+    # most recent conversation. Only used when no precise --resume <uuid>
+    # is available from the hook-written .session file.
+    if [[ -z "$resume_label" && "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]] \
+        && _has_claude_cwd_history "$HOME" "$workdir"; then
+      resume_args=(--continue)
+      resume_label="--continue (latest in cwd)"
+    fi
     echo "────────────────────────────────────────"
-    exec claude --dangerously-skip-permissions
+    [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+    # Parent Codex/Claude sessions can export CLAUDECODE. Claude Code treats
+    # that as an active nested session and exits immediately, which makes the
+    # tmux seat disappear before restart-seat can observe it.
+    unset CLAUDECODE
+    # CARTOONER_CLAUDE_CODE_EXECUTABLE: when set (cartooner-spawned seats),
+    # bypass PATH resolution and exec the absolute binary directly. Avoids
+    # the pnpm sh wrapper layer that otherwise sits between tmux pane and
+    # native claude (process tree integrity for ClawSeat's pane_pid checks).
+    # Falls back to PATH `claude` for non-cartooner invocations.
+    exec "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-claude}" --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
   fi
 
   local secret_file="" runtime_dir
@@ -214,7 +245,7 @@ run_claude_runtime() {
   seed_user_tool_dirs "$HOME" "${CLAWSEAT_PROJECT:-}"
   # Skip Claude onboarding in the isolated HOME. Without this the seat
   # blocks on the welcome + auth pages even when API keys are live in env.
-  prepare_claude_home "$HOME" "$session_name"
+  prepare_claude_home "$HOME" "$session_name" "$workdir"
 
   cd "$workdir"
   echo "────────────────────────────────────────"
@@ -225,6 +256,15 @@ run_claude_runtime() {
   echo " Endpoint:   ${ANTHROPIC_BASE_URL:-default}"
   echo " HOME:       $HOME"
   echo " AGENT_HOME: $AGENT_HOME"
+  # Crash-recovery fallback — see oauth branch comment above.
+  if [[ -z "$resume_label" && "${CLAWSEAT_NO_AUTO_RESUME:-0}" != "1" ]] \
+      && _has_claude_cwd_history "$HOME" "$workdir"; then
+    resume_args=(--continue)
+    resume_label="--continue (latest in cwd)"
+  fi
   echo "────────────────────────────────────────"
-  exec claude --dangerously-skip-permissions
+  [[ -n "$resume_label" ]] && launcher_resume_banner "$resume_label" >&2
+  unset CLAUDECODE
+  # See oauth branch above for CARTOONER_CLAUDE_CODE_EXECUTABLE rationale.
+  exec "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-claude}" --dangerously-skip-permissions ${resume_args[@]+"${resume_args[@]}"}
 }

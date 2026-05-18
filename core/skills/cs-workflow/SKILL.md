@@ -81,14 +81,14 @@ name: <workflow_name>
 type: workflow
 version: 1
 description: "一句话描述"
-template: clawseat-creative | clawseat-engineering | ...
+template: clawseat-engineering | clawseat-solo | ...
 ---
 
 ## STEPS
 
 - id: <step_id>
   skill: <skill_name>         # 引用 core/skills/<name>/SKILL.md
-  seat_role: <role>            # template 中定义的 role（如 creative-planner）
+  seat_role: <role>            # template 中定义的 role（如 planner / builder）
   input:
     <param>: <value>           # 直接值
     <param>: <step_id>.<field> # 语义引用上一步输出（不是模板引擎）
@@ -96,40 +96,44 @@ template: clawseat-creative | clawseat-engineering | ...
   condition: <step_id>.<field> == <value>  # 可选条件执行
 ```
 
-### 示例：creative-short 工作流
+### 示例：ship-feature 工作流
 
 ```yaml
 ---
-name: creative-short
+name: ship-feature
 type: workflow
 version: 1
-description: "短文创作流：分类→写作→评分"
-template: clawseat-creative
+description: "Standard feature shipping flow: plan → build → review → patrol"
+template: clawseat-engineering
 ---
 
 ## STEPS
 
-- id: classify
-  skill: cs-classify
-  seat_role: creative-builder
+- id: plan
+  skill: planner
+  seat_role: planner
   input:
     brief: project_params.brief_path
 
-- id: write
-  skill: cs-write
-  seat_role: creative-designer
+- id: build
+  skill: builder
+  seat_role: builder
   input:
-    unit_brief_path: project_params.brief_path
-    context_dir: project_params.output_dir
-  condition: classify.type == "short-form"
+    workflow_path: plan.workflow_path
 
-- id: score
-  skill: cs-score
-  seat_role: creative-designer
+- id: review
+  skill: reviewer
+  seat_role: reviewer
   input:
-    deliverable_path: write.content_path
-    brief_path: project_params.brief_path
-  gate: none
+    delivery_path: build.delivery_path
+  gate: user-confirm
+
+- id: patrol
+  skill: patrol
+  seat_role: patrol
+  input:
+    target: review.approved_branch
+  condition: review.verdict == "APPROVED"
 ```
 
 ---

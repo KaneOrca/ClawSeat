@@ -23,6 +23,7 @@ def test_detect_claude_json_oauth_account_requires_exact_field(tmp_path: Path) -
         "CLAWSEAT_TEST_OSTYPE": "linux-gnu",
         "ANTHROPIC_API_KEY": "",
         "CLAUDE_API_KEY": "",
+        "CLAUDE_CODE_OAUTH_TOKEN": "",
         "OPENAI_API_KEY": "",
         "GEMINI_API_KEY": "",
         "GOOGLE_API_KEY": "",

@@ -16,6 +16,17 @@
 
 set -euo pipefail
 
+# Seat sessions live on the default tmux socket and are managed by this
+# launcher from *outside* tmux. If invoked while $TMUX is set (e.g. the
+# operator runs `restart-seat.sh` from inside a tmux pane, or the host
+# desktop app inherits TMUX from its launching shell), `tmux new-session`
+# below either refuses with "sessions should be nested with care" or
+# nests the new server inside the caller's pane — both break seat
+# lifecycle. Strip the inherited env up front so every downstream tmux
+# call lands on the outer/server we own. (`send-and-verify.sh` defends
+# per-invocation with `env -u TMUX`; this is the launcher-side mirror.)
+unset TMUX TMUX_PANE
+
 REAL_HOME="$HOME"
 LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCHER_REPO_ROOT="$(cd "$LAUNCHER_DIR/../.." && pwd)"
@@ -189,7 +200,16 @@ validate_top_level_inputs() {
 
 
 exec_agent_shell_command() {
-  local -a cmd=(bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
+  # tmux new-session doesn't propagate non-allowlisted env vars from the
+  # caller to the spawned shell, so we embed cartooner-supplied binary
+  # overrides into the command string itself. Caller (cartooner Electron)
+  # exports these; non-cartooner invocations leave them unset and the
+  # runtimes/*.sh fall back to PATH resolution.
+  local -a env_prefix=()
+  if [[ -n "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-}" ]]; then
+    env_prefix+=("CARTOONER_CLAUDE_CODE_EXECUTABLE=$CARTOONER_CLAUDE_CODE_EXECUTABLE")
+  fi
+  local -a cmd=(env ${env_prefix[@]+"${env_prefix[@]}"} bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
   if [[ -n "$CUSTOM_ENV_FILE" ]]; then
     cmd+=(--custom-env-file "$CUSTOM_ENV_FILE")
   fi
@@ -212,12 +232,36 @@ run_selected_tool() {
   esac
 }
 
+# Audit finding #11 (2026-05-11): inject ~/.agents/secrets/shared/*.env
+# into the launching tool's env BEFORE runtime-specific auth secret loads.
+# Auth-tied secrets (sourced inside runtimes/<tool>.sh) thus override the
+# shared baseline. Without this, builder-image / builder-av had no
+# MINIMAX_API_KEY / GEMINI_API_KEY / XCODE_BEST_GPT_IMAGE_API_KEY in
+# their sandbox env even though shared/ files existed — agent_admin's
+# build_runtime added them but start_engineer_launch bypassed build_runtime.
+# Loading at the launcher (L3) instead means every launch path inherits.
+load_shared_secrets() {
+  local shared_dir="${CLAWSEAT_SHARED_SECRETS_DIR:-${REAL_HOME:-$HOME}/.agents/secrets/shared}"
+  if [[ ! -d "$shared_dir" ]]; then
+    return 0
+  fi
+  set -a
+  local f
+  for f in "$shared_dir"/*.env; do
+    [[ -f "$f" ]] || continue
+    # shellcheck source=/dev/null
+    source "$f"
+  done
+  set +a
+}
+
 if [[ "${CLAWSEAT_AGENT_LAUNCHER_LIBRARY_ONLY:-}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
 if [[ -z "$EXEC_MODE" ]]; then
   validate_top_level_inputs
+  ensure_launcher_proxy_env
   ensure_custom_env_file_for_auth
 
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -276,6 +320,9 @@ EOF
 fi
 
 validate_top_level_inputs
+ensure_launcher_proxy_env
 ensure_custom_env_file_for_auth
+
+load_shared_secrets
 
 run_selected_tool "$TOOL_NAME" "$AUTH_MODE" "$WORKDIR" "$SESSION_NAME"

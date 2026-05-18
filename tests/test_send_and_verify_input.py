@@ -53,8 +53,9 @@ def test_message_with_control_char_is_rejected(bad_char: str, name: str, isolate
 
 
 def test_message_with_LF_is_allowed() -> None:
-    """Multi-line messages are a supported feature (fire-and-forget +
-    3 Enter flushes handles embedded LF). Validator must not reject."""
+    """Multi-line messages are a supported feature — `send-keys -l`
+    transmits embedded LF bytes literally; the trailing Enter then
+    submits. Validator must not reject."""
     result = _run("nonexistent-session", "line1\nline2")
     assert result.returncode != REJECT_RC, (
         f"LF in message was rejected (rc={result.returncode}); "

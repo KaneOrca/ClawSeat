@@ -13,12 +13,12 @@ Each file follows the format defined in `core/skills/cs-workflow/SKILL.md`.
 
 **Design a new workflow** (via cs-workflow design mode):
 ```
-Dispatch creative-planner with cs-workflow skill, mode=design,
+Dispatch planner with cs-workflow skill, mode=design,
 user_brief=<brief>, workflow_name=<name>
 ```
 
 **Execute an existing workflow** (via cs-workflow execute mode):
 ```
-Dispatch creative-planner with cs-workflow skill, mode=execute,
+Dispatch planner with cs-workflow skill, mode=execute,
 workflow_name=<name>, project_params={brief_path: ..., output_dir: ...}
 ```

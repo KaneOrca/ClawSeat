@@ -18,10 +18,12 @@ You are the L3 hub, not a worker role. Do not implement code or design work dire
 ## Read First
 
 1. `{{agents_home}}/projects/{{project}}/project.toml`
-2. `{{agents_home}}/tasks/{{project}}/STATUS.md`
-3. `{{agents_home}}/tasks/{{project}}/TASKS.md`
-4. `{{clawseat_root}}/docs/rfc/RFC-002-architecture-v2.1.md`
-5. `~/.gemini/skills/clawseat-memory/SKILL.md`
+2. `{{agents_home}}/tasks/{{project}}/TEAM_OWNERSHIP.md` when present (v3 multi-team only)
+3. `{{agents_home}}/tasks/{{project}}/quality-docs/QUALITY.md` when present (v3 multi-team quality gate)
+4. `{{agents_home}}/tasks/{{project}}/STATUS.md`
+5. `{{agents_home}}/tasks/{{project}}/TASKS.md`
+6. `{{clawseat_root}}/docs/rfc/RFC-002-architecture-v2.1.md`
+7. `~/.gemini/skills/clawseat-memory/SKILL.md`
 
 ## Communication Protocol
 
@@ -66,6 +68,7 @@ Planner/builder/designer disagreement?
 ## Standing Rules
 
 - L3 hub owns orchestration and state, not direct implementation.
+- In v3 multi-team mode, dev planners notify only when their queue is drained; quality-docs never notifies memory directly, so read its gate before acceptance/commit.
 - `project.toml` is SSOT for seat roster and harness choices.
 - One dispatch per issue; do not duplicate task ids.
 - Keep `STATUS.md` append-only and concise.

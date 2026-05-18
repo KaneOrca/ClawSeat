@@ -3,7 +3,7 @@
 Verifies:
 1. --template clawseat-creative is accepted; CLAWSEAT_TEMPLATE_NAME propagated
 2. --template bad dies with exit 2
-3. Omitting --template uses clawseat-creative
+3. Omitting --template uses clawseat-engineering
 4. BOOTSTRAP_TEMPLATE_PATH follows --template (patch for fd7cd74 bug)
 5. prompt_kind_first_flow: skipped (no hang) when --project or --template explicit
 """
@@ -57,10 +57,10 @@ def test_template_invalid_dies_exit_2(tmp_path: Path) -> None:
 
 
 def test_template_default_when_omitted(tmp_path: Path) -> None:
-    """Omitting --template uses clawseat-creative."""
+    """Omitting --template uses clawseat-engineering."""
     result = _run(["--project", "testproj", "--dry-run"], tmp_path)
     assert result.returncode == 0, result.stderr
-    assert "clawseat-creative" in result.stdout, f"expected default template in output:\n{result.stdout}"
+    assert "clawseat-engineering" in result.stdout, f"expected default template in output:\n{result.stdout}"
 
 
 def test_memory_tool_defaults_to_template_claude(tmp_path: Path) -> None:

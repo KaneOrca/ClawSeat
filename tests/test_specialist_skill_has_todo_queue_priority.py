@@ -5,9 +5,7 @@ from pathlib import Path
 
 SPECIALIST_SKILLS = (
     Path("core/skills/builder/SKILL.md"),
-    Path("core/skills/creative-builder/SKILL.md"),
     Path("core/skills/designer/SKILL.md"),
-    Path("core/skills/creative-designer/SKILL.md"),
     Path("core/skills/reviewer/SKILL.md"),
 )
 

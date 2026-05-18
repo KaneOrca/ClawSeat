@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-import shutil
+import os
+import shlex
 import subprocess
 import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+import shutil
 from typing import Any, Callable
 
+from agent_admin_crud_base import require_caller_authority
 import agent_admin_window as window_ops
+
+
+_RESUME_DEDUPE_WINDOW_SECONDS = 30
+projects_registry = None
+real_user_home = None
 
 
 @dataclass
@@ -46,6 +56,9 @@ class CommandHandlers:
     def _session_supports_heartbeat_provisioning(self, session: Any) -> bool:
         return str(getattr(session, "tool", "") or "") == "claude"
 
+    def _require_dispatch_authority(self, action: str) -> None:
+        require_caller_authority("dispatch", action, self.hooks.error_cls)
+
     def _validate_project_seat_override(self, session: Any, *, accept_override: bool = False) -> None:
         project_name = str(getattr(session, "project", "") or "").strip()
         engineer_id = str(getattr(session, "engineer_id", "") or "").strip()
@@ -76,27 +89,217 @@ class CommandHandlers:
                 return
             raise self.hooks.error_cls(f"error: {message}")
 
+    def _touch_project(self, project_name: str) -> None:
+        try:
+            registry = projects_registry
+            if registry is None:
+                import projects_registry as registry
+
+            registry.touch_project(project_name)
+        except Exception as exc:
+            print(f"projects registry touch skipped: {exc}", file=sys.stderr)
+
+    def _provision_session_heartbeat_if_supported(self, session: Any) -> None:
+        if not self._session_supports_heartbeat_provisioning(session):
+            return
+        try:
+            _provisioned, detail = self.hooks.provision_session_heartbeat(session)
+            if detail:
+                print(detail)
+        except Exception as exc:
+            print(f"heartbeat: {exc}")
+
+    def _resume_state_dir(self) -> Path:
+        resolver = real_user_home
+        if resolver is None:
+            core_lib = Path(__file__).resolve().parents[1] / "lib"
+            if str(core_lib) not in sys.path:
+                sys.path.insert(0, str(core_lib))
+            from real_home import real_user_home as resolver
+
+        return resolver() / ".agent-runtime" / "active"
+
+    def _resume_session_path(self, seat: str) -> Path:
+        return self._resume_state_dir() / f"{seat}.session"
+
+    def _resume_stamp_path(self, seat: str) -> Path:
+        return self._resume_state_dir() / f"{seat}.resume"
+
+    def _read_active_session_id(self, seat: str) -> str | None:
+        try:
+            text = self._resume_session_path(seat).read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        return text or None
+
+    def _resume_recently_seen(self, seat: str) -> bool:
+        try:
+            age_seconds = time.time() - self._resume_stamp_path(seat).stat().st_mtime
+        except OSError:
+            return False
+        return age_seconds < _RESUME_DEDUPE_WINDOW_SECONDS
+
+    def _mark_resume_seen(self, seat: str, session_id: str | None) -> None:
+        stamp = self._resume_stamp_path(seat)
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        payload = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        if session_id:
+            payload = f"{payload}\n{session_id}\n"
+        stamp.write_text(payload, encoding="utf-8")
+        try:
+            stamp.chmod(0o600)
+        except OSError:
+            pass
+
+    def _resume_label_for_tool(self, tool: str, session_id: str | None) -> str | None:
+        if session_id:
+            return session_id
+        if tool == "codex":
+            return "last"
+        if tool == "gemini":
+            return "latest"
+        return None
+
+    def _resume_command_for_tool(self, session: Any, session_id: str | None) -> list[str]:
+        tool = str(getattr(session, "tool", "") or "")
+        if tool == "claude":
+            return ["claude", "--resume", session_id] if session_id else ["claude"]
+        if tool == "codex":
+            return ["codex", "--resume", session_id] if session_id else ["codex", "--last"]
+        if tool == "gemini":
+            return ["gemini", "--resume", "latest"]
+        raise self.hooks.error_cls(f"unsupported tool for resume: {tool}")
+
+    def _resume_banner(self, label: str) -> str:
+        return f"Resuming session {label} from {datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')}"
+
+    def _tmux_resume_status(self, session: Any) -> tuple[str, str]:
+        status_script = Path(__file__).resolve().parents[1] / "shell-scripts" / "check-engineer-status.sh"
+        env = dict(os.environ)
+        env["AGENT_PROJECT"] = session.project
+        try:
+            result = subprocess.run(
+                ["bash", str(status_script), session.engineer_id],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                env=env,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise self.hooks.error_cls(f"resume status probe failed for {session.session}: {exc}") from exc
+        output = (result.stdout or result.stderr or "").strip()
+        if not output:
+            return ("UNKNOWN", "")
+        line = output.splitlines()[-1].strip()
+        if ":" in line:
+            _seat, tail = line.split(":", 1)
+            tail = tail.strip()
+        else:
+            tail = line
+        state = tail.split(" ", 1)[0].strip().upper() if tail else "UNKNOWN"
+        return (state, line)
+
+    def _send_tmux_resume_command(self, session: Any, resume_cmd: list[str]) -> None:
+        if not resume_cmd:
+            raise self.hooks.error_cls(f"resume command missing for {session.session}")
+        shell_command = f"cd {shlex.quote(session.workspace)} && exec " + " ".join(
+            shlex.quote(part) for part in resume_cmd
+        )
+        result = subprocess.run(
+            ["tmux", "send-keys", "-t", f"={session.session}", shell_command, "Enter"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise self.hooks.error_cls(
+                f"resume send-keys failed for {session.session}: {detail or f'exit {result.returncode}'}"
+            )
+
+    def _resume_session(self, session: Any, *, fresh: bool) -> None:
+        session_id = self._read_active_session_id(session.engineer_id)
+        if fresh:
+            self.hooks.session_service.start_engineer(session, reset=True)
+            self._provision_session_heartbeat_if_supported(session)
+            self._touch_project(session.project)
+            print(session.session)
+            return
+
+        if self._resume_recently_seen(session.engineer_id):
+            print(
+                f"seat resume: {session.session} no-op (recent resume within 30s)",
+                file=sys.stderr,
+            )
+            return
+
+        if not self.hooks.tmux_has_session(session.session):
+            self.hooks.session_service.start_engineer(session, reset=False)
+            self._provision_session_heartbeat_if_supported(session)
+            self._touch_project(session.project)
+            self._mark_resume_seen(session.engineer_id, session_id)
+            print(session.session)
+            return
+
+        state, line = self._tmux_resume_status(session)
+        if state not in {"IDLE", "CRASHED", "SESSION_NOT_FOUND", "EMPTY"}:
+            raise self.hooks.error_cls(
+                f"seat resume refused for {session.session}: tmux still active ({line or state or 'unknown'})"
+            )
+
+        resume_cmd = self._resume_command_for_tool(session, session_id)
+        resume_label = self._resume_label_for_tool(str(getattr(session, "tool", "") or ""), session_id)
+        if resume_label:
+            print(self._resume_banner(resume_label))
+        self._send_tmux_resume_command(session, resume_cmd)
+        self._touch_project(session.project)
+        self._mark_resume_seen(session.engineer_id, session_id)
+        print(session.session)
+
     def session_start_engineer(self, args: Any) -> int:
+        self._require_dispatch_authority("session start-engineer")
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self._validate_project_seat_override(
             session,
             accept_override=bool(getattr(args, "accept_override", False)),
         )
         self.hooks.session_service.start_engineer(session, reset=args.reset)
-        if self._session_supports_heartbeat_provisioning(session):
-            try:
-                _provisioned, detail = self.hooks.provision_session_heartbeat(session)
-                if detail:
-                    print(detail)
-            except Exception as exc:
-                print(f"heartbeat: {exc}")
-        try:
-            from projects_registry import touch_project
-
-            touch_project(session.project)
-        except Exception as exc:
-            print(f"projects registry touch skipped: {exc}", file=sys.stderr)
+        self._provision_session_heartbeat_if_supported(session)
+        self._touch_project(session.project)
         print(session.session)
+        return 0
+
+    def seat_resume(self, args: Any) -> int:
+        self._require_dispatch_authority("seat resume")
+        seat_id = str(getattr(args, "seat", "") or getattr(args, "engineer", "") or "").strip()
+        if not seat_id:
+            raise self.hooks.error_cls("seat resume requires a seat id")
+        project = self.hooks.load_project_or_current(getattr(args, "project", None))
+        session = self.hooks.resolve_engineer_session(seat_id, project_name=project.name)
+        self._validate_project_seat_override(session, accept_override=False)
+        self._resume_session(session, fresh=bool(getattr(args, "fresh", False)))
+        return 0
+
+    def project_resume(self, args: Any) -> int:
+        self._require_dispatch_authority("project resume")
+        project = self.hooks.load_project_or_current(getattr(args, "project", None))
+        failures: list[str] = []
+        seat_ids = list(getattr(project, "engineers", []) or [])
+        for seat_id in seat_ids:
+            session = self.hooks.resolve_engineer_session(seat_id, project_name=project.name)
+            try:
+                self._validate_project_seat_override(session, accept_override=False)
+                self._resume_session(session, fresh=bool(getattr(args, "fresh", False)))
+            except Exception as exc:  # noqa: BLE001 - summarize per-seat failures
+                failures.append(f"{seat_id}: {exc}")
+                print(f"project resume: {seat_id} FAILED — {exc}", file=sys.stderr)
+        if failures:
+            raise self.hooks.error_cls(
+                f"project resume failed for {project.name}: {len(failures)}/{len(seat_ids)} seats failed: "
+                + "; ".join(failures)
+            )
         return 0
 
     def session_reseed_sandbox(self, args: Any) -> int:
@@ -214,6 +417,7 @@ class CommandHandlers:
         iTerm current-window race even without the fix in
         agent_admin_window.py.
         """
+        self._require_dispatch_authority("session batch-start-engineer")
         import concurrent.futures
         import sys
 
@@ -347,6 +551,7 @@ class CommandHandlers:
         return 0 if provisioned or args.dry_run or already_verified else 1
 
     def session_stop_engineer(self, args: Any) -> int:
+        self._require_dispatch_authority("session stop-engineer")
         session = self.hooks.resolve_engineer_session(args.engineer, project_name=getattr(args, "project", None))
         self.hooks.session_service.stop_engineer(session, close_iterm_pane=not getattr(args, "keep_iterm_tab", False))
         return 0
@@ -551,19 +756,26 @@ class CommandHandlers:
         project = projects.get(args.project)
         if project is None:
             raise self.hooks.error_cls(f"project not registered: {args.project}")
-        window_ops.open_grid_window(
+        result = window_ops.open_grid_window(
             project,
             recover=bool(getattr(args, "recover", False)),
             rebuild=bool(getattr(args, "rebuild", False)),
             open_memory=bool(getattr(args, "open_memory", False)),
+            refresh_memories=bool(getattr(args, "refresh_memories", False)),
         )
         if not bool(getattr(args, "quiet", False)):
-            primary_seat = window_ops._project_primary_seat_id(project)
-            worker_count = len(window_ops._project_grid_seat_ids(project))
-            seat_count = worker_count if primary_seat == "memory" else worker_count + 1
-            if seat_count <= 0:
-                seat_count = 1
-            print(f"window open-grid: rebuilt project={project.name} seats={seat_count}")
+            line = str(result.get("summary", "")).strip()
+            if not line:
+                primary_seat = window_ops._project_primary_seat_id(project)
+                worker_count = len(window_ops._project_grid_seat_ids(project))
+                seat_count = worker_count if primary_seat == "memory" else worker_count + 1
+                if seat_count <= 0:
+                    seat_count = 1
+                line = f"window open-grid: rebuilt project={project.name} seats={seat_count}"
+                memories = result.get("memories")
+                if isinstance(memories, dict) and "status" in memories:
+                    line += f" memories={'touched' if memories.get('status') == 'ok' else 'skipped'}"
+            print(line)
         return 0
 
     def window_open_engineer(self, args: Any) -> int:

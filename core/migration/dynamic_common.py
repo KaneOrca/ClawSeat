@@ -176,6 +176,9 @@ is_managed_runtime_path = BASE_COMMON.is_managed_runtime_path
 seed_empty_secret_from_peer = BASE_COMMON.seed_empty_secret_from_peer
 # seed_empty_oauth_runtime_from_peer was removed — OAuth tokens are
 # user-managed via the TUI, not seeded by the harness.
+send_feishu_user_message = BASE_COMMON.send_feishu_user_message
+broadcast_feishu_group_message = BASE_COMMON.broadcast_feishu_group_message
+stable_dispatch_nonce = BASE_COMMON.stable_dispatch_nonce
 
 
 def load_raw_toml(path: Path) -> dict[str, Any]:

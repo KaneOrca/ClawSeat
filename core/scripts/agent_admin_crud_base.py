@@ -9,7 +9,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[no-redef]
 
 from agent_admin_config import HOME, REPO_ROOT, SEND_AND_VERIFY_SH, validate_runtime_combo
 
@@ -313,6 +318,66 @@ class CrudHooks:
     ensure_secret_permissions: Callable[[Path], None]
     session_service: Any
     tmux_has_session: Callable[[str], bool]
+
+
+_CALLER_ENGINEER_PROFILE_ENV = "CLAWSEAT_ENGINEER_PROFILE"
+_CALLER_ENGINEER_ID_ENVS = ("CLAWSEAT_ENGINEER_ID", "CLAWSEAT_SEAT")
+
+
+def _caller_env(env: Mapping[str, str] | None = None) -> Mapping[str, str]:
+    return env if env is not None else os.environ
+
+
+def caller_engineer_id(env: Mapping[str, str] | None = None) -> str:
+    env_map = _caller_env(env)
+    for key in _CALLER_ENGINEER_ID_ENVS:
+        value = str(env_map.get(key, "")).strip()
+        if value:
+            return value
+    return ""
+
+
+def caller_engineer_profile_path(env: Mapping[str, str] | None = None) -> Path | None:
+    raw = str(_caller_env(env).get(_CALLER_ENGINEER_PROFILE_ENV, "")).strip()
+    return Path(raw).expanduser() if raw else None
+
+
+def caller_engineer_profile(env: Mapping[str, str] | None = None) -> dict[str, Any] | None:
+    path = caller_engineer_profile_path(env)
+    if path is None or not path.is_file():
+        return None
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def require_caller_authority(
+    authority: str,
+    action: str,
+    error_cls: type[Exception],
+    *,
+    env: Mapping[str, str] | None = None,
+) -> None:
+    if authority not in {"dispatch", "escalation"}:
+        raise ValueError(f"unknown authority level: {authority!r}")
+
+    profile = caller_engineer_profile(env)
+    caller_id = caller_engineer_id(env) or "<unknown>"
+    if profile is None:
+        raise error_cls(
+            f"{action} requires CLAWSEAT_ENGINEER_PROFILE with {authority}_authority "
+            f"(caller={caller_id})"
+        )
+
+    profile_caller_id = str(profile.get("id", profile.get("engineer_id", caller_id)) or caller_id).strip()
+    allowed = bool(profile.get("escalation_authority", False))
+    if authority == "dispatch":
+        allowed = bool(profile.get("dispatch_authority", False)) or allowed
+    if not allowed:
+        raise error_cls(
+            f"{action} requires {authority}_authority (caller={profile_caller_id or caller_id})"
+        )
 
 
 def archive_session_artifacts(hooks: CrudHooks, session: Any) -> None:

@@ -5,10 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _INSTALL = _REPO / "scripts" / "install.sh"
-_CREATIVE_TEMPLATE = _REPO / "templates" / "clawseat-creative.toml"
 _ENGINEERING_TEMPLATE = _REPO / "templates" / "clawseat-engineering.toml"
 
 
@@ -40,14 +41,10 @@ def _run_dry(tmp_path: Path, *, opt_in: str | None = None) -> subprocess.Complet
 
 
 def test_install_profile_includes_patrol() -> None:
-    creative = _CREATIVE_TEMPLATE.read_text(encoding="utf-8")
     engineering = _ENGINEERING_TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'id = "patrol"' in creative
-    assert 'role = "patrol"' in creative
-    assert 'right_seats = ["builder", "patrol", "designer"]' in creative
-    assert "monitor_max_panes = 4" in creative
-    assert "monitor_max_panes = 6" in engineering
+    assert 'id = "patrol"' in engineering
+    assert 'role = "patrol"' in engineering
 
 
 def test_install_sh_invokes_install_patrol_hook(tmp_path: Path) -> None:
@@ -55,7 +52,7 @@ def test_install_sh_invokes_install_patrol_hook(tmp_path: Path) -> None:
     combined = result.stdout + result.stderr
 
     assert result.returncode == 0, combined
-    assert "PENDING_SEATS=(planner builder patrol designer)" in combined
+    assert "PENDING_SEATS=(planner builder reviewer patrol)" in combined
     assert "Step 7.6: install patrol hook + patrol cron" in combined
     assert "engineer create patrol qa-bootstrap --no-monitor" in combined
     assert "install_patrol_hook.py --workspace" in combined

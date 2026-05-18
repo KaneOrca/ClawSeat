@@ -19,10 +19,6 @@ SKILL_PATHS = [
     "core/skills/clawseat-install/SKILL.md",
     "core/skills/clawseat/SKILL.md",
     "core/skills/cs/SKILL.md",
-    "core/skills/creative-planner/SKILL.md",
-    "core/skills/creative-builder/SKILL.md",
-    "core/skills/creative-designer/SKILL.md",
-    "core/skills/creative-patrol/SKILL.md",
 ]
 
 

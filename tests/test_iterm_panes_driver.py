@@ -694,6 +694,69 @@ def test_ensure_tabs_per_tab_status_aggregation(no_tmux_calls):
     assert stale.closed is True
 
 
+def test_ensure_tabs_reattach_when_tmux_attach_died(no_tmux_calls):
+    """Marker matches but the tab's tmux-attach is no longer the foreground
+    job (e.g. the tmux session was killed and the attach exited back to a
+    bare zsh prompt). Driver should reuse the existing tab and re-send the
+    attach command, NOT create a new tab and NOT skip silently."""
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    existing.current_tab.current_session.variables["user.tab_name"] = "cartooner-front"
+    # session.name was set by _mark_tab; tmux attach exited so the live
+    # job is the parent shell, not tmux.
+    existing.current_tab.current_session.name = "cartooner-front"
+    existing.current_tab.current_session.current_job = "zsh"
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [{"name": "cartooner-front", "command": "tmux attach -t '=cartooner-front-memory-codex'"}],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    # No new tab — the existing one was reused.
+    assert len(existing.tabs) == 1
+    # Status reflects the reattach path.
+    assert [entry["status"] for entry in result["tabs"]] == ["reattached"]
+    # The attach command was re-sent to the reused session.
+    assert existing.tabs[0].current_session.sent_text == [
+        "tmux attach -t '=cartooner-front-memory-codex'\n"
+    ]
+
+
+def test_ensure_tabs_skip_when_tmux_attach_alive(no_tmux_calls):
+    """When marker matches AND the foreground job is tmux, the attach is
+    still running — skip without re-sending."""
+    existing = _FakeWindow()
+    existing.variables["user.window_title"] = "clawseat-memories"
+    existing.current_tab.current_session.variables["user.tab_name"] = "cartooner-front"
+    existing.current_tab.current_session.name = "cartooner-front-memory-codex (tmux)"
+    existing.current_tab.current_session.current_job = "tmux"
+    _FakeWindowFactory.app_windows = [existing]
+
+    payload = {
+        "mode": "tabs",
+        "title": "clawseat-memories",
+        "tabs": [{"name": "cartooner-front", "command": "tmux attach -t '=cartooner-front-memory-codex'"}],
+        "ensure": True,
+        "send_delay_ms": 0,
+    }
+    v, e = driver._validate_payload(payload)
+    assert e is None and v is not None
+
+    result = asyncio.run(driver._build_tabs_layout(connection=None, payload=v))
+    assert result["status"] == "ok"
+    assert [entry["status"] for entry in result["tabs"]] == ["skipped"]
+    # Should NOT re-send the command on the live tab.
+    assert existing.tabs[0].current_session.sent_text == []
+
+
 def test_build_tabs_append_failure_does_not_close_existing_window(no_tmux_calls):
     existing = _FakeWindow()
     existing.variables["user.window_title"] = "clawseat-memories"

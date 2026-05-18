@@ -42,7 +42,7 @@ def test_install_dry_run_only_launches_memory_and_uses_lazy_wait_panes(tmp_path:
             "--project",
             "spawn49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "minimax",
         ],
@@ -64,8 +64,8 @@ def test_install_dry_run_only_launches_memory_and_uses_lazy_wait_panes(tmp_path:
     assert output.count("agent-launcher.sh") == 1
     assert "spawn49-memory-claude" in output
     assert "machine-memory-claude" not in output
-    assert "project bootstrap --template clawseat-creative --local" in output
-    for seat in ("planner", "builder", "patrol", "designer"):
+    assert "project bootstrap --template clawseat-engineering --local" in output
+    for seat in ("planner", "builder", "reviewer", "patrol"):
         assert f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}" in output
 
 
@@ -81,7 +81,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             "--project",
             "spawn49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "minimax",
         ],
@@ -111,7 +111,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
             "project",
             "bootstrap",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--local",
             str(home / ".agents" / "tasks" / "spawn49" / "project-local.toml"),
         ],
@@ -128,7 +128,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     local_text = (
         home / ".agents" / "tasks" / "spawn49" / "project-local.toml"
     ).read_text(encoding="utf-8")
-    assert 'seat_order = ["memory", "planner", "builder", "patrol", "designer"]' in local_text
+    assert 'seat_order = ["memory", "planner", "builder", "reviewer", "patrol"]' in local_text
     assert 'session_name = "spawn49-memory-claude"' in local_text
     assert local_text.count("[[overrides]]") == 5
     assert 'provider = "deepseek"' in local_text
@@ -140,7 +140,7 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     grid_payload = payloads[0]
     assert grid_payload["title"] == "clawseat-spawn49-workers"
     commands = {pane["label"]: pane["command"] for pane in grid_payload["panes"]}
-    for seat in ("planner", "builder", "patrol", "designer"):
+    for seat in ("planner", "builder", "reviewer", "patrol"):
         assert commands[seat] == f"bash {root}/scripts/wait-for-seat.sh spawn49 {seat}"
 
     planner_secret = home / ".agents" / "secrets" / "claude" / "deepseek" / "planner.env"
@@ -157,6 +157,58 @@ def test_install_bootstrap_writes_runtime_template_and_lazy_grid(tmp_path: Path)
     assert "agent_admin.py session start-engineer" in guide_text
     assert "第一步：让 memory 做 openclaw 生态调研（brief B2.6）" not in guide_text
     assert "ClawSeat install complete" in result.stdout
+
+
+def test_install_no_window_skips_native_iterm_payloads_but_launches_memory(tmp_path: Path) -> None:
+    root, home, launcher_log, tmux_log, py_stubs = _fake_install_root(tmp_path)
+    agent_admin_log = tmp_path / "agent_admin.jsonl"
+    iterm_payload_log = tmp_path / "iterm_payload.jsonl"
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(root / "scripts" / "install.sh"),
+            "--project",
+            "spawn49",
+            "--template",
+            "clawseat-engineering",
+            "--provider",
+            "minimax",
+            "--no-window",
+        ],
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "HOME": str(home),
+            "CLAWSEAT_REAL_HOME": str(home),
+            "PATH": f"{root.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": f"{py_stubs}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+            "PYTHON_BIN": sys.executable,
+            "LOG_FILE": str(launcher_log),
+            "TMUX_LOG_FILE": str(tmux_log),
+            "AGENT_ADMIN_LOG": str(agent_admin_log),
+            "ITERM_PAYLOAD_LOG": str(iterm_payload_log),
+        },
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "skip native iTerm windows (--no-window)" in result.stdout
+    assert not iterm_payload_log.exists()
+
+    records = _read_jsonl(launcher_log)
+    assert [record["session"] for record in records] == ["spawn49-memory-claude"]
+
+    bootstrap_calls = _read_jsonl(agent_admin_log)
+    assert bootstrap_calls[0]["argv"][:4] == [
+        "project",
+        "bootstrap",
+        "--template",
+        "clawseat-engineering",
+    ]
 
 
 def test_install_explicit_custom_api_flags_work_without_detect_or_tty(tmp_path: Path) -> None:
@@ -188,7 +240,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "custom49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--base-url",
             "https://custom.api.invalid/v1",
             "--api-key",
@@ -313,7 +365,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "mini49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "minimax",
             "--api-key",
@@ -384,7 +436,7 @@ for name in ("network", "openclaw", "github", "current_context"):
             "--project",
             "console49",
             "--template",
-            "clawseat-creative",
+            "clawseat-engineering",
             "--provider",
             "anthropic_console",
             "--api-key",
@@ -511,7 +563,6 @@ fi
     assert result.returncode != 0
     assert "WARN:" not in result.stderr
     assert f"DETACHED from {matched_session}" in result.stdout
-    assert "reconnecting in 2s" in result.stdout
     attach_lines = attach_log.read_text(encoding="utf-8").splitlines()
     assert attach_lines
     assert all(line == f"attach -t ={matched_session}" for line in attach_lines)

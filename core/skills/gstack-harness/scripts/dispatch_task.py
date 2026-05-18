@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import re
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 # Add core/lib to path so seat_resolver can be imported
 _scripts_dir = Path(__file__).parent.resolve()
@@ -23,6 +25,7 @@ from _common import (
     assert_target_not_memory,
     broadcast_feishu_group_message,
     build_notify_message,
+    load_json,
     load_profile,
     legacy_feishu_group_broadcast_enabled,
     normalize_role,
@@ -34,6 +37,7 @@ from _common import (
     utc_now_iso,
     write_json,
     write_todo,
+    sanitize_name,
 )
 
 from seat_resolver import resolve_seat_from_profile
@@ -91,6 +95,443 @@ def _resolve_gstack_skills_root() -> str:
 
 
 _GSTACK_SKILLS_ROOT = _resolve_gstack_skills_root()
+DO_MERGE_AT = datetime.fromisoformat("2026-05-09T14:55:53+08:00")
+LINEAGE_GRANDFATHER_CUTOFF = DO_MERGE_AT + timedelta(weeks=6)
+
+
+def _git_main_tip(repo_root: Path | str | None) -> str | None:
+    """Return the tip SHA for a known main remote reference."""
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip expected_base_sha", file=sys.stderr)
+        return None
+    for ref in ("clawseat/main", "origin/main"):
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", ref],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            msg = (exc.stderr or exc.stdout or "").strip()
+            print(
+                f"warn: cannot read {ref} in {root}: {msg or 'unknown git error'}",
+                file=sys.stderr,
+            )
+            continue
+        except FileNotFoundError:
+            print("warn: git not found; skip expected_base_sha", file=sys.stderr)
+            return None
+        sha = result.stdout.strip()
+        if sha:
+            return sha
+    print(
+        "warn: missing refs clawseat/main and origin/main; skip expected_base_sha",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _git_head_tip(repo_root: Path | str | None) -> str | None:
+    """Return the current HEAD SHA for a repository, if available."""
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip lineage receipt fields", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: cannot read HEAD in {root}; skip lineage receipt fields: {detail}",
+            file=sys.stderr,
+        )
+        return None
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage receipt fields", file=sys.stderr)
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _git_merge_base_is_ancestor(repo_root: Path | str | None, reported_commit: str) -> bool | None:
+    if not repo_root:
+        return None
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip lineage guard", file=sys.stderr)
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", reported_commit, "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        print("warn: git not found; skip lineage guard", file=sys.stderr)
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    detail = (result.stderr or result.stdout or "").strip()
+    print(
+        "warn: merge-base --is-ancestor failed for "
+        f"commit={reported_commit!r} in {root}: {detail or 'unknown git error'}",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _populate_lineage_receipt_fields(
+    *,
+    repo_root: Path | str | None,
+    expected_base_sha: str | None,
+    source_role: str,
+) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "builder_commit": None,
+        "memory_commit": None,
+        "head_contains_commit": False,
+        "lineage_status": "unknown",
+    }
+    builder_commit = expected_base_sha.strip() if isinstance(expected_base_sha, str) and expected_base_sha.strip() else None
+    if builder_commit:
+        fields["builder_commit"] = builder_commit
+        contains = _git_merge_base_is_ancestor(repo_root, builder_commit)
+        if contains is True:
+            fields["head_contains_commit"] = True
+            fields["lineage_status"] = "in-lineage"
+        elif contains is False:
+            fields["head_contains_commit"] = False
+            fields["lineage_status"] = "divergent"
+        else:
+            fields["head_contains_commit"] = False
+            fields["lineage_status"] = "unknown"
+    if source_role == "memory":
+        fields["memory_commit"] = _git_head_tip(repo_root)
+    return fields
+
+
+def _advance_builder_task_branch(
+    repo_root: Path | str | None,
+    branch: str | None,
+    base_sha: str | None,
+) -> bool:
+    """Advance a builder task branch to the requested base SHA.
+
+    This is a best-effort repair path. If the branch already points at the
+    requested base, it is left alone. If the repo or git is unavailable, the
+    dispatch still proceeds and the caller can surface the drift later.
+    """
+    if not repo_root or not branch or not base_sha:
+        return False
+    root = Path(repo_root)
+    if not root.exists():
+        print(f"warn: repo_root {root} does not exist; skip builder branch ref advance", file=sys.stderr)
+        return False
+    checked_out_ref = f"branch refs/heads/{branch}"
+    try:
+        worktree_list = subprocess.run(
+            ["git", "-C", str(root), "worktree", "list", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: failed to inspect worktrees for {branch}; skip builder branch ref advance: {detail}",
+            file=sys.stderr,
+        )
+        return False
+    except FileNotFoundError:
+        print("warn: git not found; skip builder branch ref advance", file=sys.stderr)
+        return False
+    if checked_out_ref in worktree_list:
+        print(
+            f"warn: builder branch {branch} is currently checked out; skip branch ref advance",
+            file=sys.stderr,
+        )
+        return False
+    try:
+        current = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        current = ""
+    if current == base_sha:
+        return True
+    try:
+        subprocess.run(
+            ["git", "-C", str(root), "update-ref", f"refs/heads/{branch}", base_sha],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip() or f"exit {exc.returncode}"
+        print(
+            f"warn: failed to advance builder branch ref {branch} -> {base_sha}: {detail}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _validate_user_summary(
+    user_summary: str | None,
+    *,
+    dispatched_at: datetime,
+    task_id: str,
+) -> None:
+    if user_summary is not None and not user_summary.strip():
+        raise SystemExit("user_summary must not be empty")
+    if user_summary is None and dispatched_at >= LINEAGE_GRANDFATHER_CUTOFF:
+        raise SystemExit(
+            "dispatch receipt missing required user_summary after grandfather cutoff: "
+            f"task_id={task_id!r}"
+        )
+    if user_summary is None:
+        print(
+            "warn: deprecated dispatch receipt format for "
+            f"task_id={task_id!r}; missing user_summary; "
+            f"grandfather until {LINEAGE_GRANDFATHER_CUTOFF.isoformat()}",
+            file=sys.stderr,
+        )
+
+
+def _dispatch_lock_metadata(
+    *,
+    task_id: str,
+    target_role: str,
+    expected_branch: str | None,
+    expected_worktree: str | None,
+) -> dict[str, str]:
+    if normalize_role(target_role) != "builder" and not expected_branch and not expected_worktree:
+        return {}
+    fields: dict[str, str] = {}
+    branch = expected_branch or (
+        f"feat/{task_id}" if normalize_role(target_role) == "builder" else None
+    )
+    worktree = expected_worktree or (
+        f"/tmp/{task_id}-wt" if normalize_role(target_role) == "builder" else None
+    )
+    if branch:
+        fields["expected_branch"] = branch
+    if worktree:
+        fields["expected_worktree_path"] = worktree
+    return fields
+
+
+def _expanded_handoff_dir(profile: object) -> Path:
+    text = str(getattr(profile, "handoff_dir")).strip()
+    return Path(os.path.expandvars(text)).expanduser().resolve()
+
+
+def _expanded_tasks_dir(profile: object) -> Path:
+    text = str(getattr(profile, "tasks_root")).strip()
+    return Path(os.path.expandvars(text)).expanduser().resolve()
+
+
+def _builder_outstanding_task(todo_path: Path) -> str | None:
+    if not todo_path.exists():
+        return None
+    match = re.search(r"^## \[(pending|queued)\] (\S+)", todo_path.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(2) if match else None
+
+
+def _finding_hypothesis_counter(profile: object, *, target: str, finding_id: str) -> int:
+    handoff_dir = _expanded_handoff_dir(profile)
+    count = 0
+    for path in handoff_dir.glob(f"*__*__{sanitize_name(target)}.json"):
+        if not path.is_file():
+            continue
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("kind") != "dispatch":
+            continue
+        if payload.get("target") != target:
+            continue
+        if payload.get("finding_id") != finding_id:
+            continue
+        count += 1
+    return count
+
+
+def _latest_consumed_completion_receipt(profile: object, target: str) -> tuple[str | None, Path | None]:
+    handoff_dir = _expanded_handoff_dir(profile)
+    pattern = f"*__{sanitize_name(target)}__planner.json.consumed"
+    candidates = [path for path in handoff_dir.glob(pattern) if path.is_file()]
+    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates:
+        payload = load_json(path)
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("kind") != "completion":
+            continue
+        if payload.get("source") != target or payload.get("target") != "planner":
+            continue
+        task_id = str(payload.get("task_id") or path.name.split("__", 1)[0]).strip() or None
+        return task_id, path
+    return None, None
+
+
+def _clear_audit_script_path() -> Path:
+    return Path(__file__).resolve().with_name("audit_clear_before_dispatch.py")
+
+
+def _clear_audit_finding_path(profile: object, task_id: str) -> Path:
+    timestamp = utc_now_iso().split("+", 1)[0].replace(":", "-")
+    project = sanitize_name(str(getattr(profile, "project_name")))
+    finding_dir = _expanded_tasks_dir(profile) / "finding"
+    return finding_dir / f"{project}-finding-{timestamp}-clear-violation-{sanitize_name(task_id)}.md"
+
+
+def _write_clear_audit_finding(
+    *,
+    profile: object,
+    task_id: str,
+    source: str,
+    target: str,
+    prev_task: str | None,
+    receipt_path: Path,
+    delivery_path: Path,
+    audit_result: subprocess.CompletedProcess[str],
+    warning_text: str,
+) -> Path:
+    finding_path = _clear_audit_finding_path(profile, task_id)
+    finding_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_stderr = (audit_result.stderr or "").strip() or "<empty>"
+    audit_stdout = (audit_result.stdout or "").strip() or "<empty>"
+    content = (
+        "---\n"
+        "kind: finding\n"
+        f"project: {profile.project_name}\n"
+        f"task_id: {task_id}\n"
+        "seat: planner\n"
+        f"source: {source}\n"
+        f"target: {target}\n"
+        "status: open\n"
+        f"title: clear-before-dispatch violation for {task_id}\n"
+        f"ts: {utc_now_iso()}\n"
+        f"detail: Planner dispatched {target} without /clear after gate 1 + gate 3 passed.\n"
+        "---\n"
+        "\n"
+        "# Evidence\n"
+        "\n"
+        f"- warning: {warning_text}\n"
+        f"- prev_task: {prev_task or '<none>'}\n"
+        f"- receipt: {receipt_path}\n"
+        f"- delivery: {delivery_path}\n"
+        f"- audit_script: {_clear_audit_script_path()}\n"
+        f"- audit_exit: {audit_result.returncode}\n"
+        "\n"
+        "## Audit stderr\n"
+        "\n"
+        "```text\n"
+        f"{audit_stderr}\n"
+        "```\n"
+        "\n"
+        "## Audit stdout\n"
+        "\n"
+        "```text\n"
+        f"{audit_stdout}\n"
+        "```\n"
+    )
+    finding_path.write_text(content, encoding="utf-8")
+    return finding_path
+
+
+def _send_clear_audit_warning(profile: object, warning_text: str) -> None:
+    try:
+        result = notify(profile, "planner", warning_text)
+    except Exception as exc:  # noqa: BLE001 - best-effort side channel
+        print(f"warn: clear audit planner notify failed: {exc}", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        print(f"warn: clear audit planner notify failed: {detail}", file=sys.stderr)
+
+
+def _run_clear_audit_hook(
+    *,
+    profile: object,
+    source_role: str,
+    target_role: str,
+    task_id: str,
+    source: str,
+    target: str,
+    notify_sent: bool,
+) -> None:
+    if source_role != "planner" or target_role == "planner" or not notify_sent:
+        return
+    prev_task, receipt_marker = _latest_consumed_completion_receipt(profile, target)
+    if receipt_marker is None:
+        return
+    delivery_path = profile.delivery_path(target)
+    if not delivery_path.exists():
+        return
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(_clear_audit_script_path()),
+                "--profile",
+                str(profile.profile_path),
+                "--task-id",
+                task_id,
+                "--target",
+                target,
+            ],
+            cwd=str(profile.repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - hook must not block dispatch
+        print(f"warn: clear audit hook failed for {task_id}: {exc}", file=sys.stderr)
+        return
+    if result.returncode == 1:
+        warning_text = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or f"[CLEAR-AUDIT-WARNING] task_id={task_id} target={target} prev_task={prev_task or '<none>'}"
+        )
+        if "[CLEAR-AUDIT-WARNING]" not in warning_text:
+            warning_text = f"[CLEAR-AUDIT-WARNING] {warning_text}"
+        finding_path = _write_clear_audit_finding(
+            profile=profile,
+            task_id=task_id,
+            source=source,
+            target=target,
+            prev_task=prev_task,
+            receipt_path=receipt_marker,
+            delivery_path=delivery_path,
+            audit_result=result,
+            warning_text=warning_text,
+        )
+        print(warning_text, file=sys.stderr)
+        _send_clear_audit_warning(profile, f"{warning_text} finding={finding_path}")
+        return
+    if result.returncode not in {0, 2}:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        print(f"warn: clear audit helper failed for {task_id}: {detail}", file=sys.stderr)
 
 INTENT_MAP: dict[str, dict[str, str]] = {
     # ── Plan-phase intents (planner's own skills) ─────────────────────
@@ -266,9 +707,37 @@ def parse_args() -> argparse.Namespace:
         metavar="ROLE",
         help="Pick least-busy live seat with this role from state.db (e.g. 'builder').",
     )
+    parser.add_argument(
+        "--expected-branch",
+        help="Expected branch tip for builder worktree lock metadata.",
+    )
+    parser.add_argument(
+        "--expected-worktree",
+        help="Expected worktree path for builder lock metadata.",
+    )
+    parser.add_argument("--finding-id", help="Optional finding bucket id for hypothesis retries.")
+    parser.add_argument(
+        "--rca-override",
+        action="store_true",
+        help="Bypass hypothesis retry warning when the finding has already exceeded the fix counter.",
+    )
+    parser.add_argument(
+        "--core-ux",
+        action="store_true",
+        help="Mark the dispatch as core UX and require an explicit core UX gate on closeout.",
+    )
+    parser.add_argument(
+        "--force-parallel-builder",
+        action="store_true",
+        help="Bypass the same-seat builder dispatch lock for intentional task stacking.",
+    )
     parser.add_argument("--task-id", required=True, help="Task id.")
     parser.add_argument("--title", required=True, help="Task title.")
     parser.add_argument("--objective", required=True, help="Objective/body text for the TODO.")
+    parser.add_argument(
+        "--user-summary",
+        help="Short plain-language summary for operator-visible progress.",
+    )
     parser.add_argument(
         "--test-policy",
         required=True,
@@ -326,6 +795,16 @@ def parse_args() -> argparse.Namespace:
             "memorise every gstack skill's trigger vocabulary. "
             "Valid keys: " + ", ".join(sorted(INTENT_MAP.keys())) + ". "
             "See TOOLS/dispatch.md for the user-intent → key mapping."
+        ),
+    )
+    parser.add_argument(
+        "--spec-path",
+        default=None,
+        help=(
+            "Path to memory's SPEC.md for this task. When provided, the path is "
+            "embedded in the dispatch receipt and surfaced to the specialist via "
+            "TODO so they can read the contract (acceptance criteria, deliverables, "
+            "out-of-scope) before working. See core/scripts/spec_admin.py."
         ),
     )
     return parser.parse_args()
@@ -395,16 +874,64 @@ def main() -> int:
         args.skill_refs,
     )
     todo_path = profile.todo_path(args.target)
+    audit_dir = _expanded_handoff_dir(profile) / "audit"
     if _is_task_already_queued(todo_path, args.task_id):
         print(
             f"TASK_ALREADY_QUEUED {args.task_id} @ {utc_now_iso()}",
             file=sys.stderr,
         )
         return 2
-    reply_to = args.reply_to or args.source
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
+    if target_role == "builder" and not args.finding_id:
+        outstanding_task = _builder_outstanding_task(todo_path)
+        if outstanding_task and outstanding_task != args.task_id:
+            if args.force_parallel_builder:
+                print(
+                    "WARNING: bypassing same-seat builder dispatch lock; "
+                    "use only when intentionally stacking work on one builder seat",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"BLOCKED: builder seat {args.target} dispatch outstanding "
+                    f"({outstanding_task}); awaiting completion receipt before "
+                    "stacking another task on the same seat",
+                    file=sys.stderr,
+                )
+                return 2
+    expected_base_sha = _git_main_tip(getattr(profile, "repo_root", None))
+    reply_to = args.reply_to or args.source
     correlation_id = stable_dispatch_nonce(profile.project_name, "planning", args.task_id)
+    dispatched_at = datetime.now(timezone.utc).replace(microsecond=0)
+    _validate_user_summary(
+        args.user_summary,
+        dispatched_at=dispatched_at,
+        task_id=args.task_id,
+    )
+    finding_counter = None
+    finding_exceeded = False
+    if args.finding_id:
+        finding_counter = _finding_hypothesis_counter(profile, target=args.target, finding_id=args.finding_id)
+        finding_exceeded = finding_counter >= 3
+        if finding_exceeded and not args.rca_override:
+            print(
+                f"warning: hypothesis_fix_counter exceeded for finding_id={args.finding_id} "
+                f"(counter={finding_counter}); use --rca-override to continue",
+                file=sys.stderr,
+            )
+    dispatch_lock_fields = _dispatch_lock_metadata(
+        task_id=args.task_id,
+        target_role=target_role,
+        expected_branch=args.expected_branch,
+        expected_worktree=args.expected_worktree,
+    )
+    if target_role == "builder" and expected_base_sha:
+        _advance_builder_task_branch(
+            getattr(profile, "repo_root", None),
+            dispatch_lock_fields.get("expected_branch"),
+            expected_base_sha,
+        )
     append_task_to_queue(
         todo_path,
         task_id=args.task_id,
@@ -419,6 +946,11 @@ def main() -> int:
         review_required=args.review_required,
         correlation_id=correlation_id,
         test_policy=args.test_policy,
+        core_ux=args.core_ux,
+        finding_id=args.finding_id,
+        hypothesis_fix_counter=finding_counter,
+        hypothesis_fix_counter_exceeded=finding_exceeded,
+        rca_override=True if args.rca_override else None,
     )
     upsert_tasks_row(
         profile.tasks_doc,
@@ -440,10 +972,33 @@ def main() -> int:
         "reply_to": reply_to,
         "docs_consulted": args.docs_consulted or None,
         "docs_skip_reason": args.docs_skip_reason or None,
-        "assigned_at": utc_now_iso(),
+        "assigned_at": dispatched_at.isoformat(),
         "notified_at": None,
         "notify_message": None,
     }
+    if args.user_summary is not None:
+        receipt["user_summary"] = args.user_summary
+    if args.finding_id:
+        receipt["finding_id"] = args.finding_id
+        receipt["hypothesis_fix_counter"] = finding_counter
+        receipt["hypothesis_fix_counter_exceeded"] = finding_exceeded
+        receipt["rca_override"] = True if args.rca_override else None
+    elif args.rca_override:
+        receipt["rca_override"] = True
+    if args.core_ux:
+        receipt["core_ux"] = True
+    if args.spec_path:
+        receipt["spec_path"] = args.spec_path
+    if expected_base_sha:
+        receipt["expected_base_sha"] = expected_base_sha
+    receipt.update(
+        _populate_lineage_receipt_fields(
+            repo_root=getattr(profile, "repo_root", None),
+            expected_base_sha=expected_base_sha,
+            source_role=source_role,
+        )
+    )
+    receipt.update(dispatch_lock_fields)
     if do_notify:
         message = build_notify_message(
             args.target,
@@ -529,6 +1084,9 @@ def main() -> int:
                 "status": "skipped",
                 "reason": f"target_kind_{resolution.kind}",
             }
+        notify_success = bool(receipt.get("notified_at"))
+    else:
+        notify_success = False
     receipt_path = profile.handoff_path(args.task_id, args.source, args.target)
     write_json(receipt_path, receipt)
     _write_dispatch_to_ledger(
@@ -546,10 +1104,25 @@ def main() -> int:
         task_id=args.task_id,
         target=args.target,
         test_policy=args.test_policy,
+        finding_id=args.finding_id,
+        hypothesis_counter=finding_counter,
+        rca_override=args.rca_override,
+        core_ux=args.core_ux,
+        audit_dir=audit_dir,
     )
     print(f"dispatched {args.task_id} -> {args.target}")
     print(f"todo: {todo_path}")
     print(f"receipt: {receipt_path}")
+    if notify_success and source_role == "planner" and target_role != "planner":
+        _run_clear_audit_hook(
+            profile=profile,
+            source_role=source_role,
+            target_role=target_role,
+            task_id=args.task_id,
+            source=args.source,
+            target=args.target,
+            notify_sent=notify_success,
+        )
     if _should_announce_planner_event(args.source, args.target, profile=profile):
         _try_announce_planner_event(
             project=profile.project_name,

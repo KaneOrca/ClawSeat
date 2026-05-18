@@ -127,4 +127,6 @@ def test_target_inference_fails_without_reply_to_handoff(tmp_path: Path) -> None
     result = _run_complete(profile, "missing-target")
 
     assert result.returncode != 0
-    assert "--target required: could not infer from dispatch handoff" in result.stderr
+    assert "task_id='missing-target'" in result.stderr
+    assert "searched " in result.stderr
+    assert "with pattern missing-target__*__planner.json" in result.stderr

@@ -38,6 +38,16 @@ def test_clawseat_memory_documents_post_spawn_chain_rehearsal_rule() -> None:
     assert "planner/DELIVERY.md" in text
 
 
+def test_clawseat_memory_owns_project_team_ownership_doc() -> None:
+    text = CLAWSEAT_MEMORY.read_text(encoding="utf-8")
+
+    assert "TEAM_OWNERSHIP.md" in text
+    assert "current-project ownership document" in text
+    assert "project.toml" in text
+    assert "Planner records per-task builder assignment" in text
+    assert "secrets" in text
+
+
 def test_post_spawn_chain_rehearsal_template_exists_and_is_complete() -> None:
     assert TEMPLATE.is_file()
     text = TEMPLATE.read_text(encoding="utf-8")

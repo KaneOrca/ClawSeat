@@ -124,7 +124,26 @@ _secret_file_auth_token() {
 
 _secret_value_is_placeholder_token() {
   local value="${1:-}"
-  printf '%s\n' "$value" | grep -Eiq '(?:^|[[:space:]])+(<set-by-operator>|YOUR_TOKEN_HERE|minimax-token|deepseek-token|dry-run-placeholder|placeholder|dummy|example)(?:$|[[:space:]])'
+  local normalized
+  [[ -n "$value" ]] || return 1
+  normalized="$(printf '%s\n' "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$normalized" in
+    '<set-by-operator>'|\
+    'your_token_here'|\
+    'minimax-token'|\
+    'deepseek-token'|\
+    'dry-run-placeholder'|\
+    'dry-run-placeholder-key'|\
+    'dry-run-placeholder-token'|\
+    'placeholder'|\
+    'dummy'|\
+    'example')
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 _secret_file_has_real_token() {
@@ -143,7 +162,7 @@ _secret_file_has_placeholder_token() {
 }
 
 _write_runtime_secret_env() {
-  local provider="$1" runtime_path="$2" seat="${3:-}"
+  local provider="$1" runtime_path="$2"
   [[ "$provider" == "$PROVIDER_MODE" ]] || return 1
   [[ -n "$PROVIDER_KEY" ]] || return 1
   if _secret_file_has_real_token "$runtime_path" && _secret_value_is_placeholder_token "$PROVIDER_KEY"; then
@@ -249,7 +268,7 @@ PY
       fi
       path_index=$((path_index + 1))
     done < <(_claude_secret_paths "$provider" "$seat")
-    _write_runtime_secret_env "$provider" "$src_path" "$seat" || true
+    _write_runtime_secret_env "$provider" "$src_path" || true
     if [[ ! -f "$src_path" ]]; then
       warn "seat secret skipped for $seat; missing shared template: $src_path"
       continue

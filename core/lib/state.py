@@ -288,7 +288,7 @@ def pick_least_busy_seat(
     """
     row = conn.execute(
         """
-        SELECT s.seat_id,
+        SELECT s.*,
                COUNT(t.id) AS inflight
         FROM   seats s
         LEFT JOIN tasks t
@@ -306,7 +306,7 @@ def pick_least_busy_seat(
     ).fetchone()
     if row is None:
         return None
-    return get_seat(conn, project, row["seat_id"])
+    return _row_to_seat(row)
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +337,26 @@ def upsert_project(conn: sqlite3.Connection, project: Project) -> None:
     conn.commit()
 
 
-def upsert_seat(conn: sqlite3.Connection, seat: Seat) -> None:
+def upsert_seat(
+    conn: sqlite3.Connection,
+    seat: Seat,
+    *,
+    allow_stopped_revival: bool = False,
+) -> None:
+    existing = conn.execute(
+        "SELECT status FROM seats WHERE project = ? AND seat_id = ?",
+        (seat.project, seat.seat_id),
+    ).fetchone()
+    if (
+        existing is not None
+        and str(existing["status"]) == "stopped"
+        and seat.status == "live"
+        and not allow_stopped_revival
+    ):
+        raise ValueError(
+            f"refusing to revive stopped seat {seat.project}/{seat.seat_id} "
+            "without allow_stopped_revival=True"
+        )
     conn.execute(
         """
         INSERT INTO seats
@@ -576,18 +595,23 @@ def seed_from_filesystem(
         roles = seat_roles_cache.get(project, {})
         role = roles.get(seat_id) or _infer_role(seat_id)
 
-        upsert_seat(conn, Seat(
-            project=project,
-            seat_id=seat_id,
-            role=role,
-            tool=str(data.get("tool", "")),
-            auth_mode=str(data.get("auth_mode", "")),
-            provider=str(data.get("provider", "")),
-            status=status,
-            last_heartbeat=last_heartbeat,
-            session_name=session_name or None,
-            workspace=str(data.get("workspace", "")) or None,
-        ))
+        upsert_kwargs = {"allow_stopped_revival": True} if status == "live" else {}
+        upsert_seat(
+            conn,
+            Seat(
+                project=project,
+                seat_id=seat_id,
+                role=role,
+                tool=str(data.get("tool", "")),
+                auth_mode=str(data.get("auth_mode", "")),
+                provider=str(data.get("provider", "")),
+                status=status,
+                last_heartbeat=last_heartbeat,
+                session_name=session_name or None,
+                workspace=str(data.get("workspace", "")) or None,
+            ),
+            **upsert_kwargs,
+        )
         counts["seats"] += 1
 
     # ── 4. Tasks from patrol/handoffs/*.json ──────────────────────────────

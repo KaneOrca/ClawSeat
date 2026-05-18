@@ -91,17 +91,6 @@ bash ${CLAWSEAT_ROOT}/scripts/recover-grid.sh <project>
 - `recover-grid.sh` — **保留现有 workers 窗口 + pane**，只修正 client 路由；首选。
 - `window open-grid` — **新开 iTerm 窗口**；整个窗口丢失时使用。
 
-## 3.2 脚本化回归入口
-- 运行 `python3 core/scripts/iterm_tmux_selftest.py`
-- 该自测不依赖真实 iTerm GUI；它使用 fake `tmux` / fake `osascript` 回放关键约束
-- 当前覆盖 6 个核心场景：
-  - `send-and-verify` 直通成功
-  - `send-and-verify` Enter 重试成功
-  - `send-and-verify` capture 失败后的硬停
-  - `check-engineer-status` capture 失败后的状态输出
-  - `agent_admin_window.iterm_run_command` 从 `iTerm` 回退到 `iTerm2`
-  - `open_project_tabs_window` 多 tab AppleScript 生成
-
 ## 4. 错误语义建议回看（快速）
 - `TMUX_MISSING`：`command -v tmux` 及 fallback 均失败，优先修环境变量与安装。  
 - `SESSION_NOT_FOUND`：会话映射失败，优先 `agent_admin` 重建会话绑定。  

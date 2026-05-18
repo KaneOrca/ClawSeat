@@ -82,3 +82,84 @@ launcher_slugify() {
   fi
   printf '%s\n' "$slug"
 }
+
+launcher_active_session_dir() {
+  local launcher_home="${REAL_HOME:-${HOME:-}}"
+  [[ -n "$launcher_home" ]] || return 1
+  printf '%s\n' "$launcher_home/.agent-runtime/active"
+}
+
+launcher_active_session_file() {
+  local seat="${1:-${CLAWSEAT_SEAT:-}}"
+  local active_dir=""
+  [[ -n "$seat" ]] || return 1
+  active_dir="$(launcher_active_session_dir)"
+  printf '%s/%s.session\n' "$active_dir" "$seat"
+}
+
+launcher_read_active_session_id() {
+  local seat="${1:-${CLAWSEAT_SEAT:-}}"
+  local active_file=""
+  active_file="$(launcher_active_session_file "$seat")" || return 1
+  [[ -f "$active_file" ]] || return 1
+  python3 - "$active_file" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+try:
+    text = path.read_text(encoding="utf-8", errors="replace").strip()
+except OSError:
+    raise SystemExit(1)
+if text:
+    print(text)
+PY
+}
+
+launcher_write_active_session_id() {
+  local seat="${1:-${CLAWSEAT_SEAT:-}}"
+  local session_id="${2:-}"
+  local active_file=""
+  local active_dir=""
+  [[ -n "$seat" ]] || return 0
+  [[ -n "$session_id" ]] || return 0
+  active_file="$(launcher_active_session_file "$seat")" || return 0
+  active_dir="$(dirname "$active_file")"
+  mkdir -p "$active_dir" 2>/dev/null || return 0
+  printf '%s\n' "$session_id" >"$active_file" 2>/dev/null || return 0
+  chmod 600 "$active_file" 2>/dev/null || true
+}
+
+launcher_resume_banner() {
+  local session_id="${1:-<unknown>}"
+  local when="${2:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  printf 'Resuming session %s from %s\n' "$session_id" "$when"
+}
+
+# Crash-recovery fallbacks for auto-resume. The .session file only gets
+# written when the Stop hook fires (clean exit). When the seat dies hard
+# (tmux killed, server reaped, system reboot), the hook never runs — so
+# we read the tool's own cwd-scoped session store instead and fall back
+# to --continue / resume --last. Both tools write their session files
+# continuously as the conversation progresses, surviving any crash.
+
+_has_claude_cwd_history() {
+  local home_for_claude="$1" cwd="$2"
+  [[ -n "$home_for_claude" && -n "$cwd" ]] || return 1
+  # Claude Code stores sessions at ~/.claude/projects/<encoded>/*.jsonl
+  # where <encoded> = cwd with both '/' AND '.' replaced by '-'. Confirmed
+  # against on-disk samples: /home/u/.agents/... -> -home-u--agents-...
+  # (the double-dash comes from /. -> --).
+  cwd="${cwd%/}"
+  local encoded
+  encoded="$(printf '%s\n' "$cwd" | tr '/.' '--')"
+  compgen -G "$home_for_claude/.claude/projects/${encoded}/*.jsonl" >/dev/null 2>&1
+}
+
+_has_codex_history() {
+  local codex_home="$1"
+  [[ -n "$codex_home" && -d "$codex_home/sessions" ]] || return 1
+  # `codex resume --last` filters by cwd internally, so we just need to
+  # confirm any rollout exists. Empty result → no recoverable history.
+  [[ -n "$(find "$codex_home/sessions" -maxdepth 5 -name 'rollout-*.jsonl' -print -quit 2>/dev/null)" ]]
+}

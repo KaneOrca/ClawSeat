@@ -14,7 +14,9 @@ import tomllib
 
 
 MAX_REWAKES_PER_CYCLE = 5
-REWAKE_COOLDOWN_SECONDS = 30 * 60
+STALE_THRESHOLD_HOURS = 6
+AUTO_SUPERSEDE_AGE_DAYS = 3
+REWAKE_COOLDOWN_SECONDS = 21600
 SEAT_HEALTH_THRESHOLD_SECONDS = 10 * 60
 
 
@@ -22,10 +24,28 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the patrol loop for a project profile.")
     parser.add_argument("--profile", required=True, help="Path to the project profile TOML.")
     parser.add_argument("--send", action="store_true", help="Allow reminders to be sent.")
+    parser.add_argument(
+        "--stale-threshold-hours",
+        type=int,
+        default=STALE_THRESHOLD_HOURS,
+        help="Age in hours before a handoff is considered stale.",
+    )
+    parser.add_argument(
+        "--auto-supersede-age-days",
+        type=int,
+        default=AUTO_SUPERSEDE_AGE_DAYS,
+        help="Age in days before auto-supersede runs.",
+    )
+    parser.add_argument(
+        "--rewake-cooldown-seconds",
+        type=int,
+        default=REWAKE_COOLDOWN_SECONDS,
+        help="Cooldown in seconds before the same stale handoff can be rewoken again.",
+    )
     return parser.parse_args()
 
 
-def run_auto_supersede(profile, *, age_days: int = 3) -> None:
+def run_auto_supersede(profile, *, age_days: int = AUTO_SUPERSEDE_AGE_DAYS) -> None:
     cmd = [
         sys.executable,
         str(profile.agent_admin),
@@ -177,7 +197,7 @@ def _unblock_seat(target: str, task_id: str) -> dict[str, Any]:
     return {"target": target, "task_id": task_id, "blocked": blocked, "reason": reason}
 
 
-def detect_stale_handoffs(project: str, threshold_hours: int = 2) -> list[dict[str, Any]]:
+def detect_stale_handoffs(project: str, threshold_hours: int = STALE_THRESHOLD_HOURS) -> list[dict[str, Any]]:
     handoffs_dir = _tasks_root() / project / "patrol" / "handoffs"
     if not handoffs_dir.is_dir():
         return []
@@ -211,7 +231,12 @@ def detect_stale_handoffs(project: str, threshold_hours: int = 2) -> list[dict[s
     return stale
 
 
-def _recent_rewake_keys(log_path: Path, *, now: float, cooldown_seconds: int) -> set[str]:
+def _recent_rewake_keys(
+    log_path: Path,
+    *,
+    now: float,
+    cooldown_seconds: int = REWAKE_COOLDOWN_SECONDS,
+) -> set[str]:
     if not log_path.exists():
         return set()
     recent: set[str] = set()
@@ -247,13 +272,17 @@ def _append_rewake_log(log_path: Path, *, project: str, handoff: dict[str, Any],
         handle.write(line + "\n")
 
 
-def re_wake_stale_handoffs(project: str, threshold_hours: int = 2) -> int:
+def re_wake_stale_handoffs(
+    project: str,
+    threshold_hours: int = STALE_THRESHOLD_HOURS,
+    cooldown_seconds: int = REWAKE_COOLDOWN_SECONDS,
+) -> int:
     stale = detect_stale_handoffs(project, threshold_hours=threshold_hours)
     if not stale:
         return 0
     now = time.time()
     log_path = _rewake_log_path()
-    recent = _recent_rewake_keys(log_path, now=now, cooldown_seconds=REWAKE_COOLDOWN_SECONDS)
+    recent = _recent_rewake_keys(log_path, now=now, cooldown_seconds=cooldown_seconds)
     send_script = Path.home() / "ClawSeat" / "core" / "shell-scripts" / "send-and-verify.sh"
 
     sent = 0
@@ -369,9 +398,13 @@ def main() -> int:
     require_success(result, "patrol_loop")
     if result.stdout.strip():
         print(result.stdout.strip())
-    run_auto_supersede(profile)
+    run_auto_supersede(profile, age_days=args.auto_supersede_age_days)
     seat_health = _patrol_seat_health(profile.project_name)
-    rewake_count = re_wake_stale_handoffs(profile.project_name)
+    rewake_count = re_wake_stale_handoffs(
+        profile.project_name,
+        threshold_hours=args.stale_threshold_hours,
+        cooldown_seconds=args.rewake_cooldown_seconds,
+    )
     print(seat_health["summary"])
     if rewake_count:
         print(f"[STALE-HANDOFF-REWAKE:project={profile.project_name},count={rewake_count}]")

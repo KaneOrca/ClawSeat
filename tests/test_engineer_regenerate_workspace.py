@@ -6,11 +6,35 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 
 _REPO = Path(__file__).resolve().parents[1]
 _SCRIPTS = _REPO / "core" / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+
+
+@pytest.fixture(autouse=True)
+def _caller_escalation_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = tmp_path / "caller.toml"
+    profile.write_text(
+        "\n".join(
+            [
+                "version = 1",
+                'id = "planner"',
+                'display_name = "planner"',
+                'role = "planner"',
+                "dispatch_authority = false",
+                "escalation_authority = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_PROFILE", str(profile))
+    monkeypatch.setenv("CLAWSEAT_ENGINEER_ID", "planner")
+    monkeypatch.setenv("CLAWSEAT_SEAT", "planner")
 
 
 def test_regenerate_workspace_command_exists() -> None:
@@ -81,3 +105,45 @@ def test_regenerate_workspace_creates_backup_before_overwrite(tmp_path: Path) ->
     backups = list(workspace.glob(".backup-*/AGENTS.md"))
     assert len(backups) == 1
     assert backups[0].read_text(encoding="utf-8") == "operator local edit\n"
+
+
+def test_regenerate_all_skips_uninitialized_project_seats(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    handlers, hooks, _session = _handlers(tmp_path)
+    memory_session = SimpleNamespace(
+        engineer_id="memory",
+        project="install",
+        session="install-memory-codex",
+        tool="codex",
+        workspace=str(tmp_path / "workspace" / "memory"),
+    )
+    hooks.load_project.return_value = SimpleNamespace(
+        name="install",
+        engineers=["memory", "cartooner-front-planner"],
+    )
+
+    def resolve_engineer_session(engineer_id: str, *, project_name: str | None = None):
+        assert project_name == "install"
+        if engineer_id == "memory":
+            return memory_session
+        raise RuntimeError(f"Unknown engineer: {engineer_id}")
+
+    def apply_template(session_obj, _project) -> None:
+        workspace = Path(session_obj.workspace)
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / "AGENTS.md").write_text(
+            hooks.render_template_text.return_value["AGENTS.md"],
+            encoding="utf-8",
+        )
+
+    hooks.resolve_engineer_session.side_effect = resolve_engineer_session
+    hooks.apply_template.side_effect = apply_template
+
+    rc = handlers.engineer_regenerate_workspace(
+        SimpleNamespace(project="install", engineer=None, all_seats=True, yes=True)
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "skipped\tcartooner-front-planner\tUnknown engineer: cartooner-front-planner" in captured.err
+    assert (Path(memory_session.workspace) / "AGENTS.md").exists()
+    assert hooks.apply_template.call_count == 1

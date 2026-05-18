@@ -124,7 +124,6 @@ CURRENT_PROJECT_PATH = STATE_ROOT / "current_project"
 TEMPLATES_ROOT = REPO_ROOT / "core" / "templates"
 DEFAULT_PATH = _default_path()
 AGENTCTL_SH = REPO_ROOT / "core" / "shell-scripts" / "agentctl.sh"
-AGENT_ADMIN_SH = REPO_ROOT / "core" / "shell-scripts" / "agent-admin.sh"
 SEND_AND_VERIFY_SH = REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 HARNESS_PROFILE_ROOT = REPO_ROOT / "core" / "skills" / "gstack-harness" / "assets" / "profiles"
 
@@ -331,6 +330,7 @@ PROVIDER_DEFAULTS = {
         },
         "xcode-best": {
             "base_url": "https://xcode.best",
+            "default_model": "gpt-5.5",
             "url_markers": ("xcode.best",),
         },
         "ccr-local": {
@@ -365,27 +365,27 @@ def tool_default_base_url(tool: str) -> str | None:
     return None
 
 
-def provider_defaults(tool: str, provider: str) -> dict[str, object]:
+def _provider_defaults(tool: str, provider: str) -> dict[str, object]:
     raw = PROVIDER_DEFAULTS.get(tool, {}).get(provider, {})
     return dict(raw) if isinstance(raw, dict) else {}
 
 
 def provider_default_base_url(tool: str, provider: str) -> str | None:
-    value = provider_defaults(tool, provider).get("base_url")
+    value = _provider_defaults(tool, provider).get("base_url")
     if isinstance(value, str) and value:
         return value
     return None
 
 
 def provider_default_model(tool: str, provider: str) -> str | None:
-    value = provider_defaults(tool, provider).get("default_model")
+    value = _provider_defaults(tool, provider).get("default_model")
     if isinstance(value, str) and value:
         return value
     return None
 
 
-def provider_url_markers(tool: str, provider: str) -> tuple[str, ...]:
-    value = provider_defaults(tool, provider).get("url_markers", ())
+def _provider_url_markers(tool: str, provider: str) -> tuple[str, ...]:
+    value = _provider_defaults(tool, provider).get("url_markers", ())
     if isinstance(value, (list, tuple)):
         return tuple(str(item) for item in value if str(item).strip())
     return ()
@@ -395,7 +395,7 @@ def provider_url_matches(tool: str, provider: str, base_url: str) -> bool:
     candidate = str(base_url or "").strip().lower()
     if not candidate:
         return False
-    return any(marker.lower() in candidate for marker in provider_url_markers(tool, provider))
+    return any(marker.lower() in candidate for marker in _provider_url_markers(tool, provider))
 
 
 XCODE_PROVIDER_ENDPOINT_RULES = {
@@ -424,6 +424,15 @@ CLAUDE_API_PROVIDER_CONFIGS = {
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         },
     },
+    "deepseek": {
+        "model": PROVIDER_DEFAULTS["claude"]["deepseek"]["default_model"],
+        "base_url": PROVIDER_DEFAULTS["claude"]["deepseek"]["base_url"],
+        "auth_token_var": "DEEPSEEK_API_KEY",
+        "extra_env": {
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        },
+    },
     "ark": {
         "model": PROVIDER_DEFAULTS["claude"]["ark"]["default_model"],
         "base_url": PROVIDER_DEFAULTS["claude"]["ark"]["base_url"],
@@ -432,6 +441,15 @@ CLAUDE_API_PROVIDER_CONFIGS = {
         # ~/.agent-runtime/secrets/claude/ark.env. Session startup aliases
         # that name into launcher custom env at runtime.
         "auth_token_var": "ARK_API_KEY",
+        "extra_env": {
+            "API_TIMEOUT_MS": "3000000",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        },
+    },
+    "xcode-best": {
+        "model": PROVIDER_DEFAULTS["claude"]["xcode-best"]["default_model"],
+        "base_url": PROVIDER_DEFAULTS["claude"]["xcode-best"]["base_url"],
+        "auth_token_var": "XCODE_BEST_API_KEY",
         "extra_env": {
             "API_TIMEOUT_MS": "3000000",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",

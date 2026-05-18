@@ -81,10 +81,15 @@ def _run_hook(
     tmux_rc: int = 0,
     python_rc: int = 0,
     transcript_content: str = "",
+    session_id: str | None = "session-123",
+    include_transcript_path: bool = True,
+    raw_input: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     """Run the stop hook with PATH wrappers and return the process + log lines."""
 
     bin_dir, calls_log = _make_wrapped_path(tmp_path, tmux_rc=tmux_rc, python_rc=python_rc)
+    home = tmp_path / "home"
+    home.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update(
         {
@@ -94,22 +99,28 @@ def _run_hook(
             "PYTHON_RC": str(python_rc),
             "TMUX_DISPLAY_MESSAGE": "install-memory-claude",
             "CLAUDE_PROJECT_DIR": str(_REPO),
+            "HOME": str(home),
+            "REAL_HOME": str(home),
+            "CLAWSEAT_SEAT": "builder",
         }
     )
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(transcript_content, encoding="utf-8")
     payload = {
-        "session_id": "session-123",
-        "transcript_path": str(transcript),
         "cwd": str(_REPO),
         "permission_mode": "default",
         "hook_event_name": "Stop",
         "stop_hook_active": False,
         **payload,
     }
+    if session_id is not None:
+        payload["session_id"] = session_id
+    if include_transcript_path:
+        payload["transcript_path"] = str(transcript)
+    input_text = raw_input if raw_input is not None else json.dumps(payload, ensure_ascii=False) + "\n"
     proc = subprocess.run(
         ["bash", str(_HOOK)],
-        input=json.dumps(payload, ensure_ascii=False) + "\n",
+        input=input_text,
         text=True,
         capture_output=True,
         cwd=_REPO,
@@ -155,13 +166,27 @@ def test_deliver_marker_triggers_memory_deliver_call(tmp_path: Path) -> None:
     assert "planner" in python_calls[0]
 
 
+def test_stop_hook_writes_active_session_marker(tmp_path: Path) -> None:
+    proc, _calls = _run_hook(
+        tmp_path,
+        {
+            "last_assistant_message": "Done.",
+        },
+    )
+
+    active_file = tmp_path / "home" / ".agent-runtime" / "active" / "builder.session"
+
+    assert proc.returncode == 0
+    assert active_file.read_text(encoding="utf-8").strip() == "session-123"
+
+
 def test_no_marker_exits_zero_silently(tmp_path: Path) -> None:
     """No marker means no side effects, rc=0, and no stdout/stderr noise."""
 
     proc, calls = _run_hook(
         tmp_path,
         {
-            "last_assistant_message": "All set, nothing special here.",
+            "last_assistant_message": "   \n\t  ",
         },
     )
 
@@ -188,26 +213,41 @@ def test_tmux_failure_still_exits_zero(tmp_path: Path) -> None:
     assert "send-keys" in tmux_calls[0]
 
 
-def test_memory_hook_adds_prefix_and_footer(tmp_path: Path) -> None:
+def test_invalid_json_exits_one_and_reports_error(tmp_path: Path) -> None:
     proc, calls = _run_hook(
         tmp_path,
-        {"last_assistant_message": "Done. [DELIVER:seat=planner]"},
-        transcript_content="task_id: MEMORY-QUERY-123\nproject: install\n",
+        {},
+        raw_input="{not-json",
     )
-    assert proc.returncode == 0
-    python_calls = [line for line in calls if line.startswith("python\t")]
-    assert python_calls
-    joined = "\n".join(python_calls)
-    assert "[Memory]" in joined
-    assert "_via Memory @" in joined
-    assert "project=install" in joined
+
+    assert proc.returncode == 1
+    assert calls == []
+    assert "invalid Stop payload JSON" in proc.stderr
 
 
-def test_memory_hook_session_lookup(tmp_path: Path) -> None:
+def test_missing_transcript_path_exits_one(tmp_path: Path) -> None:
     proc, calls = _run_hook(
         tmp_path,
-        {"last_assistant_message": "Done. [DELIVER:seat=planner]"},
-        transcript_content="task_id: MEMORY-QUERY-123\nproject: install\n",
+        {
+            "last_assistant_message": "hello",
+        },
+        include_transcript_path=False,
     )
-    assert proc.returncode == 0
-    assert "session=install-memory-claude" in "\n".join(calls)
+
+    assert proc.returncode == 1
+    assert calls == []
+    assert "transcript_path" in proc.stderr
+
+
+def test_empty_session_id_exits_one(tmp_path: Path) -> None:
+    proc, calls = _run_hook(
+        tmp_path,
+        {
+            "last_assistant_message": "hello",
+        },
+        session_id="",
+    )
+
+    assert proc.returncode == 1
+    assert calls == []
+    assert "session_id" in proc.stderr
