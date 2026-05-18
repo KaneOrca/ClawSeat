@@ -24,6 +24,20 @@ _PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# cf015: non-portable pipe-negation — `| ! cmd` is not valid POSIX sh or bash
+# syntax when used as a pipeline segment. `| ! rg X` should be `| rg -v X`.
+_PIPE_NEGATION_RE = re.compile(r"\|\s*!")
+
+# cf015: bare `git diff --name-only` without an explicit range (base..head or
+# base...head). Without a range this scans uncommitted working-tree state and
+# produces false positives on dirty branches.
+# A safe form must contain `..` between two refs on the same logical command
+# token, e.g. `origin/main..HEAD` or `origin/main...HEAD`.
+_BARE_GIT_DIFF_NAME_ONLY_RE = re.compile(
+    r"\bgit\s+diff\b(?:[^|;&\n])*?--name-only"
+)
+_GIT_DIFF_RANGE_RE = re.compile(r"\.\.")
+
 _SHELL_BUILTINS = {
     "!",
     ".",
@@ -137,6 +151,88 @@ def criterion_is_shell_runnable(criterion: Any) -> bool:
     return is_shell_runnable_command(command)
 
 
+def has_invalid_pipe_negation(command: str) -> bool:
+    """Return True if command contains a non-portable `| !` pipe-negation segment.
+
+    `| ! cmd` is invalid in POSIX sh and bash when used as a pipeline segment.
+    The portable equivalent is `| cmd -v` (rg/grep invert-match flag).
+    """
+    return bool(_PIPE_NEGATION_RE.search(command or ""))
+
+
+def normalize_pipe_negation(command: str) -> str:
+    """Replace non-portable `| ! rg X` / `| ! grep X` with portable invert-match form.
+
+    Transforms `| ! rg` → `| rg -v` and `| ! grep` → `| grep -v`.
+    Other `| !` forms are left intact (they will still fail at execution).
+    """
+    # Replace `| ! rg` → `| rg -v`
+    command = re.sub(r"\|\s*!\s*rg\b", "| rg -v", command)
+    # Replace `| ! grep` → `| grep -v`
+    command = re.sub(r"\|\s*!\s*grep\b", "| grep -v", command)
+    return command
+
+
+def has_bare_git_diff_name_only(command: str) -> bool:
+    """Return True if command uses `git diff --name-only` without an explicit range.
+
+    A bare `git diff --name-only` (no base..head range) compares the working
+    tree against the index, picking up unrelated dirty-worktree state. Safe
+    forms must include a `..` or `...` range, e.g. `origin/main...HEAD`.
+    """
+    for segment in re.split(r"[|;&]", command or ""):
+        m = _BARE_GIT_DIFF_NAME_ONLY_RE.search(segment)
+        if m and not _GIT_DIFF_RANGE_RE.search(segment):
+            return True
+    return False
+
+
+# cf025: node_modules path guard — rejects commands that would commit node_modules.
+# Builder-ui (al543) accidentally staged node_modules; this catches it early.
+_NODE_MODULES_PATH_RE = re.compile(r"\bnode_modules\b")
+
+# cf025: dirty-worktree status check pattern — detects git status commands that
+# check for uncommitted changes, helping operators see local dirty state.
+_DIRTY_WORKTREE_CHECK_RE = re.compile(
+    r"git\s+(?:status|diff\s+--stat|ls-files\s+--modified|diff\s+--cached)"
+)
+
+
+def has_node_modules_path(command: str) -> bool:
+    """Return True if command references a node_modules path.
+
+    Catches brief mechanical commands that accidentally check or commit
+    node_modules content (e.g. 'git add node_modules/' or diff checks
+    involving node_modules). These should never appear in acceptance commands.
+    """
+    return bool(_NODE_MODULES_PATH_RE.search(command or ""))
+
+
+def is_dirty_worktree_check(command: str) -> bool:
+    """Return True if command checks for dirty/staged worktree state.
+
+    Identifies commands like `git status`, `git diff --stat`, or
+    `git ls-files --modified` that surface local dirty state. Used to
+    improve dirty-worktree awareness in acceptance and validation outputs.
+    """
+    return bool(_DIRTY_WORKTREE_CHECK_RE.search(command or ""))
+
+
+# cf017: canonical portable scope-guard command for forbidden-file checks.
+# Memory/planner should use this template (with FORBIDDEN_PATHS substituted) when
+# generating the "no forbidden files touched" mechanical acceptance criterion.
+# It uses an explicit base..head range (not a bare working-tree diff) and Python
+# filtering (not shell pipe-negation), so it is POSIX-portable and shell-safe.
+SCOPE_GUARD_PORTABLE_TEMPLATE = (
+    "cd {repo_root} && "
+    "git diff --name-only origin/main...HEAD | "
+    r'python3 -c "import sys; bad=[p.strip() for p in sys.stdin if p.strip() and'
+    r' any(p.strip().endswith(f) or (k in p.strip()) for f,k in'
+    r" {forbidden_spec})];"
+    r' print(\"\n\".join(bad)); raise SystemExit(1 if bad else 0)"'
+)
+
+
 def brief_acceptance_ready(brief: dict[str, Any]) -> tuple[bool, str]:
     acceptance = brief.get("acceptance_criteria")
     if not isinstance(acceptance, dict):
@@ -160,5 +256,31 @@ def brief_acceptance_ready(brief: dict[str, Any]) -> tuple[bool, str]:
 
     if not any(criterion_is_shell_runnable(item) for item in mechanical):
         return False, "brief.acceptance_criteria.mechanical has no shell-runnable command"
+
+    # cf015: reject non-portable pipe-negation and bare git diff --name-only
+    for item in mechanical:
+        try:
+            _, command = criterion_command_and_text(item)
+        except ValueError:
+            continue
+        if not command:
+            continue
+        if has_invalid_pipe_negation(command):
+            return False, (
+                "brief.acceptance_criteria.mechanical contains non-portable pipe-negation "
+                f"('| !'): {command!r}. Use '| rg -v' or '| grep -v' instead."
+            )
+        if has_bare_git_diff_name_only(command):
+            return False, (
+                "brief.acceptance_criteria.mechanical contains bare 'git diff --name-only' "
+                f"without an explicit range: {command!r}. "
+                "Use an explicit base..head range, e.g. 'git diff origin/main...HEAD --name-only'."
+            )
+        # cf025: reject commands referencing node_modules paths
+        if has_node_modules_path(command):
+            return False, (
+                "brief.acceptance_criteria.mechanical references node_modules path "
+                f"in command: {command!r}. node_modules must not appear in acceptance commands."
+            )
 
     return True, "ok"
