@@ -26,6 +26,7 @@ const SPRAY_DURATION_MS = 220;
 const SPRAY_AMP = 120;
 const GLINT_INTERVAL_MS = 4200;
 const GLINT_DURATION_MS = 250;
+const FUNCTIONAL_TEXT_SELECTOR = '[data-functional-text], [data-pretext-engine], [data-pretext-state]';
 
 const ORCA_PARTS: OrcaPart[] = [
   { id: 'body', top: 14, left: 10, width: 36, height: 14 },
@@ -43,6 +44,11 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   const [eyeGlintActive, setEyeGlintActive] = useState(false);
   const [eyeGlintSrc, setEyeGlintSrc] = useState<string | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+  const hoverRef = useRef(false);
+  const sprayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sprayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sprayBaseAmplitudeRef = useRef(60);
   const scale = size / BASE_HEIGHT;
   const width = BASE_WIDTH * scale;
   const eyeColor = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.aurora.red;
@@ -62,7 +68,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   })), [scale]);
 
   useEffect(() => {
-    const onMove = (event: MouseEvent) => {
+    const onMove = (event: PointerEvent) => {
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return;
       const centerX = rect.left + rect.width / 2;
@@ -72,29 +78,82 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
       const dist = Math.hypot(dx, dy) || 1;
       const pull = Math.min(dist / 300, 1);
       const easedPull = Math.sqrt(pull);
+      lastPointerRef.current = { x: event.clientX, y: event.clientY };
       setOffset({
         x: (dx / dist) * easedPull * MAX_PULL,
         y: (dy / dist) * easedPull * MAX_PULL,
       });
     };
 
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
   }, []);
 
   useEffect(() => {
+    const isPointerOnFunctionalText = (x: number, y: number) => {
+      return document
+        .elementsFromPoint(x, y)
+        .some(element => element.matches(FUNCTIONAL_TEXT_SELECTOR));
+    };
+
     const triggerSpray = () => {
       const prevAmp = environmentRef.current.waveAmplitude ?? 60;
+      sprayBaseAmplitudeRef.current = prevAmp;
       setSprayActive(true);
       setEnvironment({ waveAmplitude: SPRAY_AMP });
-      window.setTimeout(() => {
+      if (sprayTimeoutRef.current) {
+        window.clearTimeout(sprayTimeoutRef.current);
+      }
+      sprayTimeoutRef.current = window.setTimeout(() => {
         setSprayActive(false);
         setEnvironment({ waveAmplitude: prevAmp });
       }, SPRAY_DURATION_MS);
     };
 
-    const interval = window.setInterval(triggerSpray, SPRAY_INTERVAL_MS);
-    return () => window.clearInterval(interval);
+    const stopSpray = () => {
+      if (sprayIntervalRef.current) {
+        window.clearInterval(sprayIntervalRef.current);
+        sprayIntervalRef.current = null;
+      }
+      if (sprayTimeoutRef.current) {
+        window.clearTimeout(sprayTimeoutRef.current);
+        sprayTimeoutRef.current = null;
+      }
+      setSprayActive(false);
+      setEnvironment({ waveAmplitude: sprayBaseAmplitudeRef.current });
+    };
+
+    const startSpray = () => {
+      if (sprayIntervalRef.current) return;
+      triggerSpray();
+      sprayIntervalRef.current = window.setInterval(() => {
+        if (!isPointerOnFunctionalText(lastPointerRef.current.x, lastPointerRef.current.y)) {
+          stopSpray();
+          return;
+        }
+        triggerSpray();
+      }, SPRAY_INTERVAL_MS);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const hoveringFunctional = isPointerOnFunctionalText(event.clientX, event.clientY);
+      if (hoveringFunctional === hoverRef.current) return;
+      hoverRef.current = hoveringFunctional;
+
+      if (hoveringFunctional) {
+        startSpray();
+      } else {
+        stopSpray();
+      }
+    };
+
+    document.addEventListener('pointermove', onPointerMove, true);
+
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove, true);
+      stopSpray();
+      hoverRef.current = false;
+    };
   }, [setEnvironment]);
 
   useEffect(() => {
