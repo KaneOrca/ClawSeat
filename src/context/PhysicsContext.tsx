@@ -17,14 +17,6 @@ export interface RectObstacle {
   charRects?: CharRect[];
 }
 
-export interface Soloist {
-  id: string;
-  text: string;
-  lineIndex: number;
-  color?: string;
-  opacity?: number;
-}
-
 export interface ViewportState {
   width: number;
   height: number;
@@ -43,7 +35,7 @@ export interface EnvironmentSettings {
   opacity?: number;
   /** When true, BitmaskPhysic draws obstacle alignment lines. */
   debugAlignment?: boolean;
-  effects?: PhysicsEffects;
+  effects?: Partial<PhysicsEffects>;
 }
 
 export interface PhysicsEffects {
@@ -76,17 +68,13 @@ interface PhysicsContextType {
   untrackObstacle: (id: string) => void;
   updateMouseObstacle: (rect: DOMRect | null) => void;
 
-  soloists: Soloist[];
-  registerSoloist: (soloist: Soloist) => void;
-  unregisterSoloist: (id: string) => void;
-
   environment: EnvironmentSettings;
   setEnvironment: (settings: Partial<EnvironmentSettings>) => void;
 }
 
 const PhysicsContext = createContext<PhysicsContextType | undefined>(undefined);
 
-const POLL_EVERY_N_FRAMES = 1;
+const POLL_EVERY_N_FRAMES = 2;
 const CHANGE_THRESHOLD = 1; // px
 const SNAPSHOT_DEBOUNCE_MS = 50;
 const RECOIL_DECAY = 0.92;
@@ -338,28 +326,6 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, []);
 
-  // ── Soloists ──────────────────────────────────────────────────────
-
-  const [soloistsMap, setSoloistsMap] = useState<Map<string, Soloist>>(new Map());
-
-  const registerSoloist = useCallback((soloist: Soloist) => {
-    setSoloistsMap(prev => {
-      const next = new Map(prev);
-      next.set(soloist.id, soloist);
-      return next;
-    });
-  }, []);
-
-  const unregisterSoloist = useCallback((id: string) => {
-    setSoloistsMap(prev => {
-      const next = new Map(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const soloists = useMemo(() => Array.from(soloistsMap.values()), [soloistsMap]);
-
   // ── Environment ───────────────────────────────────────────────────
 
   const [environment, setEnvironmentRaw] = useState<EnvironmentSettings>({
@@ -377,7 +343,12 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setEnvironmentRaw(prev => ({
       ...prev,
       ...patch,
-      effects: patch.effects ? { ...prev.effects, ...patch.effects } : prev.effects,
+      effects: patch.effects
+        ? {
+          ...(prev.effects ?? { transitionProgress: 0, transitionFrom: null }),
+          ...patch.effects,
+        }
+        : prev.effects,
     }));
   }, []);
 
@@ -401,14 +372,10 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     trackObstacle,
     untrackObstacle,
     updateMouseObstacle,
-    soloists,
-    registerSoloist,
-    unregisterSoloist,
     environment,
     setEnvironment: mergeEnvironment,
   }), [
     obstaclesSnapshot, trackObstacle, untrackObstacle, updateMouseObstacle,
-    soloists, registerSoloist, unregisterSoloist,
     environment, mergeEnvironment,
   ]);
 
