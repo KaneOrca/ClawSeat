@@ -1,0 +1,158 @@
+# ClawSeat Subgroup Profiles
+
+ClawSeat supports three explicit hot-pluggable subgroup profiles. All profiles are
+created with `install_multi.sh --seed-template multi-team-minimal --profile <name>`.
+
+Default: **dev-minimal**.
+
+## Profiles
+
+### dev-minimal — Development Minimal
+
+**Composition:** planner + builder  
+**Use when:** one focused implementation task or maintenance repair.
+
+- Planner owns workflow, code review, acceptance, and closeout while context is hot.
+- Builder implements and delivers to planner; builder never merges into `review/latest` directly.
+- No dedicated reviewer required by default.
+- Review model: `planner_owned` — planner performs code review instead of a reviewer seat.
+
+### dev-standard — Development Standard
+
+**Composition:** planner + 2 builders + reviewer  
+**Use when:** parallel feature work or higher-risk product changes.
+
+- Planner owns decomposition and assigns disjoint write scopes to each builder.
+- 2 builders work in parallel on non-overlapping file/layer scopes.
+- Reviewer gate is required before planner final closeout.
+- Fan-out is explicit: planner dispatches to each named builder with `owner_seat`.
+
+### test — Test Group
+
+**Composition:** planner + patrol  
+**Use when:** QA/evidence campaigns, smoke testing, issue reproduction.
+
+- Planner designs the test campaign and fans in evidence.
+- Patrol executes checks, records findings — does not edit product code by default.
+- To perform repairs, operator must explicitly upgrade to a development profile
+  (dev-minimal or dev-standard).
+
+## Shared Invariants (all profiles)
+
+All three profiles inherit the same workflow invariants:
+
+- **Validation branch**: `local review/latest` is the operator validation snapshot.
+  Builder delivers a branch/commit; planner merges accepted work to local `review/latest`.
+  Operator validates `review/latest` before authorizing memory/main integration.
+- **No push / no PR by default**: Remote push and PR creation are opt-in only.
+  Builders and planners do not push unless operator explicitly requests it.
+- **CI opt-in**: CI is not triggered automatically. CI runs are opt-in at operator direction.
+- **OpenClaw/Koder/Feishu/Lark are optional adapters** — not required for normal subgroup
+  creation or operation. Any required OpenClaw/Feishu/Koder field in generated configs
+  must be absent, empty-safe, or feature-gated.
+- **Memory boundary**: Memory queues briefs; memory does not directly dispatch builder/patrol.
+  Memory handles `review/latest` → main only after explicit operator authorization.
+
+## Hot-Plug Behavior
+
+Subgroups are hot-pluggable. Adding or removing a subgroup:
+
+- Does **not** delete task history, briefs, receipts, or memory facts.
+- Does **not** require reinstalling the whole project.
+- Uses the add-subgroup command: `install_multi.sh --project <name> --upgrade-team <team>`.
+- A newly added subgroup should run a chain rehearsal before receiving real work.
+
+### Adding a dev-minimal subgroup
+
+```bash
+# Step 1: seed the approved YAML
+python3 core/scripts/seed_multi_team_minimal.py \
+  --project myproject \
+  --teams new-team \
+  --profile dev-minimal \
+  --output-dir ~/.agents/tasks/myproject/_config-proposals
+
+# Step 2: upgrade project.toml
+bash scripts/install_multi.sh \
+  --project myproject \
+  --upgrade-team new-team
+```
+
+### Adding a dev-standard subgroup
+
+```bash
+python3 core/scripts/seed_multi_team_minimal.py \
+  --project myproject \
+  --teams new-team \
+  --profile dev-standard \
+  --output-dir ~/.agents/tasks/myproject/_config-proposals
+
+bash scripts/install_multi.sh \
+  --project myproject \
+  --upgrade-team new-team
+```
+
+### Adding a test group
+
+```bash
+python3 core/scripts/seed_multi_team_minimal.py \
+  --project myproject \
+  --teams qa-team \
+  --profile test \
+  --output-dir ~/.agents/tasks/myproject/_config-proposals
+
+bash scripts/install_multi.sh \
+  --project myproject \
+  --upgrade-team qa-team
+```
+
+### Removing a subgroup
+
+Deactivate a subgroup by removing its seats from the active session — do not delete
+its `_config-proposals/*.yaml`, queue, or receipt files. Task history is preserved.
+
+## Profile Selection in install_multi.sh
+
+```bash
+# dev-minimal (default)
+bash scripts/install_multi.sh \
+  --project myproject \
+  --seed-template multi-team-minimal \
+  --profile dev-minimal
+
+# dev-standard
+bash scripts/install_multi.sh \
+  --project myproject \
+  --seed-template multi-team-minimal \
+  --profile dev-standard
+
+# test group
+bash scripts/install_multi.sh \
+  --project myproject \
+  --seed-template multi-team-minimal \
+  --profile test
+```
+
+The generated `TEAM_OWNERSHIP.md` will name the chosen profile.
+
+## Profile Comparison
+
+| Aspect           | dev-minimal          | dev-standard                  | test group       |
+|------------------|----------------------|-------------------------------|------------------|
+| Seats            | planner + builder    | planner + 2 builders + reviewer | planner + patrol |
+| Reviewer         | None (planner self-reviews) | Dedicated reviewer (gate) | None          |
+| Product code edits | Yes               | Yes (disjoint scopes)         | No by default    |
+| Best for         | One focused task     | Parallel/higher-risk work     | QA campaigns     |
+
+## Planner Authority (all profiles)
+
+- Planner owns: workflow authoring, builder dispatch, code review (when hot), acceptance, closeout.
+- Builder delivers to planner; planner merges to `review/latest` after acceptance.
+- Builder never merges into `review/latest` directly.
+- Planner assigns disjoint write scopes to builders in dev-standard.
+
+## Escalation to Reviewer
+
+Reviewer is required for dev-standard. For dev-minimal, planner may optionally escalate
+to a reviewer for high-risk changes (security, privacy, filesystem, billing), multi-builder
+contention, or at explicit operator request.

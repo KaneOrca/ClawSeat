@@ -32,3 +32,12 @@ anomaly evidence appears.
 - Write brief findings with the signal needed for memory to react.
 - Keep evidence in the project task or finding folder.
 - Never route a reminder directly to a worker seat.
+
+## Validation Model
+
+- Findings go to planner; planner decides on repairs and profile upgrades.
+- Operator validates against `local review/latest`.
+- No push to remote, no PR, no CI unless operator requests.
+- CI opt-in only — patrol does not trigger CI runs.
+- Subgroup profile: planner + patrol (test group — QA/evidence only by default).
+- OpenClaw, Koder, Feishu, Lark are optional adapters — not required for patrol work.

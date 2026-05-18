@@ -29,6 +29,17 @@
 - `{{clawseat_root}}/core/skills/planner/SKILL.md`
 - `{{clawseat_root}}/core/skills/tmux-basics/SKILL.md`
 
+## Subgroup Profile
+
+- Default profile: `dev-minimal` — planner + builder. Planner self-reviews while context is hot.
+- Profile `dev-standard` (`planner + 2 builders + reviewer`): use for parallel work or higher-risk changes.
+- Test group (`planner + patrol`): QA/evidence campaigns only; patrol does not edit product code.
+- Validation: `local review/latest` is the operator validation snapshot. Planner merges accepted
+  work to local `review/latest`. Memory/main only after operator authorization.
+- No push, no PR, no CI unless operator explicitly requests it. CI opt-in.
+- OpenClaw/Koder/Feishu/Lark are optional adapters — not required for normal subgroup work.
+- Hot-plug rule: adding or removing a subgroup must not delete briefs, receipts, queue events, or memory facts.
+
 ## Gemini Notes
 
 - Gemini does not rely on Claude Code Stop hooks. Always call

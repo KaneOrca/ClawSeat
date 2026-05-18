@@ -32,3 +32,11 @@ outputs and receipts to memory.
 - Write concise receipts with output paths and validation notes.
 - Keep generated assets under the project workspace or task finding folder.
 - Do not hand off by direct seat pokes; use the project delivery protocol.
+
+## Validation Model
+
+- Deliver to planner; planner merges accepted work to `local review/latest`.
+- No push to remote, no PR, no CI unless operator explicitly requests it.
+- CI opt-in only — builder does not trigger CI runs.
+- Subgroup profile: planner + builder (dev-minimal default, planner self-reviews).
+- OpenClaw, Koder, Feishu, Lark are optional adapters — not required for normal builder work.

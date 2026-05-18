@@ -4,6 +4,14 @@
 This is the compatibility bridge for the old ``clawseat-solo`` entry point:
 solo is no longer a standalone single-mode runtime. It is the minimal dev
 subteam archetype inside a v3 multi-team project group.
+
+Three hot-pluggable subgroup profiles are supported via --profile:
+  dev-minimal  (default): planner + builder, planner self-reviews
+  dev-standard          : planner + 2 builders + reviewer, reviewer gate required
+  test                  : planner + patrol, QA-only, no product code edits by default
+
+All profiles inherit: local review/latest validation, push/PR/CI opt-in only,
+OpenClaw/Koder/Feishu/Lark as optional adapters, hot-plug without history loss.
 """
 
 from __future__ import annotations
@@ -12,6 +20,16 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+
+PROFILES_NOTE = (
+    "Subgroup profiles: dev-minimal (planner + builder, default), "
+    "dev-standard (planner + 2 builders + reviewer), "
+    "test (planner + patrol). "
+    "All inherit: local review/latest validation, push/PR/CI opt-in only, "
+    "OpenClaw/Koder/Feishu/Lark as optional adapters, hot-plug without history loss."
+)
+
+VALID_PROFILES = ("dev-minimal", "dev-standard", "test")
 
 
 def _quote(value: str) -> str:
@@ -33,9 +51,12 @@ def _header(project: str, team: str, ts: str) -> list[str]:
 
 
 def _subteam_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) -> str:
+    """Dev-minimal: planner + builder, planner_owned review. Default profile."""
     lines = _header(project, team, ts)
     lines.extend(
         [
+            "# dev-minimal: planner + builder (default subgroup profile)",
+            "subgroup_profile: dev-minimal",
             "team_type: subteam",
             "planner_mode: delivery",
             "notify_policy: queue_drained_only",
@@ -63,6 +84,95 @@ def _subteam_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) 
             "    capabilities: [implementation, tests, docs]",
             f"    rationale: {_quote('implements planner-assigned changes and returns DELIVERY.md evidence')}",
             "estimated_monthly_cost_usd: { low: 0, high: 30 }",
+            "---",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _dev_minimal_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) -> str:
+    """Explicit dev-minimal profile: same as _subteam_yaml (for clarity in dispatch)."""
+    return _subteam_yaml(project, team, ts, ownership_paths)
+
+
+def _dev_standard_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) -> str:
+    """Dev-standard: planner + 2 builders + reviewer. Reviewer gate required before closeout."""
+    lines = _header(project, team, ts)
+    lines.extend(
+        [
+            "# dev-standard: planner + 2 builders + reviewer",
+            "subgroup_profile: dev-standard",
+            "team_type: subteam",
+            "planner_mode: delivery",
+            "notify_policy: queue_drained_only",
+            "ownership_paths:",
+            _yaml_list(ownership_paths),
+            "scaling_policy:",
+            "  max_builders: 3",
+            "  reviewer_required_when_builders_gte: 2",
+            "  overflow_action: propose_new_subteam",
+            "  reviewer_fallback: planner",
+            "seats:",
+            "  - role: planner",
+            "    tool: claude",
+            "    provider: anthropic",
+            "    auth_mode: oauth_token",
+            f"    rationale: {_quote('owns decomposition, assigns disjoint scopes to builders, does fan-in, final closeout')}",
+            "  - role: builder",
+            "    instance: primary",
+            "    tool: codex",
+            "    provider: openai",
+            "    auth_mode: oauth",
+            f"    purpose: {_quote('primary builder — owns first disjoint write scope')}",
+            "    capabilities: [implementation, tests, docs]",
+            f"    rationale: {_quote('implements planner-assigned scope and returns DELIVERY.md evidence')}",
+            "  - role: builder",
+            "    instance: secondary",
+            "    tool: codex",
+            "    provider: openai",
+            "    auth_mode: oauth",
+            f"    purpose: {_quote('secondary builder — owns second disjoint write scope')}",
+            "    capabilities: [implementation, tests, docs]",
+            f"    rationale: {_quote('implements parallel planner-assigned scope and returns DELIVERY.md evidence')}",
+            "  - role: reviewer",
+            "    tool: codex",
+            "    provider: openai",
+            "    auth_mode: oauth",
+            f"    rationale: {_quote('independent reviewer gate required before planner final closeout')}",
+            "estimated_monthly_cost_usd: { low: 0, high: 60 }",
+            "---",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _test_group_yaml(project: str, team: str, ts: str) -> str:
+    """Test group: planner + patrol. QA/evidence only. No product code edits by default."""
+    lines = _header(project, team, ts)
+    lines.extend(
+        [
+            "# test group: planner + patrol (QA-only, no product code edits by default)",
+            "subgroup_profile: test",
+            "team_type: quality-docs",
+            "planner_mode: quality_campaign",
+            "notify_policy: never_notify_memory",
+            "autonomous: false",
+            "quality_gate_doc: quality-docs/QUALITY.md",
+            "seats:",
+            "  - role: planner",
+            "    tool: claude",
+            "    provider: anthropic",
+            "    auth_mode: oauth_token",
+            f"    rationale: {_quote('designs test campaigns, assigns patrol, fans in evidence, manages QUALITY.md')}",
+            "  - role: patrol",
+            "    instance: human",
+            "    tool: claude",
+            "    provider: anthropic",
+            "    auth_mode: oauth_token",
+            f"    rationale: {_quote('executes QA/smoke/reproduction checks; does not edit product code by default')}",
+            "estimated_monthly_cost_usd: { low: 0, high: 15 }",
             "---",
             "",
         ]
@@ -145,10 +255,15 @@ def seed(
     teams: list[str],
     archetype: str,
     force: bool,
+    profile: str = "dev-minimal",
 ) -> list[Path]:
+    if profile not in VALID_PROFILES:
+        raise ValueError(f"--profile must be one of {VALID_PROFILES}; got {profile!r}")
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     selected = list(teams or _default_teams(project, repo_root, archetype))
-    if "quality-docs" not in selected:
+    # For non-test profiles, always ensure quality-docs is included.
+    # For the test profile, the selected teams ARE the QA teams — no auto-append.
+    if profile != "test" and "quality-docs" not in selected:
         selected.append("quality-docs")
     output_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
@@ -156,10 +271,15 @@ def seed(
         path = output_dir / f"{team}__approved.yaml"
         if path.exists() and not force:
             continue
-        if team == "quality-docs":
+        if team == "quality-docs" and profile != "test":
             text = _quality_docs_yaml(project, ts)
+        elif profile == "dev-standard":
+            text = _dev_standard_yaml(project, team, ts, _paths_for(team, archetype))
+        elif profile == "test":
+            text = _test_group_yaml(project, team, ts)
         else:
-            text = _subteam_yaml(project, team, ts, _paths_for(team, archetype))
+            # dev-minimal (default)
+            text = _dev_minimal_yaml(project, team, ts, _paths_for(team, archetype))
         path.write_text(text, encoding="utf-8")
         written.append(path)
     return written
@@ -167,7 +287,10 @@ def seed(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Seed MULTI_TEAM_MINIMAL approved proposal YAML files."
+        description=(
+            "Seed MULTI_TEAM_MINIMAL approved proposal YAML files.\n\n"
+            + PROFILES_NOTE
+        )
     )
     parser.add_argument("--project", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -175,6 +298,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--teams", default="")
     parser.add_argument("--archetype", choices=["auto", "generic", "cartooner"], default="auto")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--profile",
+        choices=list(VALID_PROFILES),
+        default="dev-minimal",
+        help=(
+            "Subgroup profile to generate. "
+            "dev-minimal (default): planner + builder, planner self-reviews. "
+            "dev-standard: planner + 2 builders + reviewer, reviewer gate required. "
+            "test: planner + patrol, QA-only, no product code edits by default."
+        ),
+    )
     args = parser.parse_args(argv)
 
     teams = [item.strip() for item in args.teams.split(",") if item.strip()]
@@ -185,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         teams=teams,
         archetype=args.archetype,
         force=args.force,
+        profile=args.profile,
     )
     for path in written:
         print(f"seeded {path}")

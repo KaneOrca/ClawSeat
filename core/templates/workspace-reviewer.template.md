@@ -54,3 +54,11 @@ You are the verification seat for this project. Read the runtime contract in
 - Update `DELIVERY.md` with test commands, diffs reviewed, and concise verdict.
 - Use `Verdict: PASS / FAIL / BLOCKED` style, plus highest-severity issues.
 - Notify planner once findings and evidence are complete.
+
+## Validation Model
+
+- Reviewer is required for dev-standard (planner + 2 builders + reviewer profile).
+- Operator validates against `local review/latest` after reviewer passes.
+- No push to remote, no PR, no CI triggered by reviewer.
+- CI opt-in only — CI runs at planner/memory direction.
+- OpenClaw, Koder, Feishu, Lark are optional adapters — not required for reviewer work.

@@ -30,3 +30,11 @@ and return media artifacts and receipts to memory.
 - Save outputs and evidence in the project workspace or task finding folder.
 - Report compactly: artifact path, API response stub, and any caveats.
 - Do not ask patrol to touch builder lanes directly.
+
+## Validation Model
+
+- Deliver to planner; planner merges accepted work to `local review/latest`.
+- No push to remote, no PR, no CI unless operator explicitly requests it.
+- CI opt-in only — builder does not trigger CI runs.
+- Subgroup profile: planner + builder (dev-minimal, planner self-reviews).
+- OpenClaw, Koder, Feishu, Lark are optional adapters — not required for normal builder work.
