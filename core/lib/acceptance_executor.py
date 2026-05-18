@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import json
 import os
+import stat as _stat
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -195,6 +197,95 @@ def _split_by_route(brief: dict) -> tuple[list, list, list]:
     return final_mech, base_rev, base_op
 
 
+def _normalize_python_invocations(cmd: str) -> str:
+    """Rewrite python/python3/pytest command names to full sys.executable paths.
+
+    Acceptance commands often use ``bash -lc`` (login shell) which re-reads
+    .bash_profile / .zprofile and may reset PATH to system defaults, causing
+    the ambient ``python3`` (e.g. /Library/Developer/CommandLineTools/usr/bin/python3)
+    to be used instead of the project interpreter that has tomllib/pytest.
+
+    Replacing the command name with the full path to sys.executable bypasses
+    PATH lookup entirely, so the correct interpreter is always used.
+
+    Only replaces standalone command names (not paths like /usr/bin/python3).
+    Handles ``python3 -m pytest`` as a unit to avoid double-replacement.
+    """
+    import re  # noqa: PLC0415
+    exe = sys.executable
+    # Step 1: Replace "python3 -m pytest" and "python -m pytest" as units (most specific)
+    for py_cmd in ("python3", "python"):
+        cmd = re.sub(
+            rf"(?<![/\w]){py_cmd}\s+-m\s+pytest(?!\w)",
+            f"{exe} -m pytest",
+            cmd,
+        )
+    # Step 2: Replace standalone "pytest" — skip when already following "-m "
+    cmd = re.sub(r"(?<!-m )(?<![/\w])pytest(?!\w)", f"{exe} -m pytest", cmd)
+    # Step 3: Replace remaining standalone "python3" and "python"
+    cmd = re.sub(r"(?<![/\w])python3(?!\w)", exe, cmd)
+    cmd = re.sub(r"(?<![/\w])python(?!\w)", exe, cmd)
+    return cmd
+
+
+def _make_python_shims(shim_dir: Path) -> None:
+    """Write python/python3/pytest shims that delegate to the current sys.executable.
+
+    Prepending shim_dir to PATH ensures acceptance mechanical commands that
+    invoke `python`, `python3`, or `pytest` use the same interpreter and
+    installed packages as the executor — not an ambient system Python that
+    may lack tomllib/tomli or the project's pytest version.
+    """
+    exe = sys.executable
+    entries = [
+        ("python",  f"{exe}"),
+        ("python3", f"{exe}"),
+        ("pytest",  f"{exe} -m pytest"),
+    ]
+    for name, argv0 in entries:
+        shim = shim_dir / name
+        shim.write_text(f'#!/bin/sh\nexec {argv0} "$@"\n', encoding="utf-8")
+        shim.chmod(shim.stat().st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+
+
+def _resolve_reviewer_seat_from_profile(
+    team: str,
+    project: str,
+    agents_root: Path | None = None,
+    profile_path: Path | None = None,
+) -> str:
+    """Return the reviewer seat for a team by consulting the project profile.
+
+    Resolution order:
+    1. If the team declares a dedicated reviewer seat in the profile → use it.
+    2. If no reviewer seat (dev-minimal/planner-owned) → fall back to the
+       team's planner seat (planner self-review).
+    3. If the profile is unavailable or the team is not found → fall back to
+       the legacy {team}-reviewer string.
+
+    This prevents dispatching to non-existent {team}-reviewer seats for
+    planner-owned subgroups (CF041/CF042 acceptance blocker).
+    """
+    if agents_root is None:
+        agents_root = _agents_root()
+    if profile_path is None:
+        profile_path = agents_root / "profiles" / f"{project}-profile-dynamic.toml"
+    try:
+        from profile_loader_v3 import load_profile_v3  # noqa: PLC0415
+        profile = load_profile_v3(profile_path)
+        team_name = team if profile.is_multi() else "default"
+        seats = profile.seats_of(team_name)
+        reviewers = [s for s in seats if profile.seat_roles.get(s) == "reviewer"]
+        if reviewers:
+            return reviewers[0]
+        planners = [s for s in seats if profile.seat_roles.get(s) == "planner"]
+        if planners:
+            return planners[0]
+    except Exception:  # noqa: BLE001 — profile unavailable or team missing
+        pass
+    return f"{team}-reviewer"
+
+
 def run_mechanical(
     brief: dict,
     acceptance_dir: Path,
@@ -245,67 +336,71 @@ def run_mechanical(
 
     any_fail = False
     any_executed = False
-    for idx, item in enumerate(mech):
-        text, cmd = _criterion_command_and_text(item)
-        if not cmd or not criterion_is_shell_runnable(item):
-            result.items.append(
-                ItemResult(
-                    criterion=text,
-                    result="skipped",
-                    command="not_shell_runnable",
+    with tempfile.TemporaryDirectory(prefix="clawseat-acceptance-shims-") as _shim_dir:
+        _shim_path = Path(_shim_dir)
+        _make_python_shims(_shim_path)
+        env["PATH"] = f"{_shim_path}{os.pathsep}{env.get('PATH', os.defpath)}"
+        for idx, item in enumerate(mech):
+            text, cmd = _criterion_command_and_text(item)
+            if not cmd or not criterion_is_shell_runnable(item):
+                result.items.append(
+                    ItemResult(
+                        criterion=text,
+                        result="skipped",
+                        command="not_shell_runnable",
+                    )
                 )
-            )
-            continue
-        stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
-        stderr_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
-        start = time.monotonic()
-        try:
-            any_executed = True
-            proc = subprocess.run(
-                cmd,
-                shell=True,
-                cwd=str(cwd) if cwd else None,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            runtime_ms = int((time.monotonic() - start) * 1000)
-            stdout_p.write_text(proc.stdout, encoding="utf-8")
-            stderr_p.write_text(proc.stderr, encoding="utf-8")
-            verdict = "pass" if proc.returncode == 0 else "fail"
-            if verdict == "fail":
+                continue
+            stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
+            stderr_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
+            start = time.monotonic()
+            try:
+                any_executed = True
+                proc = subprocess.run(
+                    _normalize_python_invocations(cmd),
+                    shell=True,
+                    cwd=str(cwd) if cwd else None,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+                runtime_ms = int((time.monotonic() - start) * 1000)
+                stdout_p.write_text(proc.stdout, encoding="utf-8")
+                stderr_p.write_text(proc.stderr, encoding="utf-8")
+                verdict = "pass" if proc.returncode == 0 else "fail"
+                if verdict == "fail":
+                    any_fail = True
+                result.items.append(
+                    ItemResult(
+                        criterion=text,
+                        result=verdict,
+                        command=cmd,
+                        exit_code=proc.returncode,
+                        stdout_path=str(stdout_p),
+                        stderr_path=str(stderr_p),
+                        runtime_ms=runtime_ms,
+                    )
+                )
+            except subprocess.TimeoutExpired as exc:
+                runtime_ms = int((time.monotonic() - start) * 1000)
+                stdout_p.write_text(exc.stdout or "", encoding="utf-8")
+                stderr_p.write_text(
+                    (exc.stderr or "") + f"\n[acceptance_executor] timeout after {runtime_ms}ms",
+                    encoding="utf-8",
+                )
                 any_fail = True
-            result.items.append(
-                ItemResult(
-                    criterion=text,
-                    result=verdict,
-                    command=cmd,
-                    exit_code=proc.returncode,
-                    stdout_path=str(stdout_p),
-                    stderr_path=str(stderr_p),
-                    runtime_ms=runtime_ms,
+                result.items.append(
+                    ItemResult(
+                        criterion=text,
+                        result="fail",
+                        command=cmd,
+                        exit_code=-1,
+                        stdout_path=str(stdout_p),
+                        stderr_path=str(stderr_p),
+                        runtime_ms=runtime_ms,
+                    )
                 )
-            )
-        except subprocess.TimeoutExpired as exc:
-            runtime_ms = int((time.monotonic() - start) * 1000)
-            stdout_p.write_text(exc.stdout or "", encoding="utf-8")
-            stderr_p.write_text(
-                (exc.stderr or "") + f"\n[acceptance_executor] timeout after {runtime_ms}ms",
-                encoding="utf-8",
-            )
-            any_fail = True
-            result.items.append(
-                ItemResult(
-                    criterion=text,
-                    result="fail",
-                    command=cmd,
-                    exit_code=-1,
-                    stdout_path=str(stdout_p),
-                    stderr_path=str(stderr_p),
-                    runtime_ms=runtime_ms,
-                )
-            )
 
     result.verdict = "FAIL" if any_fail or not any_executed else "PASS"
     return result
@@ -320,6 +415,7 @@ def route_reviewer(
     reviewer_seat: str | None = None,
     dispatch_fn=None,
     pre_split_items: list | None = None,
+    profile_path: Path | None = None,
 ) -> RouteResult:
     """Route reviewer items via dispatch_task.py. PENDING until reviewer relays.
 
@@ -344,13 +440,20 @@ def route_reviewer(
     result.verdict = "PENDING"
     acceptance_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve reviewer seat: prefer explicit arg, then profile-based routing
+    # (dedicated reviewer or planner fallback for dev-minimal teams).
+    if not reviewer_seat:
+        reviewer_seat = _resolve_reviewer_seat_from_profile(
+            team, project, profile_path=profile_path
+        )
+
     # Materialize a single dispatch packet listing all reviewer items.
     packet_path = acceptance_dir / f"{task_id}__reviewer.dispatch.json"
     packet = {
         "task_id": task_id,
         "project": project,
         "team": team,
-        "reviewer_seat": reviewer_seat or f"{team}-reviewer",
+        "reviewer_seat": reviewer_seat,
         "items": [_criterion_command_and_text(c)[0] for c in items],
         "ts": _utc_now(),
     }
@@ -479,7 +582,7 @@ def run_acceptance(
         "reviewer": route_reviewer(
             brief, project, team, task_id, acceptance_dir,
             reviewer_seat=reviewer_seat, dispatch_fn=dispatch_fn,
-            pre_split_items=final_rev,
+            pre_split_items=final_rev, profile_path=profile_path,
         ),
         "operator": route_operator(
             brief, project, team, task_id, acceptance_dir,
