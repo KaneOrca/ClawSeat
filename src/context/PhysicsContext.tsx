@@ -3,6 +3,8 @@ import type { VariantType } from './ArenaContext';
 import { getCharRects, type CharRect } from './physics/char-metrics';
 import { renderMask, type MaskBuffer } from './physics/mask-renderer';
 import { trackElementObstacle, untrackElementObstacle } from './physics/obstacle-tracker';
+import { tokens } from '../design/tokens';
+import { useFunctionalTextHover } from '../hooks/useFunctionalTextHover';
 
 export type { CharRect } from './physics/char-metrics';
 
@@ -15,6 +17,14 @@ export interface RectObstacle {
   isClimbing?: boolean;
   /** Per-character sub-rects from measureText decomposition. */
   charRects?: CharRect[];
+}
+
+export interface Soloist {
+  id: string;
+  text: string;
+  lineIndex: number;
+  color?: string;
+  opacity?: number;
 }
 
 export interface ViewportState {
@@ -35,12 +45,12 @@ export interface EnvironmentSettings {
   opacity?: number;
   /** When true, BitmaskPhysic draws obstacle alignment lines. */
   debugAlignment?: boolean;
-  effects?: Partial<PhysicsEffects>;
+  effects?: PhysicsEffects;
 }
 
 export interface PhysicsEffects {
-  transitionProgress: number;
-  transitionFrom: VariantType | null;
+  transitionProgress?: number;
+  transitionFrom?: VariantType | null;
   alignmentPulse?: {
     active: boolean;
     startTime: number;
@@ -68,18 +78,33 @@ interface PhysicsContextType {
   untrackObstacle: (id: string) => void;
   updateMouseObstacle: (rect: DOMRect | null) => void;
 
+  soloists: Soloist[];
+  registerSoloist: (soloist: Soloist) => void;
+  unregisterSoloist: (id: string) => void;
+
   environment: EnvironmentSettings;
   setEnvironment: (settings: Partial<EnvironmentSettings>) => void;
 }
 
+interface FlashLogEntry {
+  time: number;
+  waveAmplitude: number;
+  opacity?: number;
+  source: string;
+  delta?: number;
+  stack: string;
+}
+
 const PhysicsContext = createContext<PhysicsContextType | undefined>(undefined);
 
-const POLL_EVERY_N_FRAMES = 2;
+const POLL_EVERY_N_FRAMES = 1;
 const CHANGE_THRESHOLD = 1; // px
 const SNAPSHOT_DEBOUNCE_MS = 50;
 const RECOIL_DECAY = 0.92;
 
 export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useFunctionalTextHover();
+
   // ── Obstacle tracking ─────────────────────────────────────────────
 
   const trackedRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -326,6 +351,62 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, []);
 
+  // ── Soloists ──────────────────────────────────────────────────────
+
+  const [soloistsMap, setSoloistsMap] = useState<Map<string, Soloist>>(new Map());
+
+  /**
+   * @deprecated Replaced by pretext-flow embed+data payload pattern. Will be removed after view migration.
+   *
+   * Active consumers:
+   * - src/hooks/useHomeInit.ts
+   * - src/components/PretextButton.tsx
+   * - src/components/text-physics/useDecryptionCatharsis.ts
+   * - src/views/Hall/v2/HallView.tsx
+   * - src/views/Auth/v2/AuthView.tsx
+   * - src/views/Auth/v3/AuthView.tsx
+   * - src/views/ChallengeDetail/v3/ChallengeDetailV3.tsx
+   * - src/views/ChallengeDetail/v3/ChallengeLayer.tsx
+   * - src/views/Community/v2/CommunityView.tsx
+   * - src/views/Community/v3/CommunityView.tsx
+   * - src/views/Home/v2/HomeView.tsx
+   * - src/views/Watch/v3/WatchViewV3.tsx
+   */
+  const registerSoloist = useCallback((soloist: Soloist) => {
+    setSoloistsMap(prev => {
+      const next = new Map(prev);
+      next.set(soloist.id, soloist);
+      return next;
+    });
+  }, []);
+
+  /**
+   * @deprecated Replaced by pretext-flow embed+data payload pattern. Will be removed after view migration.
+   *
+   * Active consumers:
+   * - src/hooks/useHomeInit.ts
+   * - src/components/PretextButton.tsx
+   * - src/components/text-physics/useDecryptionCatharsis.ts
+   * - src/views/Hall/v2/HallView.tsx
+   * - src/views/Auth/v2/AuthView.tsx
+   * - src/views/Auth/v3/AuthView.tsx
+   * - src/views/ChallengeDetail/v3/ChallengeDetailV3.tsx
+   * - src/views/ChallengeDetail/v3/ChallengeLayer.tsx
+   * - src/views/Community/v2/CommunityView.tsx
+   * - src/views/Community/v3/CommunityView.tsx
+   * - src/views/Home/v2/HomeView.tsx
+   * - src/views/Watch/v3/WatchViewV3.tsx
+   */
+  const unregisterSoloist = useCallback((id: string) => {
+    setSoloistsMap(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const soloists = useMemo(() => Array.from(soloistsMap.values()), [soloistsMap]);
+
   // ── Environment ───────────────────────────────────────────────────
 
   const [environment, setEnvironmentRaw] = useState<EnvironmentSettings>({
@@ -340,16 +421,27 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   const mergeEnvironment = useCallback((patch: Partial<EnvironmentSettings>) => {
-    setEnvironmentRaw(prev => ({
-      ...prev,
-      ...patch,
-      effects: patch.effects
-        ? {
-          ...(prev.effects ?? { transitionProgress: 0, transitionFrom: null }),
-          ...patch.effects,
-        }
-        : prev.effects,
-    }));
+    setEnvironmentRaw(prev => {
+      const env = {
+        ...prev,
+        ...patch,
+        effects: patch.effects ? { ...prev.effects, ...patch.effects } : prev.effects,
+      };
+
+      if (import.meta.env.DEV) {
+        const flashLog = (window as any).__arenaFlashLog__ || [];
+        (window as any).__arenaFlashLog__ = flashLog;
+        flashLog.push({
+          time: Date.now(),
+          waveAmplitude: env.waveAmplitude,
+          opacity: env.opacity,
+          source: 'PhysicsContext',
+          stack: new Error().stack?.split('\n').slice(2, 4).join(' -> ') ?? '',
+        });
+      }
+
+      return env;
+    });
   }, []);
 
   const updateMouseObstacle = useCallback((rect: DOMRect | null) => { mouseObstacleRef.current = rect ? { id: 'system:mouse', x: rect.x, y: rect.y, w: rect.width, h: rect.height, isClimbing: false, charRects: [] } : null; if (maskBufRef.current) maskBufRef.current.dirty = true; }, []);
@@ -372,12 +464,78 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     trackObstacle,
     untrackObstacle,
     updateMouseObstacle,
+    soloists,
+    registerSoloist,
+    unregisterSoloist,
     environment,
     setEnvironment: mergeEnvironment,
   }), [
     obstaclesSnapshot, trackObstacle, untrackObstacle, updateMouseObstacle,
+    soloists, registerSoloist, unregisterSoloist,
     environment, mergeEnvironment,
   ]);
+
+  const flashHudRef = useRef<HTMLDivElement | null>(null);
+  const flashHudFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (!import.meta.env.DEV) return;
+    if (!(window as any).__ARENA_DEBUG_FLASH__) return;
+
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.padding = '8px 12px';
+    container.style.zIndex = '9999';
+    container.style.background = 'rgba(0,0,0,0.75)';
+    container.style.borderRadius = '4px';
+    container.style.color = '#fff';
+    container.style.fontFamily = tokens.fonts.mono;
+    container.style.fontSize = '10px';
+    container.style.lineHeight = '1.3';
+    container.style.pointerEvents = 'none';
+    container.style.whiteSpace = 'pre';
+    flashHudRef.current = container;
+    container.setAttribute('data-flash-hud', 'arena');
+
+    const formatDelta = (value: number) => `${value >= 0 ? '+' : ''}${Math.round(value)}`;
+
+    const renderHud = () => {
+      const now = Date.now();
+      const log = ((window as any).__arenaFlashLog__ as FlashLogEntry[] | undefined) ?? [];
+      const current = log[log.length - 1];
+      const previous = log[log.length - 2];
+      const interval = previous ? current.time - previous.time : 0;
+
+      if (!current) {
+        container.textContent = 'FLASH HUD\\nLast: none\\nPrev: none\\nSource: none';
+      } else {
+        const prevText = previous
+          ? `Prev: ${interval}ms ago  amp:${previous.waveAmplitude}  (${formatDelta(previous.delta ?? 0)})`
+          : 'Prev: none';
+        const lastText = `Last: ${now - current.time}ms ago  amp:${current.waveAmplitude}  (${formatDelta(current.delta ?? 0)})`;
+        container.textContent = `FLASH HUD\\n${lastText}\\n${prevText}\\nSource: ${current.source}`;
+      }
+
+      flashHudFrameRef.current = requestAnimationFrame(renderHud);
+    };
+
+    document.body.appendChild(container);
+    flashHudFrameRef.current = requestAnimationFrame(renderHud);
+
+    return () => {
+      if (flashHudFrameRef.current !== null) {
+        cancelAnimationFrame(flashHudFrameRef.current);
+        flashHudFrameRef.current = null;
+      }
+      if (flashHudRef.current) {
+        flashHudRef.current.remove();
+      }
+      flashHudRef.current = null;
+    };
+  }, []);
 
   return (
     <PhysicsContext.Provider value={value}>
