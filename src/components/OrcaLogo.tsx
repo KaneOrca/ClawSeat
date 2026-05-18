@@ -43,6 +43,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   const [eyeGlintActive, setEyeGlintActive] = useState(false);
   const [eyeGlintSrc, setEyeGlintSrc] = useState<string | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const lastPointerRef = useRef({ x: 0, y: 0 });
   const scale = size / BASE_HEIGHT;
   const width = BASE_WIDTH * scale;
   const eyeColor = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.aurora.red;
@@ -72,6 +73,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
       const dist = Math.hypot(dx, dy) || 1;
       const pull = Math.min(dist / 300, 1);
       const easedPull = Math.sqrt(pull);
+      lastPointerRef.current = { x: event.clientX, y: event.clientY };
       setOffset({
         x: (dx / dist) * easedPull * MAX_PULL,
         y: (dy / dist) * easedPull * MAX_PULL,
@@ -84,6 +86,11 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
 
   useEffect(() => {
     const triggerSpray = () => {
+      const hoveringFunctionalText = document
+        .elementsFromPoint(lastPointerRef.current.x, lastPointerRef.current.y)
+        .some(element => element.hasAttribute('data-functional-text'));
+      if (!hoveringFunctionalText) return;
+
       const prevAmp = environmentRef.current.waveAmplitude ?? 60;
       setSprayActive(true);
       setEnvironment({ waveAmplitude: SPRAY_AMP });
