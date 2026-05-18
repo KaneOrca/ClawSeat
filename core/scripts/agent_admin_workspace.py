@@ -656,9 +656,9 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
         if reviewer_seats:
             lines.append("- Reviewer gate: " + ", ".join(f"`{seat}`" for seat in reviewer_seats))
         elif len(builders) > 1:
-            lines.append("- Reviewer gate missing for multiple builders; block and ask memory for roster repair.")
+            lines.append("- Reviewer gate absent for multiple builders; planner owns code review (cf022 minimal unit). Escalate to reviewer only for high-risk: security/privacy/filesystem, explicit operator request.")
         else:
-            lines.append("- Reviewer fallback: planner reviews only because this team has one builder.")
+            lines.append("- Reviewer fallback: planner reviews because this team has one builder.")
         lines.extend(
             [
                 "- With multiple builders, never dispatch to bare role `builder`; choose an exact `owner_seat`.",

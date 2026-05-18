@@ -19,6 +19,9 @@ from acceptance_executor import (  # noqa: E402
     route_reviewer,
     run_acceptance,
     run_mechanical,
+    _resolve_task_worktree,
+    _get_main_worktree_root,
+    _redirect_cd_to_worktree,
 )
 
 
@@ -280,3 +283,195 @@ acceptance_criteria:
     mech_receipt = json.loads((acceptance_dir / "T8__mechanical.json").read_text())
     assert mech_receipt["verdict"] == "PASS"
     assert mech_receipt["summary"]["pass"] == 1
+
+
+# ---------------------------------------------------------------------------
+# cf018: worktree CWD auto-resolution
+# ---------------------------------------------------------------------------
+
+def _write_dispatch_receipt(
+    env_home: Path,
+    project: str,
+    task_id: str,
+    worktree_path: Path,
+) -> Path:
+    """Write a fake dispatch receipt with expected_worktree_path."""
+    handoffs = env_home / ".agents" / "tasks" / project / "patrol" / "handoffs"
+    handoffs.mkdir(parents=True, exist_ok=True)
+    receipt_path = handoffs / f"{task_id}__planner__builder.json"
+    receipt_path.write_text(
+        json.dumps({
+            "kind": "dispatch",
+            "task_id": task_id,
+            "source": "planner",
+            "target": "builder",
+            "expected_worktree_path": str(worktree_path),
+        }),
+        encoding="utf-8",
+    )
+    return receipt_path
+
+
+def test_resolve_task_worktree_returns_path_when_exists(env_home, tmp_path):
+    """_resolve_task_worktree returns the dispatch-receipt worktree when it exists."""
+    agents_root = env_home / ".agents"
+    wt = tmp_path / "task-wt"
+    wt.mkdir()
+    _write_dispatch_receipt(env_home, "p", "TWR1", wt)
+    resolved = _resolve_task_worktree("TWR1", agents_root, "p")
+    assert resolved == wt
+
+
+def test_resolve_task_worktree_returns_none_when_absent(env_home, tmp_path):
+    """_resolve_task_worktree returns None when worktree path does not exist."""
+    agents_root = env_home / ".agents"
+    wt = tmp_path / "missing-wt"  # does not exist
+    _write_dispatch_receipt(env_home, "p", "TWR2", wt)
+    resolved = _resolve_task_worktree("TWR2", agents_root, "p")
+    assert resolved is None
+
+
+def test_resolve_task_worktree_returns_none_when_no_receipt(env_home):
+    """_resolve_task_worktree returns None when no handoffs exist."""
+    agents_root = env_home / ".agents"
+    resolved = _resolve_task_worktree("TWR_NONE", agents_root, "p")
+    assert resolved is None
+
+
+def test_run_acceptance_uses_task_worktree_not_main(env_home, tmp_path):
+    """cf018 regression: acceptance must run mechanical commands in task worktree.
+
+    Creates two directories: a fake 'main worktree' (no sentinel) and a
+    fake 'task worktree' (has sentinel). Brief command checks the sentinel.
+    Without the fix the command would run in the Python process CWD and fail;
+    with the fix it runs in the task worktree and passes.
+    """
+    project, team, task_id = "p", "t", "TCF018"
+
+    # Task worktree has a sentinel file
+    task_wt = tmp_path / "task-wt"
+    task_wt.mkdir()
+    (task_wt / "SENTINEL_cf018").write_text("present", encoding="utf-8")
+
+    # Write dispatch receipt pointing at task_wt
+    _write_dispatch_receipt(env_home, project, task_id, task_wt)
+
+    # Brief: verify sentinel exists (passes only in task worktree)
+    _write_brief(env_home, project, team, task_id, f"""
+task_id: {task_id}
+project: {project}
+team: {team}
+objective: worktree CWD test
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "test -f SENTINEL_cf018"
+""")
+
+    # run_acceptance with no explicit cwd — must auto-resolve to task_wt
+    results = run_acceptance(project=project, team=team, task_id=task_id, dispatch_fn=lambda p: "fake")
+    item = results["mechanical"].items[0]
+    assert item.result == "pass", (
+        f"acceptance must run in task worktree where SENTINEL_cf018 exists; "
+        f"got result={item.result!r} — worktree CWD was not resolved"
+    )
+    assert results["mechanical"].verdict == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# cf018 REPAIR: absolute cd prefix redirect
+# ---------------------------------------------------------------------------
+
+def test_redirect_cd_to_worktree_rewrites_main_root(tmp_path):
+    """_redirect_cd_to_worktree rewrites cd to main root → task worktree."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = f"cd {main_root} && npm test"
+    result = _redirect_cd_to_worktree(cmd, main_root, task_wt)
+    assert str(task_wt) in result
+    assert str(main_root) not in result
+    assert "npm test" in result
+
+
+def test_redirect_cd_to_worktree_rewrites_subdir(tmp_path):
+    """_redirect_cd_to_worktree rewrites cd to main subdir → task worktree subdir."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = f"cd {main_root}/apps/web && pnpm test"
+    result = _redirect_cd_to_worktree(cmd, main_root, task_wt)
+    assert f"{task_wt}/apps/web" in result
+    assert str(main_root) not in result
+
+
+def test_redirect_cd_to_worktree_leaves_unrelated_path(tmp_path):
+    """_redirect_cd_to_worktree leaves cd to unrelated absolute path intact."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = "cd /usr/local/bin && ls"
+    result = _redirect_cd_to_worktree(cmd, main_root, task_wt)
+    assert result == cmd
+
+
+def test_redirect_cd_to_worktree_leaves_relative_cmd(tmp_path):
+    """_redirect_cd_to_worktree leaves commands without absolute cd unchanged."""
+    main_root = tmp_path / "main"
+    task_wt = tmp_path / "task-wt"
+    cmd = "npm test"
+    assert _redirect_cd_to_worktree(cmd, main_root, task_wt) == cmd
+
+
+def test_get_main_worktree_root_returns_none_for_plain_dir(tmp_path):
+    """_get_main_worktree_root returns None when no .git file present."""
+    assert _get_main_worktree_root(tmp_path) is None
+
+
+def test_acceptance_uses_task_worktree_for_absolute_cd_command(env_home, tmp_path):
+    """cf018 REPAIR regression: absolute cd to main root must redirect to task worktree.
+
+    al541-shaped scenario: mechanical command is 'cd /main/repo && test -f SENTINEL'.
+    Sentinel exists only in task worktree. Without redirect → FAIL; with → PASS.
+    We use _redirect_cd_to_worktree directly via run_mechanical with explicit
+    main_root injection to avoid needing a real git worktree in tests.
+    """
+    from pathlib import Path
+    from acceptance_executor import run_mechanical, RouteResult
+
+    # Set up task worktree with sentinel
+    task_wt = tmp_path / "task-wt"
+    task_wt.mkdir()
+    (task_wt / "SENTINEL_al541").write_text("present", encoding="utf-8")
+
+    # Fake main root (no sentinel here)
+    main_root = tmp_path / "main-repo"
+    main_root.mkdir()
+
+    acc_dir = env_home / ".agents" / "tasks" / "p" / "t" / "acceptance"
+    brief = {
+        "acceptance_criteria": {
+            "mechanical": [f"cd {main_root} && test -f SENTINEL_al541"]
+        }
+    }
+
+    # Without redirect: runs in main_root → fails (no sentinel)
+    result_no_redirect = run_mechanical(
+        brief, acc_dir, "TAL541_no", cwd=None,
+        pre_split_mech=[f"cd {main_root} && test -f SENTINEL_al541"],
+    )
+    assert result_no_redirect.verdict == "FAIL", (
+        "without worktree redirect, command should fail (sentinel not in main root)"
+    )
+
+    # With redirect applied manually (simulating the full pipeline):
+    # The redirect rewrites 'cd /main-repo &&...' to 'cd /task-wt &&...'
+    redirected_cmd = _redirect_cd_to_worktree(
+        f"cd {main_root} && test -f SENTINEL_al541", main_root, task_wt
+    )
+    assert str(task_wt) in redirected_cmd
+
+    result_with_redirect = run_mechanical(
+        brief, acc_dir, "TAL541_yes", cwd=task_wt,
+        pre_split_mech=[redirected_cmd],
+    )
+    assert result_with_redirect.verdict == "PASS", (
+        "with worktree redirect, command must pass (sentinel found in task worktree)"
+    )

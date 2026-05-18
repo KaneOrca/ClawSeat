@@ -65,7 +65,11 @@ When a team has multiple builders:
 - If capabilities do not decide, split by disjoint path ownership, then by disjoint tests/research lanes.
 - Keep tightly coupled files or one transaction on one builder; use a merge-owner step when parallel branches touch neighboring surfaces.
 - Fan-in before review: every builder must complete handoff, then reviewer or planner consumes all receipts before verdict.
-- If there are two or three builders and no reviewer, block and ask memory for roster repair; if a fourth builder seems needed, ask memory to propose a new subteam.
+- **Planner+builder is the default minimal execution unit (cf022)**: when no reviewer seat is assigned, planner owns code review and test verification. Do NOT block or request roster repair merely because reviewer is absent. Escalate to reviewer only for: security/privacy/filesystem boundary changes, multi-builder contention on the same surface, or explicit operator request.
+- If there are two or three builders and no reviewer, planner reviews deliveries with hot context — read the diff, run acceptance checks, confirm tests pass — before relaying verdict to memory.
+- **Parallel work while builder is implementing**: after dispatching builder, planner must not idle. Prepare focused test commands, acceptance probes, or review checklists in parallel. When builder delivers, planner applies them immediately.
+- **Planner closeout must include** (in addition to the standard relay): code review result (diff reviewed, risks noted), tests run (commands and outcome), `review/latest` merge status/hash or blocker, conflict files if any, and unresolved risks.
+- If a fourth builder seems needed, ask memory to propose a new subteam.
 - Do not maintain a separate long-lived builder assignment document. Per-task
   assignment lives in this task's `workflow.md`; stable responsibility changes
   are relayed to memory for `TEAM_OWNERSHIP.md`.
@@ -115,6 +119,20 @@ not know the legacy task is ready and the planner-to-memory chain breaks.
 PASS 前必填 user_summary,简述本波 operator-visible 进度; relay 前核对 head_contains_commit.
 Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status. Planner self-closeout protocol: see [`core/references/planner-self-closeout-protocol.md`](../../references/planner-self-closeout-protocol.md).
+
+### Planner→Memory Reporting Boundary (cf022)
+
+Planner reports to memory **only** at these triggers:
+- Queue drained (all tasks in this team queue completed)
+- Final task closeout (per-task memory relay mode only)
+- Blocker requiring memory or operator authority
+- Cross-team dependency or escalation
+- Chain break (specialist unresponsive after restart attempt)
+- Post-operator-validation request for `main` integration
+
+Planner does **NOT** report to memory for: ordinary brief claim, dispatch to builder, builder in-progress status, local rework loops, tests running, reviewer intermediate changes.
+
+For the planner+builder minimal unit, only the final closeout relay goes to memory. Parallel test preparation and intermediate results stay within planner context.
 
 ### Chain End Relay to Memory (双入口都适用)
 After all specialists are approved and planner forms the verdict, legacy/single-team and planner-entry route must relay to memory with `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only. Multi-team delivery route uses `queue_drained_only`: no per-task memory relay; when the queue is empty, send a compact drained summary for memory final acceptance/commit. Quality-docs route uses `never_notify_memory`: update QUALITY.md/findings only.

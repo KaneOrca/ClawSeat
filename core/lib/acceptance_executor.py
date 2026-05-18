@@ -32,6 +32,8 @@ if str(REPO_ROOT / "core" / "lib") not in sys.path:
 from acceptance_criteria import (  # noqa: E402
     criterion_command_and_text as _shared_criterion_command_and_text,
     criterion_is_shell_runnable,
+    has_bare_git_diff_name_only,
+    normalize_pipe_negation,
 )
 from real_home import real_user_home  # noqa: E402
 
@@ -256,6 +258,41 @@ def run_mechanical(
                 )
             )
             continue
+        # cf015 Fix 1: normalize non-portable pipe-negation before execution
+        cmd = normalize_pipe_negation(cmd)
+        # cf018 REPAIR: redirect explicit absolute cd prefixes to task worktree.
+        # Commands like 'cd /main/repo && ...' bypass the cwd parameter and run
+        # in the main worktree. Rewrite to the equivalent task worktree path.
+        if cwd is not None:
+            main_root = _get_main_worktree_root(cwd)
+            if main_root is not None:
+                cmd = _redirect_cd_to_worktree(cmd, main_root, cwd)
+        # cf015 Fix 2: bare git diff --name-only scans dirty working-tree state;
+        # fail with a diagnostic rather than running a command that produces
+        # unreliable results.
+        if has_bare_git_diff_name_only(cmd):
+            any_fail = True
+            # Write diagnostic before constructing ItemResult so stderr_path is populated
+            diag_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
+            diag_p.parent.mkdir(parents=True, exist_ok=True)
+            diag_p.write_text(
+                "[acceptance_executor] bare 'git diff --name-only' without an explicit "
+                "base..head range scans dirty working-tree state. "
+                "Use 'git diff origin/main...HEAD --name-only' or equivalent.\n",
+                encoding="utf-8",
+            )
+            result.items.append(
+                ItemResult(
+                    criterion=text,
+                    result="fail",
+                    command=cmd,
+                    exit_code=-1,
+                    runtime_ms=0,
+                    stdout_path=None,
+                    stderr_path=str(diag_p),
+                )
+            )
+            continue
         stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
         stderr_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
         start = time.monotonic()
@@ -433,6 +470,87 @@ def _validate_brief_matches_cli(brief: dict, project: str, team: str, task_id: s
         raise AcceptanceError("brief vs CLI mismatch: " + "; ".join(mismatches))
 
 
+def _resolve_task_worktree(task_id: str, agents_root: Path, project: str) -> Path | None:
+    """cf018: resolve the task's dedicated worktree from dispatch receipt.
+
+    Scans patrol/handoffs for a dispatch receipt whose task_id matches and
+    whose expected_worktree_path exists on disk. Returns that path so
+    mechanical commands run against the task's actual code, not whatever
+    branch is active in the main worktree.
+
+    Returns None when no matching receipt is found or no worktree exists.
+    """
+    handoffs_dir = agents_root / "tasks" / project / "patrol" / "handoffs"
+    if not handoffs_dir.is_dir():
+        return None
+    prefix = f"{task_id}__"
+    for entry in sorted(handoffs_dir.iterdir()):
+        if not entry.name.startswith(prefix) or not entry.name.endswith(".json"):
+            continue
+        try:
+            data = json.loads(entry.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("kind") != "dispatch":
+            continue
+        wt = data.get("expected_worktree_path")
+        if wt and Path(wt).is_dir():
+            return Path(wt)
+    return None
+
+
+def _get_main_worktree_root(wt_path: Path) -> Path | None:
+    """cf018 REPAIR: find the main repo root from a git worktree .git file.
+
+    A git worktree has a .git file (not dir) containing:
+      gitdir: /main/.git/worktrees/<name>
+    Walking up two levels from that path gives /main/.git, then /main.
+    Returns None when wt_path is not a git worktree or the path is unreadable.
+    """
+    git_file = wt_path / ".git"
+    if not git_file.is_file():
+        return None
+    try:
+        content = git_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not content.startswith("gitdir:"):
+        return None
+    gitdir = Path(content[7:].strip())
+    # gitdir = /main/.git/worktrees/<name> → parent.parent = /main/.git → parent = /main
+    try:
+        main_root = gitdir.parent.parent.parent
+        if (main_root / ".git").is_dir():
+            return main_root
+    except (IndexError, OSError):
+        pass
+    return None
+
+
+def _redirect_cd_to_worktree(cmd: str, main_root: Path, task_wt: Path) -> str:
+    """cf018 REPAIR: redirect absolute cd prefixes from main repo root to task worktree.
+
+    Commands like 'cd /Users/ywf/coding/cartooner && npm test' must run in the
+    task worktree, not the main worktree. When the cd target is main_root or a
+    subdirectory, the path is rewritten to the equivalent path under task_wt.
+
+    Only the leading 'cd /abs/path' is rewritten; the rest of the command is
+    left intact. Commands without an absolute cd prefix are returned unchanged.
+    """
+    import re as _re
+    m = _re.match(r'^(cd\s+)(/[^\s;&|]+)(.*)', cmd.strip())
+    if not m:
+        return cmd
+    cd_kw, abs_path_str, rest = m.groups()
+    abs_path = Path(abs_path_str)
+    try:
+        rel = abs_path.relative_to(main_root)
+        new_path = task_wt / rel
+        return f"{cd_kw}{new_path}{rest}"
+    except ValueError:
+        return cmd  # not under main_root — leave unchanged
+
+
 def run_acceptance(
     project: str,
     team: str,
@@ -469,6 +587,12 @@ def run_acceptance(
         dispatch_fn = lambda packet: _default_reviewer_dispatch(  # noqa: E731
             packet, profile_path=profile_path, agents_root=agents_root, project=project
         )
+
+    # cf018: auto-resolve task worktree when caller did not provide cwd.
+    # Mechanical commands must evaluate the task's actual code, not whatever
+    # branch happens to be checked out in the main worktree.
+    if cwd is None:
+        cwd = _resolve_task_worktree(task_id, agents_root, project)
 
     # Round 4 #A: split criteria once by route, pass to each route helper
     final_mech, final_rev, final_op = _split_by_route(brief)
