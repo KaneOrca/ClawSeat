@@ -72,7 +72,7 @@
               "description": "Subteam builder/reviewer scaling gate.",
               "properties": {
                 "max_builders": {"type": "integer", "const": 3},
-                "reviewer_required_when_builders_gte": {"type": "integer", "const": 2},
+                "reviewer_required_when_builders_gte": {"type": "integer", "minimum": 2},
                 "overflow_action": {"type": "string", "const": "propose_new_subteam"},
                 "reviewer_fallback": {"type": "string", "const": "planner"}
               },
