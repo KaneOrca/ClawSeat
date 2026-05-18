@@ -332,6 +332,13 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
         } else {
           occlusion = getOcclusionAlpha(cx, cy, obstacles);
         }
+        if (mouseObs) {
+          const mRadius = mouseObs.w * 0.5;
+          occlusion = Math.min(
+            occlusion,
+            circularVoidAlpha(cx, cy, mouseObs.x + mRadius, mouseObs.y + mRadius, mRadius),
+          );
+        }
         if (functionalTextRects.length > 0) {
           occlusion = Math.min(occlusion, getFunctionalTextVoidAlpha(cx, cy, functionalTextRects));
         }
