@@ -19,6 +19,7 @@ from acceptance_executor import (  # noqa: E402
     route_reviewer,
     run_acceptance,
     run_mechanical,
+    _make_python_shims,
 )
 
 
@@ -280,3 +281,76 @@ acceptance_criteria:
     mech_receipt = json.loads((acceptance_dir / "T8__mechanical.json").read_text())
     assert mech_receipt["verdict"] == "PASS"
     assert mech_receipt["summary"]["pass"] == 1
+
+
+# ---------------------------------------------------------------------------
+# CF042 Lane A: Python shim / poisoned-PATH regression tests
+# ---------------------------------------------------------------------------
+
+def test_make_python_shims_creates_executable_scripts(tmp_path):
+    """_make_python_shims writes python/python3/pytest shims that are executable."""
+    import stat
+    _make_python_shims(tmp_path)
+    for name in ("python", "python3", "pytest"):
+        shim = tmp_path / name
+        assert shim.exists(), f"shim {name} not created"
+        mode = shim.stat().st_mode
+        assert mode & stat.S_IXUSR, f"shim {name} not user-executable"
+        content = shim.read_text(encoding="utf-8")
+        assert sys.executable in content, f"shim {name} does not reference sys.executable"
+
+
+def test_make_python_shims_pytest_delegates_to_m_pytest(tmp_path):
+    """pytest shim uses sys.executable -m pytest, not a bare pytest binary."""
+    _make_python_shims(tmp_path)
+    content = (tmp_path / "pytest").read_text(encoding="utf-8")
+    assert "-m pytest" in content
+
+
+def test_run_mechanical_uses_shim_python_not_poisoned_path(env_home, tmp_path):
+    """Poisoned-PATH regression: run_mechanical must not use an ambient python3
+    that lacks required packages. Shims must override a bad /usr/bin/python3.
+
+    Strategy: poison PATH with a fake python3 that always exits 1 and write
+    a mechanical command that echoes which python3 is used. The shim layer
+    must override it so the command uses the project's interpreter.
+    """
+    # Write a fake poisoned python3 that always fails
+    poison_dir = tmp_path / "poison-bin"
+    poison_dir.mkdir()
+    fake_py = poison_dir / "python3"
+    fake_py.write_text("#!/bin/sh\necho POISONED\nexit 1\n", encoding="utf-8")
+    import stat
+    fake_py.chmod(fake_py.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    brief = {
+        "task_id": "TPOISON",
+        "project": "p",
+        "team": "t",
+        "objective": "poison test",
+        "seats_required": ["builder"],
+        "acceptance_criteria": {
+            "mechanical": [
+                # This command uses python3 — the shim should make it work
+                "python3 -c 'import sys; print(sys.executable)'"
+            ]
+        },
+    }
+    acceptance_dir = env_home / "acceptance"
+
+    # Inject poisoned PATH via env_overrides — shim layer should take precedence
+    results = run_mechanical(
+        brief,
+        acceptance_dir,
+        "TPOISON",
+        env_overrides={"PATH": f"{poison_dir}{os.pathsep}{os.environ.get('PATH', '')}"},
+    )
+    # The shim should override the poisoned python3 → command succeeds
+    assert results.verdict == "PASS", (
+        f"shim must override poisoned PATH; verdict={results.verdict}; "
+        f"items={[i.result for i in results.items]}"
+    )
+    # Verify it was NOT the poison script that ran (stdout must not contain "POISONED")
+    if results.items and results.items[0].stdout_path:
+        stdout = Path(results.items[0].stdout_path).read_text(encoding="utf-8")
+        assert "POISONED" not in stdout, "poisoned python3 was invoked despite shim"

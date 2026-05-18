@@ -222,6 +222,7 @@ def test_finding5_failed_append_does_not_unlink_existing_brief(tmp_path, monkeyp
             "--team", "t",
             "--task-id", "T1",
             "--objective", "first",
+            "--no-wake",
         ]
     )
     assert cmd_queue(args1) == 0
@@ -269,7 +270,7 @@ def test_finding6_cli_writes_waiting_for_when_depends_unmet(tmp_path, monkeypatc
         cmd_queue(
             parser.parse_args(
                 ["queue", "--project", "p", "--team", "t", "--task-id", "T-UP",
-                 "--objective", "upstream"]
+                 "--objective", "upstream", "--no-wake"]
             )
         )
         == 0
@@ -278,7 +279,7 @@ def test_finding6_cli_writes_waiting_for_when_depends_unmet(tmp_path, monkeypatc
         cmd_queue(
             parser.parse_args(
                 ["queue", "--project", "p", "--team", "t", "--task-id", "T-DOWN",
-                 "--objective", "dependent", "--depends-on", "T-UP"]
+                 "--objective", "dependent", "--depends-on", "T-UP", "--no-wake"]
             )
         )
         == 0
@@ -313,7 +314,7 @@ def test_finding7_skeleton_has_nonempty_required_fields(tmp_path, monkeypatch):
     args = parser.parse_args(
         [
             "queue", "--project", "p", "--team", "t", "--task-id", "T1",
-            "--objective", "skel",
+            "--objective", "skel", "--no-wake",
         ]
     )
     assert cmd_queue(args) == 0
@@ -372,7 +373,7 @@ def test_brief_done_advances_created_task_to_pass(tmp_path, monkeypatch):
         cmd_queue(
             parser.parse_args(
                 ["queue", "--project", "p", "--team", "t", "--task-id", "Tdone",
-                 "--objective", "done"]
+                 "--objective", "done", "--no-wake"]
             )
         )
         == 0
@@ -413,6 +414,7 @@ def test_brief_done_refuses_unmet_dependencies(tmp_path, monkeypatch):
                     "--task-id", "DOWN",
                     "--objective", "blocked",
                     "--depends-on", "UP",
+                    "--no-wake",
                 ]
             )
         )
@@ -627,7 +629,7 @@ def test_finding_B_skeleton_yaml_round_trips_with_quoted_objective(tmp_path, mon
     objective_with_quote = "objective with 'single' and \"double\" quotes"
     rc = cmd_queue(parser.parse_args([
         "queue", "--project", "p", "--team", "t", "--task-id", "T-Q",
-        "--objective", objective_with_quote,
+        "--objective", objective_with_quote, "--no-wake",
     ]))
     assert rc == 0
 
@@ -664,6 +666,7 @@ def test_finding7_skeleton_accepts_seats_required_override(tmp_path, monkeypatch
             "queue", "--project", "p", "--team", "t", "--task-id", "T1",
             "--objective", "skel",
             "--seats-required", "builder", "reviewer",
+            "--no-wake",
         ]
     )
     assert cmd_queue(args) == 0
