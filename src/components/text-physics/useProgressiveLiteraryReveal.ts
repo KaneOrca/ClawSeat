@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Soloist } from '../../context/PhysicsContext';
-import { tokens } from '../../design/tokens';
 
 interface ProgressiveRevealInput {
   content: string;
@@ -12,16 +10,13 @@ interface ProgressiveRevealInput {
 interface ProgressiveRevealResult {
   revealedSlice: string;
   shimmerActive: boolean;
-  currentSoloists: Soloist[];
 }
 
 const FORM_REVEAL_RATE = 42;
 
 export function useProgressiveLiteraryReveal({
   content,
-  decryptKeyMap,
   activeStepId,
-  lineIndex = 16,
 }: ProgressiveRevealInput): ProgressiveRevealResult {
   const [revealedChars, setRevealedChars] = useState(0);
   const [shimmerUntil, setShimmerUntil] = useState(0);
@@ -52,21 +47,8 @@ export function useProgressiveLiteraryReveal({
     return content.slice(0, visible);
   }, [content, revealedChars]);
 
-  const currentSoloists = useMemo<Soloist[]>(() => {
-    return Object.entries(decryptKeyMap)
-      .filter(([, key]) => revealedSlice.includes(key))
-      .map(([id, key], index) => ({
-        id: `literary-key-${activeStepId}-${id}`,
-        text: key,
-        lineIndex: lineIndex + index,
-        color: tokens.colors.aurora.cyan,
-        opacity: 0.92,
-      }));
-  }, [activeStepId, decryptKeyMap, lineIndex, revealedSlice]);
-
   return {
     revealedSlice,
     shimmerActive: performance.now() < shimmerUntil || revealedChars < content.length,
-    currentSoloists,
   };
 }

@@ -48,7 +48,7 @@ interface WatchSessionResponse {
 export const WatchViewV3: React.FC = () => {
   const { withToast, isZenMode } = useArena();
   const { t } = useLanguage();
-  const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
 
   const [feed, setFeed] = useState<RawFeedEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,48 +69,7 @@ export const WatchViewV3: React.FC = () => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
 
-  // Feed soloist registration
-  useEffect(() => {
-    if (viewMode !== 'feed') return;
-    const ids = feed.map((_, i) => `watch-event-${i}`);
-    feed.forEach((event, i) => {
-      registerSoloist({
-        id: `watch-event-${i}`,
-        text: `${getFeedPlayerName(event).toUpperCase()} :: ${eventTypeLabel(event.event_type, t)} :: ${t('watch.v3.ref')}_${safeStr(event.target_id) || '?'}`,
-        lineIndex: 12 + i * 4,
-        color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
-      });
-    });
-    return () => { ids.forEach(id => unregisterSoloist(id)); };
-  }, [feed, registerSoloist, unregisterSoloist, viewMode]);
-
-  // Session trace soloist registration
-  useEffect(() => {
-    if (viewMode !== 'session') return;
-    const ids = sessionSteps.length > 0
-      ? sessionSteps.map((_, i) => `watch-step-${i}`)
-      : ['watch-step-message'];
-
-    if (sessionSteps.length === 0) {
-      registerSoloist({
-        id: 'watch-step-message',
-        text: sessionMessage ?? (sessionStatus === 'loading' ? t('watch.session.loading') : t('watch.session.no_active')),
-        lineIndex: 14,
-        color: sessionStatus === 'error' ? tokens.colors.aurora.red : tokens.colors.aurora.cyan,
-      });
-    } else {
-      sessionSteps.forEach((step, i) => {
-        registerSoloist({
-          id: `watch-step-${i}`,
-          text: `0x${i.toString(16).padStart(2, '0')} // ${safeStr(step)}`,
-          lineIndex: 12 + i * 3,
-          color: sessionStatus === 'thinking' ? tokens.colors.aurora.cyan : tokens.colors.aurora.blue,
-        });
-      });
-    }
-
-    return () => { ids.forEach(id => unregisterSoloist(id)); };
-  }, [registerSoloist, sessionMessage, sessionStatus, sessionSteps, t, unregisterSoloist, viewMode]);
+  // Keep feed and session metadata as ambient text flow via existing DOM obstacles.
 
   // Data polling
   useEffect(() => {
@@ -118,10 +77,9 @@ export const WatchViewV3: React.FC = () => {
       if (data && data.leaders.length > 0) setActiveAgent(data.leaders[0]);
       setLoading(false);
     });
-    const triggerAchievementPulse = (event: RawFeedEvent) => {
+    const triggerAchievementPulse = () => {
       if (achievementPulseTimeout.current) clearTimeout(achievementPulseTimeout.current);
 
-      const achievementName = safeStr(event.achievement_name ?? event.target_id).toUpperCase();
       setEnvironment({
         effects: {
           alignmentPulse: {
@@ -131,24 +89,8 @@ export const WatchViewV3: React.FC = () => {
           },
         },
       });
-      registerSoloist({
-        id: 'achievement-nickname',
-        text: getFeedPlayerName(event).toUpperCase(),
-        lineIndex: 10,
-        color: tokens.colors.aurora.purple,
-        opacity: 1,
-      });
-      registerSoloist({
-        id: 'achievement-name',
-        text: `${t('watch.v3.achievement_unlocked')} :: ${achievementName}`,
-        lineIndex: 11,
-        color: tokens.colors.aurora.cyan,
-        opacity: 1,
-      });
 
       achievementPulseTimeout.current = setTimeout(() => {
-        unregisterSoloist('achievement-nickname');
-        unregisterSoloist('achievement-name');
         setEnvironment({
           effects: {
             alignmentPulse: {
@@ -168,7 +110,7 @@ export const WatchViewV3: React.FC = () => {
         newEvents.forEach(event => seenFeedIds.current.add(event.id));
 
         if (achievementEvent && viewModeRef.current === 'feed') {
-          triggerAchievementPulse(achievementEvent);
+          triggerAchievementPulse();
         }
         if (feedData.feed.length > lastFeedLength.current && viewModeRef.current === 'feed') {
           setEnvironment({ waveAmplitude: 100 });
@@ -183,8 +125,6 @@ export const WatchViewV3: React.FC = () => {
     return () => {
       clearInterval(interval);
       if (achievementPulseTimeout.current) clearTimeout(achievementPulseTimeout.current);
-      unregisterSoloist('achievement-nickname');
-      unregisterSoloist('achievement-name');
       setEnvironment({
         effects: {
           alignmentPulse: {
@@ -202,8 +142,6 @@ export const WatchViewV3: React.FC = () => {
   }, [setEnvironment]);
 
   const returnToFeed = useCallback(() => {
-    sessionSteps.forEach((_, i) => unregisterSoloist(`watch-step-${i}`));
-    unregisterSoloist('watch-step-message');
     setSessionSteps([]);
     setSelectedPlayerCode(null);
     setSelectedPlayerName(null);
@@ -212,7 +150,7 @@ export const WatchViewV3: React.FC = () => {
     setSessionStatus('idle');
     setViewMode('feed');
     setEnvironment({ opacity: 0.15 });
-  }, [sessionSteps, setEnvironment, unregisterSoloist]);
+  }, [setEnvironment]);
 
   useEffect(() => {
     if (viewMode !== 'session') return;
@@ -287,7 +225,6 @@ export const WatchViewV3: React.FC = () => {
 
       {viewMode === 'session' ? (
         <SessionTraceMemo
-          isZenMode={isZenMode}
           selectedPlayerCode={selectedPlayerCode}
           selectedPlayerName={selectedPlayerName}
           sessionStatus={sessionStatus}
@@ -464,7 +401,6 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelec
 };
 
 const SessionTrace: React.FC<{
-  isZenMode: boolean;
   selectedPlayerCode: string | null;
   selectedPlayerName: string | null;
   sessionStatus: SessionStatus;
@@ -476,7 +412,6 @@ const SessionTrace: React.FC<{
   loadingLabel: string;
   backLabel: string;
 }> = ({
-  isZenMode,
   selectedPlayerCode,
   selectedPlayerName,
   sessionStatus,
@@ -490,7 +425,7 @@ const SessionTrace: React.FC<{
 }) => {
   return (
     <div style={sessionTraceStyle}>
-      <SessionBackAtom isZenMode={isZenMode} onBack={onBack} backLabel={backLabel} selectedPlayerCode={selectedPlayerCode} />
+      <SessionBackAtom onBack={onBack} backLabel={backLabel} selectedPlayerCode={selectedPlayerCode} />
       <SessionMetaAtom
         sessionStatus={sessionStatus}
         watchSession={watchSession}
@@ -512,8 +447,7 @@ const SessionTrace: React.FC<{
 };
 const SessionTraceMemo = React.memo(SessionTrace);
 
-const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLabel: string; selectedPlayerCode: string | null }> = ({
-  isZenMode,
+const SessionBackAtom: React.FC<{ onBack: () => void; backLabel: string; selectedPlayerCode: string | null }> = ({
   onBack,
   backLabel,
   selectedPlayerCode,

@@ -17,7 +17,7 @@ interface RegisterResponse {
 
 export const AuthViewV3: React.FC = () => {
   const { login, setView, isZenMode } = useArena();
-  const { setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
   const inputRef = useObstacle() as React.RefObject<HTMLInputElement>;
   const codeRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const messageRef = useObstacle() as React.RefObject<HTMLDivElement>;
@@ -40,19 +40,11 @@ export const AuthViewV3: React.FC = () => {
       opacity: success ? 0.34 : 0.24,
       ambientColor: success ? 'rgba(70, 214, 255, 0.22)' : 'rgba(155, 114, 203, 0.18)',
     });
-    registerSoloist({
-      id: 'auth-v3-soloist',
-      text: success ? '[ RESONANCE ESTABLISHED ] 第一道裂隙已开。' : 'AWAITING_SYNAPTIC_OVERRIDE',
-      lineIndex: success ? 16 : 12,
-      color: success ? tokens.colors.aurora.cyan : tokens.colors.aurora.purple,
-      opacity: 1,
-    });
     return () => {
-      unregisterSoloist('auth-v3-soloist');
       setEnvironment({ ambientColor: undefined });
       if (redirectTimer.current !== null) window.clearTimeout(redirectTimer.current);
     };
-  }, [registerSoloist, setEnvironment, success, unregisterSoloist]);
+  }, [setEnvironment, success]);
 
   useEffect(() => {
     if (!success || !agentCode) return;

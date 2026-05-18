@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePhysicsRegistry, type EnvironmentSettings } from '../context/PhysicsContext';
 import { useObstacle } from '../hooks/useObstacle';
 
@@ -16,11 +16,11 @@ export interface FunctionalTextConfig {
   onDeactivate?: () => void;
   /** Click/keyboard trigger side effect, usually route navigation. */
   onTrigger?: () => void;
-  /** Labyrinth/Chorus insertion row. Required when the functional text should become a Soloist. */
+  /** Labyrinth/Chorus insertion row. Retained for compatibility; no-op now. */
   physicsLineIndex?: number;
   /** Reserved for callers with a known rect; current implementation prefers live DOM measurement. */
   obstacleRect?: DOMRect;
-  /** Stable Soloist id. Defaults to a React id-derived value. */
+  /** Stable Soloist id for backward-compat configs. */
   soloistId?: string;
   /** Soloist foreground color. */
   color?: string;
@@ -70,17 +70,11 @@ const DEFAULT_IDLE_ENVIRONMENT: Partial<EnvironmentSettings> = {
   opacity: 0.15,
 };
 
-function shouldRegisterSoloist(engine: FunctionalTextEngine, physicsLineIndex?: number): physicsLineIndex is number {
-  return physicsLineIndex !== undefined && (engine === 'labyrinth' || engine === 'chorus');
-}
-
 export function useFunctionalTextObstacle(config: FunctionalTextConfig): UseFunctionalTextObstacleResult {
-  const reactId = useId();
   const obstacleRef = useObstacle(config.obstacle !== false) as React.RefObject<HTMLElement>;
-  const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
   const [state, setState] = useState<FunctionalTextState>('FIELD_IDLE');
   const pulseTimerRef = useRef<number | null>(null);
-  const soloistId = config.soloistId ?? `functional-text-${reactId}`;
 
   const clearPulseTimer = useCallback(() => {
     if (pulseTimerRef.current !== null) {
@@ -89,58 +83,38 @@ export function useFunctionalTextObstacle(config: FunctionalTextConfig): UseFunc
     }
   }, []);
 
-  const unregister = useCallback(() => {
-    unregisterSoloist(soloistId);
-  }, [soloistId, unregisterSoloist]);
-
-  const register = useCallback((text: string, opacity: number) => {
-    if (!shouldRegisterSoloist(config.engine, config.physicsLineIndex)) return;
-    registerSoloist({
-      id: soloistId,
-      text,
-      lineIndex: config.physicsLineIndex,
-      color: config.color,
-      opacity,
-    });
-  }, [config.color, config.engine, config.physicsLineIndex, registerSoloist, soloistId]);
-
   useEffect(() => {
     return () => {
       clearPulseTimer();
-      unregister();
     };
-  }, [clearPulseTimer, unregister]);
+  }, [clearPulseTimer]);
 
   const activate = useCallback(() => {
     clearPulseTimer();
     setState('TERM_SOLOIST_ACTIVE');
-    register(config.label, config.opacity ?? 0.95);
     setEnvironment(config.activationEnvironment ?? DEFAULT_ACTIVE_ENVIRONMENT);
     config.onActivate?.();
-  }, [clearPulseTimer, config, register, setEnvironment]);
+  }, [clearPulseTimer, config, setEnvironment]);
 
   const deactivate = useCallback(() => {
     if (state === 'SOLOIST_PULSE_NAV') return;
     setState('FIELD_IDLE');
-    unregister();
     setEnvironment(config.idleEnvironment ?? DEFAULT_IDLE_ENVIRONMENT);
     config.onDeactivate?.();
-  }, [config, setEnvironment, state, unregister]);
+  }, [config, setEnvironment, state]);
 
   const trigger = useCallback(() => {
     clearPulseTimer();
     setState('SOLOIST_PULSE_NAV');
-    register(`[ ${config.label} ]`, 1);
     setEnvironment(config.triggerEnvironment ?? DEFAULT_TRIGGER_ENVIRONMENT);
     config.onTrigger?.();
 
     pulseTimerRef.current = window.setTimeout(() => {
       setState('FIELD_IDLE');
-      unregister();
       setEnvironment(config.idleEnvironment ?? DEFAULT_IDLE_ENVIRONMENT);
       pulseTimerRef.current = null;
     }, config.pulseDurationMs ?? 320);
-  }, [clearPulseTimer, config, register, setEnvironment, unregister]);
+  }, [clearPulseTimer, config, setEnvironment]);
 
   return useMemo(() => ({
     ref: obstacleRef,

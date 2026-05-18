@@ -1,8 +1,8 @@
-import React, { useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { prepareWithSegments, layoutNextLine, type LayoutCursor } from '@chenglou/pretext';
 import { usePhysicsRegistry, type RectObstacle } from '../../context/PhysicsContext';
-import { usePretextCanvas } from '../../hooks/usePretextCanvas';
 import { useLanguage } from '../../context/LanguageContext';
+import { usePretextCanvas } from '../../hooks/usePretextCanvas';
 
 interface LabyrinthPhysicProps {
   text: string;
@@ -97,14 +97,12 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
   opacity = 0.15,
   variant
 }) => {
-  const { obstaclesRef, soloists, environment } = usePhysicsRegistry();
+  const { obstaclesRef, environment } = usePhysicsRegistry();
   const { locale } = useLanguage();
-
-  // Keep soloists + environment in refs so the render callback is stable
-  const soloistsRef = useRef(soloists);
-  useEffect(() => { soloistsRef.current = soloists; }, [soloists]);
   const envRef = useRef(environment);
-  useEffect(() => { envRef.current = environment; }, [environment]);
+  useEffect(() => {
+    envRef.current = environment;
+  }, [environment]);
 
   const variantFont = useMemo(() => {
     if (variant === 'v2') {
@@ -123,7 +121,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
     const currentAlpha = env.opacity ?? opacity;
     const currentWaveAmp = env.waveAmplitude ?? 60;
-    const surgeNorm = Math.max(0, (currentWaveAmp - 60) / 60);
     const transition = env.effects;
     const transitionProgress = transition?.transitionProgress ?? 0;
     const transitionFrom = transition?.transitionFrom ?? null;
@@ -137,9 +134,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
 
     let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
     let currentY = 0;
-
-    // TRACKING LINES FOR SOLOISTS
-    const lineMap: Map<number, { text: string; x: number }> = new Map();
 
     while (currentY < height) {
       ctx.font = variantFont;
@@ -165,7 +159,6 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
       }
 
       // FILL EACH SPAN WITH TEXT
-      let drewAnything = false;
       for (const span of spans) {
         let startX = span.start;
 
@@ -210,40 +203,12 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
         }
 
         ctx.fillText(line.text, drawX, drawY);
-
-        // Store first span position for soloist mapping
-        if (!drewAnything) {
-          const currentLineIndex = Math.floor(currentY / lineHeight);
-          lineMap.set(currentLineIndex, { text: line.text, x: drawX });
-          drewAnything = true;
-        }
-
         cursor = line.end;
       }
 
       currentY += lineHeight;
       if (currentY > height) break;
     }
-
-    // RENDER SOLOISTS
-    (soloistsRef.current ?? []).forEach(soloist => {
-      const lineData = lineMap.get(soloist.lineIndex);
-      if (lineData) {
-        ctx.font = `900 ${variant === 'v2' ? '32px' : '48px'} ${variant === 'v2' ? 'serif' : 'sans-serif'}`;
-        ctx.fillStyle = soloist.color || '#fff';
-        ctx.globalAlpha = 0.3 + surgeNorm * 0.7;
-        const soloistCtx = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
-        if (surgeNorm > 0.8) {
-          ctx.filter = `blur(${surgeNorm * 2}px)`;
-          soloistCtx.letterSpacing = `${surgeNorm * 10}px`;
-        }
-        ctx.fillText(soloist.text, lineData.x, soloist.lineIndex * lineHeight - 10);
-        ctx.filter = 'none';
-        soloistCtx.letterSpacing = '0px';
-        ctx.globalAlpha = 1;
-      }
-    });
-
   }, [prepared, obstaclesRef, variantFont, lineHeight, opacity, variant]);
 
   const canvasRef = usePretextCanvas({ onRender: render, isAnimated: true });

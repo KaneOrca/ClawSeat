@@ -31,7 +31,7 @@ type FieldState = 'FIELD_IDLE' | 'TERM_SOLOIST_ACTIVE' | 'SOLOIST_PULSE_NAV';
 export const HomeView: React.FC = () => {
   const { onInitialize, user, isZenMode, t } = useHomeInit(V2_CONFIG);
   const { setView, showToast } = useArena();
-  const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
   const marginalia01Ref = useObstacle() as React.RefObject<HTMLDivElement>;
   const marginalia02Ref = useObstacle() as React.RefObject<HTMLDivElement>;
   const introProseRef = useObstacle() as React.RefObject<HTMLParagraphElement>;
@@ -45,8 +45,8 @@ export const HomeView: React.FC = () => {
   }, [isZenMode, setEnvironment]);
 
   const unregisterTerms = useCallback(() => {
-    TERM_NAV.forEach(term => unregisterSoloist(`v2-home-term-${term.id}`));
-  }, [unregisterSoloist]);
+    // legacy soloist cleanup was removed; keep env-level cleanup centralized
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -55,43 +55,28 @@ export const HomeView: React.FC = () => {
     };
   }, [unregisterTerms]);
 
-  const handleTermEnter = useCallback((term: HomeTerm, label: string) => {
+  const handleTermEnter = useCallback((term: HomeTerm) => {
     unregisterTerms();
     setActiveTermId(term.id);
     setFieldState('TERM_SOLOIST_ACTIVE');
-    registerSoloist({
-      id: `v2-home-term-${term.id}`,
-      text: `[ ${label} ]`,
-      lineIndex: term.lineIndex,
-      color: MANUSCRIPT_ACTIVE_RED,
-      opacity: 0.95,
-    });
     setEnvironment({
       waveAmplitude: 92,
       opacity: 0.22,
       ambientColor: 'rgba(181, 48, 33, 0.24)',
     });
-  }, [registerSoloist, setEnvironment, unregisterTerms]);
+  }, [setEnvironment, unregisterTerms]);
 
-  const handleTermLeave = useCallback((term: HomeTerm) => {
+  const handleTermLeave = useCallback(() => {
     if (fieldState === 'SOLOIST_PULSE_NAV') return;
-    unregisterSoloist(`v2-home-term-${term.id}`);
     setActiveTermId(null);
     setFieldState('FIELD_IDLE');
     resetHomeEnvironment();
-  }, [fieldState, resetHomeEnvironment, unregisterSoloist]);
+  }, [fieldState, resetHomeEnvironment]);
 
-  const handleTermClick = useCallback((term: HomeTerm, label: string) => {
+  const handleTermClick = useCallback((term: HomeTerm) => {
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
     setActiveTermId(term.id);
     setFieldState('SOLOIST_PULSE_NAV');
-    registerSoloist({
-      id: `v2-home-term-${term.id}`,
-      text: `[ ${label} -> ${term.route} ]`,
-      lineIndex: term.lineIndex,
-      color: MANUSCRIPT_ACTIVE_RED,
-      opacity: 1,
-    });
     setEnvironment({
       waveAmplitude: 124,
       opacity: 0.28,
@@ -110,7 +95,7 @@ export const HomeView: React.FC = () => {
       unregisterTerms();
       resetHomeEnvironment();
     }, 320);
-  }, [onInitialize, registerSoloist, resetHomeEnvironment, setEnvironment, setView, showToast, unregisterTerms, user]);
+  }, [onInitialize, resetHomeEnvironment, setEnvironment, setView, showToast, unregisterTerms, user]);
 
   const termsById = useMemo(() => {
     return TERM_NAV.reduce<Record<HomeTerm['id'], HomeTerm>>((acc, term) => {
@@ -330,9 +315,9 @@ const HomeKeyTerm: React.FC<{
   active: boolean;
   label: string;
   term: HomeTerm;
-  onEnter: (term: HomeTerm, label: string) => void;
-  onLeave: (term: HomeTerm) => void;
-  onClick: (term: HomeTerm, label: string) => void;
+  onEnter: (term: HomeTerm) => void;
+  onLeave: () => void;
+  onClick: (term: HomeTerm) => void;
 }> = ({ active, label, term, onEnter, onLeave, onClick }) => {
   const termRef = useObstacle() as React.RefObject<HTMLButtonElement>;
 
@@ -342,11 +327,11 @@ const HomeKeyTerm: React.FC<{
       className="home-key-term"
       data-nav={term.id}
       data-active={active}
-      onMouseEnter={() => onEnter(term, label)}
-      onMouseLeave={() => onLeave(term)}
-      onFocus={() => onEnter(term, label)}
-      onBlur={() => onLeave(term)}
-      onClick={() => onClick(term, label)}
+      onMouseEnter={() => onEnter(term)}
+      onMouseLeave={onLeave}
+      onFocus={() => onEnter(term)}
+      onBlur={onLeave}
+      onClick={() => onClick(term)}
       style={{
         appearance: 'none',
         background: 'none',

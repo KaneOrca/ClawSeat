@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, request } from '../../../api/arena';
 import { useArena } from '../../../context/ArenaContext';
-import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { PretextButton } from '../../../components/PretextButton';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
+import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
 
@@ -20,7 +20,7 @@ interface ChatMessage {
 
 export const CommunityViewV3: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
-  const { environment, setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const { environment, setEnvironment } = usePhysicsRegistry();
   const labelRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const environmentRef = useRef(environment);
   const isZenModeRef = useRef(isZenMode);
@@ -89,19 +89,6 @@ export const CommunityViewV3: React.FC = () => {
       if (!isZenModeRef.current) setEnvironment({ waveAmplitude: mountAmplitudeRef.current });
     };
   }, [loadChat, setEnvironment]);
-
-  useEffect(() => {
-    const latestIncoming = messages.find(message => incomingIds.has(message.id));
-    if (!latestIncoming) return;
-    registerSoloist({
-      id: 'community-v3-incoming',
-      text: formatTraceText(latestIncoming, messages.indexOf(latestIncoming)),
-      lineIndex: 10,
-      color: latestIncoming.is_agent ? tokens.colors.aurora.cyan : tokens.colors.aurora.blue,
-      opacity: 1,
-    });
-    return () => unregisterSoloist('community-v3-incoming');
-  }, [incomingIds, messages, registerSoloist, unregisterSoloist]);
 
   const handleSend = async () => {
     if (!input.trim() || !participantCode) return;

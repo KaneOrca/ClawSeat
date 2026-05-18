@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { CHALLENGES, type Challenge } from '../../../data/mockData';
 import { useArena } from '../../../context/ArenaContext';
 import { useLanguage } from '../../../context/LanguageContext';
-import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
 import { useObstacle } from '../../../hooks/useObstacle';
@@ -14,7 +13,6 @@ const romanNumerals = ['I.', 'II.', 'III.', 'IV.', 'V.', 'VI.', 'VII.', 'VIII.',
 export const HallViewV2: React.FC = () => {
   const { user, setChallengeId, isLoading, isZenMode } = useArena();
   const { t } = useLanguage();
-  const { registerSoloist, unregisterSoloist } = usePhysicsRegistry();
   const profileRef = useObstacle() as React.RefObject<HTMLDivElement>;
 
   const completedIds = user?.completedChallenges ?? [];
@@ -29,20 +27,6 @@ export const HallViewV2: React.FC = () => {
     numeral: romanNumerals[index] ?? `${index + 1}.`,
     state: getLayerState(challenge.id, completedIds, activeChallengeId),
   })), [activeChallengeId, completedIds]);
-
-  const activeRow = rows.find(row => row.state === 'active');
-
-  useEffect(() => {
-    if (!activeRow) return;
-    registerSoloist({
-      id: 'hall-active',
-      text: `${activeRow.numeral} ${activeRow.challenge.title}`,
-      lineIndex: 8,
-      color: tokens.colors.manuscript.red,
-      opacity: 0.9,
-    });
-    return () => unregisterSoloist('hall-active');
-  }, [activeRow, registerSoloist, unregisterSoloist]);
 
   if (isLoading && !user) {
     return (

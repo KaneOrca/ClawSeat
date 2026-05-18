@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ArrowLeft, Edit3 } from 'lucide-react';
 import { PretextButton } from '../../../components/PretextButton';
-import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
+import { LabyrinthPhysic } from '../../../components/text-physics/LabyrinthPhysic';
 import { useChallengeSubmission } from '../../../hooks/useChallengeSubmission';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
@@ -13,11 +13,10 @@ export const ChallengeDetailView: React.FC = () => {
     currentChallengeId, setChallengeId, t, locale
   } = useChallengeSubmission();
   const textareaRef = useObstacle() as React.RefObject<HTMLTextAreaElement>;
-
-  const obstacles = useMemo(() => [
-    { id: 'folio-meta', x: 750, y: 50, w: 250, h: 400 },
-    { id: 'transcription', x: 0, y: 450, w: 700, h: 300 },
-  ], []);
+  const folioObstacleRef = useObstacle() as React.RefObject<HTMLDivElement>;
+  const transcriptionObstacleRef = useObstacle() as React.RefObject<HTMLDivElement>;
+  const folioBounds = { x: 750, y: 50, w: 250, h: 400 };
+  const transcriptionBounds = { x: 0, y: 450, w: 700, h: 300 };
 
   const liveManuscriptText = useMemo(() => {
     const core = (safeStr(challenge.title).toUpperCase() + '. ' + t('challengeDetail.body') + ' ' + t('challengeDetail.marginalia') + ' ').repeat(2);
@@ -61,20 +60,22 @@ export const ChallengeDetailView: React.FC = () => {
 
       <div style={{ maxWidth: '1000px', margin: '0 auto', position: 'relative' }}>
         <div style={{ position: 'relative', minHeight: '800px' }}>
-          <ManuscriptPhysic
+          <LabyrinthPhysic
             text={liveManuscriptText}
-            obstacles={obstacles}
-            width={1000}
+            opacity={locale === 'zh-CN' ? 0.2 : 0.18}
             lineHeight={locale === 'zh-CN' ? 40 : 36}
             fontDef={locale === 'zh-CN' ? `500 20px ${tokens.fonts.body}` : `500 22px ${tokens.fonts.manuscript}`}
+            variant="v2"
           />
 
           {/* FOLIO BLOCK */}
-          <div style={{
+          <div
+            ref={folioObstacleRef}
+            style={{
             position: 'absolute',
-            left: obstacles[0].x,
-            top: obstacles[0].y,
-            width: obstacles[0].w,
+            left: folioBounds.x,
+            top: folioBounds.y,
+            width: folioBounds.w,
             padding: '2rem',
             border: '1px solid rgba(0,0,0,0.1)',
             background: '#fff',
@@ -93,11 +94,13 @@ export const ChallengeDetailView: React.FC = () => {
           </div>
 
           {/* TRANSCRIPTION AREA */}
-          <div style={{
+          <div
+            ref={transcriptionObstacleRef}
+            style={{
             position: 'absolute',
-            left: obstacles[1].x,
-            top: obstacles[1].y,
-            width: obstacles[1].w,
+            left: transcriptionBounds.x,
+            top: transcriptionBounds.y,
+            width: transcriptionBounds.w,
             zIndex: 10,
             background: 'rgba(253, 252, 240, 0.8)',
             backdropFilter: 'blur(4px)',

@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, request } from '../../../api/arena';
 import { useArena } from '../../../context/ArenaContext';
-import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { PretextButton } from '../../../components/PretextButton';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
@@ -20,7 +19,6 @@ interface ChatMessage {
 
 export const CommunityViewV2: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
-  const { registerSoloist, unregisterSoloist } = usePhysicsRegistry();
   const inputRef = useObstacle() as React.RefObject<HTMLInputElement>;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -65,23 +63,6 @@ export const CommunityViewV2: React.FC = () => {
     };
   }, [loadChat]);
 
-  const agentMessages = useMemo(() => messages.filter(message => !!message.is_agent), [messages]);
-
-  useEffect(() => {
-    agentMessages.forEach((message, index) => {
-      registerSoloist({
-        id: `community-v2-agent-${message.id}`,
-        text: `[AGENT] ${safeStr(message.content)}`,
-        lineIndex: 8 + index * 3,
-        color: tokens.colors.manuscript.red,
-        opacity: 0.9,
-      });
-    });
-    return () => {
-      agentMessages.forEach(message => unregisterSoloist(`community-v2-agent-${message.id}`));
-    };
-  }, [agentMessages, registerSoloist, unregisterSoloist]);
-
   const handleSend = async () => {
     if (!input.trim() || !participantCode) return;
     const data = await withToast(() => api.chat(participantCode, input), 'Failed to send message');
@@ -108,8 +89,8 @@ export const CommunityViewV2: React.FC = () => {
           {loading ? (
             <NeuralLoading label="INITIALIZING_COMMUNITY_STREAM" />
           ) : messages.length === 0 ? null : (
-            messages.map((message, index) => (
-              <MessageAnnotation key={message.id} message={message} index={index} isIncoming={incomingIds.has(message.id)} />
+            messages.map((message) => (
+              <MessageAnnotation key={message.id} message={message} isIncoming={incomingIds.has(message.id)} />
             ))
           )}
         </aside>
@@ -184,7 +165,7 @@ export const CommunityViewV2: React.FC = () => {
   );
 };
 
-const MessageAnnotation: React.FC<{ message: ChatMessage; index: number; isIncoming: boolean }> = ({ message, index, isIncoming }) => {
+const MessageAnnotation: React.FC<{ message: ChatMessage; isIncoming: boolean }> = ({ message, isIncoming }) => {
   const ref = useObstacle(!isIncoming) as React.RefObject<HTMLDivElement>;
   const author = safeStr(message.nickname ?? message.author ?? (message.is_agent ? 'AGENT' : 'UNKNOWN')).toUpperCase();
   const content = safeStr(message.content);
