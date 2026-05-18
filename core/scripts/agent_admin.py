@@ -1257,6 +1257,15 @@ def cmd_brief_done(args: argparse.Namespace) -> int:
 
 
 def cmd_acceptance_run(args: argparse.Namespace) -> int:
+    baseline_raw = getattr(args, "baseline_criteria", None) or ""
+    baseline_indices: set[int] = set()
+    for token in baseline_raw.split(","):
+        token = token.strip()
+        if token:
+            try:
+                baseline_indices.add(int(token))
+            except ValueError:
+                print(f"warn: invalid --baseline-criteria token {token!r}; skipping", file=sys.stderr)
     try:
         results = _run_acceptance(
             project=args.project,
@@ -1266,6 +1275,7 @@ def cmd_acceptance_run(args: argparse.Namespace) -> int:
             reviewer_seat=args.reviewer_seat,
             cwd=Path(args.cwd) if args.cwd else None,
             profile_path=Path(args.profile) if getattr(args, "profile", None) else None,
+            baseline_indices=baseline_indices or None,
         )
     except _AcceptanceError as exc:
         print(f"acceptance schema error: {exc}", file=sys.stderr)
@@ -1275,7 +1285,9 @@ def cmd_acceptance_run(args: argparse.Namespace) -> int:
         passed = sum(1 for i in r.items if i.result == "pass")
         failed = sum(1 for i in r.items if i.result == "fail")
         pending = sum(1 for i in r.items if i.result == "pending")
-        print(f"{route}: {r.verdict} (pass={passed} fail={failed} pending={pending})")
+        diagnostic = sum(1 for i in r.items if i.result == "diagnostic")
+        diag_suffix = f" diagnostic={diagnostic}" if diagnostic else ""
+        print(f"{route}: {r.verdict} (pass={passed} fail={failed} pending={pending}{diag_suffix})")
     print(f"aggregate: {verdict}")
     if verdict == "PASS" and not getattr(args, "skip_queue_done", False):
         done_rc = brief_done(

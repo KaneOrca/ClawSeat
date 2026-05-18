@@ -43,10 +43,18 @@ class AcceptanceError(RuntimeError):
     """Schema or invocation error. Distinct from acceptance FAIL (which is data)."""
 
 
+# Result values for ItemResult.result
+_RESULT_PASS = "pass"
+_RESULT_FAIL = "fail"
+_RESULT_PENDING = "pending"
+_RESULT_SKIPPED = "skipped"
+_RESULT_DIAGNOSTIC = "diagnostic"  # non-blocking baseline evidence; never contributes to aggregate FAIL
+
+
 @dataclass
 class ItemResult:
     criterion: str
-    result: str  # 'pass' | 'fail' | 'pending' | 'skipped'
+    result: str  # 'pass' | 'fail' | 'pending' | 'skipped' | 'diagnostic'
     command: str | None = None
     exit_code: int | None = None
     stdout_path: str | None = None
@@ -156,6 +164,21 @@ def _criterion_command_and_text(criterion: Any) -> tuple[str, str]:
         text = criterion.get("description") or cmd
         return str(text), str(cmd)
     raise AcceptanceError(f"unrecognized criterion shape: {criterion!r}")
+
+
+def _criterion_is_diagnostic(criterion: Any, idx: int, baseline_indices: set[int]) -> bool:
+    """Return True when a criterion should be treated as non-blocking diagnostic evidence.
+
+    Two ways a criterion can be diagnostic:
+    1. The criterion dict declares ``"diagnostic": true``.
+    2. The criterion index appears in the caller-supplied ``baseline_indices`` set
+       (from ``--baseline-criteria`` CLI arg or equivalent).
+    """
+    if idx in baseline_indices:
+        return True
+    if isinstance(criterion, dict) and criterion.get("diagnostic"):
+        return True
+    return False
 
 
 def _criterion_route(criterion: Any) -> str:
@@ -290,6 +313,7 @@ def run_mechanical(
     cwd: Path | None = None,
     env_overrides: dict[str, str] | None = None,
     pre_split_mech: list | None = None,
+    baseline_indices: set[int] | None = None,
 ) -> RouteResult:
     """Run each mechanical criterion. Returns aggregate verdict.
 
@@ -331,6 +355,7 @@ def run_mechanical(
     if env_overrides:
         env.update(env_overrides)
 
+    _baseline = baseline_indices or set()
     any_fail = False
     with tempfile.TemporaryDirectory(prefix="clawseat-acceptance-shims-") as _shim_dir:
         _shim_path = Path(_shim_dir)
@@ -338,8 +363,9 @@ def run_mechanical(
         env["PATH"] = f"{_shim_path}{os.pathsep}{env.get('PATH', os.defpath)}"
         for idx, item in enumerate(mech):
             text, cmd = _criterion_command_and_text(item)
+            is_diagnostic = _criterion_is_diagnostic(item, idx, _baseline)
             if not cmd:
-                result.items.append(ItemResult(criterion=text, result="skipped"))
+                result.items.append(ItemResult(criterion=text, result=_RESULT_SKIPPED))
                 continue
             stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
             stderr_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
@@ -357,8 +383,12 @@ def run_mechanical(
                 runtime_ms = int((time.monotonic() - start) * 1000)
                 stdout_p.write_text(proc.stdout, encoding="utf-8")
                 stderr_p.write_text(proc.stderr, encoding="utf-8")
-                verdict = "pass" if proc.returncode == 0 else "fail"
-                if verdict == "fail":
+                if proc.returncode == 0:
+                    verdict = _RESULT_PASS
+                elif is_diagnostic:
+                    verdict = _RESULT_DIAGNOSTIC  # non-zero but non-blocking baseline
+                else:
+                    verdict = _RESULT_FAIL
                     any_fail = True
                 result.items.append(
                     ItemResult(
@@ -378,11 +408,13 @@ def run_mechanical(
                     (exc.stderr or "") + f"\n[acceptance_executor] timeout after {runtime_ms}ms",
                     encoding="utf-8",
                 )
+                # Timeout is always FAIL even for diagnostic criteria: a hanging
+                # command is an execution failure, not unrelated baseline evidence.
                 any_fail = True
                 result.items.append(
                     ItemResult(
                         criterion=text,
-                        result="fail",
+                        result=_RESULT_FAIL,
                         command=cmd,
                         exit_code=-1,
                         stdout_path=str(stdout_p),
@@ -534,6 +566,7 @@ def run_acceptance(
     dispatch_fn=None,
     cwd: Path | None = None,
     profile_path: Path | None = None,
+    baseline_indices: set[int] | None = None,
 ) -> dict[str, RouteResult]:
     """Top-level entry: run all three routes, write receipts, return dict.
 
@@ -566,7 +599,8 @@ def run_acceptance(
     final_mech, final_rev, final_op = _split_by_route(brief)
     results = {
         "mechanical": run_mechanical(
-            brief, acceptance_dir, task_id, cwd=cwd, pre_split_mech=final_mech
+            brief, acceptance_dir, task_id, cwd=cwd, pre_split_mech=final_mech,
+            baseline_indices=baseline_indices,
         ),
         "reviewer": route_reviewer(
             brief, project, team, task_id, acceptance_dir,
@@ -851,7 +885,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cwd", default=None, help="Working dir for mechanical commands")
     parser.add_argument("--profile", default=None, dest="profile",
                         help="Optional profile path for reviewer dispatch (default: ~/.agents/profiles/<project>-profile-dynamic.toml)")
+    parser.add_argument(
+        "--baseline-criteria", default=None, dest="baseline_criteria",
+        help="Comma-separated 0-based indices of mechanical criteria to treat as non-blocking baseline evidence.",
+    )
     args = parser.parse_args(argv)
+
+    baseline_indices: set[int] = set()
+    for token in (args.baseline_criteria or "").split(","):
+        token = token.strip()
+        if token:
+            try:
+                baseline_indices.add(int(token))
+            except ValueError:
+                print(f"warn: invalid --baseline-criteria token {token!r}; skipping", file=sys.stderr)
 
     try:
         results = run_acceptance(
@@ -862,6 +909,7 @@ def main(argv: list[str] | None = None) -> int:
             reviewer_seat=args.reviewer_seat,
             cwd=Path(args.cwd) if args.cwd else None,
             profile_path=Path(args.profile) if args.profile else None,
+            baseline_indices=baseline_indices or None,
         )
     except AcceptanceError as exc:
         print(f"acceptance schema error: {exc}", file=sys.stderr)

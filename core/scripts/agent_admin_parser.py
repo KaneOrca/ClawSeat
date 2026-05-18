@@ -883,6 +883,17 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         action="store_true",
         help="Do not append task_done when aggregate acceptance verdict is PASS.",
     )
+    acceptance_run.add_argument(
+        "--baseline-criteria",
+        default=None,
+        dest="baseline_criteria",
+        help=(
+            "Comma-separated 0-based indices of mechanical criteria to treat as "
+            "diagnostic/non-blocking baseline evidence (e.g. '1' or '1,3'). "
+            "Non-zero exit from these criteria is recorded as 'diagnostic' and does "
+            "not contribute to aggregate FAIL. Relevant failures still block."
+        ),
+    )
     acceptance_run.set_defaults(func=hooks.cmd_acceptance_run)
 
     identity = sub.add_parser("identity", help="Tool identity list/show operations.")

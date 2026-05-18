@@ -354,3 +354,154 @@ def test_run_mechanical_uses_shim_python_not_poisoned_path(env_home, tmp_path):
     if results.items and results.items[0].stdout_path:
         stdout = Path(results.items[0].stdout_path).read_text(encoding="utf-8")
         assert "POISONED" not in stdout, "poisoned python3 was invoked despite shim"
+
+
+# ---------------------------------------------------------------------------
+# CF043: Diagnostic/baseline criterion semantics
+# ---------------------------------------------------------------------------
+
+from acceptance_executor import (  # noqa: E402 — already imported above, re-import for clarity
+    _criterion_is_diagnostic,
+    _RESULT_DIAGNOSTIC,
+    _RESULT_FAIL,
+    _RESULT_PASS,
+)
+
+
+def test_baseline_criterion_by_index_is_diagnostic(env_home, tmp_path):
+    """Mechanical criterion at a baseline index exits non-zero → result=diagnostic, aggregate PASS."""
+    _write_brief(env_home, "p", "t", "TBASE", """
+task_id: TBASE
+project: p
+team: t
+objective: "baseline gate test"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+    - "false"
+""")
+    results = run_acceptance(
+        project="p", team="t", task_id="TBASE",
+        baseline_indices={1},  # index 1 = the 'false' command
+    )
+    mech = results["mechanical"]
+    assert mech.verdict == "PASS", f"diagnostic failure must not block: verdict={mech.verdict}"
+    assert mech.items[0].result == _RESULT_PASS
+    assert mech.items[1].result == _RESULT_DIAGNOSTIC, (
+        f"criterion at baseline index must be diagnostic, got {mech.items[1].result!r}"
+    )
+    assert aggregate_verdict(results) == "PASS"
+
+
+def test_diagnostic_true_attribute_is_nonblocking(env_home, tmp_path):
+    """Criterion with diagnostic:true in dict exits non-zero → result=diagnostic, aggregate PASS."""
+    _write_brief(env_home, "p", "t", "TDIAG", """
+task_id: TDIAG
+project: p
+team: t
+objective: "diagnostic attribute test"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+    - command: "false"
+      description: "full suite baseline"
+      diagnostic: true
+""")
+    results = run_acceptance(project="p", team="t", task_id="TDIAG")
+    mech = results["mechanical"]
+    assert mech.verdict == "PASS"
+    assert mech.items[1].result == _RESULT_DIAGNOSTIC
+    assert aggregate_verdict(results) == "PASS"
+
+
+def test_relevant_failing_criterion_still_blocks(env_home, tmp_path):
+    """A non-diagnostic failure still yields aggregate FAIL even when other items pass."""
+    _write_brief(env_home, "p", "t", "TRELEVANT", """
+task_id: TRELEVANT
+project: p
+team: t
+objective: "relevant failure blocks"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+    - "false"
+    - command: "false"
+      description: "baseline only"
+      diagnostic: true
+""")
+    results = run_acceptance(
+        project="p", team="t", task_id="TRELEVANT",
+        # Only index 2 is baseline; index 1 is a real relevant failure
+        baseline_indices={2},
+    )
+    mech = results["mechanical"]
+    assert mech.verdict == "FAIL", "relevant failure at index 1 must still block"
+    assert mech.items[1].result == _RESULT_FAIL
+    assert mech.items[2].result == _RESULT_DIAGNOSTIC
+    assert aggregate_verdict(results) == "FAIL"
+
+
+def test_baseline_indices_none_no_diagnostic(env_home, tmp_path):
+    """Without baseline_indices, all failures are hard FAIL."""
+    _write_brief(env_home, "p", "t", "TNONE", """
+task_id: TNONE
+project: p
+team: t
+objective: "no baseline set"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+    - "false"
+""")
+    results = run_acceptance(project="p", team="t", task_id="TNONE", baseline_indices=None)
+    assert results["mechanical"].verdict == "FAIL"
+    assert results["mechanical"].items[1].result == _RESULT_FAIL
+
+
+def test_criterion_is_diagnostic_by_index():
+    assert _criterion_is_diagnostic("any string", 0, {0}) is True
+    assert _criterion_is_diagnostic("any string", 1, {0}) is False
+
+
+def test_criterion_is_diagnostic_by_attribute():
+    assert _criterion_is_diagnostic({"command": "false", "diagnostic": True}, 0, set()) is True
+    assert _criterion_is_diagnostic({"command": "false", "diagnostic": False}, 0, set()) is False
+    assert _criterion_is_diagnostic({"command": "false"}, 0, set()) is False
+
+
+def test_cf041_style_full_suite_as_baseline_does_not_block(env_home, tmp_path):
+    """CF041-style: full suite exits non-zero as baseline, focused tests pass → PASS.
+
+    Regression proof: without baseline_indices, this would FAIL. With index 1
+    as baseline, the full-suite failure becomes diagnostic and aggregate PASS.
+    """
+    _write_brief(env_home, "p", "t", "TCF041STYLE", """
+task_id: TCF041STYLE
+project: p
+team: t
+objective: "cf041 baseline gate regression"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical:
+    - "true"
+    - "false"
+""")
+    # Without baseline: FAIL
+    without_baseline = run_acceptance(project="p", team="t", task_id="TCF041STYLE")
+    assert without_baseline["mechanical"].verdict == "FAIL", (
+        "regression sentinel: without baseline, hard fail must occur"
+    )
+
+    # With index 1 as baseline: PASS despite full-suite failure
+    with_baseline = run_acceptance(
+        project="p", team="t", task_id="TCF041STYLE",
+        baseline_indices={1},
+    )
+    assert with_baseline["mechanical"].verdict == "PASS", (
+        "with baseline index, full-suite diagnostic failure must not block"
+    )
+    assert with_baseline["mechanical"].items[1].result == _RESULT_DIAGNOSTIC
