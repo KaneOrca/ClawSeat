@@ -1,11 +1,9 @@
 import React, { useCallback, useRef, useEffect } from 'react';
 import { usePhysicsRegistry, type RectObstacle } from '../../context/PhysicsContext';
 import { usePretextCanvas } from '../../hooks/usePretextCanvas';
-import { getActiveFunctionalTextRects, type FunctionalTextRect } from '../../hooks/useFunctionalTextHover';
 
 interface BitmaskPhysicProps {
   opacity?: number;
-  mousePushEnabled?: boolean;
 }
 
 // ── Character palette ───────────────────────────────────────────────
@@ -50,10 +48,6 @@ function fsin(x: number): number {
 // fcos available if needed: fsin(x + Math.PI * 0.5)
 const FEATHER_PX = 36;
 const OCCLUDED_FLOOR = 0.12;
-const CURSOR_VOID_RADIUS = 85;
-const PUSH_RADIUS_FACTOR = 1.8;
-const PUSH_FORCE = 24;
-const PUSH_LERP = 0.2;
 
 /**
  * Cheap pseudo-noise based on cell coordinates.
@@ -137,50 +131,6 @@ function getOcclusionAlpha(cx: number, cy: number, obstacles: RectObstacle[]): n
   return minAlpha;
 }
 
-function circularVoidAlpha(cx: number, cy: number, sourceX: number, sourceY: number, radius: number): number {
-  const dx = cx - sourceX;
-  const dy = cy - sourceY;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-
-  if (dist <= radius) return 0;
-  if (dist >= radius + FEATHER_PX) return 1;
-
-  const t = (dist - radius) / FEATHER_PX;
-  return t * t * (3 - 2 * t);
-}
-
-function getFunctionalTextVoidAlpha(cx: number, cy: number, rects: FunctionalTextRect[]): number {
-  let alpha = 1;
-  for (const rect of rects) {
-    alpha = Math.min(
-      alpha,
-      circularVoidAlpha(cx, cy, rect.x + rect.width * 0.5, rect.y + rect.height * 0.5, CURSOR_VOID_RADIUS),
-    );
-  }
-  return alpha;
-}
-
-function addPushForce(
-  cx: number,
-  cy: number,
-  sourceX: number,
-  sourceY: number,
-  sourceRadius: number,
-  target: { dx: number; dy: number },
-): void {
-  const dx = cx - sourceX;
-  const dy = cy - sourceY;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist <= 0) return;
-
-  const pushRadius = sourceRadius * PUSH_RADIUS_FACTOR;
-  if (dist >= pushRadius) return;
-
-  const force = Math.pow(1 - dist / pushRadius, 2) * PUSH_FORCE;
-  target.dx += (dx / dist) * force;
-  target.dy += (dy / dist) * force;
-}
-
 /**
  * Sample the pixel mask at (x, y). Returns 0→1 where 1 = text pixel present.
  * Uses ImageData for fast per-pixel reads.
@@ -205,15 +155,11 @@ function sampleMask(
  * Primary masking: pixel-perfect mask buffer from PhysicsContext.
  * Fallback: geometric AABB + charRect occlusion when mask unavailable.
  */
-export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
-  opacity = 0.25,
-  mousePushEnabled = true,
-}) => {
+export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({ opacity = 0.25 }) => {
   const { obstaclesRef, maskRef, viewportRef, environment } = usePhysicsRegistry();
   const lastFrameRef = useRef(0);
   const cellSizeRef = useRef(getCellSize());
   const cachedMaskDataRef = useRef<{ data: ImageData; width: number } | null>(null);
-  const displacementRef = useRef<Map<string, { dx: number; dy: number }>>(new Map());
 
   // Keep environment in a ref so the render callback never needs to be recreated
   const envRef = useRef(environment);
@@ -221,8 +167,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
 
   const opacityRef = useRef(opacity);
   useEffect(() => { opacityRef.current = opacity; }, [opacity]);
-  const mousePushEnabledRef = useRef(mousePushEnabled);
-  useEffect(() => { mousePushEnabledRef.current = mousePushEnabled; }, [mousePushEnabled]);
 
   // Stable render callback — deps are only refs, never changes identity
   const render = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, time: number) => {
@@ -236,13 +180,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
     const env = envRef.current;
     const baseOpacity = opacityRef.current;
     const vp = viewportRef.current;
-    const doMousePush = mousePushEnabledRef.current;
-    const mouseObs = doMousePush ? obstacles.find(obs => obs.id === 'system:mouse') : null;
-    const functionalTextRects = getActiveFunctionalTextRects();
-
-    if (!doMousePush) {
-      displacementRef.current.clear();
-    }
 
     // Read pixel mask — only re-read ImageData when mask was re-rendered
     const mask = maskRef.current;
@@ -260,21 +197,10 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
     const maskW = maskCache?.width ?? 0;
     const { w: CELL_W, h: CELL_H } = cellSizeRef.current;
 
-        const cols = Math.ceil(width / CELL_W);
+    const cols = Math.ceil(width / CELL_W);
     const rows = Math.ceil(height / CELL_H);
     const t = time * 0.001;
     const waveAmplitude = env.waveAmplitude ?? 60;
-    if (import.meta.env.DEV && waveAmplitude > 60) {
-      const flashLog = (window as any).__arenaFlashLog__ || [];
-      (window as any).__arenaFlashLog__ = flashLog;
-      flashLog.push({
-        time: Date.now(),
-        waveAmplitude,
-        delta: waveAmplitude - 60,
-        source: 'BitmaskPhysic',
-        stack: new Error().stack?.split('\n').slice(2, 4).join(' -> ') ?? '',
-      });
-    }
     const baseAlpha = env.opacity ?? baseOpacity;
     const transition = env.effects;
     const recoilVelX = transition?.recoilVelocity?.x ?? 0;
@@ -332,16 +258,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
         } else {
           occlusion = getOcclusionAlpha(cx, cy, obstacles);
         }
-        if (mouseObs) {
-          const mRadius = mouseObs.w * 0.5;
-          occlusion = Math.min(
-            occlusion,
-            circularVoidAlpha(cx, cy, mouseObs.x + mRadius, mouseObs.y + mRadius, mRadius),
-          );
-        }
-        if (functionalTextRects.length > 0) {
-          occlusion = Math.min(occlusion, getFunctionalTextVoidAlpha(cx, cy, functionalTextRects));
-        }
 
         // ── Neural data swarm: flow field + repulsion ─────────────────
 
@@ -380,30 +296,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
 
         let drawX = x;
         let drawY = y;
-
-        if (doMousePush && (mouseObs || functionalTextRects.length > 0)) {
-          const key = `r${row}c${col}`;
-          const cellDisp = displacementRef.current.get(key) ?? { dx: 0, dy: 0 };
-          const target = { dx: 0, dy: 0 };
-
-          if (mouseObs) {
-            const mRadius = mouseObs.w * 0.5;
-            addPushForce(cx, cy, mouseObs.x + mRadius, mouseObs.y + mRadius, mRadius, target);
-          }
-
-          for (const rect of functionalTextRects) {
-            const sourceRadius = Math.max(rect.width, rect.height) * 0.5;
-            addPushForce(cx, cy, rect.x + rect.width * 0.5, rect.y + rect.height * 0.5, sourceRadius, target);
-          }
-
-          cellDisp.dx += (target.dx - cellDisp.dx) * PUSH_LERP;
-          cellDisp.dy += (target.dy - cellDisp.dy) * PUSH_LERP;
-          displacementRef.current.set(key, cellDisp);
-
-          drawX += cellDisp.dx;
-          drawY += cellDisp.dy;
-        }
-
         if (isTransitioning && transitionFrom === 'v2') {
           const digitalNoiseA = cellNoise(col * 17 + t * 40, row * 19 - t * 30);
           const digitalNoiseB = cellNoise(col * 23 - t * 35, row * 29 + t * 45);
