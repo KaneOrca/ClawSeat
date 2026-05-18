@@ -47,10 +47,17 @@ class AcceptanceError(RuntimeError):
     """Schema or invocation error. Distinct from acceptance FAIL (which is data)."""
 
 
+_RESULT_PASS = "pass"
+_RESULT_FAIL = "fail"
+_RESULT_PENDING = "pending"
+_RESULT_SKIPPED = "skipped"
+_RESULT_DIAGNOSTIC = "diagnostic"  # non-blocking baseline evidence; never contributes to aggregate FAIL
+
+
 @dataclass
 class ItemResult:
     criterion: str
-    result: str  # 'pass' | 'fail' | 'pending' | 'skipped'
+    result: str  # 'pass' | 'fail' | 'pending' | 'skipped' | 'diagnostic'
     command: str | None = None
     exit_code: int | None = None
     stdout_path: str | None = None
@@ -286,6 +293,15 @@ def _resolve_reviewer_seat_from_profile(
     return f"{team}-reviewer"
 
 
+def _criterion_is_diagnostic(criterion: Any, idx: int, baseline_indices: set[int]) -> bool:
+    """Return True when a criterion should be treated as non-blocking diagnostic evidence."""
+    if idx in baseline_indices:
+        return True
+    if isinstance(criterion, dict) and criterion.get("diagnostic"):
+        return True
+    return False
+
+
 def run_mechanical(
     brief: dict,
     acceptance_dir: Path,
@@ -293,6 +309,7 @@ def run_mechanical(
     cwd: Path | None = None,
     env_overrides: dict[str, str] | None = None,
     pre_split_mech: list | None = None,
+    baseline_indices: set[int] | None = None,
 ) -> RouteResult:
     """Run each mechanical criterion. Returns aggregate verdict.
 
@@ -334,6 +351,7 @@ def run_mechanical(
     if env_overrides:
         env.update(env_overrides)
 
+    _baseline = baseline_indices or set()
     any_fail = False
     any_executed = False
     with tempfile.TemporaryDirectory(prefix="clawseat-acceptance-shims-") as _shim_dir:
@@ -342,11 +360,12 @@ def run_mechanical(
         env["PATH"] = f"{_shim_path}{os.pathsep}{env.get('PATH', os.defpath)}"
         for idx, item in enumerate(mech):
             text, cmd = _criterion_command_and_text(item)
+            is_diagnostic = _criterion_is_diagnostic(item, idx, _baseline)
             if not cmd or not criterion_is_shell_runnable(item):
                 result.items.append(
                     ItemResult(
                         criterion=text,
-                        result="skipped",
+                        result=_RESULT_SKIPPED,
                         command="not_shell_runnable",
                     )
                 )
@@ -368,8 +387,12 @@ def run_mechanical(
                 runtime_ms = int((time.monotonic() - start) * 1000)
                 stdout_p.write_text(proc.stdout, encoding="utf-8")
                 stderr_p.write_text(proc.stderr, encoding="utf-8")
-                verdict = "pass" if proc.returncode == 0 else "fail"
-                if verdict == "fail":
+                if proc.returncode == 0:
+                    verdict = _RESULT_PASS
+                elif is_diagnostic:
+                    verdict = _RESULT_DIAGNOSTIC
+                else:
+                    verdict = _RESULT_FAIL
                     any_fail = True
                 result.items.append(
                     ItemResult(
@@ -545,6 +568,7 @@ def run_acceptance(
     dispatch_fn=None,
     cwd: Path | None = None,
     profile_path: Path | None = None,
+    baseline_indices: set[int] | None = None,
 ) -> dict[str, RouteResult]:
     """Top-level entry: run all three routes, write receipts, return dict.
 
@@ -577,7 +601,8 @@ def run_acceptance(
     final_mech, final_rev, final_op = _split_by_route(brief)
     results = {
         "mechanical": run_mechanical(
-            brief, acceptance_dir, task_id, cwd=cwd, pre_split_mech=final_mech
+            brief, acceptance_dir, task_id, cwd=cwd, pre_split_mech=final_mech,
+            baseline_indices=baseline_indices,
         ),
         "reviewer": route_reviewer(
             brief, project, team, task_id, acceptance_dir,
