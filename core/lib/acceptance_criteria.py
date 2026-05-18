@@ -187,6 +187,37 @@ def has_bare_git_diff_name_only(command: str) -> bool:
     return False
 
 
+# cf025: node_modules path guard — rejects commands that would commit node_modules.
+# Builder-ui (al543) accidentally staged node_modules; this catches it early.
+_NODE_MODULES_PATH_RE = re.compile(r"\bnode_modules\b")
+
+# cf025: dirty-worktree status check pattern — detects git status commands that
+# check for uncommitted changes, helping operators see local dirty state.
+_DIRTY_WORKTREE_CHECK_RE = re.compile(
+    r"git\s+(?:status|diff\s+--stat|ls-files\s+--modified|diff\s+--cached)"
+)
+
+
+def has_node_modules_path(command: str) -> bool:
+    """Return True if command references a node_modules path.
+
+    Catches brief mechanical commands that accidentally check or commit
+    node_modules content (e.g. 'git add node_modules/' or diff checks
+    involving node_modules). These should never appear in acceptance commands.
+    """
+    return bool(_NODE_MODULES_PATH_RE.search(command or ""))
+
+
+def is_dirty_worktree_check(command: str) -> bool:
+    """Return True if command checks for dirty/staged worktree state.
+
+    Identifies commands like `git status`, `git diff --stat`, or
+    `git ls-files --modified` that surface local dirty state. Used to
+    improve dirty-worktree awareness in acceptance and validation outputs.
+    """
+    return bool(_DIRTY_WORKTREE_CHECK_RE.search(command or ""))
+
+
 # cf017: canonical portable scope-guard command for forbidden-file checks.
 # Memory/planner should use this template (with FORBIDDEN_PATHS substituted) when
 # generating the "no forbidden files touched" mechanical acceptance criterion.
@@ -244,6 +275,12 @@ def brief_acceptance_ready(brief: dict[str, Any]) -> tuple[bool, str]:
                 "brief.acceptance_criteria.mechanical contains bare 'git diff --name-only' "
                 f"without an explicit range: {command!r}. "
                 "Use an explicit base..head range, e.g. 'git diff origin/main...HEAD --name-only'."
+            )
+        # cf025: reject commands referencing node_modules paths
+        if has_node_modules_path(command):
+            return False, (
+                "brief.acceptance_criteria.mechanical references node_modules path "
+                f"in command: {command!r}. node_modules must not appear in acceptance commands."
             )
 
     return True, "ok"

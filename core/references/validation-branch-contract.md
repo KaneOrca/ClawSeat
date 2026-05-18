@@ -9,6 +9,17 @@ See also: `core/lib/validation_branch.py` for the importable contract and helper
 - **Main protected**: yes — never merges directly; requires operator sign-off on `review/latest` first
 - **Local validation port**: `15173`
 
+## Local-First Validation (cf025)
+
+`review/latest` is the **local operator validation branch**. Remote push to GitHub is **not required** for operator testing — the operator validates locally against the merged `review/latest` branch.
+
+- Planner merges accepted task work to local `review/latest` and reports the commit hash.
+- Operator runs Cartooner locally on port `15173` and validates the feature.
+- Remote push of `review/latest` to GitHub happens only when explicitly requested (e.g. for CI, backup, or cross-machine handoff).
+- `main` is only updated (by memory) after operator sign-off — remote push of `main` always requires explicit operator request.
+
+**Dirty-worktree awareness**: When the operator reports unexpected behavior in local validation, first check `git status` on the `review/latest` branch — staged or unstaged changes may be influencing the local build without appearing in the merge commit.
+
 ## Required Delivery Fields
 
 When relaying final delivery to memory, planner must include a `## Validation Branch` section with:
