@@ -223,7 +223,7 @@ try:
     custom_env_file = ""
     if not auth_override.strip():
         agent_admin.SESSION_SERVICE._sync_launcher_secret_file(session, launcher_auth)
-        if launcher_auth == "custom":
+        if launcher_auth in ("custom", "minimax", "deepseek", "xcode"):
             custom_env_file = agent_admin.SESSION_SERVICE._write_launcher_custom_env_file(session)
 
     runtime_dir = agent_admin.SESSION_SERVICE._launcher_runtime_dir(session, launcher_auth)
