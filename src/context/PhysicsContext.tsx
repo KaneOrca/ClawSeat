@@ -481,6 +481,7 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
     if (!import.meta.env.DEV) return;
+    if (!(window as any).__ARENA_DEBUG_FLASH__) return;
 
     const container = document.createElement('div');
     container.style.position = 'fixed';
