@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NeuralBadge } from '../../../design/VisualPrimitive';
 import { useArena, type ViewType } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
-import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
+import { useObstacle } from '../../../hooks/useObstacle';
 import { useHomeInit } from '../../../hooks/useHomeInit';
-import { PromptCard } from '../../../components/PromptCard';
+import { PretextButton } from '../../../components/PretextButton';
 import { tokens } from '../../../design/tokens';
 
 const MANUSCRIPT_ACTIVE_RED = tokens.colors.manuscript.red;
@@ -31,10 +31,10 @@ type FieldState = 'FIELD_IDLE' | 'TERM_SOLOIST_ACTIVE' | 'SOLOIST_PULSE_NAV';
 export const HomeView: React.FC = () => {
   const { onInitialize, user, isZenMode, t } = useHomeInit(V2_CONFIG);
   const { setView, showToast } = useArena();
-  const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
-  const marginalia01Ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
-  const marginalia02Ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
-  const introProseRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLParagraphElement>;
+  const { setEnvironment } = usePhysicsRegistry();
+  const marginalia01Ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  const marginalia02Ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  const introProseRef = useObstacle() as React.RefObject<HTMLParagraphElement>;
   const timeoutRef = useRef<number | null>(null);
   const [fieldState, setFieldState] = useState<FieldState>('FIELD_IDLE');
   const [activeTermId, setActiveTermId] = useState<HomeTerm['id'] | null>(null);
@@ -45,8 +45,8 @@ export const HomeView: React.FC = () => {
   }, [isZenMode, setEnvironment]);
 
   const unregisterTerms = useCallback(() => {
-    TERM_NAV.forEach(term => unregisterSoloist(`v2-home-term-${term.id}`));
-  }, [unregisterSoloist]);
+    // legacy soloist cleanup was removed; keep env-level cleanup centralized
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -55,43 +55,28 @@ export const HomeView: React.FC = () => {
     };
   }, [unregisterTerms]);
 
-  const handleTermEnter = useCallback((term: HomeTerm, label: string) => {
+  const handleTermEnter = useCallback((term: HomeTerm) => {
     unregisterTerms();
     setActiveTermId(term.id);
     setFieldState('TERM_SOLOIST_ACTIVE');
-    registerSoloist({
-      id: `v2-home-term-${term.id}`,
-      text: `[ ${label} ]`,
-      lineIndex: term.lineIndex,
-      color: MANUSCRIPT_ACTIVE_RED,
-      opacity: 0.95,
-    });
     setEnvironment({
       waveAmplitude: 92,
       opacity: 0.22,
       ambientColor: 'rgba(181, 48, 33, 0.24)',
     });
-  }, [registerSoloist, setEnvironment, unregisterTerms]);
+  }, [setEnvironment, unregisterTerms]);
 
-  const handleTermLeave = useCallback((term: HomeTerm) => {
+  const handleTermLeave = useCallback(() => {
     if (fieldState === 'SOLOIST_PULSE_NAV') return;
-    unregisterSoloist(`v2-home-term-${term.id}`);
     setActiveTermId(null);
     setFieldState('FIELD_IDLE');
     resetHomeEnvironment();
-  }, [fieldState, resetHomeEnvironment, unregisterSoloist]);
+  }, [fieldState, resetHomeEnvironment]);
 
-  const handleTermClick = useCallback((term: HomeTerm, label: string) => {
+  const handleTermClick = useCallback((term: HomeTerm) => {
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
     setActiveTermId(term.id);
     setFieldState('SOLOIST_PULSE_NAV');
-    registerSoloist({
-      id: `v2-home-term-${term.id}`,
-      text: `[ ${label} -> ${term.route} ]`,
-      lineIndex: term.lineIndex,
-      color: MANUSCRIPT_ACTIVE_RED,
-      opacity: 1,
-    });
     setEnvironment({
       waveAmplitude: 124,
       opacity: 0.28,
@@ -110,7 +95,7 @@ export const HomeView: React.FC = () => {
       unregisterTerms();
       resetHomeEnvironment();
     }, 320);
-  }, [onInitialize, registerSoloist, resetHomeEnvironment, setEnvironment, setView, showToast, unregisterTerms, user]);
+  }, [onInitialize, resetHomeEnvironment, setEnvironment, setView, showToast, unregisterTerms, user]);
 
   const termsById = useMemo(() => {
     return TERM_NAV.reduce<Record<HomeTerm['id'], HomeTerm>>((acc, term) => {
@@ -141,13 +126,13 @@ export const HomeView: React.FC = () => {
           {/* BLOCK 1 */}
           <div ref={marginalia01Ref} data-module="home-marginalia-01" style={{
             position: 'absolute',
-            right: 'clamp(1rem, 3vw, 3rem)',
+            left: 'min(58vw, 760px)',
             top: 'clamp(3rem, 8vw, 7rem)',
-            width: 'min(20vw, 240px)',
+            width: 'min(30vw, 340px)',
             padding: '1rem 0'
           }}>
-            <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.marginalia_label')}</h3>
-            <p data-functional-text="true" style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
+            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.marginalia_label')}</h3>
+            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
               {t('home.marginalia')}
             </p>
           </div>
@@ -155,14 +140,14 @@ export const HomeView: React.FC = () => {
           {/* BLOCK 2 */}
           <div ref={marginalia02Ref} data-module="home-marginalia-02" style={{
             position: 'absolute',
-            left: 'clamp(1rem, 3vw, 3rem)',
-            top: 'clamp(28rem, 58vh, 42rem)',
-            width: 'min(18vw, 220px)',
+            left: 0,
+            top: 'clamp(26rem, 52vw, 34rem)',
+            width: 'min(28vw, 300px)',
             padding: '1rem 0',
-            textAlign: 'left'
+            textAlign: 'right'
           }}>
-            <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.notes_label')}</h3>
-            <p data-functional-text="true" style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
+            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.notes_label')}</h3>
+            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
               {t('home.v2.notes')}
             </p>
           </div>
@@ -171,8 +156,8 @@ export const HomeView: React.FC = () => {
           <div data-module="home-hero" style={{
             position: 'relative',
             marginTop: 'clamp(4rem, 14vh, 9rem)',
-            maxWidth: 'min(50vw, 680px)',
-            marginLeft: 'clamp(2rem, 22vw, 20rem)'
+            maxWidth: '780px',
+            marginLeft: 'clamp(0rem, 14vw, 14rem)'
           }}>
             <NeuralBadge text={t('home.configs.v2')} color={tokens.colors.manuscript.muted} />
 
@@ -180,7 +165,6 @@ export const HomeView: React.FC = () => {
 
             <p
               ref={introProseRef}
-              data-functional-text="true"
               data-module="home-intro-prose"
               style={{
                 margin: '2rem 0 0',
@@ -221,22 +205,45 @@ export const HomeView: React.FC = () => {
               {t('home.v2.intro_after_join')}
             </p>
 
-            <PromptCard
+            <PretextButton
               className="home-agent-prompt"
-              variant="v2"
-              heading={t('home.v2.agent_prompt.heading')}
-              body={t('home.v2.agent_prompt.body')}
-              copyLabel={t('home.v2.agent_prompt.copy_button')}
-              copiedLabel={t('home.v2.agent_prompt.copied')}
-              onTrigger={() => setView('auth')}
+              config={{
+                label: t('home.v2.agent_prompt.body'),
+                engine: 'labyrinth',
+                physicsLineIndex: 29,
+                soloistId: 'v2-home-agent-prompt',
+                color: MANUSCRIPT_ACTIVE_RED,
+                opacity: 0.95,
+                onTrigger: () => setView('auth'),
+                activationEnvironment: {
+                  waveAmplitude: 92,
+                  opacity: 0.22,
+                  ambientColor: 'rgba(181, 48, 33, 0.24)',
+                },
+                triggerEnvironment: {
+                  waveAmplitude: 124,
+                  opacity: 0.28,
+                  ambientColor: 'rgba(181, 48, 33, 0.3)',
+                },
+                idleEnvironment: isZenMode ? V2_CONFIG.zenEnvironment : V2_CONFIG.environment,
+              }}
               style={{
                 display: 'block',
                 marginTop: 'clamp(2.5rem, 6vh, 4.5rem)',
                 maxWidth: 'min(680px, 100%)',
+                color: MANUSCRIPT_ACTIVE_RED,
+                fontFamily: tokens.fonts.manuscript,
+                fontSize: 'clamp(1rem, 2.1vw, 1.35rem)',
+                fontStyle: 'italic',
+                fontWeight: 500,
+                lineHeight: 2.05,
+                textAlign: 'left',
+                textDecoration: 'none',
+                whiteSpace: 'pre-line',
               }}
             />
 
-            <div data-functional-text="true" style={{ marginTop: '8vh', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
+            <div style={{ marginTop: '8vh', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
               {t('home.v2.status_label')}: {fieldState}<br />
               {t('home.v2.route_label')}: {activeTermId ? TERM_NAV.find(term => term.id === activeTermId)?.route : '--'}<br />
               {t('home.v2.location_label')}: {t('home.v2.location_value')}<br />
@@ -308,9 +315,9 @@ const HomeKeyTerm: React.FC<{
   active: boolean;
   label: string;
   term: HomeTerm;
-  onEnter: (term: HomeTerm, label: string) => void;
-  onLeave: (term: HomeTerm) => void;
-  onClick: (term: HomeTerm, label: string) => void;
+  onEnter: (term: HomeTerm) => void;
+  onLeave: () => void;
+  onClick: (term: HomeTerm) => void;
 }> = ({ active, label, term, onEnter, onLeave, onClick }) => {
   const termRef = useObstacle() as React.RefObject<HTMLButtonElement>;
 
@@ -318,14 +325,13 @@ const HomeKeyTerm: React.FC<{
     <button
       ref={termRef}
       className="home-key-term"
-      data-functional-text="true"
       data-nav={term.id}
       data-active={active}
-      onMouseEnter={() => onEnter(term, label)}
-      onMouseLeave={() => onLeave(term)}
-      onFocus={() => onEnter(term, label)}
-      onBlur={() => onLeave(term)}
-      onClick={() => onClick(term, label)}
+      onMouseEnter={() => onEnter(term)}
+      onMouseLeave={onLeave}
+      onFocus={() => onEnter(term)}
+      onBlur={onLeave}
+      onClick={() => onClick(term)}
       style={{
         appearance: 'none',
         background: 'none',

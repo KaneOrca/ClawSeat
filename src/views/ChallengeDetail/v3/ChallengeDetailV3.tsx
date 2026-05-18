@@ -21,7 +21,7 @@ export const ChallengeDetailV3: React.FC = () => {
   } = useChallengeSubmission();
   const { t } = useLanguage();
 
-  const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
 
   const intensityRef = useRef(1);
 
@@ -34,19 +34,6 @@ export const ChallengeDetailV3: React.FC = () => {
       setEnvironment({ waveAmplitude: 60 });
     }, 500);
   }, [setAnswer, setEnvironment]);
-
-  useEffect(() => {
-    const soloistText = answer || t('challengeDetail.v3.input_placeholder');
-    if (!isZenMode || answer) {
-      registerSoloist({
-        id: 'challenge-user-input',
-        text: soloistText,
-        lineIndex: 11,
-        color: tokens.colors.aurora.cyan,
-      });
-    }
-    return () => unregisterSoloist('challenge-user-input');
-  }, [answer, isZenMode, registerSoloist, t, unregisterSoloist]);
 
   useEffect(() => {
     return () => setEnvironment({ waveAmplitude: 60, waveFrequency: 0.03 });

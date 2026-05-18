@@ -19,7 +19,7 @@ interface RegisterResponse {
 
 export const AuthViewV2: React.FC = () => {
   const { login, setView } = useArena();
-  const { setEnvironment, registerSoloist, unregisterSoloist } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
   const inputRef = useObstacle() as React.RefObject<HTMLInputElement>;
   const codeRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const messageRef = useObstacle() as React.RefObject<HTMLDivElement>;
@@ -37,19 +37,11 @@ export const AuthViewV2: React.FC = () => {
       opacity: success ? 0.28 : 0.18,
       ambientColor: success ? 'rgba(181, 48, 33, 0.24)' : 'rgba(26, 26, 26, 0.32)',
     });
-    registerSoloist({
-      id: 'auth-v2-soloist',
-      text: success ? '第一道门已通过，回响已留下印记。' : '请写下你的代号，让手稿避让出入口。',
-      lineIndex: success ? 18 : 14,
-      color: success ? INK_RED : tokens.colors.manuscript.ink,
-      opacity: success ? 1 : 0.75,
-    });
     return () => {
-      unregisterSoloist('auth-v2-soloist');
       setEnvironment({ ambientColor: undefined });
       if (redirectTimer.current !== null) window.clearTimeout(redirectTimer.current);
     };
-  }, [registerSoloist, setEnvironment, success, unregisterSoloist]);
+  }, [setEnvironment, success]);
 
   const completeLogin = (data: RegisterResponse) => {
     const user: User = {

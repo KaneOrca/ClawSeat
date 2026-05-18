@@ -290,7 +290,7 @@ export const ChallengeLayer: React.FC = () => {
     isZenMode,
     t,
   } = useChallengeSubmission();
-  const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
   const layerActive = Boolean(currentChallengeId);
   const eyebrowRef = useObstacleDetached(layerActive, isZenMode) as React.RefObject<HTMLDivElement>;
   const progressLabelRef = useObstacleDetached(layerActive, isZenMode) as React.RefObject<HTMLDivElement>;
@@ -318,13 +318,6 @@ export const ChallengeLayer: React.FC = () => {
     activeStepId: activeStep?.id ?? 'step-1',
     lineIndex: 18,
   });
-
-  useEffect(() => {
-    reveal.currentSoloists.forEach(registerSoloist);
-    return () => {
-      reveal.currentSoloists.forEach(soloist => unregisterSoloist(soloist.id));
-    };
-  }, [registerSoloist, reveal.currentSoloists, unregisterSoloist]);
 
   useEffect(() => {
     setEnvironment({ waveAmplitude: reveal.shimmerActive ? 82 : 60, waveFrequency: 0.04 });

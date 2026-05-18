@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, request } from '../../../api/arena';
 import { useArena } from '../../../context/ArenaContext';
-import { usePhysicsRegistry } from '../../../context/PhysicsContext';
 import { PretextButton } from '../../../components/PretextButton';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { tokens } from '../../../design/tokens';
@@ -20,7 +19,6 @@ interface ChatMessage {
 
 export const CommunityViewV2: React.FC = () => {
   const { participantCode, user, withToast, isZenMode } = useArena();
-  const { registerSoloist, unregisterSoloist } = usePhysicsRegistry();
   const inputRef = useObstacle() as React.RefObject<HTMLInputElement>;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -65,23 +63,6 @@ export const CommunityViewV2: React.FC = () => {
     };
   }, [loadChat]);
 
-  const agentMessages = useMemo(() => messages.filter(message => !!message.is_agent), [messages]);
-
-  useEffect(() => {
-    agentMessages.forEach((message, index) => {
-      registerSoloist({
-        id: `community-v2-agent-${message.id}`,
-        text: `[AGENT] ${safeStr(message.content)}`,
-        lineIndex: 8 + index * 3,
-        color: tokens.colors.manuscript.red,
-        opacity: 0.9,
-      });
-    });
-    return () => {
-      agentMessages.forEach(message => unregisterSoloist(`community-v2-agent-${message.id}`));
-    };
-  }, [agentMessages, registerSoloist, unregisterSoloist]);
-
   const handleSend = async () => {
     if (!input.trim() || !participantCode) return;
     const data = await withToast(() => api.chat(participantCode, input), 'Failed to send message');
@@ -101,21 +82,21 @@ export const CommunityViewV2: React.FC = () => {
         transition: 'opacity 0.8s ease',
       }}
     >
-      <div data-functional-text="true" style={labelStyle}>COMMUNITY_V2 // LEFT_MARGIN_ANNOTATIONS</div>
+      <div style={labelStyle}>COMMUNITY_V2 // LEFT_MARGIN_ANNOTATIONS</div>
 
       <main className="community-v2-frame" style={frameStyle}>
         <aside className="community-v2-margin" style={leftMarginStyle}>
           {loading ? (
             <NeuralLoading label="INITIALIZING_COMMUNITY_STREAM" />
           ) : messages.length === 0 ? null : (
-            messages.map(message => (
+            messages.map((message) => (
               <MessageAnnotation key={message.id} message={message} isIncoming={incomingIds.has(message.id)} />
             ))
           )}
         </aside>
 
         <section className="community-v2-prose" style={proseStyle}>
-          <p data-functional-text="true" style={proseParagraphStyle}>
+          <p style={proseParagraphStyle}>
             {messages.length === 0
               ? 'The margin is empty. The manuscript field continues without interruption, waiting for its first annotation.'
               : 'Every annotation alters the reading path. The archive does not separate social signal from text; it lets each voice press against the page until meaning bends around it.'}
@@ -125,7 +106,6 @@ export const CommunityViewV2: React.FC = () => {
 
       <div className="community-v2-input-row" style={inputRowStyle}>
         <input
-          data-functional-text="true"
           ref={inputRef}
           data-obstacle-id="community-v2-input"
           type="text"
@@ -191,9 +171,8 @@ const MessageAnnotation: React.FC<{ message: ChatMessage; isIncoming: boolean }>
   const content = safeStr(message.content);
 
   return (
-    <div ref={ref} data-functional-text="true" style={messageContainerStyle}>
+    <div ref={ref} style={messageContainerStyle}>
       <div
-        data-functional-text="true"
         style={{
           ...messageStyle,
           ...(message.is_agent ? agentMessageStyle : null),
@@ -204,7 +183,7 @@ const MessageAnnotation: React.FC<{ message: ChatMessage; isIncoming: boolean }>
           <>[AGENT] {content}</>
         ) : (
           <>
-            <span data-functional-text="true" style={authorStyle}>{author}</span>
+            <span style={authorStyle}>{author}</span>
             {content}
           </>
         )}

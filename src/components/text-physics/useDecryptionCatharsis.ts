@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useArena } from '../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../context/PhysicsContext';
-import { tokens } from '../../design/tokens';
 
 interface CatharsisInput {
   layerId: number;
@@ -9,7 +8,7 @@ interface CatharsisInput {
 
 export function useDecryptionCatharsis({ layerId }: CatharsisInput) {
   const { user } = useArena();
-  const { registerSoloist, setEnvironment } = usePhysicsRegistry();
+  const { setEnvironment } = usePhysicsRegistry();
 
   return useCallback((stepId: string) => {
     const timestamp = Date.now();
@@ -37,16 +36,6 @@ export function useDecryptionCatharsis({ layerId }: CatharsisInput) {
     });
 
     window.setTimeout(() => {
-      registerSoloist({
-        id: `signature-${layerId}-${stepId}-${timestamp}`,
-        text: signature,
-        lineIndex: 8 + Number(stepId.replace(/\D/g, '') || 0) * 3,
-        color: tokens.colors.aurora.cyan,
-        opacity: 0.95,
-      });
-    }, 240);
-
-    window.setTimeout(() => {
       setEnvironment({
         waveAmplitude: 60,
         effects: {
@@ -59,5 +48,5 @@ export function useDecryptionCatharsis({ layerId }: CatharsisInput) {
         },
       });
     }, 800);
-  }, [layerId, registerSoloist, setEnvironment, user?.nickname]);
+  }, [layerId, setEnvironment, user?.nickname]);
 }

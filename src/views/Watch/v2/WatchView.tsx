@@ -5,7 +5,7 @@ import { api, request } from '../../../api/arena';
 import { NeuralLoading } from '../../../design/VisualPrimitive';
 import { safeStr } from '../../../utils/safeStr';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
+import { LabyrinthPhysic } from '../../../components/text-physics/LabyrinthPhysic';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { tokens } from '../../../design/tokens';
 
@@ -42,15 +42,6 @@ export const WatchView: React.FC = () => {
 
   if (loading) return <NeuralLoading label={t('watch.status.loading').toUpperCase()} />;
 
-  // Map feed to obstacles (wider and more offset for better wrapping visualization)
-  const obstacles = feed.map((event, i) => ({
-    id: `event-${event.id}`,
-    x: i % 2 === 0 ? 0 : 500,
-    y: 150 + i * 250,
-    w: 400,
-    h: 220
-  }));
-
   return (
     <div className="v2-watch" style={{ 
       minHeight: '100vh', 
@@ -64,12 +55,11 @@ export const WatchView: React.FC = () => {
 
       {/* BACKGROUND CHRONICLE PHYSICS */}
       <div style={{ position: 'absolute', inset: '4rem', zIndex: 1, opacity: isZenMode ? 0.95 : 0.8 }}>
-        <ManuscriptPhysic 
+        <LabyrinthPhysic 
           text={(t('watch.subtitle') + ' ' + t('watch.marginalia') + ' ' + t('home.manifesto') + ' ').repeat(10)} 
-          obstacles={isZenMode ? [] : obstacles} 
-          width={window.innerWidth - 128} 
           lineHeight={locale === 'zh-CN' ? 36 : 32} 
           fontDef={locale === 'zh-CN' ? `400 18px ${tokens.fonts.body}` : `400 20px ${tokens.fonts.manuscript}`}
+          variant="v2"
         />
       </div>
 
@@ -98,7 +88,6 @@ export const WatchView: React.FC = () => {
               key={event.id}
               event={event}
               index={i}
-              obstacle={obstacles[i]}
               t={t}
             />
           ))}
@@ -129,10 +118,11 @@ export const WatchView: React.FC = () => {
 const WatchFeedEntry: React.FC<{
   event: RawFeedEvent;
   index: number;
-  obstacle: { x: number; y: number; w: number; h: number };
   t: (keyPath: string) => string;
-}> = ({ event, index, obstacle, t }) => {
+}> = ({ event, index, t }) => {
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
+  const left = index % 2 === 0 ? 0 : 500;
+  const top = 150 + index * 250;
 
   return (
     <motion.div
@@ -141,10 +131,10 @@ const WatchFeedEntry: React.FC<{
       animate={{ opacity: 1, x: 0 }}
       style={{
         position: 'absolute',
-        left: obstacle.x,
-        top: obstacle.y,
-        width: obstacle.w,
-        minHeight: obstacle.h,
+        left,
+        top,
+        width: 400,
+        minHeight: 220,
         padding: '0.75rem 0 0.75rem 1.25rem',
         borderLeft: '1px solid rgba(26,26,26,0.3)',
         background: 'transparent',
