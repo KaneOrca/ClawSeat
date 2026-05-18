@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -231,20 +232,76 @@ def detect_stale_handoffs(project: str, threshold_hours: int = STALE_THRESHOLD_H
     return stale
 
 
+# Child task_id suffix patterns (role at end, no trailing date):
+#   {parent}-builder, {parent}-reviewer, {parent}-patrol
+_CHILD_TERMINAL_RE = re.compile(r"-(builder|reviewer|patrol)$", re.IGNORECASE)
+
+# Child task_id suffix patterns (role before date):
+#   {base}-{role}-{date6-8}, e.g. al093-...-reviewer-20260504
+#   Parent would be {base}-{date6-8}
+_CHILD_DATE_RE = re.compile(r"-(builder|reviewer|patrol)-(\d{6,8})$", re.IGNORECASE)
+
+
+def _resolve_parent_task_key(task_key: str) -> str:
+    """Strip specialist child suffix from task_key to recover the parent workflow task id.
+
+    Handles two conventions:
+    - Terminal role:  {base}-{date}-{role}  →  {base}-{date}   (CF/ClawSeat style)
+    - Role-then-date: {base}-{role}-{date}  →  {base}-{date}   (cartooner-product style)
+    Returns task_key unchanged when no child suffix is found.
+    """
+    m = _CHILD_DATE_RE.search(task_key)
+    if m:
+        return task_key[: m.start()] + "-" + m.group(2)
+    m = _CHILD_TERMINAL_RE.search(task_key)
+    if m:
+        return task_key[: m.start()]
+    return task_key
+
+
+def _has_task_done_pass(queue_paths: list[Path], task_id: str) -> bool:
+    """Return True if any queue file records a task_done PASS event for task_id."""
+    for qpath in queue_paths:
+        if not qpath.is_file():
+            continue
+        try:
+            lines = qpath.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                event.get("event_type") == "task_done"
+                and event.get("task_id") == task_id
+                and event.get("verdict") == "PASS"
+            ):
+                return True
+    return False
+
+
 def detect_stale_fanin_closeout(
     project: str,
     handoffs_dir: Path | None = None,
+    queue_paths: list[Path] | None = None,
 ) -> list[dict[str, Any]]:
     """Detect tasks where builder delivery was consumed by planner but planner final closeout is missing.
 
-    A stale fan-in occurs when:
-    - A {task}__*__{planner-seat}.json.consumed file exists (builder delivered and planner consumed it)
-    - But no {task}__{planner-seat}__memory.json receipt exists (planner hasn't closed out to memory)
+    A stale fan-in occurs when ALL of the following hold:
+    - A {task}__*__{planner-seat}.json.consumed file exists (specialist delivered; planner consumed it)
+    - No {task}__{planner-seat}__memory.json receipt exists at the child task_id level
+    - No {parent}__{planner-seat}__memory.json receipt exists at the parent task_id level
+      (parent is resolved by stripping child specialist suffixes like -builder/-reviewer/-patrol)
+    - No task_done PASS event exists for the parent task_id in any provided queue_paths
 
-    Returns a list of dicts: task_id, planner_seat, consumed_path, hint.
+    Returns a list of dicts: task_id, parent_task_id, planner_seat, consumed_path, hint.
     """
     if handoffs_dir is None:
         handoffs_dir = _tasks_root() / project / "patrol" / "handoffs"
+    if queue_paths is None:
+        queue_paths = list((_tasks_root() / project).glob("*/tasks.queue.jsonl"))
     if not handoffs_dir.is_dir():
         return []
 
@@ -267,19 +324,33 @@ def detect_stale_fanin_closeout(
         if dedup_key in seen:
             continue
         seen.add(dedup_key)
-        planner_memory_receipt = handoffs_dir / f"{task_key}__{target}__memory.json"
-        if not planner_memory_receipt.exists():
-            stale.append(
-                {
-                    "task_id": task_key,
-                    "planner_seat": target,
-                    "consumed_path": str(consumed_path),
-                    "hint": (
-                        f"planner_final_missing: {target} consumed builder delivery "
-                        f"but planner->memory receipt absent"
-                    ),
-                }
-            )
+
+        # Check 1: direct planner->memory receipt at child task_id level
+        if (handoffs_dir / f"{task_key}__{target}__memory.json").exists():
+            continue
+
+        # Check 2: parent planner->memory receipt (after stripping child suffix)
+        parent_key = _resolve_parent_task_key(task_key)
+        if parent_key != task_key and (handoffs_dir / f"{parent_key}__{target}__memory.json").exists():
+            continue
+
+        # Check 3: queue task_done PASS for the parent task id
+        if _has_task_done_pass(queue_paths, parent_key):
+            continue
+
+        stale.append(
+            {
+                "task_id": task_key,
+                "parent_task_id": parent_key,
+                "planner_seat": target,
+                "consumed_path": str(consumed_path),
+                "hint": (
+                    f"planner_final_missing: {target} consumed delivery for "
+                    f"{task_key} (parent: {parent_key}) but planner->memory "
+                    f"receipt and task_done PASS absent"
+                ),
+            }
+        )
     return stale
 
 
@@ -460,7 +531,8 @@ def main() -> int:
     print(seat_health["summary"])
     if rewake_count:
         print(f"[STALE-HANDOFF-REWAKE:project={profile.project_name},count={rewake_count}]")
-    fanin_stale = detect_stale_fanin_closeout(profile.project_name)
+    fanin_queue_paths = list((_tasks_root() / profile.project_name).glob("*/tasks.queue.jsonl"))
+    fanin_stale = detect_stale_fanin_closeout(profile.project_name, queue_paths=fanin_queue_paths)
     for item in fanin_stale:
         print(
             f"[PLANNER-FANIN-STALE:project={profile.project_name},"
