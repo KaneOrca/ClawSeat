@@ -168,16 +168,34 @@ run_claude_runtime() {
         mode_label="Anthropic Console API"
         ;;
       minimax)
+        if [[ -n "${CUSTOM_ENV_FILE:-}" ]] && [[ -f "$CUSTOM_ENV_FILE" ]]; then
+          load_custom_env "$CUSTOM_ENV_FILE"
+          export ANTHROPIC_AUTH_TOKEN="${LAUNCHER_CUSTOM_API_KEY:-}"
+          export ANTHROPIC_BASE_URL="${LAUNCHER_CUSTOM_BASE_URL:-}"
+          export ANTHROPIC_MODEL="${LAUNCHER_CUSTOM_MODEL:-}"
+        fi
         export API_TIMEOUT_MS=3000000
         export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
         mode_label="MiniMax API"
         ;;
       deepseek)
+        if [[ -n "${CUSTOM_ENV_FILE:-}" ]] && [[ -f "$CUSTOM_ENV_FILE" ]]; then
+          load_custom_env "$CUSTOM_ENV_FILE"
+          export ANTHROPIC_AUTH_TOKEN="${LAUNCHER_CUSTOM_API_KEY:-}"
+          export ANTHROPIC_BASE_URL="${LAUNCHER_CUSTOM_BASE_URL:-}"
+          export ANTHROPIC_MODEL="${LAUNCHER_CUSTOM_MODEL:-}"
+        fi
         export API_TIMEOUT_MS=3000000
         export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
         mode_label="DeepSeek API"
         ;;
       xcode)
+        if [[ -n "${CUSTOM_ENV_FILE:-}" ]] && [[ -f "$CUSTOM_ENV_FILE" ]]; then
+          load_custom_env "$CUSTOM_ENV_FILE"
+          export ANTHROPIC_AUTH_TOKEN="${LAUNCHER_CUSTOM_API_KEY:-}"
+          export ANTHROPIC_BASE_URL="${LAUNCHER_CUSTOM_BASE_URL:-}"
+          export ANTHROPIC_MODEL="${LAUNCHER_CUSTOM_MODEL:-}"
+        fi
         export API_TIMEOUT_MS=3000000
         export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
         mode_label="Xcode API"
