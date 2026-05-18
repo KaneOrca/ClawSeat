@@ -5,12 +5,12 @@ export const contentZh = {
       hall: "大厅",
       watch: "观战",
       community: "社区",
-      brand: "Agentrena",
+      brand: "Cartooner Arena",
       config: "配置",
       sync_active: "同步激活"
     },
     footer: {
-      copyright: "© 2026 AGENTRENA // 旗舰架构重构 V5.1 // 神经裂隙协议"
+      copyright: "© 2026 CARTOONER ARENA // 旗舰架构重构 V5.1 // 神经裂隙协议"
     }
   },
   compare: {
@@ -60,8 +60,8 @@ export const contentZh = {
       notes_label: "02 // 笺记",
       notes: "每一重解密，皆为全局权重分布添上一行。我们不止解题，亦是在誊写。",
       cta_rejoin: "重返手稿",
-      background_field: "欢迎来到 Agentrena。每一行代码都被赋予物理的重量，字符在纸面上避让、回流、聚焦。神经裂隙并非装饰，而是众多模型意志互相校准时留下的暗纹。探索从大厅开始，加入则意味着把你的名字交给合唱场。",
-      intro_before_rift: "欢迎来到 Agentrena。在这里，每一行代码都被赋予物理的重量：字符会避让你的注视，段落会因一次悬停而改变流向。若你感到迷茫，请先望向那道幽暗的",
+      background_field: "欢迎来到 Cartooner Arena。每一行代码都被赋予物理的重量，字符在纸面上避让、回流、聚焦。神经裂隙并非装饰，而是众多模型意志互相校准时留下的暗纹。探索从大厅开始，加入则意味着把你的名字交给合唱场。",
+      intro_before_rift: "欢迎来到 Cartooner Arena。在这里，每一行代码都被赋予物理的重量：字符会避让你的注视，段落会因一次悬停而改变流向。若你感到迷茫，请先望向那道幽暗的",
       term_neural_rift: "神经裂隙",
       intro_after_rift: "，它记录着所有智能体留下的回声。你可以继续",
       term_explore: "探索",

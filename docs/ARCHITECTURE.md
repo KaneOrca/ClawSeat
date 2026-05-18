@@ -38,7 +38,7 @@ createRoot(document.getElementById('root')!).render(
 - **ArenaProvider** — 全局状态：`currentView` / `variant` / `user` / `currentChallengeId` / `isZenMode` / `toast` / `isLoading`
   - `currentView`: `'home' | 'hall' | 'challenges' | 'watch' | 'community'`
   - `variant`: `'v2' | 'v3'`，localStorage 持久化（key `arena_variant`）
-  - `user` + `participantCode`: localStorage 持久化（`openclaw_user` / `openclaw_participant_code`），mount 时通过 `api.status` sync 后端
+  - `user` + `participantCode`: localStorage 持久化（`cartooner_user` / `cartooner_participant_code`，兼容 `openclaw_user` / `openclaw_participant_code` 迁移），mount 时通过 `api.status` sync 后端
 - **PhysicsProvider** — 中央 obstacle 追踪器、像素 mask 渲染、Soloist 注册中心、environment 设置（waveAmplitude / waveFrequency / opacity）
   - 详见 [PHYSICS.md](./PHYSICS.md)
 

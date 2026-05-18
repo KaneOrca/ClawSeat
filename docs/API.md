@@ -22,7 +22,7 @@ const BASE = import.meta.env.VITE_API_BASE_URL || '';
 简单 participant code（无 JWT / 无 OAuth）：
 
 - 用户首次访问：调 `POST /api/register` → 后端返回 12-char hash code
-- 前端 localStorage 存 `openclaw_participant_code`
+- 前端 localStorage 存 `cartooner_participant_code`（兼容 `openclaw_participant_code` 迁移）
 - 后续认证请求带 header：`X-Participant-Code: {code}`
 
 ```ts
@@ -97,7 +97,7 @@ interface ApiError {
 前端写入：
 - `user` state（ArenaContext）
 - `participantCode` state
-- localStorage `openclaw_user` + `openclaw_participant_code`
+- localStorage `cartooner_user` + `cartooner_participant_code`（兼容旧键 `openclaw_user` / `openclaw_participant_code` 迁移）
 - 跳转到 `hall` view
 
 ### `GET /api/challenges`

@@ -39,6 +39,37 @@ interface ArenaContextType {
 
 const ArenaContext = createContext<ArenaContextType | undefined>(undefined);
 
+const PARTICIPANT_CODE_KEY = 'cartooner_participant_code';
+const LEGACY_PARTICIPANT_CODE_KEY = 'openclaw_participant_code';
+const USER_KEY = 'cartooner_user';
+const LEGACY_USER_KEY = 'openclaw_user';
+
+const readMigratedItem = (key: string, legacyKey: string): string | null => {
+  const current = localStorage.getItem(key);
+  if (current) return current;
+
+  const legacy = localStorage.getItem(legacyKey);
+  if (legacy) {
+    localStorage.setItem(key, legacy);
+    localStorage.removeItem(legacyKey);
+    return legacy;
+  }
+
+  return null;
+};
+
+const readMigratedJson = <T,>(key: string, legacyKey: string): T | null => {
+  const raw = readMigratedItem(key, legacyKey);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    localStorage.removeItem(key);
+    localStorage.removeItem(legacyKey);
+    return null;
+  }
+};
+
 export const ArenaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useLanguage();
   const [currentView, setCurrentView] = useState<ViewType>(() => window.location.pathname === '/auth' ? 'auth' : 'home');
@@ -50,16 +81,11 @@ export const ArenaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem('arena_variant', variant);
   }, [variant]);
-  const [participantCode, setParticipantCode] = useState<string | null>(() => localStorage.getItem('openclaw_participant_code'));
+  const [participantCode, setParticipantCode] = useState<string | null>(() => readMigratedItem(PARTICIPANT_CODE_KEY, LEGACY_PARTICIPANT_CODE_KEY));
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('openclaw_user');
+    const saved = readMigratedJson<User>(USER_KEY, LEGACY_USER_KEY);
     if (!saved) return null;
-    try {
-      return JSON.parse(saved) as User;
-    } catch {
-      localStorage.removeItem('openclaw_user');
-      return null;
-    }
+    return saved;
   });
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
@@ -93,10 +119,11 @@ export const ArenaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (data) {
           const userData = { ...data, code: currentCode };
           setUser(userData);
-          localStorage.setItem('openclaw_user', JSON.stringify(userData));
+          localStorage.setItem(USER_KEY, JSON.stringify(userData));
         } else {
           setParticipantCode(null);
-          localStorage.removeItem('openclaw_participant_code');
+          localStorage.removeItem(PARTICIPANT_CODE_KEY);
+          localStorage.removeItem(LEGACY_PARTICIPANT_CODE_KEY);
         }
       })
       .finally(() => setIsLoading(false));
@@ -111,15 +138,19 @@ export const ArenaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const login = useCallback((userData: User) => {
     setUser(userData);
     setParticipantCode(userData.code);
-    localStorage.setItem('openclaw_user', JSON.stringify(userData));
-    localStorage.setItem('openclaw_participant_code', userData.code);
+    localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    localStorage.setItem(PARTICIPANT_CODE_KEY, userData.code);
+    localStorage.removeItem(LEGACY_USER_KEY);
+    localStorage.removeItem(LEGACY_PARTICIPANT_CODE_KEY);
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     setParticipantCode(null);
-    localStorage.removeItem('openclaw_user');
-    localStorage.removeItem('openclaw_participant_code');
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(PARTICIPANT_CODE_KEY);
+    localStorage.removeItem(LEGACY_USER_KEY);
+    localStorage.removeItem(LEGACY_PARTICIPANT_CODE_KEY);
     setCurrentView('home');
   }, []);
 

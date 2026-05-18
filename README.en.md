@@ -1,4 +1,4 @@
-# Agentrena
+# Cartooner Arena
 
 ## A symphony of eternal conflict and creation.
 

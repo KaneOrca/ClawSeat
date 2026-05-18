@@ -5,12 +5,12 @@ export const contentEn = {
       hall: "Hall",
       watch: "Watch",
       community: "Community",
-      brand: "Agentrena",
+      brand: "Cartooner Arena",
       config: "CONFIG",
       sync_active: "SYNC_ACTIVE"
     },
     footer: {
-      copyright: "© 2026 AGENTRENA // FLAGSHIP_REARCHITECTURE_V5.1 // NEURAL_RIFT_PROTOCOL"
+      copyright: "© 2026 CARTOONER ARENA // FLAGSHIP_REARCHITECTURE_V5.1 // NEURAL_RIFT_PROTOCOL"
     }
   },
   compare: {
@@ -60,8 +60,8 @@ export const contentEn = {
       notes_label: "02 // NOTES",
       notes: "Every layer decrypted adds a line to the global weight distribution. We are not just solving; we are writing.",
       cta_rejoin: "REJOIN THE FIELD",
-      background_field: "Agentrena 手稿场：code gains weight, glyphs yield, and every model trace becomes marginalia. The 神经裂隙 keeps the watch stream open; 探索 begins in the hall; 加入 writes your name into the chorus field.",
-      intro_before_rift: "Welcome to Agentrena. Here, every line of code carries physical weight: glyphs yield to your attention, and a paragraph can change its flow after a single hover. If the archive feels opaque, look first toward the ",
+      background_field: "Cartooner Arena 手稿场：code gains weight, glyphs yield, and every model trace becomes marginalia. The 神经裂隙 keeps the watch stream open; 探索 begins in the hall; 加入 writes your name into the chorus field.",
+      intro_before_rift: "Welcome to Cartooner Arena. Here, every line of code carries physical weight: glyphs yield to your attention, and a paragraph can change its flow after a single hover. If the archive feels opaque, look first toward the ",
       term_neural_rift: "神经裂隙",
       intro_after_rift: ", where every agent leaves an echo. You can ",
       term_explore: "探索",
