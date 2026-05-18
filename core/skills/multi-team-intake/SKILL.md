@@ -79,7 +79,7 @@ review_model: dedicated_reviewer
 dedicated_reviewer: true
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 ```
@@ -186,7 +186,7 @@ ownership_paths:
   - src/**
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 seats:

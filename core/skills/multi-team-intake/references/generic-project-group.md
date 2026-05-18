@@ -40,7 +40,7 @@ review_model: dedicated_reviewer
 dedicated_reviewer: true
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 ```
@@ -94,7 +94,7 @@ ownership_paths:
   - apps/web/src/domain/**
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 seats:
@@ -157,7 +157,7 @@ ownership_paths:
   - apps/web/src/services/control-plane/**
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 seats:
@@ -192,7 +192,7 @@ ownership_paths:
   - src/domain/**
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 seats:
@@ -228,7 +228,7 @@ ownership_paths:
   - docs/**
 scaling_policy:
   max_builders: 3
-  reviewer_required_when_builders_gte: 2
+  reviewer_required_when_builders_gte: 4
   overflow_action: propose_new_subteam
   reviewer_fallback: planner
 seats:

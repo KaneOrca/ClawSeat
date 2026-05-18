@@ -13,7 +13,7 @@ See [core/references/handoff-receipt-protocol.md](../../references/handoff-recei
 ## Work Mode: **2+ 独立子目标（disjoint files / disjoint tests / disjoint research lanes / multi-part）→ 必须 fan-out；按本 seat 的 dispatch primitive 拆分并行处理。**
 ## TODO Queue Priority
 See [core/references/todo-queue-priority.md](../../references/todo-queue-priority.md) — process queue HEAD first (not tail); skip [superseded]; age-out >3 days. 先看队首 / queue head, not tail; zombie tasks result from tail-first reading.
-## Worktree 选择(强制) — **Worktree**: 实施前须在 `feat/<task-id>` 分支 isolated worktree(`git worktree add /tmp/<task-id>-wt clawseat/main`);不动 operator 主 repo / stale worktree;完成后 push → PR。
+## Worktree 选择(强制) — **Worktree**: 实施前须在 `feat/<task-id>` 分支 isolated worktree(`git worktree add /tmp/<task-id>-wt clawseat/main`);不动 operator 主 repo / stale worktree;完成后 commit 并告知 planner branch+hash；push → PR 仅当 operator 或 planner 明确要求（safe-mode opt-in）。
 - DO lineage repair waves that choose a/c must seed the temporary worktree from memory active HEAD; do not seed from a stale local `main` when the repair path is explicitly lineage-sensitive.
 - Pickup verification: see [`core/references/builder-pickup-verification.md`](../../references/builder-pickup-verification.md) before editing.
 ## Context Management
@@ -21,15 +21,19 @@ See [core/references/context-management-protocol.md](../../references/context-ma
 ## Failure mode: PTY exhaustion — Stop immediately; do NOT stop tmux/iTerm sessions; send `[BLOCKED:reason=pty-exhaustion]`; wait for memory cross-project recovery.
 ## Operator Language Matching: match last 3 operator messages; keep paths, commands, task IDs, and technical terms literal.
 
+## Single-Subgroup Safe Mode (cf027)
+
+Default operational mode. Builder delivers branch commit + tests to planner — never merges to `review/latest` or `main`. Push/PR/CI are opt-in (required only when explicitly requested). Reviewer is escalation only.
+
 ## Closure Protocol (6-line block)
 
-Before relaying PASS to planner, builder DELIVERY.md MUST include all 6:
+Before relaying PASS to planner, builder DELIVERY.md MUST include all 6. **In single-subgroup safe mode**, steps 2–5 (git push, gh pr view, CI, merge-base) are opt-in when remote push was not explicitly requested — replace with `N/A: safe-mode local delivery`:
 
 1. `git status` — clean (no uncommitted)
-2. `git push` — exit 0
+2. `git push` — exit 0 (or `N/A: safe-mode local delivery`)
 3. `git log clawseat/<branch> --oneline -1` matches local HEAD
-4. `gh pr view --json mergeable,mergeStateStatus,statusCheckRollup`
-5. CI 3.11 conclusion=success OR strict-diff vs main = 0
+4. `gh pr view --json mergeable,mergeStateStatus,statusCheckRollup` (or `N/A: safe-mode`)
+5. CI 3.11 conclusion=success OR strict-diff vs main = 0 (or `N/A: safe-mode`)
 6. `git merge-base clawseat/main clawseat/<branch>` = `clawseat/main` HEAD
 
 Closure block missing or any line failing = relay is malformed.

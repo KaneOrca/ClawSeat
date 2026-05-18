@@ -157,7 +157,9 @@ to memory via `complete_handoff.py`. Memory then:
 1. Reads `tasks/<p>/<t>/acceptance/<task_id>__{mechanical,reviewer,operator}.json`
    to inspect the routed outcomes.
 2. If aggregate verdict is PASS → memory commits the chain to KB
-   (decision/finding) and may merge to main (spec §8 git flow).
+   (decision/finding), merges accepted work to `review/latest` for operator
+   validation, then merges to `main` only after operator sign-off (cf019
+   validation-branch contract; main remains protected until operator validates).
 3. If aggregate is FAIL → memory writes a new brief (parent_task_id linkage)
    with corrected acceptance and re-queues.
 4. If aggregate is PENDING and receipt carries `lineage_status: divergent` →
@@ -252,10 +254,10 @@ field names / handoff format; rendering directives / template variables;
 contract-pattern examples.
 
 Decision test: "diff 一眼看得出纯文字清理 vs 行为变化吗？" yes ->
-memory; no -> builder via brief. Operations: single-file prose typo -> direct
-push to main, commit prefix `docs:`; multi-file prose sweep -> open PR titled
-`docs: ...`; template prose change -> record `re-render pending` line in
-STATUS.md. memory's own memory-oracle SKILL follows the same standard: prose
+memory; no -> builder via brief. Operations: single-file prose typo -> open PR targeting `review/latest`,
+commit prefix `docs:` (direct push to main requires operator validation per
+cf019 contract); multi-file prose sweep -> open PR titled `docs: ...`;
+template prose change -> record `re-render pending` line in STATUS.md. memory's own memory-oracle SKILL follows the same standard: prose
 OK, contract clauses NOT.
 
 ## Skill Loading

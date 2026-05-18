@@ -356,10 +356,11 @@ def _check_team_metadata(data: dict[str, Any], proposal_file: Path) -> list[str]
             if max_builders is not None and max_builders != 3:
                 violations.append(f"{proposal_file.name}: scaling_policy.max_builders must be 3")
             reviewer_gte = policy.get("reviewer_required_when_builders_gte")
-            if reviewer_gte is not None and reviewer_gte != 2:
+            if reviewer_gte is not None and (not isinstance(reviewer_gte, int) or reviewer_gte < 2):
                 violations.append(
                     f"{proposal_file.name}: "
-                    "scaling_policy.reviewer_required_when_builders_gte must be 2"
+                    "scaling_policy.reviewer_required_when_builders_gte must be an integer >= 2 "
+                    "(safe-mode default is 4; legacy minimum is 2)"
                 )
             overflow = str(policy.get("overflow_action") or "").strip()
             if overflow and overflow != "propose_new_subteam":
