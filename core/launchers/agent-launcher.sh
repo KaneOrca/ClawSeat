@@ -201,15 +201,37 @@ validate_top_level_inputs() {
 
 exec_agent_shell_command() {
   # tmux new-session doesn't propagate non-allowlisted env vars from the
-  # caller to the spawned shell, so we embed cartooner-supplied binary
-  # overrides into the command string itself. Caller (cartooner Electron)
-  # exports these; non-cartooner invocations leave them unset and the
-  # runtimes/*.sh fall back to PATH resolution.
-  local -a env_prefix=()
-  if [[ -n "${CARTOONER_CLAUDE_CODE_EXECUTABLE:-}" ]]; then
-    env_prefix+=("CARTOONER_CLAUDE_CODE_EXECUTABLE=$CARTOONER_CLAUDE_CODE_EXECUTABLE")
-  fi
-  local -a cmd=(env ${env_prefix[@]+"${env_prefix[@]}"} bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
+  # caller to the spawned shell. Worse, an already-running tmux server can
+  # carry stale CLAWSEAT_* values from a previous seat in its global
+  # environment. Clear every managed key first, then explicitly inject this
+  # launch's values into the pane command.
+  local -a managed_env_vars=(
+    CARTOONER_CLAUDE_CODE_EXECUTABLE
+    REAL_HOME
+    CLAWSEAT_ROOT
+    CLAWSEAT_PROJECT
+    CLAWSEAT_PROVIDER
+    CLAWSEAT_SEAT
+    CLAWSEAT_ENGINEER_ID
+    CLAWSEAT_ENGINEER_PROFILE
+    CLAWSEAT_TOOLS_ISOLATION
+    CLAWSEAT_PROJECT_TOOL_ROOT
+    CLAWSEAT_NO_AUTO_RESUME
+    CLAWSEAT_MEMORY_BRIEF
+    CLAWSEAT_ANCESTOR_BRIEF
+  )
+  local -a cmd=(env)
+  local key value
+  for key in "${managed_env_vars[@]}"; do
+    cmd+=("-u" "$key")
+  done
+  for key in "${managed_env_vars[@]}"; do
+    value="${!key:-}"
+    if [[ -n "$value" ]]; then
+      cmd+=("$key=$value")
+    fi
+  done
+  cmd+=(bash "$0" --tool "$TOOL_NAME" --session "$SESSION_NAME" --auth "$AUTH_MODE" --dir "$WORKDIR" --exec-agent)
   if [[ -n "$CUSTOM_ENV_FILE" ]]; then
     cmd+=(--custom-env-file "$CUSTOM_ENV_FILE")
   fi

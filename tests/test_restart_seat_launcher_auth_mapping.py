@@ -23,7 +23,7 @@ def _write_fake_tmux(fakebin: Path, tmux_state: Path, tmux_log: Path) -> Path:
             shift || true
             printf 'TMUX %q' "$cmd" >> "$log"
             for arg in "$@"; do printf ' %q' "$arg" >> "$log"; done
-            printf '\\n' >> "$log"
+            printf ' TMUX_ENV=%q TMUX_PANE_ENV=%q\\n' "${{TMUX:-}}" "${{TMUX_PANE:-}}" >> "$log"
             session=""
             while [[ $# -gt 0 ]]; do
               if [[ "$1" == "-t" || "$1" == "-s" ]]; then
@@ -167,6 +167,8 @@ def test_restart_seat_launches_custom_provider_through_agent_admin_plan(tmp_path
             "CLAWSEAT_REAL_HOME": str(home),
             "PYTHON_BIN": sys.executable,
             "TMUX_BIN": str(tmux),
+            "TMUX": "/tmp/polluted-cartooner-socket,123,0",
+            "TMUX_PANE": "%polluted",
             "PATH": f"{fakebin}{os.pathsep}{env.get('PATH', '')}",
         }
     )
@@ -362,5 +364,7 @@ def test_restart_seat_materializes_declared_project_seat(tmp_path: Path) -> None
     assert result.returncode == 0, result.stderr + result.stdout
     assert f"session:       {session}" in result.stdout
     assert "result:    tmux session alive" in result.stdout
+    assert "polluted-cartooner-socket" not in tmux_log.read_text(encoding="utf-8")
+    assert "%polluted" not in tmux_log.read_text(encoding="utf-8")
     assert (home / ".agents" / "engineers" / seat / "engineer.toml").exists()
     assert (home / ".agents" / "sessions" / project / seat / "session.toml").exists()
