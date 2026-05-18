@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,9 @@ exit 0
             "WAIT_FOR_SEAT_RECONNECT_PAUSE": "0.01",
             "WAIT_FOR_SEAT_PRIMARY_FAILURE_BUDGET": "1",
             "TMUX_ATTACH_LOG": str(attach_log),
+            # Ensure wait-for-seat.sh uses the project Python (not ambient system
+            # python3 which may lack tomllib under bash -lc login shell PATH reset)
+            "PYTHON3": sys.executable,
         },
         check=False,
         timeout=5,

@@ -165,10 +165,11 @@ def _run_agent_admin(
     *args: str,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """Invoke `python3 core/scripts/agent_admin.py ...` (canonical, not direct
-    agent_admin_brief.py)."""
+    """Invoke `sys.executable core/scripts/agent_admin.py ...` (canonical, not
+    direct agent_admin_brief.py). Uses sys.executable so bash -lc PATH reset
+    does not fall back to an ambient Python missing tomllib/tomli."""
     return subprocess.run(
-        ["python3", str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"), *args],
+        [sys.executable, str(REPO_ROOT / "core" / "scripts" / "agent_admin.py"), *args],
         env={**os.environ, "CLAWSEAT_REAL_HOME": str(env_home), **(extra_env or {})},
         capture_output=True, text=True,
     )

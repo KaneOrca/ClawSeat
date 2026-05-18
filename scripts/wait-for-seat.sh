@@ -78,11 +78,12 @@ warn_degraded_wait() {
 
 read_default_tool_from_engineer_profile() {
   local engineer_file="$1"
-  command -v python3 >/dev/null 2>&1 || {
+  local _py="${PYTHON3:-python3}"
+  command -v "$_py" >/dev/null 2>&1 || {
     printf 'python3 is unavailable for engineer.toml parsing\n' >&2
     return 14
   }
-  python3 - "$engineer_file" <<'PY'
+  "$_py" - "$engineer_file" <<'PY'
 from __future__ import annotations
 
 import re

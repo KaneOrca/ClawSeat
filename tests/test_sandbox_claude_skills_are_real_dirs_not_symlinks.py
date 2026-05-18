@@ -50,6 +50,9 @@ def _prepare_runtime(tmp_path: Path, seat_id: str) -> tuple[Path, Path]:
         extra_env={
             "AGENTS_ROOT": str(real_home / ".agents"),
             "CLAWSEAT_SEAT": seat_id,
+            # Ensure launcher uses the project Python (not ambient system python3
+            # which may lack tomllib under bash -lc login shell PATH reset)
+            "PYTHON_BIN": sys.executable,
         },
     )
     assert result.returncode == 0, result.stderr

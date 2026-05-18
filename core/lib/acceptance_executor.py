@@ -196,6 +196,35 @@ def _split_by_route(brief: dict) -> tuple[list, list, list]:
     return final_mech, base_rev, base_op
 
 
+def _normalize_python_invocations(cmd: str) -> str:
+    """Rewrite python/python3/pytest command names to full sys.executable paths.
+
+    Acceptance commands often use ``bash -lc`` (login shell) which re-reads
+    .bash_profile / .zprofile and may reset PATH to system defaults, causing
+    the ambient ``python3`` to be used instead of the project interpreter.
+
+    Replacing the command name with the full path to sys.executable bypasses
+    PATH lookup entirely, so the correct interpreter is always used.
+    Only replaces standalone command names (not paths like /usr/bin/python3).
+    Handles ``python3 -m pytest`` as a unit to avoid double-replacement.
+    """
+    import re  # noqa: PLC0415
+    exe = sys.executable
+    # Step 1: Replace "python3 -m pytest" and "python -m pytest" as units (most specific)
+    for py_cmd in ("python3", "python"):
+        cmd = re.sub(
+            rf"(?<![/\w]){py_cmd}\s+-m\s+pytest(?!\w)",
+            f"{exe} -m pytest",
+            cmd,
+        )
+    # Step 2: Replace standalone "pytest" — skip when already following "-m "
+    cmd = re.sub(r"(?<!-m )(?<![/\w])pytest(?!\w)", f"{exe} -m pytest", cmd)
+    # Step 3: Replace remaining standalone "python3" and "python"
+    cmd = re.sub(r"(?<![/\w])python3(?!\w)", exe, cmd)
+    cmd = re.sub(r"(?<![/\w])python(?!\w)", exe, cmd)
+    return cmd
+
+
 def _make_python_shims(shim_dir: Path) -> None:
     """Write python/python3/pytest shims that delegate to the current sys.executable.
 
@@ -317,7 +346,7 @@ def run_mechanical(
             start = time.monotonic()
             try:
                 proc = subprocess.run(
-                    cmd,
+                    _normalize_python_invocations(cmd),
                     shell=True,
                     cwd=str(cwd) if cwd else None,
                     env=env,
