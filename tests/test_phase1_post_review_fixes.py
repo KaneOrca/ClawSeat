@@ -345,7 +345,7 @@ def test_brief_queue_uses_real_user_home_under_sandbox_home(tmp_path, monkeypatc
         cmd_queue(
             parser.parse_args(
                 ["queue", "--project", "p", "--team", "t", "--task-id", "T1",
-                 "--objective", "real-home"]
+                 "--objective", "real-home", "--no-wake"]
             )
         )
         == 0
@@ -483,6 +483,7 @@ notify_on_completion: [memory]
             "--task-id", "Taccept",
             "--objective", "pass acceptance",
             "--brief-content-file", str(brief_content),
+            "--no-wake",
         ],
         cwd=REPO_ROOT,
         env=env,
