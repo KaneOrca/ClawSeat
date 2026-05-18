@@ -48,3 +48,7 @@
   for seat-to-seat protocol messages.
 - Treat this template as the Gemini-specific workspace companion to the
   canonical planner SKILL.md.
+
+## Single-Subgroup Safe Mode (cf027)
+
+Default operational mode. One active subgroup; planner+builder minimum unit; reviewer is escalation only (high-risk/security/privacy/UI-sensitive/multi-builder/operator request). Builder delivers to planner — never merges to `review/latest` or `main`. Planner merges to local `review/latest` after approval; reports merge hash in closeout. Memory handles `review/latest`→`main` only after operator authorization. Push/PR/CI are opt-in.

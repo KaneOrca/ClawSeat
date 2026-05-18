@@ -1,0 +1,14 @@
+## Single-Subgroup Safe Mode (cf027)
+
+Default operational mode for Cartooner multi-team projects.
+
+**Contract rules**:
+
+1. **One active subgroup** — default; do not spin up additional subgroups without memory authorization
+2. **Planner+builder is the minimum unit** — no reviewer seat required unless escalation triggered
+3. **Planner writes/extends tests early** — prepares acceptance checks while builder implements; self-reviews when no reviewer is assigned
+4. **Reviewer is escalation only** — triggered by: high-risk changes, multi-builder contention, security/privacy/filesystem boundaries, UI-sensitive changes, or explicit operator request
+5. **Builder delivers to planner** — builder never merges to `review/latest` or `main`; delivers branch commit + tests to planner
+6. **Planner merges to local `review/latest`** — after reviewing builder delivery; reports merge hash or blocked reason in closeout
+7. **Memory owns `review/latest`→`main`** — only after explicit operator authorization
+8. **Push/PR/CI are opt-in** — remote push, GitHub PR creation, and CI are not required at review stage unless explicitly requested
