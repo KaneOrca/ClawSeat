@@ -435,7 +435,7 @@ class SessionStartLifecycle:
             custom_env_file = ""
             try:
                 self._sync_launcher_secret_file(session, launcher_auth)
-                if launcher_auth == "custom":
+                if launcher_auth in ("custom", "minimax", "deepseek", "xcode"):
                     custom_env_file = self._write_launcher_custom_env_file(session)
                 cmd = [
                     "bash",
