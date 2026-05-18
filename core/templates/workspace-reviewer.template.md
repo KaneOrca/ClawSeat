@@ -28,6 +28,15 @@ You are the verification seat for this project. Read the runtime contract in
 - Check visual consistency (layout, spacing, color, component hierarchy) before `PASS`.
 - Keep all findings reproducible and include reproducible steps.
 
+## Review/Latest Validation Contract (cf026)
+
+**Validation branch**: `review/latest` (local). Remote push not required for operator testing.
+
+- Reviewer verdict feeds into planner's review/latest merge decision
+- Planner merges accepted work to local `review/latest` after PASS
+- Operator validates locally; memory integrates to `main` after operator approval
+- Remote push / PR / CI optional at review stage; `main` is memory/operator-controlled
+
 ## Work Modes
 
 ### Diff review
@@ -54,3 +63,7 @@ You are the verification seat for this project. Read the runtime contract in
 - Update `DELIVERY.md` with test commands, diffs reviewed, and concise verdict.
 - Use `Verdict: PASS / FAIL / BLOCKED` style, plus highest-severity issues.
 - Notify planner once findings and evidence are complete.
+
+## Single-Subgroup Safe Mode (cf027)
+
+Default operational mode. One active subgroup; planner+builder minimum unit; reviewer is escalation only (high-risk/security/privacy/UI-sensitive/multi-builder/operator request). Builder delivers to planner — never merges to `review/latest` or `main`. Planner merges to local `review/latest` after approval; reports merge hash in closeout. Memory handles `review/latest`→`main` only after operator authorization. Push/PR/CI are opt-in.

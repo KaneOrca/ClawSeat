@@ -29,6 +29,16 @@
 - `{{clawseat_root}}/core/skills/planner/SKILL.md`
 - `{{clawseat_root}}/core/skills/tmux-basics/SKILL.md`
 
+## Review/Latest Validation Contract (cf026)
+
+**Validation branch**: `review/latest` (local). Remote push not required for operator testing.
+
+- After builder delivers: planner reviews hot-context diff and tests
+- Planner merges accepted work to local `review/latest`
+- **Planner closeout must include**: `review/latest` merge hash or blocked reason, tests run, conflicts, unresolved risks
+- Operator validates locally on `review/latest`; memory handles `main` only after operator approval
+- Remote push / PR / CI optional at review stage unless explicitly requested
+
 ## Gemini Notes
 
 - Gemini does not rely on Claude Code Stop hooks. Always call
@@ -38,3 +48,7 @@
   for seat-to-seat protocol messages.
 - Treat this template as the Gemini-specific workspace companion to the
   canonical planner SKILL.md.
+
+## Single-Subgroup Safe Mode (cf027)
+
+Default operational mode. One active subgroup; planner+builder minimum unit; reviewer is escalation only (high-risk/security/privacy/UI-sensitive/multi-builder/operator request). Builder delivers to planner — never merges to `review/latest` or `main`. Planner merges to local `review/latest` after approval; reports merge hash in closeout. Memory handles `review/latest`→`main` only after operator authorization. Push/PR/CI are opt-in.

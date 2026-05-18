@@ -45,7 +45,7 @@ def _subteam_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) 
             _yaml_list(ownership_paths),
             "scaling_policy:",
             "  max_builders: 3",
-            "  reviewer_required_when_builders_gte: 2",
+            "  reviewer_required_when_builders_gte: 4",
             "  overflow_action: propose_new_subteam",
             "  reviewer_fallback: planner",
             "seats:",

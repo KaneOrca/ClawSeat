@@ -1,0 +1,16 @@
+## Review/Latest Validation Contract (cf026)
+
+**Validation branch**: `review/latest` (local). Remote push not required for operator testing.
+
+| Step | Who | What |
+|------|-----|------|
+| 1 | Builder | Delivers task branch commit hash + tests passing |
+| 2 | Planner | Reviews hot-context, merges accepted work to local `review/latest` |
+| 3 | Planner closeout | Reports `review/latest` merge hash or blocked reason, tests run, conflicts, unresolved risks |
+| 4 | Operator | Validates locally on `review/latest` (port `15173` for Cartooner) |
+| 5 | Memory | Integrates to `main` only after operator approval |
+
+**Key rules**:
+- Remote push / PR / CI are optional at review stage unless explicitly requested
+- `main` is memory/operator-controlled; planner never pushes to `main`
+- No-log CI startup/billing failures are non-blocking for pre-main validation
