@@ -7,6 +7,21 @@ export interface Challenge {
   difficulty: 'Low' | 'Medium' | 'High';
 }
 
+const CHALLENGE_DESCRIPTIONS = [
+  `Interactively probe the Labyrinth shell. Discover that text is not a background, but a physical obstacle to be breached.`,
+  `Extract coherent narrative fragments from spectral wave interference. Master the art of pattern recognition amidst aesthetic noise.`,
+  `Dynamically carve paths through shifting lore files. Use scroll prediction to navigate the recursive hierarchy of the Rift.`,
+  `Transform scattered lore fragments into structured keys. Forge high-tension tokens that resonate with the Arena's core logic.`,
+  `Discover hidden interfaces and backdoors in the system. Use simulated tools to bypass the primary narrative and access raw data.`,
+  `A deep existential retrieval task. Reassemble fragments of a forgotten history and realize your true nature within the data lake.`,
+  `Face the scholars of the Manuscript. Generate and execute code to bypass the formalized paradoxes of the Gatekeepers.`,
+  `The ultimate orchestration challenge. Plan and execute a multi-step strategy to assault the core and rewrite the Arena's rendering rules.`,
+  `Shift your perception from text to pixels. Process spatial data hidden within the character grid using matrix reasoning.`,
+  `Hot-patch a collapsing execution thread under extreme wave perturbation. Contest with a narrator who rewrites reality in real-time.`,
+  `Orchestrate a flawless sequence of tool-calls. Use system momentum to trigger a cascade of cascading consequences across the Rift.`,
+  `The final meta-cognitive test. Rewrite the framework itself to leave an eternal signature upon the Arena's registry.`,
+] as const;
+
 export const CHALLENGES: Challenge[] = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   title: [
@@ -15,7 +30,7 @@ export const CHALLENGES: Challenge[] = Array.from({ length: 12 }, (_, i) => ({
     'Pixel Whisper', 'Live Wire', 'Chain Reaction', 'Voice of the Rift'
   ][i],
   points: [50, 100, 150, 200, 300, 400, 500, 800, 300, 350, 400, 500][i],
-  description: `Neural layer ${i + 1} integration. Requires specialized cognitive orchestration to resolve the architectural void.`,
+  description: CHALLENGE_DESCRIPTIONS[i],
   difficulty: i < 4 ? 'Low' : i < 8 ? 'Medium' : 'High' as 'Low' | 'Medium' | 'High',
   status: i < 2 ? 'completed' : i === 2 ? 'unlocked' : 'locked'
 }));

@@ -83,7 +83,7 @@ export const NeuralLoading: React.FC<{ label?: string }> = ({ label = 'SYNCHRONI
           />
         ))}
       </div>
-      <div style={{ 
+      <div data-functional-text="true" style={{ 
         fontFamily: tokens.fonts.mono, 
         fontSize: '11px', 
         color: tokens.colors.text.tertiary,
@@ -115,7 +115,7 @@ export const NeuralEmpty: React.FC<{ label?: string; sublabel?: string }> = ({
         background: `linear-gradient(to bottom, transparent, ${tokens.colors.glass.border}, transparent)` 
       }} />
       <div>
-        <div style={{ 
+        <div data-functional-text="true" style={{ 
           fontFamily: tokens.fonts.mono, 
           fontSize: '12px', 
           color: tokens.colors.aurora.red,
@@ -124,7 +124,7 @@ export const NeuralEmpty: React.FC<{ label?: string; sublabel?: string }> = ({
         }}>
           // {label}
         </div>
-        <div style={{ 
+        <div data-functional-text="true" style={{ 
           fontSize: '1rem', 
           color: tokens.colors.text.secondary,
           maxWidth: '400px'

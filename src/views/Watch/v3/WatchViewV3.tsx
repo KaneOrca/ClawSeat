@@ -287,7 +287,6 @@ export const WatchViewV3: React.FC = () => {
 
       {viewMode === 'session' ? (
         <SessionTraceMemo
-          isZenMode={isZenMode}
           selectedPlayerCode={selectedPlayerCode}
           selectedPlayerName={selectedPlayerName}
           sessionStatus={sessionStatus}
@@ -425,11 +424,11 @@ const formatUpdatedAt = (updatedAt?: string) => {
 const HeaderAtom: React.FC<{ isZenMode: boolean; activeAgent: any }> = ({ isZenMode, activeAgent }) => {
   const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  const ripple = useWaveRipple();
   return (
     <div className="watch-v3-header" style={{ marginBottom: '3rem', opacity: isZenMode ? 0.3 : 0.8, transition: 'opacity 0.6s ease' }}>
       <MagneticSurface pull={0.15}>
-        <div ref={ref} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={headerLabelStyle}>
+        <div ref={ref} data-functional-text="true" onPointerEnter={ripple.onPointerEnter} onTouchStart={ripple.onTouchStart} style={headerLabelStyle}>
           <Radio size={14} className="pulse" />
           {t('watch.v3.header')} // {t('watch.v3.agent')}: {safeStr(activeAgent?.nickname).toUpperCase() || '---'}
         </div>
@@ -442,15 +441,16 @@ const HeaderAtomMemo = React.memo(HeaderAtom);
 const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelect: (event: RawFeedEvent) => void }> = ({ event, isZenMode, onSelect }) => {
   const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  const ripple = useWaveRipple();
   return (
     <div style={{ marginBottom: '0.5rem' }}>
       <MagneticSurface pull={0.1}>
         <div
           ref={ref}
+          data-functional-text="true"
           onClick={() => onSelect(event)}
-          onPointerEnter={onPointerEnter}
-          onTouchStart={onTouchStart}
+          onPointerEnter={ripple.onPointerEnter}
+          onTouchStart={ripple.onTouchStart}
           style={{
             ...feedEventStyle,
             color: event.event_type === 'completed_challenge' ? tokens.colors.aurora.purple : tokens.colors.aurora.blue,
@@ -464,7 +464,6 @@ const FeedEventAtom: React.FC<{ event: RawFeedEvent; isZenMode: boolean; onSelec
 };
 
 const SessionTrace: React.FC<{
-  isZenMode: boolean;
   selectedPlayerCode: string | null;
   selectedPlayerName: string | null;
   sessionStatus: SessionStatus;
@@ -476,7 +475,6 @@ const SessionTrace: React.FC<{
   loadingLabel: string;
   backLabel: string;
 }> = ({
-  isZenMode,
   selectedPlayerCode,
   selectedPlayerName,
   sessionStatus,
@@ -490,7 +488,7 @@ const SessionTrace: React.FC<{
 }) => {
   return (
     <div style={sessionTraceStyle}>
-      <SessionBackAtom isZenMode={isZenMode} onBack={onBack} backLabel={backLabel} selectedPlayerCode={selectedPlayerCode} />
+      <SessionBackAtom onBack={onBack} backLabel={backLabel} selectedPlayerCode={selectedPlayerCode} />
       <SessionMetaAtom
         sessionStatus={sessionStatus}
         watchSession={watchSession}
@@ -512,14 +510,12 @@ const SessionTrace: React.FC<{
 };
 const SessionTraceMemo = React.memo(SessionTrace);
 
-const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLabel: string; selectedPlayerCode: string | null }> = ({
-  isZenMode,
+const SessionBackAtom: React.FC<{ onBack: () => void; backLabel: string; selectedPlayerCode: string | null }> = ({
   onBack,
   backLabel,
   selectedPlayerCode,
 }) => {
   const { t } = useLanguage();
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
   return (
     <MagneticSurface pull={0.1}>
       <PretextButton
@@ -533,8 +529,6 @@ const SessionBackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; backLa
           triggerEnvironment: { waveAmplitude: 118, opacity: 0.22 },
           idleEnvironment: { opacity: 0.15 },
         }}
-        onPointerEnter={onPointerEnter}
-        onTouchStart={onTouchStart}
         style={backStyle}
       >
         <ArrowLeft size={12} style={{ marginRight: '0.75rem', verticalAlign: '-2px' }} />
@@ -553,7 +547,7 @@ const SessionMetaAtom: React.FC<{
   const { t } = useLanguage();
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{ ...sessionStepStyle, color: sessionStatusColor(sessionStatus), opacity: 0.85 }}>
+    <div data-functional-text="true" ref={ref} style={{ ...sessionStepStyle, color: sessionStatusColor(sessionStatus), opacity: 0.85 }}>
       {safeStr(selectedPlayerName ?? selectedPlayerCode ?? '---').toUpperCase()} :: {t('watch.session.challenge')}_{challengeTitle(watchSession)}
       {' '}:: {t('watch.session.status')}_{safeStr(watchSession?.status ?? sessionStatus).toUpperCase()}
       {' '}:: {t('watch.session.updated')}_{formatUpdatedAt(watchSession?.updated_at)}
@@ -565,6 +559,7 @@ const SessionStepAtom: React.FC<{ index: number; step: string; sessionStatus: Se
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
   return (
     <div
+      data-functional-text="true"
       ref={ref}
       style={{
         ...sessionStepStyle,
@@ -579,7 +574,7 @@ const SessionStepAtom: React.FC<{ index: number; step: string; sessionStatus: Se
 const EmptySessionAtom: React.FC<{ label: string; tone: SessionStatus }> = ({ label, tone }) => {
   const ref = useObstacle() as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{ ...sessionStepStyle, color: sessionStatusColor(tone) }}>
+    <div data-functional-text="true" ref={ref} style={{ ...sessionStepStyle, color: sessionStatusColor(tone) }}>
       {label}
     </div>
   );
@@ -589,7 +584,7 @@ const EmptyAtom: React.FC<{ isZenMode: boolean }> = ({ isZenMode }) => {
   const { t } = useLanguage();
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, opacity: 0.4 }}>
+    <div data-functional-text="true" ref={ref} style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, opacity: 0.4 }}>
       {t('watch.v3.empty')}
     </div>
   );

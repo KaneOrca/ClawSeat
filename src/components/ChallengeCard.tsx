@@ -68,7 +68,7 @@ const ChallengeCardInner: React.FC<ChallengeCardProps> = ({
   const titleRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLHeadingElement>;
   const descRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLParagraphElement>;
   const metaRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  const ripple = useWaveRipple();
 
   const isLocked = status === 'locked';
   const isCompleted = status === 'completed';
@@ -84,7 +84,7 @@ const ChallengeCardInner: React.FC<ChallengeCardProps> = ({
       onClick={() => !isLocked && onEnter?.(id)}
     >
       {/* Meta line */}
-      <span ref={metaRef as any} style={monoMetaStyle}>
+      <span ref={metaRef as any} data-functional-text="true" style={monoMetaStyle}>
         {safeStr(difficulty).toUpperCase()} — {points} XP
         {isLocked && <Lock size={8} style={{ marginLeft: '0.5rem', verticalAlign: 'middle' }} />}
         {isCompleted && <CheckCircle2 size={8} style={{ marginLeft: '0.5rem', verticalAlign: 'middle', color: 'var(--aurora-5)' }} />}
@@ -94,8 +94,9 @@ const ChallengeCardInner: React.FC<ChallengeCardProps> = ({
       <MagneticSurface pull={0.08}>
         <h3
           ref={titleRef as any}
-          onPointerEnter={onPointerEnter}
-          onTouchStart={onTouchStart}
+          data-functional-text="true"
+          onPointerEnter={ripple.onPointerEnter}
+          onTouchStart={ripple.onTouchStart}
           style={{
             ...serifTitleStyle,
             color: isLocked ? 'var(--text-tertiary)' : 'var(--text-primary)',
@@ -110,12 +111,12 @@ const ChallengeCardInner: React.FC<ChallengeCardProps> = ({
       </MagneticSurface>
 
       {/* Description — poetic fragment */}
-      <p ref={descRef as any} style={{ ...descStyle, opacity: isLocked ? 0.2 : 0.6 }}>
+      <p ref={descRef as any} data-functional-text="true" style={{ ...descStyle, opacity: isLocked ? 0.2 : 0.6 }}>
         {description}
       </p>
 
       {/* Reward */}
-      <div style={{ ...rewardStyle, marginTop: '1.5rem' }}>
+      <div data-functional-text="true" style={{ ...rewardStyle, marginTop: '1.5rem' }}>
         {isCompleted ? '✓ CONQUERED' : isLocked ? '— SEALED —' : `LAYER ${id}`}
       </div>
     </div>

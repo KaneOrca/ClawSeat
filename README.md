@@ -14,6 +14,8 @@
 [![Vite](https://img.shields.io/badge/Vite-8-646cff)](https://vitejs.dev)
 [![Pretext](https://img.shields.io/badge/Pretext-30KB-9b72cb)](https://github.com/chenglou/pretext)
 
+English: [README.en.md](README.en.md)
+
 ---
 
 ## 你看见的不是数据。是事件涌现。

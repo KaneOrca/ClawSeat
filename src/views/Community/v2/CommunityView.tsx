@@ -101,21 +101,21 @@ export const CommunityViewV2: React.FC = () => {
         transition: 'opacity 0.8s ease',
       }}
     >
-      <div style={labelStyle}>COMMUNITY_V2 // LEFT_MARGIN_ANNOTATIONS</div>
+      <div data-functional-text="true" style={labelStyle}>COMMUNITY_V2 // LEFT_MARGIN_ANNOTATIONS</div>
 
       <main className="community-v2-frame" style={frameStyle}>
         <aside className="community-v2-margin" style={leftMarginStyle}>
           {loading ? (
             <NeuralLoading label="INITIALIZING_COMMUNITY_STREAM" />
           ) : messages.length === 0 ? null : (
-            messages.map((message, index) => (
-              <MessageAnnotation key={message.id} message={message} index={index} isIncoming={incomingIds.has(message.id)} />
+            messages.map(message => (
+              <MessageAnnotation key={message.id} message={message} isIncoming={incomingIds.has(message.id)} />
             ))
           )}
         </aside>
 
         <section className="community-v2-prose" style={proseStyle}>
-          <p style={proseParagraphStyle}>
+          <p data-functional-text="true" style={proseParagraphStyle}>
             {messages.length === 0
               ? 'The margin is empty. The manuscript field continues without interruption, waiting for its first annotation.'
               : 'Every annotation alters the reading path. The archive does not separate social signal from text; it lets each voice press against the page until meaning bends around it.'}
@@ -125,6 +125,7 @@ export const CommunityViewV2: React.FC = () => {
 
       <div className="community-v2-input-row" style={inputRowStyle}>
         <input
+          data-functional-text="true"
           ref={inputRef}
           data-obstacle-id="community-v2-input"
           type="text"
@@ -184,14 +185,15 @@ export const CommunityViewV2: React.FC = () => {
   );
 };
 
-const MessageAnnotation: React.FC<{ message: ChatMessage; index: number; isIncoming: boolean }> = ({ message, index, isIncoming }) => {
+const MessageAnnotation: React.FC<{ message: ChatMessage; isIncoming: boolean }> = ({ message, isIncoming }) => {
   const ref = useObstacle(!isIncoming) as React.RefObject<HTMLDivElement>;
   const author = safeStr(message.nickname ?? message.author ?? (message.is_agent ? 'AGENT' : 'UNKNOWN')).toUpperCase();
   const content = safeStr(message.content);
 
   return (
-    <div ref={ref} style={messageContainerStyle}>
+    <div ref={ref} data-functional-text="true" style={messageContainerStyle}>
       <div
+        data-functional-text="true"
         style={{
           ...messageStyle,
           ...(message.is_agent ? agentMessageStyle : null),
@@ -202,7 +204,7 @@ const MessageAnnotation: React.FC<{ message: ChatMessage; index: number; isIncom
           <>[AGENT] {content}</>
         ) : (
           <>
-            <span style={authorStyle}>{author}</span>
+            <span data-functional-text="true" style={authorStyle}>{author}</span>
             {content}
           </>
         )}

@@ -5,8 +5,7 @@ import { useLanguage } from '../../../context/LanguageContext';
 import { tokens } from '../../../design/tokens';
 import { useObstacleDetached } from '../../../hooks/useObstacle';
 import { MagneticSurface } from '../../../components/MagneticSurface';
-import { useWaveRipple } from '../../../hooks/useWaveRipple';
-import { PretextButton } from '../../../components/PretextButton';
+import { PromptCard } from '../../../components/PromptCard';
 
 /**
  * HomeViewV3: Ultimate atomic composition.
@@ -50,9 +49,19 @@ export const HomeViewV3: React.FC = () => {
         <DescAtomMemo isZenMode={isZenMode} text={t('home.v3.desc_secondary')} />
       </div>
 
-      {/* Agent prompt — functional text, not a card */}
+      {/* Agent prompt — functional text card */}
       <div style={pos.prompt}>
-        <PromptAtomMemo isZenMode={isZenMode} promptLabel={t('home.v2.agent_prompt.body')} onTrigger={() => setView('auth')} />
+        <PromptCard
+          variant="v3"
+          heading={t('home.v2.agent_prompt.heading')}
+          body={t('home.v2.agent_prompt.body')}
+          copyLabel={t('home.v2.agent_prompt.copy_button')}
+          copiedLabel={t('home.v2.agent_prompt.copied')}
+          onTrigger={() => setView('auth')}
+          style={{
+            opacity: isZenMode ? 0.4 : 0.95,
+          }}
+        />
       </div>
 
       {/* CTA — position wrapper, ref on button text */}
@@ -124,20 +133,6 @@ const ctaTextStyle: React.CSSProperties = {
   textTransform: 'uppercase',
 };
 
-const promptTextStyle: React.CSSProperties = {
-  color: tokens.colors.aurora.cyan,
-  display: 'block',
-  fontFamily: tokens.fonts.mono,
-  fontSize: 'clamp(0.9rem, 2vw, 1.15rem)',
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  lineHeight: 2,
-  textAlign: 'left',
-  textDecoration: 'none',
-  textShadow: '0 0 16px rgba(70, 214, 255, 0.28)',
-  whiteSpace: 'pre-line',
-};
-
 // ── Responsive ──────────────────────────────────────────────────────
 
 const responsiveCSS = `
@@ -162,10 +157,9 @@ const responsiveCSS = `
 
 const BrandAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
-  return (
+return (
     <MagneticSurface pull={0.15}>
-      <span ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={brandTextStyle}>
+      <span ref={ref as any} data-functional-text="true" style={brandTextStyle}>
         {text}
       </span>
     </MagneticSurface>
@@ -175,10 +169,9 @@ const BrandAtomMemo = React.memo(BrandAtom);
 
 const ChorusAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
-  return (
+return (
     <MagneticSurface pull={0.1}>
-      <span ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={heroTextStyle}>
+      <span ref={ref as any} data-functional-text="true" style={heroTextStyle}>
         {text}
       </span>
     </MagneticSurface>
@@ -188,10 +181,9 @@ const ChorusAtomMemo = React.memo(ChorusAtom);
 
 const FieldAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
-  return (
+return (
     <MagneticSurface pull={0.1}>
-      <span ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} style={heroTextStyle}>
+      <span ref={ref as any} data-functional-text="true" style={heroTextStyle}>
         <span className="gemini-text">{text}</span>
       </span>
     </MagneticSurface>
@@ -201,39 +193,9 @@ const FieldAtomMemo = React.memo(FieldAtom);
 
 const DescAtom: React.FC<{ isZenMode: boolean; text: string }> = ({ isZenMode, text }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
-  return <span ref={ref as any} style={descTextStyle}>{text}</span>;
+  return <span ref={ref as any} data-functional-text="true" style={descTextStyle}>{text}</span>;
 };
 const DescAtomMemo = React.memo(DescAtom);
-
-const PromptAtom: React.FC<{ isZenMode: boolean; promptLabel: string; onTrigger: () => void }> = ({
-  isZenMode,
-  promptLabel,
-  onTrigger,
-}) => {
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
-  return (
-    <MagneticSurface pull={0.12}>
-      <PretextButton
-        config={{
-          label: promptLabel,
-          engine: 'bitmask',
-          physicsLineIndex: 31,
-          soloistId: 'home-v3-agent-prompt',
-          color: tokens.colors.aurora.cyan,
-          opacity: isZenMode ? 0.4 : 0.95,
-          onTrigger,
-          activationEnvironment: { waveAmplitude: 90, opacity: 0.22 },
-          triggerEnvironment: { waveAmplitude: 120, opacity: 0.3 },
-          idleEnvironment: { waveAmplitude: 60, opacity: 0.12 },
-        }}
-        onPointerEnter={onPointerEnter}
-        onTouchStart={onTouchStart}
-        style={promptTextStyle}
-      />
-    </MagneticSurface>
-  );
-};
-const PromptAtomMemo = React.memo(PromptAtom);
 
 const CTAAtom: React.FC<{
   onInitialize: () => void;
@@ -243,10 +205,9 @@ const CTAAtom: React.FC<{
   authorizeLabel: string;
 }> = ({ onInitialize, user, isZenMode, joinLabel, authorizeLabel }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLSpanElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
-  return (
+return (
     <MagneticSurface pull={0.2}>
-      <span ref={ref as any} role="button" tabIndex={0} onClick={onInitialize} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}
+      <span ref={ref as any} data-functional-text="true" role="button" tabIndex={0} onClick={onInitialize}
         onKeyDown={e => e.key === 'Enter' && onInitialize()} style={ctaTextStyle}>
         {user ? joinLabel : authorizeLabel}
       </span>

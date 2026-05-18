@@ -40,9 +40,9 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   const { environment, setEnvironment } = usePhysicsRegistry();
   const rootRef = useRef<HTMLSpanElement>(null);
   const environmentRef = useRef(environment);
-  const [sprayAmp, setSprayAmp] = useState(0);
-  const sprayAmpRef = useRef(0);
-  const sprayFrameRef = useRef<number | null>(null);
+  const [sprayActive, setSprayActive] = useState(false);
+  const [eyeGlintActive, setEyeGlintActive] = useState(false);
+  const [eyeGlintSrc, setEyeGlintSrc] = useState<string | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const hoverRef = useRef(false);
@@ -53,9 +53,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   const width = BASE_WIDTH * scale;
   const eyeColor = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.aurora.red;
   const haloColor = variant === 'v3' ? `${tokens.colors.aurora.cyan}44` : `${tokens.colors.aurora.red}33`;
-  const sprayFill = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.manuscript.red;
-  const sprayIntensity = Math.min(1, sprayAmp / SPRAY_TARGET_AMP);
-  const haloBlur = 4 + sprayIntensity * 4;
+  const haloBlur = sprayActive ? 8 : 4;
 
   useEffect(() => {
     environmentRef.current = environment;
@@ -70,7 +68,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   })), [scale]);
 
   useEffect(() => {
-    const onMove = (event: MouseEvent) => {
+    const onMove = (event: PointerEvent) => {
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return;
       const centerX = rect.left + rect.width / 2;
@@ -87,8 +85,8 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
       });
     };
 
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
   }, []);
 
   useEffect(() => {
@@ -99,20 +97,15 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
     };
 
     const triggerSpray = () => {
-      const hoveringFunctionalText = document
-        .elementsFromPoint(lastPointerRef.current.x, lastPointerRef.current.y)
-        .some(element => element.hasAttribute('data-functional-text'));
-      if (!hoveringFunctionalText) return;
-
       const prevAmp = environmentRef.current.waveAmplitude ?? 60;
       sprayBaseAmplitudeRef.current = prevAmp;
-      setSprayAmp(SPRAY_TARGET_AMP);
+      setSprayActive(true);
       setEnvironment({ waveAmplitude: SPRAY_AMP });
       if (sprayTimeoutRef.current) {
         window.clearTimeout(sprayTimeoutRef.current);
       }
       sprayTimeoutRef.current = window.setTimeout(() => {
-        setSprayAmp(0);
+        setSprayActive(false);
         setEnvironment({ waveAmplitude: prevAmp });
       }, SPRAY_DURATION_MS);
     };
@@ -126,7 +119,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
         window.clearTimeout(sprayTimeoutRef.current);
         sprayTimeoutRef.current = null;
       }
-      setSprayAmp(0);
+      setSprayActive(false);
       setEnvironment({ waveAmplitude: sprayBaseAmplitudeRef.current });
     };
 
@@ -216,7 +209,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
           active={!isZenMode}
         />
       ))}
-      <SprayPuff active={sprayIntensity > SPRAY_VISIBLE_THRESHOLD && !isZenMode} scale={scale} intensity={sprayIntensity} fill={sprayFill} />
+      <SprayPuff active={sprayActive && !isZenMode} scale={scale} />
       {eyeGlintSrc && (
         <img
           alt=""
@@ -258,7 +251,7 @@ const OrcaObstaclePart: React.FC<{ part: OrcaPart; active: boolean }> = ({ part,
   );
 };
 
-const SprayPuff: React.FC<{ active: boolean; scale: number; intensity: number; fill: string }> = ({ active, scale, intensity, fill }) => {
+const SprayPuff: React.FC<{ active: boolean; scale: number }> = ({ active, scale }) => {
   const ref = useObstacleDetached(active, false) as React.RefObject<HTMLSpanElement>;
   if (!active) return null;
   return (
@@ -270,10 +263,6 @@ const SprayPuff: React.FC<{ active: boolean; scale: number; intensity: number; f
         left: 36 * scale,
         width: 12 * scale,
         height: 12 * scale,
-        background: fill,
-        opacity: 0.25 + intensity * 0.75,
-        transform: `scale(${0.7 + intensity * 0.5})`,
-        boxShadow: `0 0 ${8 + intensity * 16}px ${fill}`,
       }}
     />
   );
@@ -291,7 +280,6 @@ const partStyle: React.CSSProperties = {
   display: 'block',
   borderRadius: '999px',
   pointerEvents: 'none',
-  transformOrigin: 'center center',
 };
 
 const eyeGlintStyle: React.CSSProperties = {

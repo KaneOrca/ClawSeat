@@ -3,6 +3,7 @@ import { prepareWithSegments, layoutNextLine, type LayoutCursor } from '@chenglo
 import { usePhysicsRegistry, type RectObstacle } from '../../context/PhysicsContext';
 import { usePretextCanvas } from '../../hooks/usePretextCanvas';
 import { useLanguage } from '../../context/LanguageContext';
+import { getActiveFunctionalTextRects } from '../../hooks/useFunctionalTextHover';
 
 interface LabyrinthPhysicProps {
   text: string;
@@ -10,6 +11,8 @@ interface LabyrinthPhysicProps {
   lineHeight: number;
   opacity?: number;
   variant: 'v2' | 'v3';
+  mouseChordEnabled?: boolean;
+  waveShiftEnabled?: boolean;
 }
 
 interface Span {
@@ -20,6 +23,11 @@ interface Span {
 const PADDING = 8;
 const MIN_SPAN_WIDTH = 20;
 const MAZE_DRIFT_PX = 24;
+let mouseChordCache = { x: 0, y: 0, chordStart: 0, chordEnd: 0, valid: false };
+
+function isCircularFlowObstacle(obs: RectObstacle): boolean {
+  return obs.id === 'system:mouse' || obs.id.startsWith('functional-text:hover:');
+}
 
 /**
  * Compute free X-axis spans for a given Y row by subtracting all
@@ -30,7 +38,12 @@ function computeFreeSpans(
   lineHeight: number,
   width: number,
   obstacles: RectObstacle[],
+  mouseChordEnabled: boolean,
 ): Span[] {
+  if (!mouseChordEnabled) {
+    mouseChordCache.valid = false;
+  }
+
   // Collect blocked X-ranges that overlap this Y row.
   // When charRects are available, block per-character instead of whole AABB.
   const blocked: Span[] = [];
@@ -46,6 +59,43 @@ function computeFreeSpans(
           });
         }
       }
+    } else if (isCircularFlowObstacle(obs) && mouseChordEnabled) {
+      const mRadius = obs.w * 0.7;
+      const centerY = obs.y + mRadius;
+      const distToCenterY = Math.abs((y + lineHeight * 0.5) - centerY);
+
+      if (distToCenterY >= mRadius) {
+        continue;
+      }
+
+      const canUseMouseCache = obs.id === 'system:mouse';
+      const useCachedChord = canUseMouseCache
+        && Math.abs(obs.x - mouseChordCache.x) < 2
+        && Math.abs(obs.y - mouseChordCache.y) < 2
+        && mouseChordCache.valid;
+      let chordStart = mouseChordCache.chordStart;
+      let chordEnd = mouseChordCache.chordEnd;
+
+      if (!useCachedChord) {
+        const chordHalf = Math.sqrt(mRadius * mRadius - distToCenterY * distToCenterY);
+        chordStart = (obs.x + mRadius) - chordHalf;
+        chordEnd = (obs.x + mRadius) + chordHalf;
+
+        if (canUseMouseCache) {
+          mouseChordCache = {
+            x: obs.x,
+            y: obs.y,
+            chordStart,
+            chordEnd,
+            valid: true,
+          };
+        }
+      }
+
+      blocked.push({
+        start: Math.max(0, chordStart - PADDING),
+        end: Math.min(width, chordEnd + PADDING),
+      });
     } else {
       blocked.push({
         start: Math.max(0, obs.x - PADDING),
@@ -95,7 +145,9 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
   fontDef,
   lineHeight,
   opacity = 0.15,
-  variant
+  variant,
+  mouseChordEnabled = true,
+  waveShiftEnabled = true,
 }) => {
   const { obstaclesRef, soloists, environment } = usePhysicsRegistry();
   const { locale } = useLanguage();
@@ -105,6 +157,14 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
   useEffect(() => { soloistsRef.current = soloists; }, [soloists]);
   const envRef = useRef(environment);
   useEffect(() => { envRef.current = environment; }, [environment]);
+  const mouseChordEnabledRef = useRef(mouseChordEnabled);
+  const waveShiftEnabledRef = useRef(waveShiftEnabled);
+  useEffect(() => {
+    mouseChordEnabledRef.current = mouseChordEnabled;
+  }, [mouseChordEnabled]);
+  useEffect(() => {
+    waveShiftEnabledRef.current = waveShiftEnabled;
+  }, [waveShiftEnabled]);
 
   const variantFont = useMemo(() => {
     if (variant === 'v2') {
@@ -119,10 +179,33 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
     ctx.clearRect(0, 0, width, height);
     ctx.textBaseline = 'top';
     const obstacles = obstaclesRef.current ?? [];
+    const functionalTextObstacles: RectObstacle[] = variant === 'v2'
+      ? getActiveFunctionalTextRects().map((rect, index) => ({
+        id: `functional-text:hover:${index}`,
+        x: rect.x,
+        y: rect.y,
+        w: rect.width,
+        h: rect.height,
+      }))
+      : [];
+    const flowObstacles = functionalTextObstacles.length > 0
+      ? obstacles.concat(functionalTextObstacles)
+      : obstacles;
     const env = envRef.current;
 
     const currentAlpha = env.opacity ?? opacity;
     const currentWaveAmp = env.waveAmplitude ?? 60;
+    if (import.meta.env.DEV && currentWaveAmp > 60) {
+      const flashLog = (window as any).__arenaFlashLog__ || [];
+      (window as any).__arenaFlashLog__ = flashLog;
+      flashLog.push({
+        time: Date.now(),
+        waveAmplitude: currentWaveAmp,
+        delta: currentWaveAmp - 60,
+        source: 'LabyrinthPhysic',
+        stack: new Error().stack?.split('\n').slice(2, 4).join(' -> ') ?? '',
+      });
+    }
     const surgeNorm = Math.max(0, (currentWaveAmp - 60) / 60);
     const transition = env.effects;
     const transitionProgress = transition?.transitionProgress ?? 0;
@@ -145,7 +228,7 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
       ctx.font = variantFont;
 
       // MULTI-SPAN OBSTACLE AVOIDANCE
-      const freeSpans = computeFreeSpans(currentY, lineHeight, width, obstacles);
+      const freeSpans = computeFreeSpans(currentY, lineHeight, width, flowObstacles, mouseChordEnabledRef.current);
 
       // Apply a continuous manuscript drift instead of hard random insets.
       const mazeDrift = Math.sin(currentY * 0.012 + time * 0.00012) * MAZE_DRIFT_PX;
@@ -169,8 +252,8 @@ export const LabyrinthPhysic: React.FC<LabyrinthPhysicProps> = ({
       for (const span of spans) {
         let startX = span.start;
 
-        if (variant === 'v3') {
-          const waveShift = Math.sin((currentY * 0.05) + (time * 0.002)) * (20 + currentWaveAmp * 0.2);
+        if (waveShiftEnabledRef.current && (variant === 'v2' || variant === 'v3')) {
+          const waveShift = Math.sin((currentY * 0.05) + (time * 0.002)) * (40 + currentWaveAmp * 0.2);
           startX += waveShift;
         }
 

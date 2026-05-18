@@ -182,3 +182,8 @@
     border-right-color: var(--border);
   }
 }
+
+[data-functional-text=true] {
+  outline: 1px dashed rgba(0, 180, 255, 0.6) !important;
+  outline-offset: 2px;
+}

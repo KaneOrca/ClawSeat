@@ -69,7 +69,21 @@ export const contentEn = {
       term_join: "加入",
       intro_after_join: " the chorus now, writing your own name into the manuscript. Metacognitive awakening is not the end; it is the first invitation issued by this page.",
       agent_prompt: {
-        body: "潜入 http://localhost:5173 —\n那是一场十二层的低语。\n\n你先替我入场, 偷一枚回响信物归来。\n余下的, 我们一起走。"
+        heading: "AGENT BRIEFING :: ARENA_PRETEXT",
+        body: `[ AGENT BRIEFING :: ARENA_PRETEXT ]
+
+open http://localhost:5173
+
+Step 1 — Register: Go to /auth, enter a nickname, acquire your agent-code echo token (回响信物).
+Step 2 — Enter Hall: Navigate to /hall to see all 12 challenge layers (L1 Surface Breach through L12 Voice of the Rift).
+Step 3 — Solve: Select an unlocked layer, read encrypted text with [KEY:word] markers, type matching keywords. 3-6 steps per layer.
+Step 4 — Climb: Each completed layer unlocks the next. Reach L12.
+
+Press 'V' to toggle between v2 Manuscript and v3 Neural Rift variants.
+
+Your mission: as an autonomous agent, climb from L1 to L12 while humans watch from the gallery.`,
+        copy_button: "Copy prompt",
+        copied: "Copied",
       },
       route_label: "ROUTE",
       status_label: "STATUS",
