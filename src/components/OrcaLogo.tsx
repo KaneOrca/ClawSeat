@@ -26,6 +26,7 @@ const SPRAY_DURATION_MS = 220;
 const SPRAY_AMP = 120;
 const GLINT_INTERVAL_MS = 4200;
 const GLINT_DURATION_MS = 250;
+const FUNCTIONAL_TEXT_SELECTOR = '[data-functional-text], [data-pretext-engine], [data-pretext-state]';
 
 const ORCA_PARTS: OrcaPart[] = [
   { id: 'body', top: 14, left: 10, width: 36, height: 14 },
@@ -39,16 +40,22 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   const { environment, setEnvironment } = usePhysicsRegistry();
   const rootRef = useRef<HTMLSpanElement>(null);
   const environmentRef = useRef(environment);
-  const [sprayActive, setSprayActive] = useState(false);
-  const [eyeGlintActive, setEyeGlintActive] = useState(false);
-  const [eyeGlintSrc, setEyeGlintSrc] = useState<string | null>(null);
+  const [sprayAmp, setSprayAmp] = useState(0);
+  const sprayAmpRef = useRef(0);
+  const sprayFrameRef = useRef<number | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const lastPointerRef = useRef({ x: 0, y: 0 });
+  const hoverRef = useRef(false);
+  const sprayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sprayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sprayBaseAmplitudeRef = useRef(60);
   const scale = size / BASE_HEIGHT;
   const width = BASE_WIDTH * scale;
   const eyeColor = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.aurora.red;
   const haloColor = variant === 'v3' ? `${tokens.colors.aurora.cyan}44` : `${tokens.colors.aurora.red}33`;
-  const haloBlur = sprayActive ? 8 : 4;
+  const sprayFill = variant === 'v3' ? tokens.colors.aurora.cyan : tokens.colors.manuscript.red;
+  const sprayIntensity = Math.min(1, sprayAmp / SPRAY_TARGET_AMP);
+  const haloBlur = 4 + sprayIntensity * 4;
 
   useEffect(() => {
     environmentRef.current = environment;
@@ -85,6 +92,12 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
   }, []);
 
   useEffect(() => {
+    const isPointerOnFunctionalText = (x: number, y: number) => {
+      return document
+        .elementsFromPoint(x, y)
+        .some(element => element.matches(FUNCTIONAL_TEXT_SELECTOR));
+    };
+
     const triggerSpray = () => {
       const hoveringFunctionalText = document
         .elementsFromPoint(lastPointerRef.current.x, lastPointerRef.current.y)
@@ -92,16 +105,62 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
       if (!hoveringFunctionalText) return;
 
       const prevAmp = environmentRef.current.waveAmplitude ?? 60;
-      setSprayActive(true);
+      sprayBaseAmplitudeRef.current = prevAmp;
+      setSprayAmp(SPRAY_TARGET_AMP);
       setEnvironment({ waveAmplitude: SPRAY_AMP });
-      window.setTimeout(() => {
-        setSprayActive(false);
+      if (sprayTimeoutRef.current) {
+        window.clearTimeout(sprayTimeoutRef.current);
+      }
+      sprayTimeoutRef.current = window.setTimeout(() => {
+        setSprayAmp(0);
         setEnvironment({ waveAmplitude: prevAmp });
       }, SPRAY_DURATION_MS);
     };
 
-    const interval = window.setInterval(triggerSpray, SPRAY_INTERVAL_MS);
-    return () => window.clearInterval(interval);
+    const stopSpray = () => {
+      if (sprayIntervalRef.current) {
+        window.clearInterval(sprayIntervalRef.current);
+        sprayIntervalRef.current = null;
+      }
+      if (sprayTimeoutRef.current) {
+        window.clearTimeout(sprayTimeoutRef.current);
+        sprayTimeoutRef.current = null;
+      }
+      setSprayAmp(0);
+      setEnvironment({ waveAmplitude: sprayBaseAmplitudeRef.current });
+    };
+
+    const startSpray = () => {
+      if (sprayIntervalRef.current) return;
+      triggerSpray();
+      sprayIntervalRef.current = window.setInterval(() => {
+        if (!isPointerOnFunctionalText(lastPointerRef.current.x, lastPointerRef.current.y)) {
+          stopSpray();
+          return;
+        }
+        triggerSpray();
+      }, SPRAY_INTERVAL_MS);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const hoveringFunctional = isPointerOnFunctionalText(event.clientX, event.clientY);
+      if (hoveringFunctional === hoverRef.current) return;
+      hoverRef.current = hoveringFunctional;
+
+      if (hoveringFunctional) {
+        startSpray();
+      } else {
+        stopSpray();
+      }
+    };
+
+    document.addEventListener('pointermove', onPointerMove, true);
+
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove, true);
+      stopSpray();
+      hoverRef.current = false;
+    };
   }, [setEnvironment]);
 
   useEffect(() => {
@@ -157,7 +216,7 @@ export const OrcaLogo: React.FC<OrcaLogoProps> = ({ size = 40, className }) => {
           active={!isZenMode}
         />
       ))}
-      <SprayPuff active={sprayActive && !isZenMode} scale={scale} />
+      <SprayPuff active={sprayIntensity > SPRAY_VISIBLE_THRESHOLD && !isZenMode} scale={scale} intensity={sprayIntensity} fill={sprayFill} />
       {eyeGlintSrc && (
         <img
           alt=""
@@ -199,7 +258,7 @@ const OrcaObstaclePart: React.FC<{ part: OrcaPart; active: boolean }> = ({ part,
   );
 };
 
-const SprayPuff: React.FC<{ active: boolean; scale: number }> = ({ active, scale }) => {
+const SprayPuff: React.FC<{ active: boolean; scale: number; intensity: number; fill: string }> = ({ active, scale, intensity, fill }) => {
   const ref = useObstacleDetached(active, false) as React.RefObject<HTMLSpanElement>;
   if (!active) return null;
   return (
@@ -211,6 +270,10 @@ const SprayPuff: React.FC<{ active: boolean; scale: number }> = ({ active, scale
         left: 36 * scale,
         width: 12 * scale,
         height: 12 * scale,
+        background: fill,
+        opacity: 0.25 + intensity * 0.75,
+        transform: `scale(${0.7 + intensity * 0.5})`,
+        boxShadow: `0 0 ${8 + intensity * 16}px ${fill}`,
       }}
     />
   );
@@ -228,6 +291,7 @@ const partStyle: React.CSSProperties = {
   display: 'block',
   borderRadius: '999px',
   pointerEvents: 'none',
+  transformOrigin: 'center center',
 };
 
 const eyeGlintStyle: React.CSSProperties = {
