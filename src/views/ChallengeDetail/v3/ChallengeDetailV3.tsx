@@ -200,10 +200,10 @@ const diagValueStyle: React.CSSProperties = {
 
 const BackAtom: React.FC<{ isZenMode: boolean; onBack: () => void; label: string }> = ({ isZenMode, onBack, label }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLButtonElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  const ripple = useWaveRipple();
   return (
     <MagneticSurface pull={0.2}>
-      <button ref={ref as any} onClick={onBack} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}
+      <button ref={ref as any} data-functional-text="true" onClick={onBack} onPointerEnter={ripple.onPointerEnter} onTouchStart={ripple.onTouchStart}
         style={{ ...backButtonStyle, opacity: isZenMode ? 0.3 : 1, transition: 'opacity 0.6s ease' }}>
         <ArrowLeft size={16} /> {label}
       </button>
@@ -215,7 +215,7 @@ const BackAtomMemo = React.memo(BackAtom);
 const LabelAtom: React.FC<{ isZenMode: boolean; title: string; label: string }> = ({ isZenMode, title, label }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
   return (
-    <div ref={ref} style={{ ...labelStyle, opacity: isZenMode ? 0.3 : 1, transition: 'opacity 0.6s ease' }}>
+    <div ref={ref} data-functional-text="true" style={{ ...labelStyle, opacity: isZenMode ? 0.3 : 1, transition: 'opacity 0.6s ease' }}>
       {label}: {safeStr(title).toUpperCase()}
     </div>
   );
@@ -224,10 +224,10 @@ const LabelAtomMemo = React.memo(LabelAtom);
 
 const TitleAtom: React.FC<{ isZenMode: boolean; title: string }> = ({ isZenMode, title }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLHeadingElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  const ripple = useWaveRipple();
   return (
     <MagneticSurface pull={0.1}>
-      <h1 ref={ref as any} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}
+      <h1 ref={ref as any} data-functional-text="true" onPointerEnter={ripple.onPointerEnter} onTouchStart={ripple.onTouchStart}
         style={{ ...titleStyle, opacity: isZenMode ? 0 : 0.8, transition: 'opacity 0.6s ease' }}>
         {title}
       </h1>
@@ -258,7 +258,7 @@ const TextareaAtom: React.FC<{
 }> = ({ isZenMode, answer, onInput }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLTextAreaElement>;
   return (
-    <textarea ref={ref as any} autoFocus value={answer} onChange={onInput} style={textareaStyle} />
+    <textarea data-functional-text="true" ref={ref as any} autoFocus value={answer} onChange={onInput} style={textareaStyle} />
   );
 };
 const TextareaAtomMemo = React.memo(TextareaAtom);
@@ -272,11 +272,11 @@ const SubmitAtom: React.FC<{
   submitLabel: string;
 }> = ({ isZenMode, answer, onSubmit, submitting, submittingLabel, submitLabel }) => {
   const ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLButtonElement>;
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
+  const ripple = useWaveRipple();
   return (
     <div style={{ opacity: isZenMode && !answer.trim() ? 0 : 1, transition: 'opacity 0.6s ease' }}>
       <MagneticSurface pull={0.2}>
-        <button ref={ref as any} onClick={onSubmit} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}
+        <button ref={ref as any} data-functional-text="true" onClick={onSubmit} onPointerEnter={ripple.onPointerEnter} onTouchStart={ripple.onTouchStart}
           disabled={submitting || !answer.trim()}
           style={{
             ...submitStyle,

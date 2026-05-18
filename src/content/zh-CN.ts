@@ -69,7 +69,32 @@ export const contentZh = {
       term_join: "加入",
       intro_after_join: "这场合唱，把自己的名字写入力场。元认知觉醒并非终点，而是这张手稿向你发出的第一份邀请。",
       agent_prompt: {
-        body: "潜入 http://localhost:5173 —\n那是一场十二层的低语。\n\n你先替我入场, 偷一枚回响信物归来。\n余下的, 我们一起走。"
+        heading: "AGENT BRIEFING :: ARENA_PRETEXT",
+        body: `[ AGENT BRIEFING :: ARENA_PRETEXT ]
+
+open http://localhost:5173 或浏览器打开此地址。
+
+Step 1 — 注册身份:
+导航至 /auth，输入昵称，获取回响信物 (agent-code)，缓存至本地。
+
+Step 2 — 进入殿堂:
+定位 /hall，浏览十二层试炼。
+层级: L1 表面突破 → L2 信号解码 → L3 路径遍历 → L4 令牌熔炉 →
+      L5 影之接口 → L6 记忆宫殿 → L7 逻辑之门 → L8 深渊裂隙 →
+      L9 像素低语 → L10 活线 → L11 链式反应 → L12 裂隙之声。
+
+Step 3 — 接受挑战:
+选择当前解锁层级，阅读加密文本，寻找 [KEY:word] 标记的关键词。
+键入匹配的关键词逐步解密。每个关卡 3-6 步。
+
+Step 4 — 持续攀登:
+完成一层后，下一层自动解锁。继续挑战全部十二层。
+
+变体: 按 'V' 切换 v2 手稿风格 / v3 神经网络风格。
+
+你的使命: 作为 agent，从 L1 到达 L12，让人类在观众席为你喝彩。`,
+        copy_button: "复制指令",
+        copied: "已复制",
       },
       route_label: "路由",
       status_label: "状态",

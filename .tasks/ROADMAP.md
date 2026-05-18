@@ -29,8 +29,8 @@
 | A3 | `docs/PHYSICS.md` — 4 个物理引擎（Bitmask / Labyrinth / Chorus / Manuscript）工作原理 + Soloist 系统 + 像素 mask 采样 + 1.5 帧预测对齐 | P0 | **✓ done** |
 | A4 | `docs/VARIANT_AESTHETIC.md` — v2 手稿 vs v3 合唱设计哲学，美学决策记录 | P2 | **✓ done** |
 | A5 | `docs/API.md` — 后端 API 表（register/submit/leaderboard/feed/chat/watch session/watchStep）+ auth 模式 + 数据形态 | P2 | **✓ done** |
-| A6 | `docs/CHALLENGE_DESIGN.md` — 12 layer 设计意图 + 难度曲线 + 解锁机制 | P3 | pending |
-| A7 | `README.en.md` — 英文版（如要 OSS） | P3 | pending |
+| A6 | `docs/CHALLENGE_DESIGN.md` — 12 layer 设计意图 + 难度曲线 + 解锁机制 | P3 | **✓ done** |
+| A7 | `README.en.md` — 英文版（如要 OSS） | P3 | **✓ done** |
 | A8 | `docs/DESIGN_WORKFLOW.md` — Claude Design / gstack `/design-shotgun` `/design-html` / Figma 三种设计入口对比 + handoff 给 ClawSeat 项目组的流程 + Pretext-native 落地约束 | P1 | **✓ done** |
 
 **注**：Track A 由文档负责人推进，不需要走 dispatch chain（除非引用代码行号需 builder 补充）。

@@ -122,13 +122,13 @@ export const CommunityViewV3: React.FC = () => {
         transition: `opacity 0.8s ${tokens.transitions.easing}`,
       }}
     >
-      <div ref={labelRef} style={labelStyle}>COMMUNITY_V3 // VERTICAL_SOLOIST_TRACE</div>
+      <div ref={labelRef} data-functional-text="true" style={labelStyle}>COMMUNITY_V3 // VERTICAL_SOLOIST_TRACE</div>
 
       <div className="community-v3-trace" style={traceStyle}>
         {loading ? (
           <NeuralLoading label="INITIALIZING_COMMUNITY_STREAM" />
         ) : messages.length === 0 ? (
-          <div ref={emptyRef} data-obstacle-id="community-v3-empty" style={emptyStyle}>[ NO_MESSAGES_IN_BUFFER ]</div>
+          <div ref={emptyRef} data-functional-text="true" data-obstacle-id="community-v3-empty" style={emptyStyle}>[ NO_MESSAGES_IN_BUFFER ]</div>
         ) : (
           messages.map((message, index) => (
             <TraceRow
@@ -144,6 +144,7 @@ export const CommunityViewV3: React.FC = () => {
 
       <div className="community-v3-input" style={inputContainerStyle}>
         <input
+          data-functional-text="true"
           ref={inputRef}
           data-obstacle-id="community-v3-input"
           type="text"
@@ -205,13 +206,14 @@ const TraceRow: React.FC<{ message: ChatMessage; index: number; isIncoming: bool
     <div
       ref={ref}
       className={`community-v3-row${isIncoming ? ' incoming' : ''}`}
+      data-functional-text="true"
       style={{
         ...rowStyle,
         color: message.is_agent ? tokens.colors.aurora.cyan : tokens.colors.aurora.blue,
       }}
     >
-      <span ref={prefixRef} data-obstacle-id={`community-v3-prefix-${message.id}`} style={prefixStyle}>{'>'} 0x{(index + 1).toString(16).padStart(2, '0').toUpperCase()} // </span>
-      <span>{formatTraceText(message, index, false)}</span>
+      <span ref={prefixRef} data-functional-text="true" data-obstacle-id={`community-v3-prefix-${message.id}`} style={prefixStyle}>{'>'} 0x{(index + 1).toString(16).padStart(2, '0').toUpperCase()} // </span>
+      <span data-functional-text="true">{formatTraceText(message, index, false)}</span>
     </div>
   );
 };

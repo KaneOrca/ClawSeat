@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { prepareWithSegments, layoutNextLineRange, materializeLineRange } from '@chenglou/pretext';
 import { tokens } from '../design/tokens';
+import { useMousePush } from '../hooks/useMousePush';
 
 interface PretextEditorialProps {
   text: string;
@@ -26,6 +27,81 @@ function edgeJitter(lineIndex: number, charIndex: number, diff: number) {
   const seed = Math.sin((lineIndex + 1) * 19.19 + (charIndex + 1) * 37.37);
   return seed * 2.5 * (1 - diff / 0.1);
 }
+
+interface PretextEditorialLineProps {
+  text: string;
+  index: number;
+  totalLines: number;
+  textCols: number;
+  fontDef: string;
+  lineHeight: number;
+  color: string;
+  reveal: number;
+  delay: number;
+}
+
+const PretextEditorialLine: React.FC<PretextEditorialLineProps> = ({
+  text,
+  index,
+  totalLines,
+  textCols,
+  fontDef,
+  lineHeight,
+  color,
+  reveal,
+  delay,
+}) => {
+  const ref = useMousePush();
+
+  return (
+    <motion.div
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className="pretext-editorial-line"
+      data-functional-text="true"
+      initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{
+        duration: 0.8,
+        delay: delay + index * 0.05,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      style={{
+        position: 'absolute',
+        top: index * lineHeight,
+        left: 0,
+        font: fontDef,
+        color,
+        whiteSpace: 'pre',
+      }}
+    >
+      {Array.from(text).map((char, charIndex) => {
+        const lineBase = totalLines > 1 ? index / totalLines : 0;
+        const slotProgress = clamp(lineBase + (charIndex / textCols) / Math.max(1, totalLines), 0, 1);
+        const diff = Math.abs(reveal - slotProgress);
+        const isResolved = reveal > slotProgress;
+        const isTextSlot = char.trim().length > 0;
+        const dormantChar = isTextSlot ? HEX[(index * 7 + charIndex) % HEX.length] : '\u00a0';
+
+        return (
+          <span
+            key={`${index}-${charIndex}`}
+            style={{
+              display: 'inline-block',
+              minWidth: char === ' ' ? '0.35em' : undefined,
+              fontFamily: isResolved ? undefined : tokens.fonts.mono,
+              color,
+              opacity: isResolved ? 1 : (isTextSlot ? 0.25 : 0.1),
+              transform: `translateX(${edgeJitter(index, charIndex, diff)}px)`,
+              transition: 'opacity 80ms linear',
+            }}
+          >
+            {isResolved ? (char === ' ' ? '\u00a0' : char) : dormantChar}
+          </span>
+        );
+      })}
+    </motion.div>
+  );
+};
 
 /**
  * PretextEditorial: Flagship typographic composition.
@@ -143,51 +219,18 @@ export const PretextEditorial: React.FC<PretextEditorialProps> = ({
     >
       <AnimatePresence>
         {lines.map((line, index) => (
-          <motion.div
-            className="pretext-editorial-line"
+          <PretextEditorialLine
             key={`${index}-${line.substring(0, 10)}`}
-            initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            transition={{ 
-              duration: 0.8, 
-              delay: delay + index * 0.05,
-              ease: [0.16, 1, 0.3, 1]
-            }}
-            style={{
-              position: 'absolute',
-              top: index * lineHeight,
-              left: 0,
-              font: fontDef,
-              color: color,
-              whiteSpace: 'pre',
-            }}
-          >
-            {Array.from(line).map((char, charIndex) => {
-              const lineBase = lines.length > 1 ? index / lines.length : 0;
-              const slotProgress = clamp(lineBase + (charIndex / textCols) / Math.max(1, lines.length), 0, 1);
-              const diff = Math.abs(reveal - slotProgress);
-              const isResolved = reveal > slotProgress;
-              const isTextSlot = char.trim().length > 0;
-              const dormantChar = isTextSlot ? HEX[(index * 7 + charIndex) % HEX.length] : '\u00a0';
-
-              return (
-                <span
-                  key={`${index}-${charIndex}`}
-                  style={{
-                    display: 'inline-block',
-                    minWidth: char === ' ' ? '0.35em' : undefined,
-                    fontFamily: isResolved ? undefined : tokens.fonts.mono,
-                    color,
-                    opacity: isResolved ? 1 : (isTextSlot ? 0.25 : 0.1),
-                    transform: `translateX(${edgeJitter(index, charIndex, diff)}px)`,
-                    transition: 'opacity 80ms linear',
-                  }}
-                >
-                  {isResolved ? (char === ' ' ? '\u00a0' : char) : dormantChar}
-                </span>
-              );
-            })}
-          </motion.div>
+            text={line}
+            index={index}
+            totalLines={lines.length}
+            textCols={textCols}
+            fontDef={fontDef}
+            lineHeight={lineHeight}
+            color={color}
+            reveal={reveal}
+            delay={delay}
+          />
         ))}
       </AnimatePresence>
       <style>{`

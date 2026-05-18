@@ -104,10 +104,11 @@ export const AuthViewV3: React.FC = () => {
     <section className="auth-v3" style={containerStyle}>
       {!success ? (
         <div style={flowStyle}>
-          <div ref={messageRef} style={eyebrowStyle}>AWAITING_SYNAPTIC_OVERRIDE</div>
-          <p style={proseStyle}>
-            <span ref={prefixRef} data-obstacle-id="auth-v3-prefix">INJECT_NICKNAME_</span>
+          <div ref={messageRef} data-functional-text="true" style={eyebrowStyle}>AWAITING_SYNAPTIC_OVERRIDE</div>
+          <p data-functional-text="true" style={proseStyle}>
+            <span ref={prefixRef} data-functional-text="true" data-obstacle-id="auth-v3-prefix">INJECT_NICKNAME_</span>
             <input
+              data-functional-text="true"
               ref={inputRef}
               aria-label="nickname"
               value={nickname}
@@ -117,7 +118,7 @@ export const AuthViewV3: React.FC = () => {
               style={inputStyle}
               autoComplete="off"
             />
-            <span ref={suffixRef} data-obstacle-id="auth-v3-suffix">TO CUT THE FIRST RIFT.</span>
+            <span ref={suffixRef} data-functional-text="true" data-obstacle-id="auth-v3-suffix">TO CUT THE FIRST RIFT.</span>
           </p>
           <PretextButton
             config={{
@@ -133,14 +134,14 @@ export const AuthViewV3: React.FC = () => {
             disabled={submitting || !nickname.trim()}
             style={buttonStyle}
           />
-          {error ? <div ref={errorRef} style={errorStyle}>{error}</div> : null}
+          {error ? <div ref={errorRef} data-functional-text="true" style={errorStyle}>{error}</div> : null}
         </div>
       ) : (
         <div style={flowStyle}>
-          <div ref={resonanceRef} data-obstacle-id="auth-v3-resonance" style={eyebrowStyle}>RESONANCE_ESTABLISHED</div>
-          <div ref={messageRef} style={successTextStyle}>[ RESONANCE ESTABLISHED ] 第一道裂隙已开。</div>
-          <div id="agent-code" ref={codeRef} style={codeStyle}>{safeStr(displayCode || agentCode)}</div>
-          <div ref={captionRef} data-obstacle-id="auth-v3-caption" style={captionStyle}>[ RELIC_STATUS: STABLE ]<br />[ AUTO_REDIRECT: HALL_V3 IN 8S ]</div>
+          <div ref={resonanceRef} data-functional-text="true" data-obstacle-id="auth-v3-resonance" style={eyebrowStyle}>RESONANCE_ESTABLISHED</div>
+          <div ref={messageRef} data-functional-text="true" style={successTextStyle}>[ RESONANCE ESTABLISHED ] 第一道裂隙已开。</div>
+          <div id="agent-code" ref={codeRef} data-functional-text="true" style={codeStyle}>{safeStr(displayCode || agentCode)}</div>
+          <div ref={captionRef} data-functional-text="true" data-obstacle-id="auth-v3-caption" style={captionStyle}>[ RELIC_STATUS: STABLE ]<br />[ AUTO_REDIRECT: HALL_V3 IN 8S ]</div>
           <PretextButton
             config={{
               label: 'ENTER_HALL_V3',

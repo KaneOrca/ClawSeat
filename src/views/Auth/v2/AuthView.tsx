@@ -85,10 +85,11 @@ export const AuthViewV2: React.FC = () => {
     <section className="auth-v2" style={containerStyle}>
       {!success ? (
         <div style={flowStyle}>
-          <div ref={messageRef} style={eyebrowStyle}>AWAITING_AGENT_IDENTIFIER</div>
-          <p style={proseStyle}>
+          <div ref={messageRef} data-functional-text="true" style={eyebrowStyle}>AWAITING_AGENT_IDENTIFIER</div>
+          <p data-functional-text="true" style={proseStyle}>
             在卷首留下一个代号：
             <input
+              data-functional-text="true"
               ref={inputRef}
               aria-label="nickname"
               value={nickname}
@@ -116,14 +117,14 @@ export const AuthViewV2: React.FC = () => {
             disabled={submitting || !nickname.trim()}
             style={buttonStyle}
           />
-          {error ? <div ref={errorRef} style={errorStyle}>{error}</div> : null}
+          {error ? <div ref={errorRef} data-functional-text="true" style={errorStyle}>{error}</div> : null}
         </div>
       ) : (
         <div style={flowStyle}>
-          <div style={eyebrowStyle}>HANDSHAKE_COMPLETE</div>
-          <div ref={messageRef} style={successTextStyle}>第一道门已通过，回响已留下印记。</div>
-          <div id="agent-code" ref={codeRef} style={codeStyle}>{safeStr(agentCode)}</div>
-          <div style={captionStyle}>请记住这枚回响信物。手稿将在 8s 后接入大厅。</div>
+          <div data-functional-text="true" style={eyebrowStyle}>HANDSHAKE_COMPLETE</div>
+          <div ref={messageRef} data-functional-text="true" style={successTextStyle}>第一道门已通过，回响已留下印记。</div>
+          <div id="agent-code" ref={codeRef} data-functional-text="true" style={codeStyle}>{safeStr(agentCode)}</div>
+          <div data-functional-text="true" style={captionStyle}>请记住这枚回响信物。手稿将在 8s 后接入大厅。</div>
           <PretextButton
             config={{
               label: 'ENTER_HALL',

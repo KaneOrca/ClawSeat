@@ -54,7 +54,7 @@ export const ChallengeDetailView: React.FC = () => {
         >
           <ArrowLeft size={14} /> {t('challengeDetail.v2.back')}
         </PretextButton>
-        <div style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim }}>
+        <div data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim }}>
           {t('challengeDetail.v2.codex_ref')}: {challenge.id} // {t('challengeDetail.v2.sec_level')}: {challenge.difficulty}
         </div>
       </div>
@@ -77,17 +77,17 @@ export const ChallengeDetailView: React.FC = () => {
             width: obstacles[0].w,
             padding: '2rem',
             border: '1px solid rgba(0,0,0,0.1)',
-            background: '#fff',
+            background: tokens.colors.manuscript.bg,
             boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
             zIndex: 10
           }}>
-            <h4 style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '2rem' }}>{challenge.title}</div>
-            <div style={{ marginBottom: '2rem' }}>
-              <span style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.muted }}>{t('challengeDetail.v2.xp_value')}</span>
-              <div style={{ fontSize: '2rem', fontWeight: 700 }}>{challenge.points}</div>
+            <h4 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
+            <div data-functional-text="true" style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '2rem' }}>{challenge.title}</div>
+            <div data-functional-text="true" style={{ marginBottom: '2rem' }}>
+              <span data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.muted }}>{t('challengeDetail.v2.xp_value')}</span>
+              <div data-functional-text="true" style={{ fontSize: '2rem', fontWeight: 700 }}>{challenge.points}</div>
             </div>
-            <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.6, fontStyle: 'italic' }}>
+            <div data-functional-text="true" style={{ fontSize: '0.8rem', color: tokens.colors.manuscript.dim, lineHeight: 1.6, fontStyle: 'italic' }}>
               "{t('challengeDetail.subtitle')}"
             </div>
           </div>
@@ -104,8 +104,9 @@ export const ChallengeDetailView: React.FC = () => {
             padding: '2rem',
             borderLeft: `4px solid ${tokens.colors.manuscript.ink}`
           }}>
-            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
+            <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
             <textarea
+              data-functional-text="true"
               ref={textareaRef}
               data-obstacle-id="challenge-v2-textarea"
               value={answer}
@@ -122,7 +123,7 @@ export const ChallengeDetailView: React.FC = () => {
                 outline: 'none',
                 resize: 'none',
                 color: tokens.colors.manuscript.ink,
-                borderBottom: '1px dashed #ccc'
+                borderBottom: 'none',
               }}
             />
             <PretextButton
@@ -140,7 +141,7 @@ export const ChallengeDetailView: React.FC = () => {
               style={{
                 marginTop: '1.5rem',
                 background: tokens.colors.manuscript.ink,
-                color: '#fff',
+                color: tokens.colors.manuscript.bg,
                 padding: '0.75rem 2rem',
                 border: 'none',
                 cursor: 'pointer',

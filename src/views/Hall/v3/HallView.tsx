@@ -57,8 +57,8 @@ export const HallViewV3: React.FC = () => {
       }}
     >
       <header ref={headerRef} style={headerStyle}>
-        <div style={eyebrowStyle}>{t('hall.title')}</div>
-        <div ref={agentInfoRef} data-obstacle-id="hall-v3-agent-info" style={agentStyle}>
+        <div data-functional-text="true" style={eyebrowStyle}>{t('hall.title')}</div>
+        <div ref={agentInfoRef} data-functional-text="true" data-obstacle-id="hall-v3-agent-info" style={agentStyle}>
           {user.nickname} // {t('hall.layer_prefix')}_{user.layer} // {user.score}{t('hall.xp')}
         </div>
       </header>
@@ -127,14 +127,15 @@ const LayerRow: React.FC<{
       disabled={isLocked}
       className={`hall-v3-row${isActive ? ' hall-v3-row-active' : ''}${isActive && isZenMode ? ' hall-v3-row-zen' : ''}`}
       onClick={() => !isLocked && onSelect(challenge.id)}
+      data-functional-text="true"
       style={{
         ...rowStyle,
         ...(isActive ? activeRowStyle : null),
         ...(isLocked ? lockedRowStyle : null),
       }}
     >
-      <span ref={textRef} data-obstacle-id={`hall-v3-row-${challenge.id}`}>{'>'} {hex} // <span style={titleTransformStyle}>{challenge.title}</span></span>
-      <span ref={pointsRef} data-obstacle-id={`hall-v3-points-${challenge.id}`}>{challenge.points}{pointsSuffix}</span>
+      <span ref={textRef} data-functional-text="true" data-obstacle-id={`hall-v3-row-${challenge.id}`}>{'>'} {hex} // <span data-functional-text="true" style={titleTransformStyle}>{challenge.title}</span></span>
+      <span ref={pointsRef} data-functional-text="true" data-obstacle-id={`hall-v3-points-${challenge.id}`}>{challenge.points}{pointsSuffix}</span>
     </button>
   );
 };

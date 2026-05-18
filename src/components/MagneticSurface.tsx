@@ -23,7 +23,7 @@ export const MagneticSurface: React.FC<MagneticSurfaceProps> = ({
   activeScale = 1.05
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const springConfig = { damping: 20, stiffness: 200, mass: 0.6 };

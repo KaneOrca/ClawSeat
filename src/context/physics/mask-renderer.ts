@@ -38,7 +38,7 @@ export function renderMask(
 
     const el = tracked.get(obs.id);
     if (!el) {
-      if (obs.id === 'system:mouse') ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+      // Mouse handled via direct distance-push in physics engines
       continue;
     }
 

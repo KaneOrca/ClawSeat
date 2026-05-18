@@ -7,7 +7,8 @@ import { useLanguage } from '../context/LanguageContext';
 import type { ViewType } from '../context/ArenaContext';
 import { tokens } from '../design/tokens';
 import { useObstacle } from '../hooks/useObstacle';
-import { useWaveRipple } from '../hooks/useWaveRipple';
+import { useMousePush } from '../hooks/useMousePush';
+import { assignRefs } from '../utils/assignRefs';
 
 interface NavigationProps {
   currentView: ViewType;
@@ -21,7 +22,6 @@ interface NavigationProps {
  */
 export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChange, onOpenSettings }) => {
   const { t } = useLanguage();
-  const { onPointerEnter, onTouchStart } = useWaveRipple();
 
   const navItems: Array<{ id: ViewType; label: string; seq: string }> = [
     { id: 'home', label: t('common.nav.home'), seq: '01' },
@@ -33,7 +33,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
   return (
     <div data-module="nav" style={navScatterStyle}>
       {/* Logo */}
-      <NavAtom onPointerEnter={onPointerEnter} onTouchStart={onTouchStart} obstacle={false}>
+      <NavAtom obstacle={false}>
         <MagneticSurface pull={0.2} padding={15}>
           <div
             onClick={() => onViewChange('home')}
@@ -47,7 +47,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
 
       {/* Nav links — each independently positioned */}
       {navItems.map((item) => (
-        <NavAtom key={item.id} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
+        <NavAtom key={item.id}>
           <MagneticSurface pull={0.3} padding={10}>
             <span
               onClick={() => onViewChange(item.id)}
@@ -64,7 +64,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
       ))}
 
       {/* Settings */}
-      <NavAtom onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
+      <NavAtom>
         <MagneticSurface pull={0.4} padding={15}>
           <div
             onClick={onOpenSettings}
@@ -81,7 +81,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
       </NavAtom>
 
       {/* Sync status */}
-      <NavAtom onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
+      <NavAtom>
         <div style={syncStyle}>
           <div style={syncDotStyle} />
           <span style={syncLabelStyle}>{t('common.nav.sync_active')}</span>
@@ -89,7 +89,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, onViewChang
       </NavAtom>
 
       {/* Language */}
-      <NavAtom onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
+      <NavAtom>
         <LanguageSwitcher />
       </NavAtom>
     </div>
@@ -163,13 +163,16 @@ const syncLabelStyle: React.CSSProperties = {
 
 const NavAtom: React.FC<{
   children: React.ReactNode;
-  onPointerEnter: () => void;
-  onTouchStart: () => void;
   obstacle?: boolean;
-}> = ({ children, onPointerEnter, onTouchStart, obstacle = true }) => {
+}> = ({ children, obstacle = true }) => {
   const ref = useObstacle(obstacle) as React.RefObject<HTMLSpanElement>;
+  const mousePushRef = useMousePush();
   return (
-    <span ref={ref as any} style={{ display: 'inline-flex' }} onPointerEnter={onPointerEnter} onTouchStart={onTouchStart}>
+    <span
+      ref={node => assignRefs(node, ref, mousePushRef)}
+      data-functional-text="true"
+      style={{ display: 'inline-flex' }}
+    >
       {children}
     </span>
   );

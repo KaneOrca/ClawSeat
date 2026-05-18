@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { usePhysicsRegistry, type EnvironmentSettings } from '../context/PhysicsContext';
 import { useObstacle } from '../hooks/useObstacle';
+import { useMousePush } from '../hooks/useMousePush';
+import { assignRefs } from '../utils/assignRefs';
 
 export type FunctionalTextEngine = 'labyrinth' | 'bitmask' | 'manuscript' | 'chorus';
 export type FunctionalTextState = 'FIELD_IDLE' | 'TERM_SOLOIST_ACTIVE' | 'SOLOIST_PULSE_NAV';
@@ -52,6 +54,7 @@ export interface UseFunctionalTextObstacleResult {
   dataAttributes: {
     'data-pretext-engine': FunctionalTextEngine;
     'data-pretext-state': FunctionalTextState;
+    'data-functional-text': 'true';
   };
 }
 
@@ -156,6 +159,7 @@ export function useFunctionalTextObstacle(config: FunctionalTextConfig): UseFunc
     dataAttributes: {
       'data-pretext-engine': config.engine,
       'data-pretext-state': state,
+      'data-functional-text': 'true',
     },
   }), [activate, config.engine, deactivate, obstacleRef, state, trigger]);
 }
@@ -177,12 +181,12 @@ export const PretextButton: React.FC<PretextButtonProps> = ({
   ...rest
 }) => {
   const functional = useFunctionalTextObstacle(config);
-
+  const mousePushRef = useMousePush();
   return (
     <button
       {...rest}
       {...functional.dataAttributes}
-      ref={functional.ref as React.RefObject<HTMLButtonElement>}
+      ref={node => assignRefs(node, functional.ref, mousePushRef)}
       onMouseEnter={(event) => {
         functional.eventHandlers.onMouseEnter();
         onMouseEnter?.(event);

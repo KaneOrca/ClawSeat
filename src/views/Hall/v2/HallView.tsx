@@ -65,9 +65,9 @@ export const HallViewV2: React.FC = () => {
       }}
     >
       <div ref={profileRef} style={profileStyle}>
-        <div style={eyebrowStyle}>{t('hall.title')}</div>
-        <div style={nameStyle}>{user.nickname}</div>
-        <div style={metaStyle}>{t('hall.layer_prefix')} {user.layer} / {user.score} {t('hall.xp')}</div>
+        <div data-functional-text="true" style={eyebrowStyle}>{t('hall.title')}</div>
+        <div data-functional-text="true" style={nameStyle}>{user.nickname}</div>
+        <div data-functional-text="true" style={metaStyle}>{t('hall.layer_prefix')} {user.layer} / {user.score} {t('hall.xp')}</div>
       </div>
 
       <div className="hall-v2-list" style={listStyle}>
@@ -138,12 +138,13 @@ const LayerRow: React.FC<{
         ...(isActive ? activeRowStyle : null),
         ...(isLocked ? lockedRowStyle : null),
       }}
+      data-functional-text="true"
     >
-      <span>
-        <span style={chapterStyle}>{numeral}</span>
-        <span>{challenge.title}</span>
+      <span data-functional-text="true">
+        <span data-functional-text="true" style={chapterStyle}>{numeral}</span>
+        <span data-functional-text="true">{challenge.title}</span>
       </span>
-      <span style={pointsStyle}>{challenge.points}{pointsSuffix}</span>
+      <span data-functional-text="true" style={pointsStyle}>{challenge.points}{pointsSuffix}</span>
     </button>
   );
 };

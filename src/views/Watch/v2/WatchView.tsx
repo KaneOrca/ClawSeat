@@ -83,10 +83,10 @@ export const WatchView: React.FC = () => {
         transition: 'opacity 0.6s ease'
       }}>
         <header style={{ marginBottom: '4rem' }}>
-          <div style={{ display: 'inline-flex', padding: '0.5rem 1rem', border: `1px solid ${tokens.colors.manuscript.ink}`, marginBottom: '1rem', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small }}>
+          <div data-functional-text="true" style={{ display: 'inline-flex', padding: '0.5rem 1rem', border: `1px solid ${tokens.colors.manuscript.ink}`, marginBottom: '1rem', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small }}>
             {t('watch.v2.node_observation')} // {safeStr(activeAgent?.nickname).toUpperCase()}
           </div>
-          <h1 className="v2-watch-title" style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: tokens.colors.manuscript.ink }}>
+          <h1 data-functional-text="true" className="v2-watch-title" style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '-0.02em', color: tokens.colors.manuscript.ink }}>
             {t('watch.v2.chronicle')}
           </h1>
         </header>
@@ -107,7 +107,7 @@ export const WatchView: React.FC = () => {
 
       <style>{`
         .v2-watch {
-          background-image: radial-gradient(#dcdcdc 0.5px, transparent 0.5px);
+          background-image: radial-gradient(' + tokens.colors.manuscript.faint + ' 0.5px, transparent 0.5px);
           background-size: 30px 30px;
         }
         @media (max-width: 768px) {
@@ -153,11 +153,11 @@ const WatchFeedEntry: React.FC<{
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>
+      <div data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>
         // {t('watch.v2.entry')}_{event.id}
       </div>
-      <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{event.player_nickname}</div>
-      <div style={{ fontSize: '0.9rem', color: tokens.colors.manuscript.faint, fontStyle: 'italic' }}>
+      <div data-functional-text="true" style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>{event.player_nickname}</div>
+      <div data-functional-text="true" style={{ fontSize: '0.9rem', color: tokens.colors.manuscript.faint, fontStyle: 'italic' }}>
         {formatWatchEventLine(t, event)}
       </div>
     </motion.div>

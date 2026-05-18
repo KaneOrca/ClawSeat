@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NeuralBadge } from '../../../design/VisualPrimitive';
 import { useArena, type ViewType } from '../../../context/ArenaContext';
 import { usePhysicsRegistry } from '../../../context/PhysicsContext';
-import { useObstacle } from '../../../hooks/useObstacle';
+import { useObstacle, useObstacleDetached } from '../../../hooks/useObstacle';
 import { useHomeInit } from '../../../hooks/useHomeInit';
-import { PretextButton } from '../../../components/PretextButton';
+import { PromptCard } from '../../../components/PromptCard';
 import { tokens } from '../../../design/tokens';
 
 const MANUSCRIPT_ACTIVE_RED = tokens.colors.manuscript.red;
@@ -32,9 +32,9 @@ export const HomeView: React.FC = () => {
   const { onInitialize, user, isZenMode, t } = useHomeInit(V2_CONFIG);
   const { setView, showToast } = useArena();
   const { registerSoloist, unregisterSoloist, setEnvironment } = usePhysicsRegistry();
-  const marginalia01Ref = useObstacle() as React.RefObject<HTMLDivElement>;
-  const marginalia02Ref = useObstacle() as React.RefObject<HTMLDivElement>;
-  const introProseRef = useObstacle() as React.RefObject<HTMLParagraphElement>;
+  const marginalia01Ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
+  const marginalia02Ref = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLDivElement>;
+  const introProseRef = useObstacleDetached(true, isZenMode) as React.RefObject<HTMLParagraphElement>;
   const timeoutRef = useRef<number | null>(null);
   const [fieldState, setFieldState] = useState<FieldState>('FIELD_IDLE');
   const [activeTermId, setActiveTermId] = useState<HomeTerm['id'] | null>(null);
@@ -141,13 +141,13 @@ export const HomeView: React.FC = () => {
           {/* BLOCK 1 */}
           <div ref={marginalia01Ref} data-module="home-marginalia-01" style={{
             position: 'absolute',
-            left: 'min(58vw, 760px)',
+            right: 'clamp(1rem, 3vw, 3rem)',
             top: 'clamp(3rem, 8vw, 7rem)',
-            width: 'min(30vw, 340px)',
+            width: 'min(20vw, 240px)',
             padding: '1rem 0'
           }}>
-            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.marginalia_label')}</h3>
-            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
+            <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.marginalia_label')}</h3>
+            <p data-functional-text="true" style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
               {t('home.marginalia')}
             </p>
           </div>
@@ -155,14 +155,14 @@ export const HomeView: React.FC = () => {
           {/* BLOCK 2 */}
           <div ref={marginalia02Ref} data-module="home-marginalia-02" style={{
             position: 'absolute',
-            left: 0,
-            top: 'clamp(26rem, 52vw, 34rem)',
-            width: 'min(28vw, 300px)',
+            left: 'clamp(1rem, 3vw, 3rem)',
+            top: 'clamp(28rem, 58vh, 42rem)',
+            width: 'min(18vw, 220px)',
             padding: '1rem 0',
-            textAlign: 'right'
+            textAlign: 'left'
           }}>
-            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.notes_label')}</h3>
-            <p style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
+            <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '9px', textTransform: 'uppercase', marginBottom: '0.5rem', color: tokens.colors.manuscript.dim, letterSpacing: '0.3em', fontWeight: 700 }}>{t('home.v2.notes_label')}</h3>
+            <p data-functional-text="true" style={{ fontSize: '0.9rem', lineHeight: 1.8, fontStyle: 'italic', color: tokens.colors.manuscript.faint }}>
               {t('home.v2.notes')}
             </p>
           </div>
@@ -171,8 +171,8 @@ export const HomeView: React.FC = () => {
           <div data-module="home-hero" style={{
             position: 'relative',
             marginTop: 'clamp(4rem, 14vh, 9rem)',
-            maxWidth: '780px',
-            marginLeft: 'clamp(0rem, 14vw, 14rem)'
+            maxWidth: 'min(50vw, 680px)',
+            marginLeft: 'clamp(2rem, 22vw, 20rem)'
           }}>
             <NeuralBadge text={t('home.configs.v2')} color={tokens.colors.manuscript.muted} />
 
@@ -180,6 +180,7 @@ export const HomeView: React.FC = () => {
 
             <p
               ref={introProseRef}
+              data-functional-text="true"
               data-module="home-intro-prose"
               style={{
                 margin: '2rem 0 0',
@@ -220,45 +221,22 @@ export const HomeView: React.FC = () => {
               {t('home.v2.intro_after_join')}
             </p>
 
-            <PretextButton
+            <PromptCard
               className="home-agent-prompt"
-              config={{
-                label: t('home.v2.agent_prompt.body'),
-                engine: 'labyrinth',
-                physicsLineIndex: 29,
-                soloistId: 'v2-home-agent-prompt',
-                color: MANUSCRIPT_ACTIVE_RED,
-                opacity: 0.95,
-                onTrigger: () => setView('auth'),
-                activationEnvironment: {
-                  waveAmplitude: 92,
-                  opacity: 0.22,
-                  ambientColor: 'rgba(181, 48, 33, 0.24)',
-                },
-                triggerEnvironment: {
-                  waveAmplitude: 124,
-                  opacity: 0.28,
-                  ambientColor: 'rgba(181, 48, 33, 0.3)',
-                },
-                idleEnvironment: isZenMode ? V2_CONFIG.zenEnvironment : V2_CONFIG.environment,
-              }}
+              variant="v2"
+              heading={t('home.v2.agent_prompt.heading')}
+              body={t('home.v2.agent_prompt.body')}
+              copyLabel={t('home.v2.agent_prompt.copy_button')}
+              copiedLabel={t('home.v2.agent_prompt.copied')}
+              onTrigger={() => setView('auth')}
               style={{
                 display: 'block',
                 marginTop: 'clamp(2.5rem, 6vh, 4.5rem)',
                 maxWidth: 'min(680px, 100%)',
-                color: MANUSCRIPT_ACTIVE_RED,
-                fontFamily: tokens.fonts.manuscript,
-                fontSize: 'clamp(1rem, 2.1vw, 1.35rem)',
-                fontStyle: 'italic',
-                fontWeight: 500,
-                lineHeight: 2.05,
-                textAlign: 'left',
-                textDecoration: 'none',
-                whiteSpace: 'pre-line',
               }}
             />
 
-            <div style={{ marginTop: '8vh', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
+            <div data-functional-text="true" style={{ marginTop: '8vh', fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.xs, opacity: 0.4, lineHeight: 2.2, letterSpacing: '0.05em' }}>
               {t('home.v2.status_label')}: {fieldState}<br />
               {t('home.v2.route_label')}: {activeTermId ? TERM_NAV.find(term => term.id === activeTermId)?.route : '--'}<br />
               {t('home.v2.location_label')}: {t('home.v2.location_value')}<br />
@@ -340,6 +318,7 @@ const HomeKeyTerm: React.FC<{
     <button
       ref={termRef}
       className="home-key-term"
+      data-functional-text="true"
       data-nav={term.id}
       data-active={active}
       onMouseEnter={() => onEnter(term, label)}

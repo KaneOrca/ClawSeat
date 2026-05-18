@@ -3,6 +3,9 @@ import { prepareWithSegments, layoutNextLine, type LayoutCursor } from '@chenglo
 import { usePretextCanvas } from '../../hooks/usePretextCanvas';
 import type { RectObstacle } from '../../types/physics';
 
+/**
+ * @deprecated Replaced by pretext-flow flowLayout(). Will be removed after v2 view migration.
+ */
 interface ManuscriptPhysicProps {
   text: string;
   obstacles: RectObstacle[];
