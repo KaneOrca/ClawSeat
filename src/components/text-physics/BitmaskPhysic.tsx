@@ -248,7 +248,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
     const baseOpacity = opacityRef.current;
     const vp = viewportRef.current;
     const doMousePush = mousePushEnabledRef.current;
-    const mouseObs = doMousePush ? obstacles.find(obs => obs.id === 'system:mouse') : null;
     const functionalTextRects = getActiveFunctionalTextRects();
 
     if (!doMousePush) {
@@ -346,13 +345,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
         } else {
           occlusion = getOcclusionAlpha(cx, cy, obstacles);
         }
-        if (mouseObs) {
-          const mRadius = mouseObs.w * 0.5;
-          occlusion = Math.min(
-            occlusion,
-            circularVoidAlpha(cx, cy, mouseObs.x + mRadius, mouseObs.y + mRadius, mRadius),
-          );
-        }
         if (functionalTextRects.length > 0) {
           occlusion = Math.min(occlusion, getFunctionalTextVoidAlpha(cx, cy, functionalTextRects));
         }
@@ -395,15 +387,10 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
         let drawX = x;
         let drawY = y;
 
-        if (doMousePush && (mouseObs || functionalTextRects.length > 0)) {
+        if (doMousePush && functionalTextRects.length > 0) {
           const key = `r${row}c${col}`;
           const cellDisp = displacementRef.current.get(key) ?? { dx: 0, dy: 0 };
           const target = { dx: 0, dy: 0 };
-
-          if (mouseObs) {
-            const mRadius = mouseObs.w * 0.5;
-            addPushForce(cx, cy, mouseObs.x + mRadius, mouseObs.y + mRadius, mRadius, target);
-          }
 
           for (const rect of functionalTextRects) {
             const sourceRadius = Math.max(rect.width, rect.height) * 0.5;

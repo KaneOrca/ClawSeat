@@ -4,6 +4,7 @@ import { LanguageProvider } from './context/LanguageContext';
 import { PhysicsProvider } from './context/PhysicsContext';
 import { MainLayout } from './layouts/MainLayout';
 import { variantRegistry } from './variants/registry';
+import { useFunctionalTextHover } from './hooks/useFunctionalTextHover';
 import { WatchViewV3Flow } from './views/Watch/v3/WatchViewV3Flow';
 import { tokens } from './design/tokens';
 
@@ -82,6 +83,8 @@ const Router: React.FC = () => {
 };
 
 const AppContent: React.FC = () => {
+  useFunctionalTextHover();
+
   return (
     <MainLayout>
       <Router />

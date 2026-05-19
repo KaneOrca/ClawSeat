@@ -66,7 +66,6 @@ interface PhysicsContextType {
   viewportRef: React.RefObject<ViewportState>;
   trackObstacle: (id: string, element: HTMLElement) => void;
   untrackObstacle: (id: string) => void;
-  updateMouseObstacle: (rect: DOMRect | null) => void;
 
   environment: EnvironmentSettings;
   setEnvironment: (settings: Partial<EnvironmentSettings>) => void;
@@ -100,7 +99,6 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const prevRectsRef = useRef<Map<string, RectObstacle>>(new Map());
   const prevContentRef = useRef<Map<string, string>>(new Map());
   const obstaclesLiveRef = useRef<RectObstacle[]>([]);
-  const mouseObstacleRef = useRef<RectObstacle | null>(null);
   const maskBufRef = useRef<MaskBuffer | null>(null);
   const [obstaclesSnapshot, setObstaclesSnapshot] = useState<RectObstacle[]>([]);
   const frameRef = useRef(0);
@@ -220,7 +218,7 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
           return;
         }
 
-        let changed = prevRects.size !== tracked.size + (mouseObstacleRef.current ? 1 : 0);
+        let changed = prevRects.size !== tracked.size;
         let contentChanged = false;
         const next: RectObstacle[] = [];
         const prevContent = prevContentRef.current;
@@ -276,21 +274,6 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
             // Swallow errors from detached/invalid elements
           }
         });
-
-        const mouseObstacle = mouseObstacleRef.current;
-        if (mouseObstacle) next.push(mouseObstacle);
-        if (mouseObstacle && !changed) {
-          const prev = prevRects.get('system:mouse');
-          if (
-            !prev ||
-            Math.abs(mouseObstacle.x - prev.x) > CHANGE_THRESHOLD ||
-            Math.abs(mouseObstacle.y - prev.y) > CHANGE_THRESHOLD ||
-            Math.abs(mouseObstacle.w - prev.w) > CHANGE_THRESHOLD ||
-            Math.abs(mouseObstacle.h - prev.h) > CHANGE_THRESHOLD
-          ) {
-            changed = true;
-          }
-        }
 
         // Always update the mutable ref (canvas reads this directly)
         obstaclesLiveRef.current = next;
@@ -352,16 +335,6 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
   }, []);
 
-  const updateMouseObstacle = useCallback((rect: DOMRect | null) => { mouseObstacleRef.current = rect ? { id: 'system:mouse', x: rect.x, y: rect.y, w: rect.width, h: rect.height, isClimbing: false, charRects: [] } : null; if (maskBufRef.current) maskBufRef.current.dirty = true; }, []);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => { const r = 60 + ((environment.waveAmplitude ?? 60) / 60) * 40; updateMouseObstacle(new DOMRect(e.clientX - r, e.clientY - r, r * 2, r * 2)); };
-    const onLeave = () => updateMouseObstacle(null);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseleave', onLeave);
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseleave', onLeave); updateMouseObstacle(null); };
-  }, [environment.waveAmplitude, updateMouseObstacle]);
-
   // ── Provider ──────────────────────────────────────────────────────
 
   const value = useMemo(() => ({
@@ -371,11 +344,10 @@ export const PhysicsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     viewportRef,
     trackObstacle,
     untrackObstacle,
-    updateMouseObstacle,
     environment,
     setEnvironment: mergeEnvironment,
   }), [
-    obstaclesSnapshot, trackObstacle, untrackObstacle, updateMouseObstacle,
+    obstaclesSnapshot, trackObstacle, untrackObstacle,
     environment, mergeEnvironment,
   ]);
 
