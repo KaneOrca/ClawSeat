@@ -275,9 +275,17 @@ def cmd_validate(args: argparse.Namespace, home: Path | None = None) -> int:
     if cfg is None:
         print(f"heartbeat_config validate: no config for project '{args.project}'", file=sys.stderr)
         return 1
+    # S2 (openclaw-decoupling-map-20260518.md): feishu_group_id is optional —
+    # an empty value downgrades the heartbeat to CLI-only / file-only sink
+    # rather than failing validation. Cadence and template remain mandatory.
     errors: list[str] = []
+    warnings: list[str] = []
     if not cfg.get("feishu_group_id", ""):
-        errors.append("feishu_group_id is missing")
+        warnings.append(
+            "feishu_group_id is empty; heartbeat will run in CLI-only mode "
+            "(no Feishu push). Bind a group via "
+            "`agent-admin project bind --feishu-group <id>` to enable push."
+        )
     try:
         parse_cadence_seconds(str(cfg.get("cadence", "")))
     except ValueError as exc:
@@ -288,6 +296,8 @@ def cmd_validate(args: argparse.Namespace, home: Path | None = None) -> int:
         for e in errors:
             print(f"  ERROR: {e}", file=sys.stderr)
         return 1
+    for w in warnings:
+        print(f"  WARN: {w}", file=sys.stderr)
     _warn_if_external(args.project, home=home)
     print(f"heartbeat config for '{args.project}' is valid")
     return 0

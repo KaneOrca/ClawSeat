@@ -32,6 +32,8 @@ _HARNESS_SCRIPTS = _REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts"
 if str(_HARNESS_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_HARNESS_SCRIPTS))
 
+import sqlite3  # noqa: E402
+
 from core.lib.state import (  # noqa: E402
     Event,
     list_unsent_feishu_events,
@@ -294,6 +296,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _any_project_bound_to_feishu(conn: sqlite3.Connection) -> bool:
+    """Return True iff at least one project has a non-empty feishu_group_id.
+
+    Used by the announcer entrypoint as a graceful no-op gate: when ClawSeat
+    is installed without any Feishu binding (the S1-S5 decoupling target
+    state), the announcer should exit 0 with a friendly message rather than
+    iterating empty event queues. See
+    docs/architecture/openclaw-decoupling-map-20260518.md slice S2.
+    """
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM projects WHERE COALESCE(feishu_group_id, '') != '' LIMIT 1"
+        ).fetchone()
+        return row is not None
+    except sqlite3.DatabaseError:
+        # Schema might predate the projects table; treat as not-bound and
+        # let the rest of the pipeline surface a clearer error if needed.
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args(argv)
@@ -303,6 +325,24 @@ def main(argv: list[str] | None = None) -> int:
         event_types = tuple(t.strip() for t in args.types.split(",") if t.strip())
 
     if args.watch:
+        # S2: graceful no-op for the daemon mode when no project is bound to
+        # a Feishu group. Without a binding the watch loop would poll empty
+        # event queues forever; exit cleanly instead. The --once path stays
+        # the same so callers can still inspect pending counts via state.db.
+        try:
+            precheck_conn = open_db()
+        except Exception as exc:
+            print(f"announcer: failed to open state.db: {exc}", file=sys.stderr)
+            return 1
+        try:
+            if not _any_project_bound_to_feishu(precheck_conn):
+                print(
+                    "announcer: no project has a feishu_group_id; "
+                    "ClawSeat is running without the Feishu adapter — nothing to do."
+                )
+                return 0
+        finally:
+            precheck_conn.close()
         return run_watch(
             interval=max(1.0, args.interval),
             event_types=event_types,
