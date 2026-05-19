@@ -83,7 +83,11 @@
                   "criterion": {"type": "string"},
                   "command": {"type": "string"},
                   "route": {"$ref": "#/$defs/acceptance_route_enum"},
-                  "description": {"type": "string"}
+                  "description": {"type": "string"},
+                  "diagnostic": {
+                    "type": "boolean",
+                    "description": "When true, non-zero exit is recorded as diagnostic evidence and does not fail aggregate acceptance. Use for full-suite baseline probes where unrelated pre-existing failures should not block. Relevant failures must remain non-diagnostic (omit this field or set false)."
+                  }
                 },
                 "anyOf": [
                   {"required": ["command"]},
@@ -93,7 +97,7 @@
             ]
           },
           "minItems": 1,
-          "description": "Mechanical commands main memory physically runs."
+          "description": "Mechanical commands the acceptance executor physically runs. Each item must be a machine-deterministic shell command. For non-blocking baseline evidence (full-suite probes where pre-existing failures exist), use diagnostic:true in the criterion dict or --baseline-criteria N at acceptance-run time. Human natural-language qualifiers are not enforceable and must not appear in hard mechanical commands."
         },
         "reviewer": {
           "type": "array",

@@ -39,11 +39,6 @@ from queue_io import (  # noqa: E402
     query_pending,
     read_current_state,
 )
-from acceptance_criteria import (  # noqa: E402
-    brief_acceptance_ready,
-    load_brief_frontmatter,
-    load_brief_frontmatter_text,
-)
 from profile_loader_v3 import ProfileV3Error, load_profile_v3  # noqa: E402
 from real_home import real_user_home  # noqa: E402
 
@@ -282,31 +277,6 @@ def _brief_path(project: str, team: str, task_id: str) -> Path:
     return _project_team_root(project, team) / "brief" / f"{task_id}.md"
 
 
-def _resolve_task_brief_path(project: str, team: str, brief_path: str | None) -> Path | None:
-    if not brief_path:
-        return None
-    path = Path(brief_path)
-    if path.is_absolute():
-        return path
-    agents_relative = _agents_root() / path
-    team_relative = _project_team_root(project, team) / path
-    if agents_relative.exists() or not team_relative.exists():
-        return agents_relative
-    return team_relative
-
-
-def _brief_acceptance_ready_for_task(project: str, team: str, brief_path: str | None) -> tuple[bool, str]:
-    resolved = _resolve_task_brief_path(project, team, brief_path)
-    if resolved is None:
-        return False, "brief_path missing"
-    if not resolved.exists():
-        return False, f"brief not found: {resolved}"
-    try:
-        return brief_acceptance_ready(load_brief_frontmatter(resolved))
-    except Exception as exc:  # noqa: BLE001
-        return False, f"brief acceptance parse failed: {exc}"
-
-
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -397,16 +367,19 @@ def cmd_queue(args: argparse.Namespace) -> int:
             + str(args.objective).strip()
             + "\n\n"
             "## 验收说明\n\n"
-            "<待 memory 补全 mechanical/reviewer/operator 路由项>\n"
+            "<待 memory 补全 mechanical/reviewer/operator 路由项>\n\n"
+            "<!-- Acceptance authoring rules (CF043/CF044):\n"
+            "  - mechanical: must be machine-deterministic shell commands (binary exit code)\n"
+            "    - GOOD: 'bash -lc \"cd /path && python3 -m pytest tests -q -k filter\"'\n"
+            "    - AVOID: human-language qualifiers inside mechanical descriptions\n"
+            "      (executor cannot honor natural-language conditions, only exit codes)\n"
+            "    - For non-blocking baseline (full-suite probe): add diagnostic:true to the\n"
+            "      criterion dict, or pass --baseline-criteria N to acceptance run\n"
+            "  - reviewer: planner self-review or dedicated reviewer criteria\n"
+            "  - operator: questions answered manually by the human operator\n"
+            "  See docs/guides/acceptance-criteria.md for details.\n"
+            "-->\n"
         )
-
-    try:
-        acceptance_ready, acceptance_reason = brief_acceptance_ready(
-            load_brief_frontmatter_text(brief_text, str(brief))
-        )
-    except Exception as exc:  # noqa: BLE001
-        acceptance_ready = False
-        acceptance_reason = f"brief acceptance parse failed: {exc}"
 
     # Fix #5: write to temp file, atomic rename ONLY after append succeeds.
     # If append fails, we unlink the temp file and leave any pre-existing brief alone.
@@ -447,9 +420,6 @@ def cmd_queue(args: argparse.Namespace) -> int:
     print(f"  seq:   {result['seq']}")
     if args.no_wake:
         print("WAKE_SKIPPED (--no-wake)")
-        return 0
-    if not acceptance_ready:
-        print(f"WAKE_DEFERRED reason={acceptance_reason}")
         return 0
     try:
         target = _wake_team_planner(project, team, task_id)
@@ -517,24 +487,6 @@ def cmd_claim(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-
-    acceptance_ready, acceptance_reason = _brief_acceptance_ready_for_task(
-        args.project, args.team, ts.brief_path
-    )
-    if not acceptance_ready:
-        event = {
-            "event_type": "task_waiting_for",
-            "actor": args.actor,
-            "task_id": args.task_id,
-            "waiting_for": "acceptance_criteria",
-        }
-        try:
-            append_event(queue, event)
-        except QueueError as exc:
-            print(f"waiting_for append failed: {exc}", file=sys.stderr)
-            return 1
-        print(f"task {args.task_id} blocked on acceptance_criteria: {acceptance_reason}")
-        return 3
 
     # Post-retest #5: check depends_on across ALL teams in the project.
     # Local queue checked first; if absent, fall through to cross-team scan.
