@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Edit3 } from 'lucide-react';
 import { PretextButton } from '../../../components/PretextButton';
-import { ManuscriptPhysic } from '../../../components/text-physics/ManuscriptPhysic';
+import { LabyrinthPhysic } from '../../../components/text-physics/LabyrinthPhysic';
 import { useChallengeSubmission } from '../../../hooks/useChallengeSubmission';
 import { useObstacle } from '../../../hooks/useObstacle';
 import { safeStr } from '../../../utils/safeStr';
@@ -13,11 +13,20 @@ export const ChallengeDetailView: React.FC = () => {
     currentChallengeId, setChallengeId, t, locale
   } = useChallengeSubmission();
   const textareaRef = useObstacle() as React.RefObject<HTMLTextAreaElement>;
+  const folioObstacleRef = useObstacle() as React.RefObject<HTMLDivElement>;
+  const transcriptionObstacleRef = useObstacle() as React.RefObject<HTMLDivElement>;
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth < 768));
+  const folioBounds = { x: 750, y: 50, w: 250, h: 400 };
+  const transcriptionBounds = { x: 0, y: 450, w: 700, h: 300 };
 
-  const obstacles = useMemo(() => [
-    { id: 'folio-meta', x: 750, y: 50, w: 250, h: 400 },
-    { id: 'transcription', x: 0, y: 450, w: 700, h: 300 },
-  ], []);
+  useEffect(() => {
+    const update = () => {
+      setIsMobileLayout(window.innerWidth < 768);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const liveManuscriptText = useMemo(() => {
     const core = (safeStr(challenge.title).toUpperCase() + '. ' + t('challengeDetail.body') + ' ' + t('challengeDetail.marginalia') + ' ').repeat(2);
@@ -32,7 +41,7 @@ export const ChallengeDetailView: React.FC = () => {
       minHeight: '100vh',
       background: tokens.colors.manuscript.bg,
       color: tokens.colors.manuscript.ink,
-      padding: '4rem',
+      padding: isMobileLayout ? '2rem 1rem' : '4rem',
       fontFamily: tokens.fonts.manuscript,
       position: 'relative',
       overflowX: 'hidden'
@@ -54,58 +63,72 @@ export const ChallengeDetailView: React.FC = () => {
         >
           <ArrowLeft size={14} /> {t('challengeDetail.v2.back')}
         </PretextButton>
-        <div style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim }}>
+        <div data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim }}>
           {t('challengeDetail.v2.codex_ref')}: {challenge.id} // {t('challengeDetail.v2.sec_level')}: {challenge.difficulty}
         </div>
       </div>
 
-      <div style={{ maxWidth: '1000px', margin: '0 auto', position: 'relative' }}>
-        <div style={{ position: 'relative', minHeight: '800px' }}>
-          <ManuscriptPhysic
+      <div style={{ maxWidth: '1000px', margin: isMobileLayout ? '0' : '0 auto', position: 'relative' }}>
+        <div style={{
+          position: isMobileLayout ? 'static' : 'relative',
+          minHeight: isMobileLayout ? 'auto' : '800px',
+          display: isMobileLayout ? 'flex' : 'block',
+          flexDirection: 'column',
+          gap: isMobileLayout ? '1.5rem' : 0,
+        }}>
+          <LabyrinthPhysic
             text={liveManuscriptText}
-            obstacles={obstacles}
-            width={1000}
+            opacity={locale === 'zh-CN' ? 0.2 : 0.18}
             lineHeight={locale === 'zh-CN' ? 40 : 36}
             fontDef={locale === 'zh-CN' ? `500 20px ${tokens.fonts.body}` : `500 22px ${tokens.fonts.manuscript}`}
+            variant="v2"
           />
 
           {/* FOLIO BLOCK */}
-          <div style={{
-            position: 'absolute',
-            left: obstacles[0].x,
-            top: obstacles[0].y,
-            width: obstacles[0].w,
-            padding: '2rem',
+          <div
+            ref={folioObstacleRef}
+            style={{
+            position: isMobileLayout ? 'relative' : 'absolute',
+            left: isMobileLayout ? 'auto' : folioBounds.x,
+            top: isMobileLayout ? 'auto' : folioBounds.y,
+            width: isMobileLayout ? '100%' : folioBounds.w,
+            maxWidth: isMobileLayout ? '100%' : undefined,
+            padding: isMobileLayout ? '1.5rem' : '2rem',
             border: '1px solid rgba(0,0,0,0.1)',
-            background: '#fff',
+            background: tokens.colors.manuscript.bg,
             boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
             zIndex: 10
           }}>
-            <h4 style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '2rem' }}>{challenge.title}</div>
-            <div style={{ marginBottom: '2rem' }}>
-              <span style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.muted }}>{t('challengeDetail.v2.xp_value')}</span>
-              <div style={{ fontSize: '2rem', fontWeight: 700 }}>{challenge.points}</div>
+            <h4 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.dim, marginBottom: '1rem' }}>{t('challengeDetail.v2.foliation_data')}</h4>
+            <div data-functional-text="true" style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '2rem' }}>{challenge.title}</div>
+            <div data-functional-text="true" style={{ marginBottom: '2rem' }}>
+              <span data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: tokens.sizes.small, color: tokens.colors.manuscript.muted }}>{t('challengeDetail.v2.xp_value')}</span>
+              <div data-functional-text="true" style={{ fontSize: '2rem', fontWeight: 700 }}>{challenge.points}</div>
             </div>
-            <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.6, fontStyle: 'italic' }}>
+            <div data-functional-text="true" style={{ fontSize: '0.8rem', color: tokens.colors.manuscript.dim, lineHeight: 1.6, fontStyle: 'italic' }}>
               "{t('challengeDetail.subtitle')}"
             </div>
           </div>
 
           {/* TRANSCRIPTION AREA */}
-          <div style={{
-            position: 'absolute',
-            left: obstacles[1].x,
-            top: obstacles[1].y,
-            width: obstacles[1].w,
+          <div
+            ref={transcriptionObstacleRef}
+            style={{
+            position: isMobileLayout ? 'relative' : 'absolute',
+            left: isMobileLayout ? 'auto' : transcriptionBounds.x,
+            top: isMobileLayout ? 'auto' : transcriptionBounds.y,
+            width: isMobileLayout ? '100%' : transcriptionBounds.w,
+            maxWidth: isMobileLayout ? '100%' : undefined,
             zIndex: 10,
             background: 'rgba(253, 252, 240, 0.8)',
             backdropFilter: 'blur(4px)',
-            padding: '2rem',
-            borderLeft: `4px solid ${tokens.colors.manuscript.ink}`
+            padding: isMobileLayout ? '1.5rem' : '2rem',
+            borderLeft: isMobileLayout ? 'none' : `4px solid ${tokens.colors.manuscript.ink}`,
+            borderTop: isMobileLayout ? `4px solid ${tokens.colors.manuscript.ink}` : 'none'
           }}>
-            <h3 style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
+            <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
             <textarea
+              data-functional-text="true"
               ref={textareaRef}
               data-obstacle-id="challenge-v2-textarea"
               value={answer}
@@ -122,7 +145,7 @@ export const ChallengeDetailView: React.FC = () => {
                 outline: 'none',
                 resize: 'none',
                 color: tokens.colors.manuscript.ink,
-                borderBottom: '1px dashed #ccc'
+                borderBottom: 'none',
               }}
             />
             <PretextButton
@@ -140,7 +163,7 @@ export const ChallengeDetailView: React.FC = () => {
               style={{
                 marginTop: '1.5rem',
                 background: tokens.colors.manuscript.ink,
-                color: '#fff',
+                color: tokens.colors.manuscript.bg,
                 padding: '0.75rem 2rem',
                 border: 'none',
                 cursor: 'pointer',
