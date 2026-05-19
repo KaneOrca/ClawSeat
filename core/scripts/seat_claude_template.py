@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import tomllib
+import sys as _sys, pathlib as _pl
+_sct_scripts = str(_pl.Path(__file__).resolve().parent)
+if _sct_scripts not in _sys.path: _sys.path.insert(0, _sct_scripts)
+from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 from pathlib import Path
 
 from core.lib.real_home import real_user_home
@@ -31,7 +34,7 @@ def role_hint_from_engineer(engineers_root: Path, seat_id: str) -> str | None:
     if not path.is_file():
         return None
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        data = _toml_loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
     role = str(data.get("role", "") or "").strip()

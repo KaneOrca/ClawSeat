@@ -22,10 +22,7 @@ import os
 import sys
 from pathlib import Path
 
-try:
-    import tomllib  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
+from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORE_LIB = _REPO_ROOT / "core" / "lib"
@@ -276,7 +273,7 @@ def render_project_record_toml_v3(profile_text: str) -> str:
     flat-template seats from resurfacing as "ungrouped" UI seats after
     reinstall.
     """
-    data = tomllib.loads(profile_text)
+    data = _toml_loads(profile_text)
     project = str(data.get("project_name") or "").strip()
     repo_root = str(data.get("repo_root") or "").strip()
     template_name = str(data.get("template_name") or "clawseat-minimal").strip()
@@ -535,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
         project_record_path.write_text(render_project_record_toml_v3(toml_text), encoding="utf-8")
         print(f"wrote {project_record_path}", file=sys.stderr)
     if args.ownership_output:
-        profile_data = tomllib.loads(toml_text)
+        profile_data = _toml_loads(toml_text)
         ownership_text = render_team_ownership_markdown(args.project, profile_data)
         ownership_path = Path(args.ownership_output)
         ownership_path.parent.mkdir(parents=True, exist_ok=True)
