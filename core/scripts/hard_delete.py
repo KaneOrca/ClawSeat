@@ -11,11 +11,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import re as _re
-
 _CORE_LIB = Path(__file__).resolve().parents[1] / "lib"
 if str(_CORE_LIB) not in sys.path:
     sys.path.insert(0, str(_CORE_LIB))
+
+from _toml_compat import load_safe as _toml_load_safe  # noqa: E402
 
 from real_home import real_user_home  # noqa: E402
 
@@ -92,49 +92,14 @@ def _seat_session_name(conn: sqlite3.Connection | None, home: Path, project: str
             return str(row["session_name"]).strip()
     session_toml = _session_dir(home, project, seat_id) / "session.toml"
     if session_toml.is_file():
-        session_name = _read_toml_string(session_toml, "session")
-        if session_name:
-            return session_name
-    return ""
-
-
-def _read_toml_string(path: "Path", key: str) -> str:
-    """Read a single string value from a TOML file without requiring tomllib/tomli.
-
-    Tries the standard library tomllib (Python 3.11+) or the tomli package
-    when available. Falls back to a pure-Python regex that handles the common
-    ``key = "value"`` and ``key = 'value'`` patterns so seat cleanup succeeds
-    even when neither module is installed.
-    """
-    try:
         try:
-            import tomllib as _tomllib  # type: ignore[import-not-found]
-        except ModuleNotFoundError:
-            try:
-                import tomli as _tomllib  # type: ignore[import-not-found,no-redef]
-            except ModuleNotFoundError:
-                _tomllib = None  # type: ignore[assignment]
-        if _tomllib is not None:
-            try:
-                with path.open("rb") as fh:
-                    data = _tomllib.load(fh)
-                return str(data.get(key, "")).strip()
-            except Exception:  # noqa: BLE001
-                return ""
-    except Exception:  # noqa: BLE001
-        return ""
-    # Pure-Python regex fallback: handles `key = "value"` and `key = 'value'`
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        m = _re.search(
-            r'^\s*' + _re.escape(key) + r'''\s*=\s*(?:"([^"]*)"|'([^']*)')''',
-            text,
-            _re.MULTILINE,
-        )
-        if m:
-            return (m.group(1) or m.group(2) or "").strip()
-    except OSError:
-        pass
+            with session_toml.open("rb") as fh:
+                data = _toml_load_safe(fh)
+            session_name = str(data.get("session", "")).strip()
+            if session_name:
+                return session_name
+        except Exception:  # noqa: BLE001
+            return ""
     return ""
 
 
