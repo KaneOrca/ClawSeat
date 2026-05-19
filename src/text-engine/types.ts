@@ -1,4 +1,6 @@
-export type { Embed, FlowLine, FlowResult, FlowConfig, ResolvedEmbed } from 'pretext-flow';
+import type { Embed, FlowLine, FlowResult, FlowConfig, ResolvedEmbed } from 'pretext-flow';
+
+export type { Embed, FlowLine, FlowResult, FlowConfig, ResolvedEmbed };
 
 export interface LegacyLine {
   text: string;
