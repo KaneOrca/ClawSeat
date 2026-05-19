@@ -7,10 +7,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib  # type: ignore[attr-defined]
-except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
+from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 
 # agent_admin_config lives in the same scripts directory.
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
@@ -320,7 +317,7 @@ def _load_dynamic_profile_data(project_name: str) -> tuple[Path, dict[str, Any]]
         return None
     try:
         with profile_path.open("rb") as fh:
-            data = tomllib.load(fh)
+            data = _toml_load(fh)
     except Exception:
         return None
     if not isinstance(data, dict):
@@ -1602,7 +1599,7 @@ def render_profile_preserving_operator_edits(
 
     try:
         existing_text = target_path.read_text(encoding="utf-8")
-        existing = tomllib.loads(existing_text)
+        existing = _toml_loads(existing_text)
     except Exception as exc:
         print(
             f"WARNING [C14]: could not parse existing profile {target_path}: {exc}; "

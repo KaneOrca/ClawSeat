@@ -77,6 +77,10 @@ command -v "$TMUX_BIN" >/dev/null 2>&1 || {
   exit 3
 }
 
+tmux_outer() {
+  env -u TMUX -u TMUX_PANE "$TMUX_BIN" "$@"
+}
+
 CUSTOM_ENV_FILE=""
 CUSTOM_ENV_FILE_DELEGATED_TO_TMUX=0
 cleanup_custom_env_file() {
@@ -223,7 +227,7 @@ try:
     custom_env_file = ""
     if not auth_override.strip():
         agent_admin.SESSION_SERVICE._sync_launcher_secret_file(session, launcher_auth)
-        if launcher_auth == "custom":
+        if launcher_auth in ("custom", "minimax", "deepseek", "xcode"):
             custom_env_file = agent_admin.SESSION_SERVICE._write_launcher_custom_env_file(session)
 
     runtime_dir = agent_admin.SESSION_SERVICE._launcher_runtime_dir(session, launcher_auth)
@@ -268,9 +272,9 @@ fi
 printf 'restart-seat:\n  project:       %s\n  seat:          %s\n  tool:          %s\n  auth:          %s\n  launcher_auth: %s\n  workspace:     %s\n  session:       %s\n' \
   "$PROJECT" "$SEAT" "$TOOL" "$AUTH_MODE" "$LAUNCHER_AUTH" "$WORKSPACE" "$SESSION_NAME"
 
-if "$TMUX_BIN" has-session -t "=$SESSION_NAME" 2>/dev/null; then
+if tmux_outer has-session -t "=$SESSION_NAME" 2>/dev/null; then
   echo "  status:    killing existing session"
-  "$TMUX_BIN" kill-session -t "=$SESSION_NAME"
+  tmux_outer kill-session -t "=$SESSION_NAME"
 else
   echo "  status:    no existing session"
 fi
@@ -304,10 +308,10 @@ CUSTOM_ENV_FILE_DELEGATED_TO_TMUX=1
 # Verify the session came up.
 for _ in 1 2 3 4 5; do
   sleep 0.5
-  "$TMUX_BIN" has-session -t "=$SESSION_NAME" 2>/dev/null && break
+  tmux_outer has-session -t "=$SESSION_NAME" 2>/dev/null && break
 done
 
-if ! "$TMUX_BIN" has-session -t "=$SESSION_NAME" 2>/dev/null; then
+if ! tmux_outer has-session -t "=$SESSION_NAME" 2>/dev/null; then
   echo "error: tmux session $SESSION_NAME failed to come up" >&2
   exit 1
 fi
@@ -319,7 +323,7 @@ if [[ "$NO_WINDOW" == "0" ]]; then
   # session. Tolerate failure — the tmux session is the durable artifact.
   if ! "$PYTHON_BIN" "$AGENT_ADMIN" window open-grid "$PROJECT" --quiet 2>&1; then
     echo "warn: window open-grid $PROJECT failed; tmux is alive — attach manually with:" >&2
-    echo "  $TMUX_BIN attach -t '=$SESSION_NAME'" >&2
+    echo "  env -u TMUX -u TMUX_PANE $TMUX_BIN attach -t '=$SESSION_NAME'" >&2
   fi
 fi
 

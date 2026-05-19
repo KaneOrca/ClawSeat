@@ -148,7 +148,7 @@ _has_claude_cwd_history() {
   [[ -n "$home_for_claude" && -n "$cwd" ]] || return 1
   # Claude Code stores sessions at ~/.claude/projects/<encoded>/*.jsonl
   # where <encoded> = cwd with both '/' AND '.' replaced by '-'. Confirmed
-  # against on-disk samples: /Users/ywf/.agents/... -> -Users-ywf--agents-...
+  # against on-disk samples: /home/u/.agents/... -> -home-u--agents-...
   # (the double-dash comes from /. -> --).
   cwd="${cwd%/}"
   local encoded

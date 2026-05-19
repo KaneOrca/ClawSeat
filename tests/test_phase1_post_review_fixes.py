@@ -21,6 +21,38 @@ sys.path.insert(0, str(REPO_ROOT / "core" / "scripts"))
 from queue_io import VALID_TRANSITIONS, QueueError, append_event, read_current_state  # noqa: E402
 
 
+def _write_ready_brief_content(
+    path: Path,
+    *,
+    project: str = "p",
+    team: str = "t",
+    task_id: str = "T1",
+) -> None:
+    path.write_text(
+        f"""---
+task_id: {task_id}
+project: {project}
+team: {team}
+created: '2026-05-15T00:00:00+00:00'
+created_by: memory
+objective: ready acceptance
+acceptance_criteria:
+  mechanical:
+    - "true"
+  reviewer: []
+  operator: []
+seats_required: [builder]
+fuzz_required: false
+priority: P2
+notify_on_completion: [memory]
+---
+
+# body
+""",
+        encoding="utf-8",
+    )
+
+
 # ---------- Finding #1: render preserves model field ----------
 
 
@@ -342,11 +374,14 @@ def test_brief_queue_uses_real_user_home_under_sandbox_home(tmp_path, monkeypatc
     monkeypatch.setenv("AGENT_HOME", str(real_home))
 
     parser = build_parser()
+    brief = tmp_path / "ready.md"
+    _write_ready_brief_content(brief, task_id="T1")
     assert (
         cmd_queue(
             parser.parse_args(
                 ["queue", "--project", "p", "--team", "t", "--task-id", "T1",
-                 "--objective", "real-home", "--no-wake"]
+                 "--objective", "real-home", "--brief-content-file", str(brief),
+                 "--no-wake"]
             )
         )
         == 0
@@ -589,11 +624,19 @@ def test_finding_A_waiting_for_retry_succeeds_after_upstream_done(tmp_path, monk
     parser = build_parser()
 
     # Queue UP and DOWN(depends_on=[UP])
+    up_brief = tmp_path / "up.md"
+    down_brief = tmp_path / "down.md"
+    _write_ready_brief_content(up_brief, task_id="UP")
+    _write_ready_brief_content(down_brief, task_id="DOWN")
     cmd_queue(parser.parse_args(["queue", "--project", "p", "--team", "t",
-                                  "--task-id", "UP", "--objective", "u"]))
+                                  "--task-id", "UP", "--objective", "u",
+                                  "--brief-content-file", str(up_brief),
+                                  "--no-wake"]))
     cmd_queue(parser.parse_args(["queue", "--project", "p", "--team", "t",
                                   "--task-id", "DOWN", "--objective", "d",
-                                  "--depends-on", "UP"]))
+                                  "--depends-on", "UP",
+                                  "--brief-content-file", str(down_brief),
+                                  "--no-wake"]))
 
     # First claim DOWN: upstream not done → waiting_for, exit 3
     rc1 = cmd_claim(parser.parse_args(["claim", "--project", "p", "--team", "t",

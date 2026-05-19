@@ -31,6 +31,10 @@ _SCHEMA_PATH = REPO_ROOT / "core" / "schemas" / "brief.schema.json"
 # Ensure sibling lib modules importable when called as standalone
 if str(REPO_ROOT / "core" / "lib") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "core" / "lib"))
+from acceptance_criteria import (  # noqa: E402
+    criterion_command_and_text as _shared_criterion_command_and_text,
+    criterion_is_shell_runnable,
+)
 from real_home import real_user_home  # noqa: E402
 
 try:
@@ -157,13 +161,10 @@ def _load_brief(brief_path: Path) -> dict:
 
 def _criterion_command_and_text(criterion: Any) -> tuple[str, str]:
     """Normalize a criterion entry to (display_text, shell_command)."""
-    if isinstance(criterion, str):
-        return criterion, criterion
-    if isinstance(criterion, dict):
-        cmd = criterion.get("command") or criterion.get("criterion") or ""
-        text = criterion.get("description") or cmd
-        return str(text), str(cmd)
-    raise AcceptanceError(f"unrecognized criterion shape: {criterion!r}")
+    try:
+        return _shared_criterion_command_and_text(criterion)
+    except ValueError as exc:
+        raise AcceptanceError(str(exc)) from exc
 
 
 def _criterion_is_diagnostic(criterion: Any, idx: int, baseline_indices: set[int]) -> bool:
@@ -224,7 +225,8 @@ def _normalize_python_invocations(cmd: str) -> str:
 
     Acceptance commands often use ``bash -lc`` (login shell) which re-reads
     .bash_profile / .zprofile and may reset PATH to system defaults, causing
-    the ambient ``python3`` to be used instead of the project interpreter.
+    the ambient ``python3`` (e.g. /Library/Developer/CommandLineTools/usr/bin/python3)
+    to be used instead of the project interpreter that has tomllib/pytest.
 
     Replacing the command name with the full path to sys.executable bypasses
     PATH lookup entirely, so the correct interpreter is always used.
@@ -284,14 +286,14 @@ def _resolve_reviewer_seat_from_profile(
        the legacy {team}-reviewer string.
 
     This prevents dispatching to non-existent {team}-reviewer seats for
-    planner-owned subgroups (cf. CF041/CF042 acceptance blocker).
+    planner-owned subgroups (CF041/CF042 acceptance blocker).
     """
     if agents_root is None:
         agents_root = _agents_root()
     if profile_path is None:
         profile_path = agents_root / "profiles" / f"{project}-profile-dynamic.toml"
     try:
-        from profile_loader_v3 import load_profile_v3, ProfileV3Error  # noqa: PLC0415
+        from profile_loader_v3 import load_profile_v3  # noqa: PLC0415
         profile = load_profile_v3(profile_path)
         team_name = team if profile.is_multi() else "default"
         seats = profile.seats_of(team_name)
@@ -357,6 +359,7 @@ def run_mechanical(
 
     _baseline = baseline_indices or set()
     any_fail = False
+    any_executed = False
     with tempfile.TemporaryDirectory(prefix="clawseat-acceptance-shims-") as _shim_dir:
         _shim_path = Path(_shim_dir)
         _make_python_shims(_shim_path)
@@ -364,13 +367,20 @@ def run_mechanical(
         for idx, item in enumerate(mech):
             text, cmd = _criterion_command_and_text(item)
             is_diagnostic = _criterion_is_diagnostic(item, idx, _baseline)
-            if not cmd:
-                result.items.append(ItemResult(criterion=text, result=_RESULT_SKIPPED))
+            if not cmd or not criterion_is_shell_runnable(item):
+                result.items.append(
+                    ItemResult(
+                        criterion=text,
+                        result=_RESULT_SKIPPED,
+                        command="not_shell_runnable",
+                    )
+                )
                 continue
             stdout_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stdout"
             stderr_p = acceptance_dir / f"{task_id}__mech__{idx:02d}.stderr"
             start = time.monotonic()
             try:
+                any_executed = True
                 proc = subprocess.run(
                     _normalize_python_invocations(cmd),
                     shell=True,
@@ -423,7 +433,7 @@ def run_mechanical(
                     )
                 )
 
-    result.verdict = "FAIL" if any_fail else "PASS"
+    result.verdict = "FAIL" if any_fail or not any_executed else "PASS"
     return result
 
 
@@ -639,6 +649,16 @@ def run_acceptance(
 
     op_receipt = acceptance_dir / f"{task_id}__operator.json"
     _write_receipt(op_receipt, project, team, task_id, results["operator"])
+
+    # cf013: auto-reconcile reviewer section from any routed __accept_review handoff.
+    # Checks patrol/handoffs for {task_id}__accept_review__*__memory.json; if found with
+    # APPROVED/APPROVED_WITH_NITS → updates reviewer receipt to PASS; FAIL/CHANGES_REQUESTED
+    # → FAIL. Historical handoff files are never touched. Works on both first-run dispatch
+    # and re-runs against an already-dispatched task.
+    handoffs_dir = _agents_root() / "tasks" / project / "patrol" / "handoffs"
+    reconciled_reviewer = reconcile_reviewer_acceptance(task_id, acceptance_dir, handoffs_dir=handoffs_dir)
+    if reconciled_reviewer is not None:
+        results["reviewer"] = reconciled_reviewer
 
     return results
 
@@ -857,17 +877,158 @@ def _write_receipt(path: Path, project: str, team: str, task_id: str, result: Ro
 
 
 def aggregate_verdict(results: dict[str, RouteResult]) -> str:
-    """PASS only when mechanical PASS and reviewer/operator are PASS or PENDING (empty).
+    """PASS only when all routes are PASS (or empty). FAIL on any route FAIL. PENDING otherwise.
 
-    FAIL if mechanical FAIL. PENDING if mechanical PASS but reviewer/operator
-    has work outstanding.
+    Priority: FAIL > PENDING > PASS. Mechanical FAIL blocks immediately. Reviewer or
+    operator FAIL also blocks (e.g. CHANGES_REQUESTED reconciled into FAIL). PENDING
+    when mechanical PASS but reviewer/operator work outstanding.
     """
     mech = results.get("mechanical")
     if mech is None or mech.verdict == "FAIL":
         return "FAIL"
+    if any(r.verdict == "FAIL" for r in results.values()):
+        return "FAIL"
     if any(r.verdict == "PENDING" for r in results.values()):
         return "PENDING"
     return "PASS"
+
+
+# Reviewer verdicts that map to acceptance PASS
+_REVIEWER_APPROVED_VERDICTS = frozenset({"APPROVED", "APPROVED_WITH_NITS"})
+# Reviewer verdicts that map to acceptance FAIL (block parent aggregate)
+_REVIEWER_BLOCKED_VERDICTS = frozenset({"FAIL", "CHANGES_REQUESTED", "REJECTED"})
+
+
+def load_route_result_from_receipt(receipt_path: Path) -> RouteResult | None:
+    """Load a RouteResult from a persisted JSON receipt. Returns None if missing/unreadable."""
+    try:
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    route = str(data.get("route", "reviewer"))
+    verdict = str(data.get("verdict", "PENDING"))
+    items = []
+    for item_dict in data.get("items") or []:
+        items.append(
+            ItemResult(
+                criterion=str(item_dict.get("criterion", "")),
+                result=str(item_dict.get("result", "pending")),
+                command=item_dict.get("command"),
+                exit_code=item_dict.get("exit_code"),
+                stdout_path=item_dict.get("stdout_path"),
+                stderr_path=item_dict.get("stderr_path"),
+                runtime_ms=item_dict.get("runtime_ms"),
+                dispatch_receipt=item_dict.get("dispatch_receipt"),
+            )
+        )
+    rr = RouteResult(route=route, verdict=verdict)
+    rr.items = items
+    return rr
+
+
+def _find_accept_review_handoff(task_id: str, handoffs_dir: Path) -> dict | None:
+    """Scan handoffs_dir for a reviewer completion receipt for {task_id}__accept_review.
+
+    Returns the parsed JSON dict of the first matching completion handoff, or None.
+    Matching pattern: {task_id}__accept_review__*__memory.json  (reviewer → memory).
+    Receipt must have kind=completion and verdict present.
+    """
+    if not handoffs_dir.is_dir():
+        return None
+    prefix = f"{task_id}__accept_review__"
+    suffix = "__memory.json"
+    for entry in sorted(handoffs_dir.iterdir()):
+        name = entry.name
+        if not name.startswith(prefix) or not name.endswith(suffix):
+            continue
+        try:
+            data = json.loads(entry.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("kind") != "completion":
+            continue
+        verdict = data.get("verdict")
+        if verdict and (
+            verdict in _REVIEWER_APPROVED_VERDICTS or verdict in _REVIEWER_BLOCKED_VERDICTS
+        ):
+            return data
+    return None
+
+
+def reconcile_reviewer_acceptance(
+    task_id: str,
+    acceptance_dir: Path,
+    handoffs_dir: Path | None = None,
+    project: str | None = None,
+) -> RouteResult | None:
+    """Reconcile the reviewer section of the acceptance aggregate from a routed receipt.
+
+    When the reviewer submits an __accept_review completion with APPROVED/APPROVED_WITH_NITS,
+    the parent aggregate reviewer section should transition from PENDING to PASS.
+    FAIL/CHANGES_REQUESTED/REJECTED keeps it blocked (verdict = FAIL).
+
+    The reviewer receipt file is updated in-place; historical item data is preserved
+    and reconciliation metadata is appended. Historical accept_review handoff files
+    are never deleted.
+
+    Returns the updated RouteResult if reconciliation happened, or None if:
+    - no accept_review handoff found
+    - reviewer section is already PASS or FAIL (nothing to reconcile)
+    - reviewer receipt file missing
+    """
+    receipt_path = acceptance_dir / f"{task_id}__reviewer.json"
+    route_result = load_route_result_from_receipt(receipt_path)
+    if route_result is None:
+        return None
+    if route_result.verdict != "PENDING":
+        return route_result
+
+    # Determine handoffs directory
+    if handoffs_dir is None and project is not None:
+        handoffs_dir = _agents_root() / "tasks" / project / "patrol" / "handoffs"
+
+    if handoffs_dir is None:
+        return None
+
+    handoff = _find_accept_review_handoff(task_id, handoffs_dir)
+    if handoff is None:
+        return None
+
+    reviewer_verdict = str(handoff.get("verdict", ""))
+    if reviewer_verdict in _REVIEWER_APPROVED_VERDICTS:
+        new_verdict = "PASS"
+    elif reviewer_verdict in _REVIEWER_BLOCKED_VERDICTS:
+        new_verdict = "FAIL"
+    else:
+        return None
+
+    # Update items: mark pending items as reconciled
+    for item in route_result.items:
+        if item.result == "pending":
+            item.result = "pass" if new_verdict == "PASS" else "fail"
+
+    route_result.verdict = new_verdict
+
+    # Persist updated receipt, carrying reconciliation audit trail
+    try:
+        existing = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+
+    existing["verdict"] = new_verdict
+    existing["reconciled_at"] = _utc_now()
+    existing["reconciled_verdict"] = reviewer_verdict
+    existing["accept_review_handoff"] = str(handoff.get("task_id", f"{task_id}__accept_review"))
+    existing["items"] = [i.to_dict() for i in route_result.items]
+    existing["summary"] = {
+        "total": len(route_result.items),
+        "pass": sum(1 for i in route_result.items if i.result == "pass"),
+        "fail": sum(1 for i in route_result.items if i.result == "fail"),
+        "pending": sum(1 for i in route_result.items if i.result == "pending"),
+    }
+
+    receipt_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    return route_result
 
 
 def main(argv: list[str] | None = None) -> int:

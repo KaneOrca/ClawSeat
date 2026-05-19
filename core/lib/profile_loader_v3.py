@@ -18,10 +18,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover — repo runtime is 3.11+
-    import tomli as tomllib  # type: ignore
+import sys as _sys, pathlib as _pl
+_plv3_scripts = str(_pl.Path(__file__).resolve().parent.parent / "scripts")
+if _plv3_scripts not in _sys.path: _sys.path.insert(0, _plv3_scripts)
+from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 
 
 VALID_MODES = frozenset({"single", "multi"})
@@ -101,7 +101,7 @@ def load_profile_v3(profile_path: Path | str) -> ProfileV3:
         raise ProfileV3Error(f"profile not found: {path}")
 
     with path.open("rb") as fh:
-        data = tomllib.load(fh)
+        data = _toml_load(fh)
 
     project_name = str(data.get("project_name") or "").strip()
     if not project_name:

@@ -11,14 +11,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
-
 _CORE_LIB = Path(__file__).resolve().parents[1] / "lib"
 if str(_CORE_LIB) not in sys.path:
     sys.path.insert(0, str(_CORE_LIB))
+
+from _toml_compat import load_safe as _toml_load_safe  # noqa: E402
 
 from real_home import real_user_home  # noqa: E402
 
@@ -96,12 +93,12 @@ def _seat_session_name(conn: sqlite3.Connection | None, home: Path, project: str
     session_toml = _session_dir(home, project, seat_id) / "session.toml"
     if session_toml.is_file():
         try:
-            with session_toml.open("rb") as handle:
-                data = tomllib.load(handle)
+            with session_toml.open("rb") as fh:
+                data = _toml_load_safe(fh)
             session_name = str(data.get("session", "")).strip()
             if session_name:
                 return session_name
-        except (OSError, tomllib.TOMLDecodeError, TypeError, ValueError):
+        except Exception:  # noqa: BLE001
             return ""
     return ""
 

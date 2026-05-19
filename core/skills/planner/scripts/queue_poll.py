@@ -40,6 +40,10 @@ from queue_io import (  # noqa: E402
     append_event,
     read_current_state,
 )
+from acceptance_criteria import (  # noqa: E402
+    brief_acceptance_ready,
+    load_brief_frontmatter,
+)
 from real_home import real_user_home  # noqa: E402
 
 
@@ -49,6 +53,35 @@ def _agents_root() -> Path:
 
 def _queue_path(project: str, team: str) -> Path:
     return _agents_root() / "tasks" / project / team / "tasks.queue.jsonl"
+
+
+def _project_team_root(project: str, team: str) -> Path:
+    return _agents_root() / "tasks" / project / team
+
+
+def _resolve_task_brief_path(project: str, team: str, brief_path: str | None) -> Path | None:
+    if not brief_path:
+        return None
+    path = Path(brief_path)
+    if path.is_absolute():
+        return path
+    agents_relative = _agents_root() / path
+    team_relative = _project_team_root(project, team) / path
+    if agents_relative.exists() or not team_relative.exists():
+        return agents_relative
+    return team_relative
+
+
+def _brief_acceptance_ready_for_task(project: str, team: str, brief_path: str | None) -> tuple[bool, str]:
+    resolved = _resolve_task_brief_path(project, team, brief_path)
+    if resolved is None:
+        return False, "brief_path missing"
+    if not resolved.exists():
+        return False, f"brief not found: {resolved}"
+    try:
+        return brief_acceptance_ready(load_brief_frontmatter(resolved))
+    except Exception as exc:  # noqa: BLE001
+        return False, f"brief acceptance parse failed: {exc}"
 
 
 def _list_project_teams(project: str) -> list[str]:
@@ -105,6 +138,27 @@ def poll_team(project: str, team: str, actor: str) -> dict | None:
                 u for u in ts.depends_on
                 if not _is_upstream_done(state, project, team, u)
             ]
+            acceptance_ready, acceptance_reason = _brief_acceptance_ready_for_task(
+                project, team, ts.brief_path
+            )
+            if not acceptance_ready:
+                try:
+                    append_event(queue, {
+                        "event_type": "task_waiting_for",
+                        "actor": actor,
+                        "task_id": ts.task_id,
+                        "waiting_for": "acceptance_criteria",
+                    })
+                except QueueError:
+                    pass
+                return {
+                    "team": team,
+                    "task_id": ts.task_id,
+                    "brief_path": ts.brief_path,
+                    "verdict": "waiting_for",
+                    "waiting_for": "acceptance_criteria",
+                    "reason": acceptance_reason,
+                }
             if not unmet:
                 # Upstream done — retry claim
                 try:
@@ -125,6 +179,27 @@ def poll_team(project: str, team: str, actor: str) -> dict | None:
 
     # Try to claim the oldest pending. depends_on check inline (cross-team aware).
     candidate = pending[0]
+    acceptance_ready, acceptance_reason = _brief_acceptance_ready_for_task(
+        project, team, candidate.brief_path
+    )
+    if not acceptance_ready:
+        try:
+            append_event(queue, {
+                "event_type": "task_waiting_for",
+                "actor": actor,
+                "task_id": candidate.task_id,
+                "waiting_for": "acceptance_criteria",
+            })
+        except QueueError:
+            pass
+        return {
+            "team": team,
+            "task_id": candidate.task_id,
+            "brief_path": candidate.brief_path,
+            "verdict": "waiting_for",
+            "waiting_for": "acceptance_criteria",
+            "reason": acceptance_reason,
+        }
     unmet = [
         u for u in candidate.depends_on
         if not _is_upstream_done(state, project, team, u)

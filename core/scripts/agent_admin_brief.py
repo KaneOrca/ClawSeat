@@ -33,6 +33,10 @@ _CORE_LIB = _REPO_ROOT / "core" / "lib"
 if str(_CORE_LIB) not in sys.path:
     sys.path.insert(0, str(_CORE_LIB))
 
+from acceptance_criteria import (  # noqa: E402
+    brief_acceptance_ready,
+    load_brief_frontmatter,
+)
 from queue_io import (  # noqa: E402
     QueueError,
     append_event,
@@ -277,6 +281,20 @@ def _brief_path(project: str, team: str, task_id: str) -> Path:
     return _project_team_root(project, team) / "brief" / f"{task_id}.md"
 
 
+def _stored_brief_path(path_text: str) -> Path:
+    path = Path(path_text)
+    if path.is_absolute():
+        return path
+    return _agents_root() / path
+
+
+def _brief_acceptance_status(path: Path) -> tuple[bool, str]:
+    try:
+        return brief_acceptance_ready(load_brief_frontmatter(path))
+    except Exception as exc:  # noqa: BLE001 - readiness gate reports parse/schema details.
+        return False, str(exc)
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -421,6 +439,10 @@ def cmd_queue(args: argparse.Namespace) -> int:
     if args.no_wake:
         print("WAKE_SKIPPED (--no-wake)")
         return 0
+    ready, reason = _brief_acceptance_status(brief)
+    if not ready:
+        print(f"WAKE_DEFERRED reason={_one_line_detail(reason)}")
+        return 0
     try:
         target = _wake_team_planner(project, team, task_id)
     except WakeHookError as exc:
@@ -506,6 +528,22 @@ def cmd_claim(args: argparse.Namespace) -> int:
                 print(f"waiting_for append failed: {exc}", file=sys.stderr)
                 return 1
         print(f"task {args.task_id} blocked on upstream: {unmet}")
+        return 3
+
+    ready, reason = _brief_acceptance_status(_stored_brief_path(ts.brief_path))
+    if not ready:
+        event = {
+            "event_type": "task_waiting_for",
+            "actor": args.actor,
+            "task_id": args.task_id,
+            "waiting_for": "acceptance_criteria",
+        }
+        try:
+            append_event(queue, event)
+        except QueueError as exc:
+            print(f"waiting_for append failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"task {args.task_id} blocked on acceptance_criteria: {_one_line_detail(reason)}")
         return 3
 
     event = {

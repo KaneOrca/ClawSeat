@@ -11,10 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
+import sys as _sys, pathlib as _pl
+_fc_scripts = str(_pl.Path(__file__).resolve().parent.parent / "scripts")
+if _fc_scripts not in _sys.path: _sys.path.insert(0, _fc_scripts)
+from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 
 from env_utils import parse_env_file, parse_env_text
 from real_home import real_user_home
@@ -407,7 +407,7 @@ def read_providers(path: Path | None = None, *, home: Path | None = None) -> Pro
     if not providers_file.exists():
         return ProvidersStore()
     with providers_file.open("rb") as handle:
-        data = tomllib.load(handle)
+        data = _toml_load(handle)
     if not isinstance(data, dict):
         raise ProviderValidationError(f"invalid providers.toml at {providers_file}: top-level TOML is not a table")
     version = int(data.get("version", 0) or 0)
@@ -466,7 +466,7 @@ def _session_provider_refs(name: str, *, home: Path | None = None) -> tuple[Sess
     refs: list[SessionReference] = []
     for session_toml in sorted(sessions_root.glob("*/*/session.toml")):
         try:
-            data = tomllib.loads(session_toml.read_text(encoding="utf-8"))
+            data = _toml_loads(session_toml.read_text(encoding="utf-8"))
         except Exception:
             continue
         if str(data.get("provider", "")).strip() != provider_name:
@@ -517,7 +517,7 @@ def _replace_toml_scalar(text: str, key: str, value: str, *, expected: str | Non
         current = match.group(2).strip()
         if expected is not None:
             try:
-                parsed = tomllib.loads(f"key = {current}\n")
+                parsed = _toml_loads(f"key = {current}\n")
                 current_value = str(parsed["key"])
             except Exception:
                 current_value = current.strip("\"'")

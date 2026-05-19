@@ -23,10 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover — Python < 3.11
-    import tomli as tomllib  # type: ignore[no-redef]
+from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 
 # Path bootstrapping so imports work from both script + package contexts.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -437,7 +434,7 @@ def list_seats_for_project(project: str, *, home: Path | None = None) -> list[st
     path = project_profile_path(project, home=home)
     if not path.is_file():
         raise FileNotFoundError(f"profile not found: {path}")
-    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    raw = _toml_loads(path.read_text(encoding="utf-8"))
     seats = list(raw.get("seats", []))
     overrides = raw.get("seat_overrides", {}) or {}
     return expand_parallel_seats(seats, overrides)
@@ -465,7 +462,7 @@ def cmd_project_validate(args: argparse.Namespace) -> int:
     path = project_profile_path(args.project)
     try:
         with path.open("rb") as handle:
-            raw_profile = tomllib.load(handle)
+            raw_profile = _toml_load(handle)
     except FileNotFoundError:
         print(f"error: profile not found: {path}", file=sys.stderr)
         return 1
