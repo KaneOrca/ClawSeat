@@ -1,10 +1,10 @@
 """_toml_compat — vendored TOML compatibility shim.
 
 Provides :func:`loads_safe` and :func:`load_safe` that work when neither
-``tomllib`` (Python 3.11+) nor ``tomli`` (third-party) is installed. A small
-pure-Python fallback is used in that case, covering the scalar, array, section,
-and inline-table shapes that ClawSeat runtime scripts read from project/profile
-TOML files.
+``tomllib`` (Python 3.11+) nor ``tomli`` (third-party) is installed. A
+small pure-Python fallback is used in that case, covering the TOML shapes
+ClawSeat runtime config actually reads: scalars, arrays, dotted tables,
+quoted table keys, inline tables, and simple ``[[array-of-table]]`` blocks.
 
 Import this module instead of importing ``tomllib`` / ``tomli`` directly so
 the desktop Electron runtime does not crash when it ships a Python build
@@ -21,7 +21,7 @@ Usage::
 """
 from __future__ import annotations
 
-import ast
+import json
 import re
 from typing import IO, Any
 
@@ -45,38 +45,42 @@ def _strip_comment(line: str) -> str:
     quote: str | None = None
     escaped = False
     for index, char in enumerate(line):
-        if quote:
-            if quote == '"' and char == "\\" and not escaped:
-                escaped = True
-                continue
-            if char == quote and not escaped:
-                quote = None
+        if escaped:
             escaped = False
             continue
-        if char in {"'", '"'}:
-            quote = char
+        if quote == '"' and char == "\\":
+            escaped = True
             continue
-        if char == "#":
+        if char in ("'", '"'):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            continue
+        if char == "#" and quote is None:
             return line[:index]
     return line
 
 
-def _balanced(value: str) -> bool:
+def _balanced(text: str) -> bool:
     quote: str | None = None
     escaped = False
     square = 0
     curly = 0
-    for char in value:
-        if quote:
-            if quote == '"' and char == "\\" and not escaped:
-                escaped = True
-                continue
-            if char == quote and not escaped:
-                quote = None
+    for char in text:
+        if escaped:
             escaped = False
             continue
-        if char in {"'", '"'}:
-            quote = char
+        if quote == '"' and char == "\\":
+            escaped = True
+            continue
+        if char in ("'", '"'):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            continue
+        if quote is not None:
             continue
         if char == "[":
             square += 1
@@ -89,24 +93,43 @@ def _balanced(value: str) -> bool:
     return quote is None and square == 0 and curly == 0
 
 
-def _split_top_level(text: str, delimiter: str = ",") -> list[str]:
+def _logical_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    pending = ""
+    for raw_line in text.splitlines():
+        line = _strip_comment(raw_line).strip()
+        if not line:
+            continue
+        pending = f"{pending} {line}".strip() if pending else line
+        if _balanced(pending):
+            lines.append(pending)
+            pending = ""
+    if pending:
+        lines.append(pending)
+    return lines
+
+
+def _split_top_level(text: str, separator: str = ",") -> list[str]:
     parts: list[str] = []
+    start = 0
     quote: str | None = None
     escaped = False
     square = 0
     curly = 0
-    start = 0
     for index, char in enumerate(text):
-        if quote:
-            if quote == '"' and char == "\\" and not escaped:
-                escaped = True
-                continue
-            if char == quote and not escaped:
-                quote = None
+        if escaped:
             escaped = False
             continue
-        if char in {"'", '"'}:
-            quote = char
+        if quote == '"' and char == "\\":
+            escaped = True
+            continue
+        if char in ("'", '"'):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            continue
+        if quote is not None:
             continue
         if char == "[":
             square += 1
@@ -116,106 +139,176 @@ def _split_top_level(text: str, delimiter: str = ",") -> list[str]:
             curly += 1
         elif char == "}":
             curly -= 1
-        elif char == delimiter and square == 0 and curly == 0:
+        elif char == separator and square == 0 and curly == 0:
             parts.append(text[start:index].strip())
             start = index + 1
     parts.append(text[start:].strip())
-    return [part for part in parts if part]
+    return parts
 
 
-def _unquote(value: str) -> str:
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+def _split_key_value(line: str) -> tuple[str, str] | None:
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if quote == '"' and char == "\\":
+            escaped = True
+            continue
+        if char in ("'", '"'):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            continue
+        if char == "=" and quote is None:
+            return line[:index].strip(), line[index + 1 :].strip()
+    return None
+
+
+def _parse_string(value: str) -> str:
+    if value.startswith('"') and value.endswith('"'):
         try:
-            parsed = ast.literal_eval(value)
+            parsed = json.loads(value)
             if isinstance(parsed, str):
                 return parsed
         except Exception:
             pass
         return value[1:-1]
+    if value.startswith("'") and value.endswith("'"):
+        return value[1:-1]
     return value
 
 
-def _parse_value(raw: str) -> Any:
-    value = raw.strip().rstrip(",").strip()
+def _parse_key_path(raw: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for char in raw.strip():
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if quote == '"' and char == "\\":
+            escaped = True
+            continue
+        if char in ("'", '"'):
+            if quote is None:
+                quote = char
+                continue
+            if quote == char:
+                quote = None
+                continue
+        if char == "." and quote is None:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(char)
+    part = "".join(current).strip()
+    if part:
+        parts.append(part)
+    return parts
+
+
+def _ensure_table(root: dict[str, Any], path: list[str]) -> dict[str, Any]:
+    current = root
+    for part in path:
+        child = current.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            current[part] = child
+        current = child
+    return current
+
+
+def _assign_value(root: dict[str, Any], path: list[str], value: Any) -> None:
+    if not path:
+        return
+    target = _ensure_table(root, path[:-1])
+    target[path[-1]] = value
+
+
+def _parse_array(value: str) -> list[Any]:
+    inner = value[1:-1].strip()
+    if not inner:
+        return []
+    return [_parse_value(part) for part in _split_top_level(inner) if part]
+
+
+def _parse_inline_table(value: str) -> dict[str, Any]:
+    inner = value[1:-1].strip()
+    table: dict[str, Any] = {}
+    if not inner:
+        return table
+    for part in _split_top_level(inner):
+        split = _split_key_value(part)
+        if split is None:
+            continue
+        key, raw_value = split
+        _assign_value(table, _parse_key_path(key), _parse_value(raw_value))
+    return table
+
+
+def _parse_value(value: str) -> Any:
+    value = value.strip()
     if not value:
         return ""
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        return _unquote(value)
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        return _parse_string(value)
+    if value.startswith("[") and value.endswith("]"):
+        return _parse_array(value)
+    if value.startswith("{") and value.endswith("}"):
+        return _parse_inline_table(value)
     if value == "true":
         return True
     if value == "false":
         return False
     if re.match(r"^-?\d+$", value):
-        return int(value)
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        return [_parse_value(item) for item in _split_top_level(inner)]
-    if value.startswith("{") and value.endswith("}"):
-        inner = value[1:-1].strip()
-        table: dict[str, Any] = {}
-        if not inner:
-            return table
-        for item in _split_top_level(inner):
-            match = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.+)$", item)
-            if not match:
-                continue
-            table[match.group(1)] = _parse_value(match.group(2))
-        return table
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    if re.match(r"^-?(?:\d+\.\d*|\d*\.\d+)$", value):
+        try:
+            return float(value)
+        except ValueError:
+            return value
     return value
 
 
-def _section_dict(root: dict[str, Any], section: str | None) -> dict[str, Any]:
-    current = root
-    if not section:
-        return current
-    for part in section.split("."):
-        current = current.setdefault(part.strip(), {})
-    return current
-
-
-def _regex_loads(text: str) -> dict[str, Any]:
-    """Minimal TOML parser for ClawSeat runtime config fallback.
-
-    It intentionally covers only the TOML shapes ClawSeat reads at runtime:
-    strings, integers, booleans, string/scalar arrays, dotted sections, and
-    inline tables. It is not a general TOML implementation.
-    """
+def _fallback_loads(text: str) -> dict[str, Any]:
+    """Small TOML parser for ClawSeat runtime config when no parser is installed."""
     result: dict[str, Any] = {}
-    current_section: str | None = None
-    pending_key: str | None = None
-    pending_value = ""
+    current_section = result
+    for line in _logical_lines(text):
+        array_table_m = re.match(r"^\[\[([^\[\]]+)\]\]$", line)
+        if array_table_m:
+            path = _parse_key_path(array_table_m.group(1))
+            parent = _ensure_table(result, path[:-1])
+            key = path[-1]
+            existing = parent.get(key)
+            if not isinstance(existing, list):
+                existing = []
+                parent[key] = existing
+            item: dict[str, Any] = {}
+            existing.append(item)
+            current_section = item
+            continue
 
-    def assign(key: str, raw_value: str) -> None:
-        _section_dict(result, current_section)[key] = _parse_value(raw_value)
+        table_m = re.match(r"^\[([^\[\]]+)\]$", line)
+        if table_m:
+            current_section = _ensure_table(result, _parse_key_path(table_m.group(1)))
+            continue
 
-    for raw_line in text.splitlines():
-        line = _strip_comment(raw_line).strip()
-        if not line or line.startswith('#'):
+        split = _split_key_value(line)
+        if split is None:
             continue
-        if pending_key is not None:
-            pending_value += " " + line
-            if _balanced(pending_value):
-                assign(pending_key, pending_value)
-                pending_key = None
-                pending_value = ""
-            continue
-        # Section header [section]
-        sec_m = re.match(r'^\[([^\[\]]+)\]\s*$', line)
-        if sec_m:
-            current_section = sec_m.group(1).strip()
-            _section_dict(result, current_section)
-            continue
-        kv_m = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.+)$', line)
-        if kv_m:
-            key, value = kv_m.group(1), kv_m.group(2).strip()
-            if _balanced(value):
-                assign(key, value)
-            else:
-                pending_key = key
-                pending_value = value
+        key, raw_value = split
+        _assign_value(current_section, _parse_key_path(key), _parse_value(raw_value))
     return result
 
 
@@ -227,7 +320,10 @@ def loads_safe(text: str) -> dict[str, Any]:
             return mod.loads(text)  # type: ignore[no-any-return]
         except Exception:
             return {}
-    return _regex_loads(text)
+    try:
+        return _fallback_loads(text)
+    except Exception:
+        return {}
 
 
 def load_safe(fh: IO[bytes]) -> dict[str, Any]:
@@ -242,4 +338,7 @@ def load_safe(fh: IO[bytes]) -> dict[str, Any]:
         text = fh.read().decode('utf-8', errors='replace')
     except Exception:
         return {}
-    return _regex_loads(text)
+    try:
+        return _fallback_loads(text)
+    except Exception:
+        return {}
