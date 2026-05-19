@@ -62,6 +62,41 @@ class ValidationResult:
     normalized: dict | None = None
 
 
+# ── OpenClaw feature flag ─────────────────────────────────────────────
+#
+# S1 (docs/architecture/openclaw-decoupling-map-20260518.md): profiles may
+# opt out of OpenClaw via `[features] openclaw = false`. Default-true to
+# preserve current behavior for existing OpenClaw projects.
+
+
+def _openclaw_features_enabled(raw: dict[str, Any]) -> bool:
+    """Whether profile opts into OpenClaw frontstage binding.
+
+    Returns False only when the profile explicitly sets
+    ``[features] openclaw = false``; missing key defaults to True so existing
+    OpenClaw projects continue to validate against the strict rules.
+    """
+    features = raw.get("features", {})
+    if isinstance(features, dict) and features.get("openclaw") is False:
+        return False
+    return True
+
+
+def _openclaw_required_for_profile(
+    raw: dict[str, Any], machine_cfg: MachineConfig | None
+) -> bool:
+    """Whether ``openclaw_frontstage_agent`` is a mandatory profile field.
+
+    Required only when machine.toml declares at least one openclaw tenant AND
+    the profile has not explicitly opted out via ``[features] openclaw=false``.
+    When machine.toml carries no openclaw tenants the binding is moot — there
+    is no OpenClaw side to bind to — so the check is skipped.
+    """
+    if machine_cfg is None or not machine_cfg.tenants:
+        return False
+    return _openclaw_features_enabled(raw)
+
+
 # ── Profile rules ─────────────────────────────────────────────────────
 
 
@@ -199,19 +234,27 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
 
     # Rules 5, 6: machine cross-validation (if machine_cfg provided)
     if machine_cfg is not None:
-        oc_agent = str(raw.get("openclaw_frontstage_agent", "")).strip()
-        if not oc_agent:
-            errors.append(
-                "missing 'openclaw_frontstage_agent'. "
-                "Run `agent-admin project koder-bind --project <name> --tenant <tenant>`."
-            )
-        elif oc_agent not in machine_cfg.tenants:
-            known = sorted(machine_cfg.tenants.keys())
-            errors.append(
-                f"openclaw_frontstage_agent={oc_agent!r} is not in machine.toml tenants. "
-                f"Known tenants: {known}. "
-                "Run `agent-admin project koder-bind --project <name> --tenant <tenant>`."
-            )
+        # S1 (openclaw-decoupling-map-20260518.md): OpenClaw frontstage_agent
+        # binding is only required when both (a) machine.toml declares
+        # openclaw_tenants AND (b) the profile does not explicitly opt out via
+        # [features] openclaw = false. When either side disables OpenClaw the
+        # binding check is skipped so ClawSeat can install/run without it.
+        openclaw_required = _openclaw_required_for_profile(raw, machine_cfg)
+        if openclaw_required:
+            oc_agent = str(raw.get("openclaw_frontstage_agent", "")).strip()
+            if not oc_agent:
+                errors.append(
+                    "missing 'openclaw_frontstage_agent'. "
+                    "Run `agent-admin project koder-bind --project <name> --tenant <tenant>`. "
+                    "To run ClawSeat without OpenClaw, set [features] openclaw = false in the profile."
+                )
+            elif oc_agent not in machine_cfg.tenants:
+                known = sorted(machine_cfg.tenants.keys())
+                errors.append(
+                    f"openclaw_frontstage_agent={oc_agent!r} is not in machine.toml tenants. "
+                    f"Known tenants: {known}. "
+                    "Run `agent-admin project koder-bind --project <name> --tenant <tenant>`."
+                )
 
         machine_services = raw.get("machine_services", [])
         if isinstance(machine_services, list):
@@ -220,9 +263,9 @@ def _check_profile(raw: dict[str, Any], *, machine_cfg: MachineConfig | None) ->
                 if str(svc) not in ("memory",):
                     errors.append(f"machine_services entry {svc!r} is not a known service in machine.toml.")
 
-    # Rule 12: PROJECT_BINDING cross-validation
+    # Rule 12: PROJECT_BINDING cross-validation (only when OpenClaw is enabled)
     project_name = str(raw.get("project_name", "")).strip()
-    if project_name:
+    if project_name and _openclaw_features_enabled(raw):
         try:
             from project_binding import load_binding
             binding = load_binding(project_name)
