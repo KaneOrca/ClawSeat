@@ -79,20 +79,29 @@ def main() -> int:
 
     task_key = sanitize_name(args.task_id)
     planner_seats = _resolve_planner_seats(profile)
-    errors: list[str] = []
+    hard_errors: list[str] = []
+    warnings: list[str] = []
 
-    # Check 1: consumed receipt — any planner seat delivered to
+    # Check 1 (diagnostic/warning): incoming consumed — any planner seat delivered to.
+    #
+    # CF047 relaxation: the presence of a planner-incoming .consumed sidecar is NOT
+    # required for a valid final queue-drained planner closeout.  Current protocol
+    # only promises this artifact when the planner invoked `complete_handoff.py
+    # --enforce-planner-self-closeout`; many valid multi-team relays do not produce
+    # it.  Absence is a diagnostic warning; the authoritative final closeout evidence
+    # is the planner→memory receipt and the planner DELIVERY.md (checks 2 and 3).
     consumed_matches: list[Path] = []
     for seat in planner_seats:
         consumed_matches.extend(handoff_dir.glob(f"{task_key}__*__{sanitize_name(seat)}.json.consumed"))
     if not consumed_matches:
         seats_tried = ", ".join(planner_seats)
-        errors.append(
-            f".consumed missing: searched {handoff_dir} for"
-            f" {task_key}__*__{{{seats_tried}}}.json.consumed"
+        warnings.append(
+            f".consumed missing (diagnostic): no"
+            f" {task_key}__*__{{{seats_tried}}}.json.consumed found;"
+            f" planner→memory receipt and DELIVERY are the authoritative closeout evidence"
         )
 
-    # Check 2: planner→memory receipt — any planner seat sent to memory
+    # Check 2 (hard): planner→memory receipt — any planner seat sent to memory
     receipt_path: Path | None = None
     for seat in planner_seats:
         candidate = handoff_dir / f"{task_key}__{sanitize_name(seat)}__memory.json"
@@ -101,12 +110,12 @@ def main() -> int:
             break
     if receipt_path is None:
         seats_tried = ", ".join(planner_seats)
-        errors.append(
+        hard_errors.append(
             f"planner→memory receipt missing: searched {handoff_dir} for"
             f" {task_key}__{{{seats_tried}}}__memory.json"
         )
 
-    # Check 3: planner DELIVERY.md with matching task_id — any planner seat workspace
+    # Check 3 (hard): planner DELIVERY.md with matching task_id — any planner seat workspace
     delivery_found = False
     delivery_error: str | None = None
     for seat in planner_seats:
@@ -116,7 +125,6 @@ def main() -> int:
             continue
         actual_task_id = _delivery_task_id(dp)
         if actual_task_id is None:
-            # File missing for this seat; try next
             delivery_error = f"planner DELIVERY.md missing: {dp}"
             continue
         if actual_task_id != args.task_id:
@@ -124,25 +132,29 @@ def main() -> int:
                 f"planner DELIVERY.md task_id mismatch: expected {args.task_id},"
                 f" got {actual_task_id} (in {dp})"
             )
-            # task_id mismatch is an error for this seat but keep checking others
             continue
         delivery_found = True
         break
     if not delivery_found:
         if delivery_error:
-            errors.append(delivery_error)
+            hard_errors.append(delivery_error)
         else:
             seats_tried = ", ".join(planner_seats)
-            errors.append(
+            hard_errors.append(
                 f"planner DELIVERY.md missing: checked seats {{{seats_tried}}}"
             )
 
-    if errors:
-        for line in errors:
+    if hard_errors:
+        for line in hard_errors:
             print(line)
         return 1
 
-    print("all 3 artifacts present")
+    if warnings:
+        for line in warnings:
+            print(line)
+        print("2 authoritative artifacts present (receipt + DELIVERY)")
+    else:
+        print("all 3 artifacts present")
     return 0
 
 
