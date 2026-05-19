@@ -201,3 +201,96 @@ def test_subgroup_guide_covers_four_profiles():
     assert "four" in text.lower() or "4" in text, (
         "subgroup-profiles.md must note there are now four profiles"
     )
+
+
+# ---------------------------------------------------------------------------
+# CF050 rework1: --planner-count tests
+# ---------------------------------------------------------------------------
+
+def test_seed_planner_only_default_one_planner(tmp_path: Path):
+    """Default planner-only generates exactly one planner seat."""
+    files = _run_seed(tmp_path, "planner-only")
+    text = files["engineering"].read_text(encoding="utf-8")
+    planner_count = text.count("role: planner")
+    assert planner_count == 1, f"default planner-only must have 1 planner seat, got {planner_count}"
+
+
+def test_seed_planner_only_two_planners(tmp_path: Path):
+    """--planner-count 2 generates two planner seats with distinct instances."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SEED_SCRIPT),
+            "--project", "test-proj",
+            "--output-dir", str(tmp_path),
+            "--repo-root", "/tmp/test-proj",
+            "--teams", "engineering",
+            "--archetype", "generic",
+            "--profile", "planner-only",
+            "--planner-count", "2",
+            "--force",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"seed with --planner-count 2 failed:\n{result.stderr}"
+    files = {p.stem.replace("__approved", ""): p for p in tmp_path.glob("*__approved.yaml")}
+    text = files["engineering"].read_text(encoding="utf-8")
+    planner_count = text.count("role: planner")
+    assert planner_count == 2, f"--planner-count 2 must generate 2 planner seats, got {planner_count}"
+    # Must have distinct instance labels
+    assert "instance: primary" in text, "first planner must have instance: primary"
+    assert "instance: secondary" in text, "second planner must have instance: secondary"
+    # No builder/reviewer still
+    assert "role: builder" not in text
+    assert "role: reviewer" not in text
+
+
+def test_seed_planner_only_three_planners(tmp_path: Path):
+    """--planner-count 3 generates three planner seats."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SEED_SCRIPT),
+            "--project", "test-proj",
+            "--output-dir", str(tmp_path),
+            "--repo-root", "/tmp/test-proj",
+            "--teams", "engineering",
+            "--archetype", "generic",
+            "--profile", "planner-only",
+            "--planner-count", "3",
+            "--force",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    files = {p.stem.replace("__approved", ""): p for p in tmp_path.glob("*__approved.yaml")}
+    text = files["engineering"].read_text(encoding="utf-8")
+    assert text.count("role: planner") == 3
+
+
+def test_profiles_toml_header_says_four_profiles():
+    """subgroup-profiles.toml header comment must say 'Four hot-pluggable subgroup profiles'."""
+    text = PROFILES_TOML.read_text(encoding="utf-8")
+    assert "Four hot-pluggable" in text or "four" in text.lower(), (
+        "subgroup-profiles.toml header must reflect that there are now four profiles"
+    )
+
+
+def test_profiles_toml_usage_includes_planner_only():
+    """Usage comment in subgroup-profiles.toml must include planner-only."""
+    text = PROFILES_TOML.read_text(encoding="utf-8")
+    assert "planner-only" in text, (
+        "subgroup-profiles.toml usage/comment must include planner-only"
+    )
+
+
+def test_subgroup_guide_documents_planner_count():
+    """docs/guides/subgroup-profiles.md must document --planner-count."""
+    text = SUBGROUP_GUIDE.read_text(encoding="utf-8")
+    assert "--planner-count" in text, (
+        "subgroup-profiles.md must document --planner-count flag"
+    )

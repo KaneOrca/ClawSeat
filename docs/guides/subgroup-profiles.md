@@ -9,7 +9,7 @@ Default: **dev-minimal**.
 
 ### dev-minimal — Development Minimal
 
-**Composition:** planner + builder  
+**Composition:** planner + builder
 **Use when:** one focused implementation task or maintenance repair.
 
 - Planner owns workflow, code review, acceptance, and closeout while context is hot.
@@ -19,7 +19,7 @@ Default: **dev-minimal**.
 
 ### dev-standard — Development Standard
 
-**Composition:** planner + 2 builders + reviewer  
+**Composition:** planner + 2 builders + reviewer
 **Use when:** parallel feature work or higher-risk product changes.
 
 - Planner owns decomposition and assigns disjoint write scopes to each builder.
@@ -29,7 +29,7 @@ Default: **dev-minimal**.
 
 ### test — Test Group
 
-**Composition:** planner + patrol  
+**Composition:** planner + patrol
 **Use when:** QA/evidence campaigns, smoke testing, issue reproduction.
 
 - Planner designs the test campaign and fans in evidence.
@@ -39,7 +39,7 @@ Default: **dev-minimal**.
 
 ### planner-only — Planner-Only Engineering
 
-**Composition:** planner(s) only — no builder, no reviewer by default  
+**Composition:** planner(s) only — no builder, no reviewer by default
 **Use when:** the operator wants a high-reasoning planner to self-contain all engineering work.
 
 - Planner owns root-cause diagnosis, solution design, implementation, testing, self-review, and closeout.
@@ -125,10 +125,19 @@ bash scripts/install_multi.sh \
 ### Adding a planner-only subgroup
 
 ```bash
+# Single planner (default)
 python3 core/scripts/seed_multi_team_minimal.py \
   --project myproject \
   --teams engineering-planner \
   --profile planner-only \
+  --output-dir ~/.agents/tasks/myproject/_config-proposals
+
+# Two planners (primary + secondary)
+python3 core/scripts/seed_multi_team_minimal.py \
+  --project myproject \
+  --teams engineering-planner \
+  --profile planner-only \
+  --planner-count 2 \
   --output-dir ~/.agents/tasks/myproject/_config-proposals
 
 bash scripts/install_multi.sh \
@@ -136,8 +145,11 @@ bash scripts/install_multi.sh \
   --upgrade-team engineering-planner
 ```
 
-Provider/tool/auth are configurable — edit the generated `__approved.yaml`
-before running `install_multi.sh` if you want a different model or provider.
+**Planner count**: use `--planner-count N` to generate N planner seats (default: 1).
+Each additional planner gets a distinct instance name (`primary`, `secondary`, etc.).
+
+**Provider/tool/auth**: default to claude/anthropic/oauth_token. Edit the generated
+`__approved.yaml` before running `install_multi.sh` if you want a different model.
 
 ### Removing a subgroup
 

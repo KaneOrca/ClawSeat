@@ -183,20 +183,28 @@ def _test_group_yaml(project: str, team: str, ts: str) -> str:
     return "\n".join(lines)
 
 
-def _planner_only_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) -> str:
+def _planner_only_yaml(
+    project: str,
+    team: str,
+    ts: str,
+    ownership_paths: list[str],
+    planner_count: int = 1,
+) -> str:
     """Planner-only: one or more planners, no builder, planner self-reviews.
 
-    The planner seat is self-contained: it diagnoses root causes, writes
+    Each planner seat is self-contained: it diagnoses root causes, writes
     workflows, implements changes, runs tests, self-reviews, and closes out.
-    Provider/tool/auth are configurable through project inputs; this template
-    defaults to claude/anthropic/oauth_token as a starting point.
-    Builder is absent by default — operator adds builder seats when execution
-    volume warrants it.
+    Provider/tool/auth default to claude/anthropic/oauth_token; operator edits
+    the generated YAML before running install_multi.sh to change provider.
+    Builder is absent by default. Use --planner-count N to generate N planner seats.
     """
+    if planner_count < 1:
+        planner_count = 1
+    _INSTANCES = ["primary", "secondary", "tertiary", "quaternary", "quinary"]
     lines = _header(project, team, ts)
     lines.extend(
         [
-            "# planner-only: planner self-contains all engineering work, no builder",
+            f"# planner-only: {planner_count} planner seat(s), no builder, planner self-reviews",
             "subgroup_profile: planner-only",
             "team_type: subteam",
             "planner_mode: delivery",
@@ -213,14 +221,30 @@ def _planner_only_yaml(project: str, team: str, ts: str, ownership_paths: list[s
             "  overflow_action: propose_new_subteam",
             "  reviewer_fallback: planner",
             "seats:",
-            "  - role: planner",
-            "    tool: claude",
-            "    provider: anthropic",
-            "    auth_mode: oauth_token",
-            f"    purpose: {_quote('self-contained engineering planner: diagnoses, implements, tests, self-reviews, and closes out without a dedicated builder')}",
-            "    capabilities: [implementation, tests, docs, self-review]",
-            f"    rationale: {_quote('high-reasoning planner owns the full engineering cycle; builder is optional and absent in this profile')}",
-            "estimated_monthly_cost_usd: { low: 0, high: 20 }",
+        ]
+    )
+    for idx in range(planner_count):
+        if planner_count == 1:
+            instance_label = ""
+            purpose = "self-contained engineering planner: diagnoses, implements, tests, self-reviews, and closes out without a dedicated builder"
+        else:
+            instance = _INSTANCES[idx] if idx < len(_INSTANCES) else str(idx + 1)
+            instance_label = f"\n    instance: {instance}"
+            purpose = f"{instance} engineering planner: self-contained diagnosis, implementation, testing, self-review, and closeout"
+        lines.extend(
+            [
+                "  - role: planner" + instance_label,
+                "    tool: claude",
+                "    provider: anthropic",
+                "    auth_mode: oauth_token",
+                f"    purpose: {_quote(purpose)}",
+                "    capabilities: [implementation, tests, docs, self-review]",
+                f"    rationale: {_quote('high-reasoning planner owns the full engineering cycle; builder is optional and absent in this profile')}",
+            ]
+        )
+    lines.extend(
+        [
+            f"estimated_monthly_cost_usd: {{ low: 0, high: {20 * planner_count} }}",
             "---",
             "",
         ]
@@ -304,6 +328,7 @@ def seed(
     archetype: str,
     force: bool,
     profile: str = "dev-minimal",
+    planner_count: int = 1,
 ) -> list[Path]:
     if profile not in VALID_PROFILES:
         raise ValueError(f"--profile must be one of {VALID_PROFILES}; got {profile!r}")
@@ -328,7 +353,7 @@ def seed(
         elif profile == "test":
             text = _test_group_yaml(project, team, ts)
         elif profile == "planner-only":
-            text = _planner_only_yaml(project, team, ts, _paths_for(team, archetype))
+            text = _planner_only_yaml(project, team, ts, _paths_for(team, archetype), planner_count=planner_count)
         else:
             # dev-minimal (default)
             text = _dev_minimal_yaml(project, team, ts, _paths_for(team, archetype))
@@ -363,6 +388,18 @@ def main(argv: list[str] | None = None) -> int:
             "provider/tool/auth configurable through project inputs."
         ),
     )
+    parser.add_argument(
+        "--planner-count",
+        type=int,
+        default=1,
+        dest="planner_count",
+        help=(
+            "Number of planner seats to generate for the planner-only profile. "
+            "Default: 1. Ignored for other profiles. "
+            "Each additional planner gets a distinct instance name (primary, secondary, etc.). "
+            "Provider/tool/auth for each seat can be edited in the generated YAML."
+        ),
+    )
     args = parser.parse_args(argv)
 
     teams = [item.strip() for item in args.teams.split(",") if item.strip()]
@@ -371,6 +408,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=Path(args.output_dir),
         repo_root=args.repo_root,
         teams=teams,
+        planner_count=args.planner_count,
         archetype=args.archetype,
         force=args.force,
         profile=args.profile,

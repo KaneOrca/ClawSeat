@@ -1,8 +1,9 @@
-# ClawSeat subgroup profile definitions (cf030)
-# Three hot-pluggable subgroup profiles. Default: dev-minimal.
+# ClawSeat subgroup profile definitions (cf030, cf050)
+# Four hot-pluggable subgroup profiles. Default: dev-minimal.
 #
 # Usage in seed script:
-#   python3 core/scripts/seed_multi_team_minimal.py --profile dev-minimal|dev-standard|test ...
+#   python3 core/scripts/seed_multi_team_minimal.py --profile dev-minimal|dev-standard|test|planner-only ...
+#   # planner-only supports --planner-count N to generate N planner seats (default: 1)
 #
 # All profiles inherit the same workflow invariants (see [invariants]).
 
