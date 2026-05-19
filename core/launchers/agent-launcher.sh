@@ -27,7 +27,7 @@ set -euo pipefail
 # per-invocation with `env -u TMUX`; this is the launcher-side mirror.)
 unset TMUX TMUX_PANE
 
-REAL_HOME="$HOME"
+REAL_HOME="${REAL_HOME:-$HOME}"
 LAUNCHER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAUNCHER_REPO_ROOT="$(cd "$LAUNCHER_DIR/../.." && pwd)"
 LAUNCHER_PYTHON_BIN="${PYTHON_BIN:-python3}"
