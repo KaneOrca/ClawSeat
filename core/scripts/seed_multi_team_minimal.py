@@ -5,10 +5,12 @@ This is the compatibility bridge for the old ``clawseat-solo`` entry point:
 solo is no longer a standalone single-mode runtime. It is the minimal dev
 subteam archetype inside a v3 multi-team project group.
 
-Three hot-pluggable subgroup profiles are supported via --profile:
+Four hot-pluggable subgroup profiles are supported via --profile:
   dev-minimal  (default): planner + builder, planner self-reviews
   dev-standard          : planner + 2 builders + reviewer, reviewer gate required
   test                  : planner + patrol, QA-only, no product code edits by default
+  planner-only          : memory + planner(s) only, no builder; planner self-contains
+                          diagnosis, planning, implementation, testing, and closeout
 
 All profiles inherit: local review/latest validation, push/PR/CI opt-in only,
 OpenClaw/Koder/Feishu/Lark as optional adapters, hot-plug without history loss.
@@ -24,12 +26,13 @@ from pathlib import Path
 PROFILES_NOTE = (
     "Subgroup profiles: dev-minimal (planner + builder, default), "
     "dev-standard (planner + 2 builders + reviewer), "
-    "test (planner + patrol). "
+    "test (planner + patrol), "
+    "planner-only (planner self-contains all engineering work; no builder). "
     "All inherit: local review/latest validation, push/PR/CI opt-in only, "
     "OpenClaw/Koder/Feishu/Lark as optional adapters, hot-plug without history loss."
 )
 
-VALID_PROFILES = ("dev-minimal", "dev-standard", "test")
+VALID_PROFILES = ("dev-minimal", "dev-standard", "test", "planner-only")
 
 
 def _quote(value: str) -> str:
@@ -180,6 +183,51 @@ def _test_group_yaml(project: str, team: str, ts: str) -> str:
     return "\n".join(lines)
 
 
+def _planner_only_yaml(project: str, team: str, ts: str, ownership_paths: list[str]) -> str:
+    """Planner-only: one or more planners, no builder, planner self-reviews.
+
+    The planner seat is self-contained: it diagnoses root causes, writes
+    workflows, implements changes, runs tests, self-reviews, and closes out.
+    Provider/tool/auth are configurable through project inputs; this template
+    defaults to claude/anthropic/oauth_token as a starting point.
+    Builder is absent by default — operator adds builder seats when execution
+    volume warrants it.
+    """
+    lines = _header(project, team, ts)
+    lines.extend(
+        [
+            "# planner-only: planner self-contains all engineering work, no builder",
+            "subgroup_profile: planner-only",
+            "team_type: subteam",
+            "planner_mode: delivery",
+            "notify_policy: queue_drained_only",
+            "review_model: planner_owned",
+            "dedicated_reviewer: false",
+            "dedicated_builder: false",
+            "planner_test_lock_required: true",
+            "ownership_paths:",
+            _yaml_list(ownership_paths),
+            "scaling_policy:",
+            "  max_builders: 0",
+            "  reviewer_required_when_builders_gte: 999",
+            "  overflow_action: propose_new_subteam",
+            "  reviewer_fallback: planner",
+            "seats:",
+            "  - role: planner",
+            "    tool: claude",
+            "    provider: anthropic",
+            "    auth_mode: oauth_token",
+            f"    purpose: {_quote('self-contained engineering planner: diagnoses, implements, tests, self-reviews, and closes out without a dedicated builder')}",
+            "    capabilities: [implementation, tests, docs, self-review]",
+            f"    rationale: {_quote('high-reasoning planner owns the full engineering cycle; builder is optional and absent in this profile')}",
+            "estimated_monthly_cost_usd: { low: 0, high: 20 }",
+            "---",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _quality_docs_yaml(project: str, ts: str) -> str:
     lines = _header(project, "quality-docs", ts)
     lines.extend(
@@ -263,7 +311,9 @@ def seed(
     selected = list(teams or _default_teams(project, repo_root, archetype))
     # For non-test profiles, always ensure quality-docs is included.
     # For the test profile, the selected teams ARE the QA teams — no auto-append.
-    if profile != "test" and "quality-docs" not in selected:
+    # For planner-only, also skip quality-docs auto-append (planning-focused teams
+    # don't automatically pair with a quality patrol).
+    if profile not in ("test", "planner-only") and "quality-docs" not in selected:
         selected.append("quality-docs")
     output_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
@@ -271,12 +321,14 @@ def seed(
         path = output_dir / f"{team}__approved.yaml"
         if path.exists() and not force:
             continue
-        if team == "quality-docs" and profile != "test":
+        if team == "quality-docs" and profile not in ("test", "planner-only"):
             text = _quality_docs_yaml(project, ts)
         elif profile == "dev-standard":
             text = _dev_standard_yaml(project, team, ts, _paths_for(team, archetype))
         elif profile == "test":
             text = _test_group_yaml(project, team, ts)
+        elif profile == "planner-only":
+            text = _planner_only_yaml(project, team, ts, _paths_for(team, archetype))
         else:
             # dev-minimal (default)
             text = _dev_minimal_yaml(project, team, ts, _paths_for(team, archetype))
@@ -306,7 +358,9 @@ def main(argv: list[str] | None = None) -> int:
             "Subgroup profile to generate. "
             "dev-minimal (default): planner + builder, planner self-reviews. "
             "dev-standard: planner + 2 builders + reviewer, reviewer gate required. "
-            "test: planner + patrol, QA-only, no product code edits by default."
+            "test: planner + patrol, QA-only, no product code edits by default. "
+            "planner-only: planner self-contains all engineering (no builder); "
+            "provider/tool/auth configurable through project inputs."
         ),
     )
     args = parser.parse_args(argv)
