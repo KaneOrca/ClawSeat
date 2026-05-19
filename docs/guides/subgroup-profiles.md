@@ -55,7 +55,7 @@ Default: **dev-minimal**.
 
 ## Shared Invariants (all profiles)
 
-All three profiles inherit the same workflow invariants:
+All four profiles inherit the same workflow invariants:
 
 - **Validation branch**: `local review/latest` is the operator validation snapshot.
   Builder delivers a branch/commit; planner merges accepted work to local `review/latest`.
