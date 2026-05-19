@@ -76,6 +76,10 @@ def test_clawseat_minimal_template_dry_run_is_valid(tmp_path: Path) -> None:
             "--dry-run",
             "--project",
             "jj-minimal",
+            # Force install.sh to use the current repo root rather than
+            # redirecting to a fresher main worktree that may lack install_multi.sh
+            "--force-repo-root",
+            str(REPO),
         ],
         capture_output=True,
         text=True,
