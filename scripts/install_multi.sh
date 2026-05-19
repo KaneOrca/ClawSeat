@@ -27,13 +27,14 @@ SEED_TEMPLATE=""
 SEED_ARCHETYPE="auto"
 SEED_FORCE=0
 SEED_TMP_DIR=""
+SEED_PROFILE="dev-minimal"
 TEMPLATE_NAME="clawseat-minimal"
 
 usage() {
   cat <<EOF
 Usage: $0 --project <name> [--teams <csv>] [--repo-root <path>] [--dry-run]
        $0 --project <name> --upgrade-team <team> [--dry-run]
-       $0 --project <name> --seed-template multi-team-minimal [--teams <csv>] [--dry-run]
+       $0 --project <name> --seed-template multi-team-minimal [--profile dev-minimal|dev-standard|test|planner-only] [--teams <csv>] [--dry-run]
 
 Render v3 project.toml from approved config proposals.
 Prerequisite: \$HOME/.agents/tasks/<project>/_config-proposals/<team>__approved.yaml exists.
@@ -43,6 +44,14 @@ Flags:
                       Unknown team names hard-fail.
   --seed-template t   Seed approved proposals before rendering. Supported:
                       multi-team-minimal. Used by the clawseat-solo alias.
+  --profile p         Subgroup profile for seed. Default: dev-minimal.
+                      dev-minimal  : planner + builder, planner self-reviews (default).
+                      dev-standard : planner + 2 builders + reviewer, reviewer gate required.
+                      test         : planner + patrol, QA-only, no product code edits by default.
+                      planner-only : memory + planner(s), no builder; planner self-contains
+                                     diagnosis, implementation, testing, self-review, and closeout.
+                      All profiles: local review/latest validation, no push/no PR, CI opt-in,
+                      OpenClaw/Koder/Feishu/Lark as optional adapters, hot-plug without history loss.
   --template-name n   Template name to embed in project.toml.
   --seed-archetype a  auto | generic | cartooner (default: auto).
   --seed-force        Overwrite existing approved proposals when seeding.
@@ -63,6 +72,7 @@ while [ $# -gt 0 ]; do
     --seed-template) SEED_TEMPLATE="$2"; shift 2 ;;
     --seed-archetype) SEED_ARCHETYPE="$2"; shift 2 ;;
     --seed-force) SEED_FORCE=1; shift ;;
+    --profile) SEED_PROFILE="$2"; shift 2 ;;
     --template-name) TEMPLATE_NAME="$2"; shift 2 ;;
     --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -99,6 +109,7 @@ if [ -n "$SEED_TEMPLATE" ]; then
     "--output-dir" "$PROPOSALS_DIR"
     "--repo-root" "${REPO_ROOT_OVERRIDE:-$REPO_ROOT}"
     "--archetype" "$SEED_ARCHETYPE"
+    "--profile" "$SEED_PROFILE"
   )
   [ -n "$TEAMS_FILTER" ] && seed_args+=("--teams" "$TEAMS_FILTER")
   [ "$SEED_FORCE" -eq 1 ] && seed_args+=("--force")
