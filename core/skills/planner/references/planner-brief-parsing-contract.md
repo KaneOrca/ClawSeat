@@ -100,6 +100,13 @@ Only when all three resolve to PASS does planner close the brief:
   `task_done`, then claim the next team task. Do not notify memory per task.
   Notify memory only when the team queue is drained or the planner is blocked by
   memory/user authority. Memory owns final acceptance and commit/push.
+  **Empty-queue maintenance briefs**: when the queue drains, memory may queue
+  maintenance briefs (code quality, cleanup, modularization, bug scan). Planner
+  claims and processes them exactly as product briefs — same dispatch, fan-in,
+  acceptance, and closeout chain. Builder deliveries still wake planner only;
+  memory is notified only on queue-drained relay or authority blocker.
+  Memory-to-builder direct dispatch and builder-to-memory final closeout remain
+  unauthorized.
 - `planner_mode=quality_campaign` + `notify_policy=never_notify_memory`:
   update `quality-docs/QUALITY.md`, findings, missions, runs, and evidence;
   never notify memory directly. Memory pulls the quality gate when awakened.

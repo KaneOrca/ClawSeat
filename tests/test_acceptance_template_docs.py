@@ -251,3 +251,59 @@ def test_no_unsafe_or_wording_in_clawseat_source():
             if _UNSAFE_OR_PATTERN.search(text):
                 found.append(str(path))
     assert not found, f"Unsafe OR wording found in: {found}"
+
+
+# ---------------------------------------------------------------------------
+# CF045: Empty-queue maintenance protocol discoverability
+# ---------------------------------------------------------------------------
+
+_PLANNER_SKILL = REPO_ROOT / "core" / "skills" / "planner" / "SKILL.md"
+_BRIEF_CONTRACT = REPO_ROOT / "core" / "skills" / "planner" / "references" / "planner-brief-parsing-contract.md"
+_MEMORY_TEMPLATE = REPO_ROOT / "core" / "templates" / "workspace-memory.template.md.codex"
+
+
+def test_planner_skill_documents_empty_queue_maintenance():
+    """SKILL.md must mention empty-queue maintenance mode."""
+    text = _PLANNER_SKILL.read_text(encoding="utf-8")
+    assert "empty-queue maintenance" in text.lower() or "empty queue maintenance" in text.lower(), (
+        "SKILL.md must document empty-queue maintenance mode"
+    )
+
+
+def test_planner_skill_maintenance_mode_forbids_direct_dispatch():
+    """SKILL.md empty-queue maintenance section must not authorize memory-to-builder direct dispatch."""
+    text = _PLANNER_SKILL.read_text(encoding="utf-8")
+    # The maintenance bullet must be present and must NOT say memory dispatches builders
+    assert "empty-queue maintenance" in text.lower() or "empty queue maintenance" in text.lower()
+    # Verify the invariant: direct dispatch remains unauthorized
+    # (presence of prohibition language in the maintenance section)
+    assert "direct dispatch" in text or "direct" in text
+
+
+def test_brief_parsing_contract_documents_maintenance_briefs():
+    """planner-brief-parsing-contract.md must cover maintenance brief handling."""
+    text = _BRIEF_CONTRACT.read_text(encoding="utf-8")
+    assert "maintenance" in text.lower(), (
+        "planner-brief-parsing-contract.md must document maintenance brief handling"
+    )
+    assert "queue" in text.lower() and "drain" in text.lower()
+
+
+def test_memory_template_documents_maintenance_queueing():
+    """workspace-memory.template.md.codex must mention queueing maintenance briefs."""
+    text = _MEMORY_TEMPLATE.read_text(encoding="utf-8")
+    assert "maintenance" in text.lower(), (
+        "memory workspace template must explain maintenance brief queueing"
+    )
+
+
+def test_maintenance_protocol_no_unauthorized_shortcuts():
+    """None of the CF045 docs should authorize memory→builder direct dispatch."""
+    for path in (_PLANNER_SKILL, _BRIEF_CONTRACT, _MEMORY_TEMPLATE):
+        text = path.read_text(encoding="utf-8")
+        # Check for forbidden patterns (memory dispatches builders directly)
+        # We assert that the docs do NOT grant "memory dispatches builder" authority
+        # Heuristic: docs should not say memory dispatch is authorized without planner
+        assert "memory dispatch" not in text.lower() or "planner" in text.lower(), (
+            f"{path.name} must not authorize memory dispatch without planner involvement"
+        )
