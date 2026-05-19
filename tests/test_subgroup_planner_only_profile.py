@@ -294,3 +294,14 @@ def test_subgroup_guide_documents_planner_count():
     assert "--planner-count" in text, (
         "subgroup-profiles.md must document --planner-count flag"
     )
+
+
+def test_subgroup_guide_shared_invariants_says_four_not_three():
+    """Regression: Shared Invariants section must not say 'All three profiles' after CF050."""
+    text = SUBGROUP_GUIDE.read_text(encoding="utf-8")
+    assert "All three profiles" not in text, (
+        "subgroup-profiles.md must not say 'All three profiles' — planner-only is the fourth"
+    )
+    assert "All four profiles" in text, (
+        "subgroup-profiles.md Shared Invariants must say 'All four profiles'"
+    )
