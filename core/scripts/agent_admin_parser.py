@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -89,10 +90,26 @@ class ParserHooks:
     cmd_acceptance_run: Callable[[Any], int]
 
 
+def _openclaw_cli_enabled() -> bool:
+    """Whether OpenClaw / Feishu subcommands surface in --help output.
+
+    S3 (docs/architecture/openclaw-decoupling-map-20260518.md): controlled by
+    the ``CLAWSEAT_OPENCLAW`` environment variable. Any truthy value
+    (``1`` / ``true`` / ``yes`` / ``on``) makes the ``project bind`` and
+    ``project koder-bind`` subparsers visible in ``--help``; otherwise the
+    subparsers are still registered (so existing scripts and tests continue
+    to dispatch through them) but their help text is suppressed so a vanilla
+    ClawSeat install does not advertise OpenClaw plumbing.
+    """
+    val = os.environ.get("CLAWSEAT_OPENCLAW", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
 def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-admin")
     sub = parser.add_subparsers(dest="command", required=True)
     template_help = "Template name/path. Built-ins: clawseat-engineering, clawseat-creative, clawseat-solo."
+    _openclaw_help_visible = _openclaw_cli_enabled()
 
     migrate = sub.add_parser("migrate-legacy", help="Migrate legacy engineer/profile state.")
     migrate.add_argument("--force", action="store_true")
@@ -277,9 +294,15 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_layout_nested.set_defaults(func=hooks.cmd_project_layout_set)
 
     # C2: per-project binding SSOT — writes ~/.agents/tasks/<project>/PROJECT_BINDING.toml
+    # S3: help text gated on CLAWSEAT_OPENCLAW; the subparser stays registered
+    # so existing scripts continue to dispatch.
     project_bind_nested = project_sub.add_parser(
         "bind",
-        help="Write per-project binding (Feishu group / sender app / koder agent). See C2 guardrail.",
+        help=(
+            "Write per-project binding (Feishu group / sender app / koder agent). See C2 guardrail."
+            if _openclaw_help_visible
+            else argparse.SUPPRESS
+        ),
     )
     project_bind_nested.add_argument("--project", required=True)
     project_bind_nested.add_argument(
@@ -393,10 +416,16 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
     project_switch_identity_nested.set_defaults(func=hooks.cmd_project_switch_identity)
 
     # P1 layered-model: project koder-bind / seat list / validate (§3-§5).
+    # S3: help text gated on CLAWSEAT_OPENCLAW; the subparser stays registered
+    # so existing OpenClaw-bound projects keep dispatching through it.
     project_koder_bind_nested = project_sub.add_parser(
         "koder-bind",
-        help="Bind an OpenClaw tenant as this project's koder frontstage "
-             "(v0.4 layered model).",
+        help=(
+            "Bind an OpenClaw tenant as this project's koder frontstage "
+            "(v0.4 layered model)."
+            if _openclaw_help_visible
+            else argparse.SUPPRESS
+        ),
     )
     project_koder_bind_nested.add_argument("--project", required=True)
     project_koder_bind_nested.add_argument(
