@@ -123,7 +123,7 @@ the team loop unless it needs memory/user authority.
 | `brief.acceptance_criteria.*` | Memory is single source of truth (§4.7) |
 | `brief.objective` / `out_of_scope` / `constraints` | Memory-authored intent |
 | `brief.depends_on` | Enforced by queue helper |
-| `brief.fuzz_required` / `fuzz_spec` | Phase 3 will read |
+| `brief.fuzz_required` / `fuzz_spec` | Read by acceptance executor (`_maybe_run_fuzz` in acceptance_executor.py) |
 
 Modifying any of these is a §17 spec violation and reviewer must FAIL the
 chain. If planner judges a brief unrunnable, emit `task_bounced` event
