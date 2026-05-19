@@ -31,7 +31,7 @@ RUNTIME_DIR=""
 SECRET_FILE=""
 
 metadata="$(
-  python3 - "$AGENTS_ROOT" "$PROJECT" "$SEAT" <<'PY'
+  "${PYTHON3:-python3}" - "$AGENTS_ROOT" "$PROJECT" "$SEAT" <<'PY'
 from __future__ import annotations
 
 import shlex
@@ -110,7 +110,7 @@ env_value() {
   local file="$1"
   local key="$2"
   [[ -f "$file" ]] || return 1
-  python3 - "$file" "$key" <<'PY'
+  "${PYTHON3:-python3}" - "$file" "$key" <<'PY'
 from __future__ import annotations
 
 import shlex

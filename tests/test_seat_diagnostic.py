@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -106,6 +107,9 @@ def _run(home: Path, bin_dir: Path, *, project: str = "demo", seat: str = "build
     env["HOME"] = str(home)
     env["AGENTS_ROOT"] = str(home / ".agents")
     env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    # Ensure seat-diagnostic.sh uses the project Python (not ambient system python3
+    # which may lack tomllib under bash -lc login shell PATH reset)
+    env["PYTHON3"] = sys.executable
     return subprocess.run(
         ["bash", str(_SCRIPT), project, seat],
         cwd=_REPO,

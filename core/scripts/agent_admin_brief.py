@@ -367,7 +367,18 @@ def cmd_queue(args: argparse.Namespace) -> int:
             + str(args.objective).strip()
             + "\n\n"
             "## 验收说明\n\n"
-            "<待 memory 补全 mechanical/reviewer/operator 路由项>\n"
+            "<待 memory 补全 mechanical/reviewer/operator 路由项>\n\n"
+            "<!-- Acceptance authoring rules (CF043/CF044):\n"
+            "  - mechanical: must be machine-deterministic shell commands (binary exit code)\n"
+            "    - GOOD: 'bash -lc \"cd /path && python3 -m pytest tests -q -k filter\"'\n"
+            "    - AVOID: human-language qualifiers inside mechanical descriptions\n"
+            "      (executor cannot honor natural-language conditions, only exit codes)\n"
+            "    - For non-blocking baseline (full-suite probe): add diagnostic:true to the\n"
+            "      criterion dict, or pass --baseline-criteria N to acceptance run\n"
+            "  - reviewer: planner self-review or dedicated reviewer criteria\n"
+            "  - operator: questions answered manually by the human operator\n"
+            "  See docs/guides/acceptance-criteria.md for details.\n"
+            "-->\n"
         )
 
     # Fix #5: write to temp file, atomic rename ONLY after append succeeds.
