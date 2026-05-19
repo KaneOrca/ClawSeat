@@ -195,7 +195,14 @@ def test_audit_all_artifacts_present(tmp_path: Path) -> None:
     assert "all 3 artifacts present" in result.stdout
 
 
-def test_audit_consumed_missing(tmp_path: Path) -> None:
+def test_audit_consumed_missing_is_diagnostic_not_hard_failure(tmp_path: Path) -> None:
+    """CF047: .consumed absence is a diagnostic warning, not a hard failure.
+
+    When planner→memory receipt and DELIVERY are both present, the audit must
+    pass (exit 0) even if no incoming planner consumed sidecar exists.
+    The .consumed artifact is not reliably produced by all multi-team relay
+    paths (e.g. when --enforce-planner-self-closeout is not used).
+    """
     profile = _write_profile(
         tmp_path / "profile.toml",
         handoff_dir=str(tmp_path / "handoffs"),
@@ -208,8 +215,10 @@ def test_audit_consumed_missing(tmp_path: Path) -> None:
 
     result = _run(profile, "DJ-A2")
 
-    assert result.returncode != 0
-    assert ".consumed missing" in result.stdout
+    # CF047 relaxation: returncode must be 0 (PASS with diagnostic warning)
+    assert result.returncode == 0, f"consumed-missing must not block; got: {result.stdout}"
+    assert ".consumed missing" in result.stdout  # diagnostic is still emitted
+    assert "diagnostic" in result.stdout         # must be labelled as diagnostic
 
 
 def test_audit_receipt_missing(tmp_path: Path) -> None:
@@ -419,8 +428,12 @@ def test_team_scoped_planner_all_artifacts_present(tmp_path: Path) -> None:
     assert "all 3 artifacts present" in result.stdout
 
 
-def test_team_scoped_consumed_missing_is_hard_failure(tmp_path: Path) -> None:
-    """Missing .consumed receipt must still fail for team-scoped planner."""
+def test_team_scoped_consumed_missing_is_diagnostic_not_hard_failure(tmp_path: Path) -> None:
+    """CF047: .consumed absence is diagnostic (non-blocking) for team-scoped planner.
+
+    When planner→memory receipt and DELIVERY are both present, the audit passes
+    (exit 0) even without an incoming .consumed sidecar.
+    """
     planner_seat = "clawseat-core-planner"
     handoff_dir = tmp_path / "handoffs"
     workspace_root = tmp_path / "workspaces"
@@ -431,14 +444,53 @@ def test_team_scoped_consumed_missing_is_hard_failure(tmp_path: Path) -> None:
         planner_seat=planner_seat,
     )
     handoff_dir.mkdir(parents=True)
-    # Only the planner→memory receipt, no .consumed
+    # Only the planner→memory receipt + DELIVERY, no .consumed
     (handoff_dir / f"TS-A2__{planner_seat}__memory.json").write_text("{}", encoding="utf-8")
     _write_team_delivery(tmp_path / "tasks" / planner_seat, "TS-A2")
 
     result = _run_team(profile, "TS-A2")
 
-    assert result.returncode != 0
+    assert result.returncode == 0, f"consumed-missing must not block; got: {result.stdout}"
     assert ".consumed missing" in result.stdout
+    assert "diagnostic" in result.stdout
+
+
+def test_cv007_style_queue_drained_closeout_passes(tmp_path: Path) -> None:
+    """CF047 regression: valid queue-drained team-scoped closeout without .consumed sidecar.
+
+    Simulates the CV007 cartooner-vault-planner pattern:
+    - builder delivered to planner (.json exists, no .consumed sidecar)
+    - planner→memory receipt exists
+    - planner DELIVERY.md has correct task_id
+    → must PASS (exit 0) with consumed diagnostic, not hard-fail.
+    """
+    planner_seat = "cartooner-vault-planner"
+    handoff_dir = tmp_path / "handoffs"
+    workspace_root = tmp_path / "workspaces"
+    profile = _write_team_scoped_profile(
+        tmp_path / "profile.toml",
+        handoff_dir=str(handoff_dir),
+        workspace_root=str(workspace_root),
+        planner_seat=planner_seat,
+    )
+    handoff_dir.mkdir(parents=True)
+    # Builder→planner delivery exists but NOT consumed (no .consumed sidecar)
+    task = "cv007-vault-page-patch-resilience-smoke-20260519"
+    (handoff_dir / f"{task}__cartooner-vault-builder-core__{planner_seat}.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    # Planner→memory receipt IS present (final closeout)
+    (handoff_dir / f"{task}__{planner_seat}__memory.json").write_text("{}", encoding="utf-8")
+    _write_team_delivery(tmp_path / "tasks" / planner_seat, task)
+
+    result = _run_team(profile, task)
+
+    assert result.returncode == 0, (
+        f"CV007-style valid closeout must pass; got stdout={result.stdout!r}"
+    )
+    assert ".consumed missing" in result.stdout  # diagnostic emitted
+    assert "diagnostic" in result.stdout         # labelled as diagnostic
+    assert "2 authoritative artifacts present" in result.stdout
 
 
 def test_team_scoped_receipt_missing_is_hard_failure(tmp_path: Path) -> None:
