@@ -136,3 +136,59 @@ acceptance_criteria:
   operator:
     - "Closeout states ..."
 ```
+
+## Scope Guard Best Practices (CF049)
+
+Scope guards verify that no product UI/runtime files were changed by a
+ClawSeat maintenance task. They must be **machine-deterministic and portable**
+— not every host uses the same `grep` implementation.
+
+### Use Python-based scope guards (portable)
+
+```yaml
+- command: >-
+    bash -lc 'cd /path/to/cartooner && git diff --name-only review/latest...HEAD |
+    python3 -c "import sys; bad=[p.strip() for p in sys.stdin
+    if p.strip().startswith((\"apps/web/src/\",\"apps/web/electron/src/\"))
+    and not p.strip().startswith(\"apps/web/electron/vendor/clawseat/\")];
+    print(\"\\n\".join(bad)); sys.exit(1 if bad else 0)"'
+  description: "No Cartooner product UI/runtime source files changed."
+```
+
+### Avoid grep with regex lookbehind (not portable)
+
+```
+# WRONG — grep lookbehind is not portable across all grep implementations
+! git diff --name-only ... | grep -E "^apps/web/src/|^apps/web/electron/src/(?!.*vendor/clawseat)"
+```
+
+The lookbehind `(?!.*vendor/clawseat)` causes some `grep` versions to emit
+"repetition-operator operand invalid" or "invalid syntax" errors. Use the
+Python-based pattern instead, which runs with `sys.executable` and is fully
+portable.
+
+### Rule: scope guards are always hard-gating
+
+Do **not** apply `diagnostic: true` to scope guards. A changed product file
+is a real error, not unrelated baseline evidence.
+
+## Historical Queue Rows (CV002 Pattern)
+
+A `task_claimed` row can remain visibly open in `brief list --all` after
+the work is complete if:
+
+- The planner opened a repair child task (`cv002r`) rather than calling
+  `agent_admin brief done` or emitting `task_bounced`/`task_failed` on the
+  parent (`cv002`).
+- The queue state machine correctly records this as `task_claimed` because no
+  terminal event (`task_done`, `task_failed`, `task_bounced`) was ever appended
+  to the parent row.
+
+**This is expected behavior** (data artifact), not a tooling bug.
+
+- `brief list` (no flag) shows only `task_created` — hides historical rows.
+- `brief list --all` shows all non-terminal states including `task_claimed`.
+- The repair child's `task_done PASS` does **not** automatically close the
+  parent; the parent and child are independent queue entries.
+- To close the parent explicitly, use `agent_admin brief done` with memory or
+  operator authority; do not edit the queue ledger directly.
