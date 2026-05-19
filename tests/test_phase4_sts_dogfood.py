@@ -142,7 +142,13 @@ def test_install_multi_writes_team_ownership_sidecar(env_home):
     script = REPO_ROOT / "scripts" / "install_multi.sh"
     proc = subprocess.run(
         ["bash", str(script), "--project", project, "--teams", "core"],
-        env={**os.environ, "CLAWSEAT_REAL_HOME": str(env_home)},
+        env={
+            **os.environ,
+            "CLAWSEAT_REAL_HOME": str(env_home),
+            # Ensure install_multi.sh uses the project Python (not ambient
+            # system python3 which may lack tomllib under bash -lc login shell)
+            "PYTHON_BIN": sys.executable,
+        },
         capture_output=True,
         text=True,
     )
