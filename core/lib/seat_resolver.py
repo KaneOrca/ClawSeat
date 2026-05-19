@@ -42,6 +42,10 @@ from typing import Optional
 _THIS_DIR = str(Path(__file__).resolve().parent)
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent / "scripts")
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from _toml_compat import loads_safe as _toml_loads  # noqa: E402
 from real_home import real_user_home  # noqa: E402
 
 
@@ -59,9 +63,7 @@ def _openclaw_home_resolved() -> Path:
 
 def _load_toml(path: Path) -> Optional[dict]:
     try:
-        import tomllib
-
-        return tomllib.loads(path.read_text(encoding="utf-8"))
+        return _toml_loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
 
