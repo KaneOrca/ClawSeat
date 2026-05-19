@@ -1,10 +1,10 @@
 """_toml_compat — vendored TOML compatibility shim.
 
 Provides :func:`loads_safe` and :func:`load_safe` that work when neither
-``tomllib`` (Python 3.11+) nor ``tomli`` (third-party) is installed. A
-pure-Python regex fallback is used in that case, covering the simple
-``key = "value"`` and ``key = 'value'`` patterns that the ClawSeat vendored
-scripts actually read.
+``tomllib`` (Python 3.11+) nor ``tomli`` (third-party) is installed. A small
+pure-Python fallback is used in that case, covering the scalar, array, section,
+and inline-table shapes that ClawSeat runtime scripts read from project/profile
+TOML files.
 
 Import this module instead of importing ``tomllib`` / ``tomli`` directly so
 the desktop Electron runtime does not crash when it ships a Python build
@@ -21,7 +21,7 @@ Usage::
 """
 from __future__ import annotations
 
-import io
+import ast
 import re
 from typing import IO, Any
 
@@ -41,53 +41,181 @@ def _toml_module() -> Any:
     return None
 
 
-def _regex_loads(text: str) -> dict[str, Any]:
-    """Minimal regex-based TOML parser for simple key = "value" documents.
+def _strip_comment(line: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(line):
+        if quote:
+            if quote == '"' and char == "\\" and not escaped:
+                escaped = True
+                continue
+            if char == quote and not escaped:
+                quote = None
+            escaped = False
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char == "#":
+            return line[:index]
+    return line
 
-    Only handles top-level string, integer, and boolean scalar assignments.
-    Lists and tables are not supported — callers should only rely on this
-    fallback for the specific keys they need (e.g. ``session``, ``engineer``).
+
+def _balanced(value: str) -> bool:
+    quote: str | None = None
+    escaped = False
+    square = 0
+    curly = 0
+    for char in value:
+        if quote:
+            if quote == '"' and char == "\\" and not escaped:
+                escaped = True
+                continue
+            if char == quote and not escaped:
+                quote = None
+            escaped = False
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char == "[":
+            square += 1
+        elif char == "]":
+            square -= 1
+        elif char == "{":
+            curly += 1
+        elif char == "}":
+            curly -= 1
+    return quote is None and square == 0 and curly == 0
+
+
+def _split_top_level(text: str, delimiter: str = ",") -> list[str]:
+    parts: list[str] = []
+    quote: str | None = None
+    escaped = False
+    square = 0
+    curly = 0
+    start = 0
+    for index, char in enumerate(text):
+        if quote:
+            if quote == '"' and char == "\\" and not escaped:
+                escaped = True
+                continue
+            if char == quote and not escaped:
+                quote = None
+            escaped = False
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char == "[":
+            square += 1
+        elif char == "]":
+            square -= 1
+        elif char == "{":
+            curly += 1
+        elif char == "}":
+            curly -= 1
+        elif char == delimiter and square == 0 and curly == 0:
+            parts.append(text[start:index].strip())
+            start = index + 1
+    parts.append(text[start:].strip())
+    return [part for part in parts if part]
+
+
+def _unquote(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        try:
+            parsed = ast.literal_eval(value)
+            if isinstance(parsed, str):
+                return parsed
+        except Exception:
+            pass
+        return value[1:-1]
+    return value
+
+
+def _parse_value(raw: str) -> Any:
+    value = raw.strip().rstrip(",").strip()
+    if not value:
+        return ""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return _unquote(value)
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if re.match(r"^-?\d+$", value):
+        return int(value)
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [_parse_value(item) for item in _split_top_level(inner)]
+    if value.startswith("{") and value.endswith("}"):
+        inner = value[1:-1].strip()
+        table: dict[str, Any] = {}
+        if not inner:
+            return table
+        for item in _split_top_level(inner):
+            match = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.+)$", item)
+            if not match:
+                continue
+            table[match.group(1)] = _parse_value(match.group(2))
+        return table
+    return value
+
+
+def _section_dict(root: dict[str, Any], section: str | None) -> dict[str, Any]:
+    current = root
+    if not section:
+        return current
+    for part in section.split("."):
+        current = current.setdefault(part.strip(), {})
+    return current
+
+
+def _regex_loads(text: str) -> dict[str, Any]:
+    """Minimal TOML parser for ClawSeat runtime config fallback.
+
+    It intentionally covers only the TOML shapes ClawSeat reads at runtime:
+    strings, integers, booleans, string/scalar arrays, dotted sections, and
+    inline tables. It is not a general TOML implementation.
     """
     result: dict[str, Any] = {}
     current_section: str | None = None
+    pending_key: str | None = None
+    pending_value = ""
+
+    def assign(key: str, raw_value: str) -> None:
+        _section_dict(result, current_section)[key] = _parse_value(raw_value)
+
     for raw_line in text.splitlines():
-        line = raw_line.strip()
+        line = _strip_comment(raw_line).strip()
         if not line or line.startswith('#'):
+            continue
+        if pending_key is not None:
+            pending_value += " " + line
+            if _balanced(pending_value):
+                assign(pending_key, pending_value)
+                pending_key = None
+                pending_value = ""
             continue
         # Section header [section]
         sec_m = re.match(r'^\[([^\[\]]+)\]\s*$', line)
         if sec_m:
             current_section = sec_m.group(1).strip()
-            if current_section not in result:
-                result[current_section] = {}
+            _section_dict(result, current_section)
             continue
-        # Key = "value" or key = 'value'
-        kv_m = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')$', line)
+        kv_m = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.+)$', line)
         if kv_m:
-            k, v1, v2 = kv_m.group(1), kv_m.group(2), kv_m.group(3)
-            v = v1 if v1 is not None else (v2 if v2 is not None else '')
-            if current_section is None:
-                result[k] = v
+            key, value = kv_m.group(1), kv_m.group(2).strip()
+            if _balanced(value):
+                assign(key, value)
             else:
-                result[current_section][k] = v  # type: ignore[index]
-            continue
-        # Key = integer
-        int_m = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(-?\d+)$', line)
-        if int_m:
-            k, v_int = int_m.group(1), int(int_m.group(2))
-            if current_section is None:
-                result[k] = v_int
-            else:
-                result[current_section][k] = v_int  # type: ignore[index]
-            continue
-        # Key = boolean
-        bool_m = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(true|false)$', line)
-        if bool_m:
-            k, v_bool = bool_m.group(1), bool_m.group(2) == 'true'
-            if current_section is None:
-                result[k] = v_bool
-            else:
-                result[current_section][k] = v_bool  # type: ignore[index]
+                pending_key = key
+                pending_value = value
     return result
 
 
