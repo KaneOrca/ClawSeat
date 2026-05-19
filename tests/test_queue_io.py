@@ -162,3 +162,34 @@ def test_jsonl_format_is_valid(qpath):
             obj = json.loads(line)
             assert "seq" in obj
             assert "event_type" in obj
+
+
+def test_task_claimed_without_terminal_event_remains_claimed(qpath):
+    """CF049 regression: task_claimed without a terminal event stays task_claimed.
+
+    When a planner opens a repair child instead of formally closing the parent
+    (task_bounced / task_failed / task_done), the parent row remains task_claimed.
+    read_current_state must not silently absorb the parent into a terminal state.
+    """
+    # Parent task: created and claimed, but no terminal event
+    append_event(qpath, {"event_type": "task_created", "actor": "memory", "task_id": "parent", "brief_path": "b.md"})
+    append_event(qpath, {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "parent"})
+    # Repair child: created, claimed, in-progress, done
+    append_event(qpath, {"event_type": "task_created", "actor": "memory", "task_id": "parent-repair", "brief_path": "r.md"})
+    append_event(qpath, {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "parent-repair"})
+    append_event(qpath, {"event_type": "task_in_progress", "actor": "planner@claude", "task_id": "parent-repair"})
+    append_event(qpath, {"event_type": "task_done", "actor": "memory", "task_id": "parent-repair", "verdict": "PASS"})
+
+    state = read_current_state(qpath)
+
+    # Parent must remain task_claimed (no terminal event)
+    assert state["parent"].status == "task_claimed", (
+        "parent task without terminal event must stay task_claimed (data artifact, not tooling bug)"
+    )
+    # Repair child must be task_done
+    assert state["parent-repair"].status == "task_done"
+    # query_pending returns only task_created; task_claimed parent is NOT pending
+    from queue_io import query_pending
+    pending_ids = {ts.task_id for ts in query_pending(qpath)}
+    assert "parent" not in pending_ids, "task_claimed parent must not appear in query_pending"
+    assert "parent-repair" not in pending_ids

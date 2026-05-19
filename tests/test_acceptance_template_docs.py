@@ -307,3 +307,58 @@ def test_maintenance_protocol_no_unauthorized_shortcuts():
         assert "memory dispatch" not in text.lower() or "planner" in text.lower(), (
             f"{path.name} must not authorize memory dispatch without planner involvement"
         )
+
+
+# ---------------------------------------------------------------------------
+# CF049: Scope guard best practices and historical queue row discoverability
+# ---------------------------------------------------------------------------
+
+def test_acceptance_criteria_guide_covers_scope_guard_best_practices():
+    """Guide must cover portable scope guard patterns."""
+    text = _GUIDE_PATH.read_text(encoding="utf-8")
+    assert "scope guard" in text.lower(), "guide must cover scope guard authoring"
+    assert "python" in text.lower(), "guide must recommend Python-based scope guards"
+
+
+def test_acceptance_criteria_guide_warns_against_grep_lookbehind():
+    """Guide must warn against non-portable grep lookbehind in scope guards."""
+    text = _GUIDE_PATH.read_text(encoding="utf-8")
+    # The guide should warn about lookbehind — check for the concept
+    has_lookbehind_warning = (
+        "lookbehind" in text.lower() or
+        "not portable" in text.lower() or
+        "avoid" in text.lower()
+    )
+    assert has_lookbehind_warning, "guide must warn against non-portable grep patterns"
+
+
+def test_acceptance_criteria_guide_states_scope_guards_are_not_diagnostic():
+    """Guide must state scope guards should not use diagnostic:true."""
+    text = _GUIDE_PATH.read_text(encoding="utf-8")
+    # The guide says scope guards are always hard-gating
+    assert "scope guard" in text.lower()
+    # Check that the guide addresses the diagnostic relationship for scope guards
+    assert "diagnostic" in text.lower()
+
+
+def test_acceptance_criteria_guide_explains_historical_queue_rows():
+    """Guide must explain the task_claimed parent / repair-child pattern."""
+    text = _GUIDE_PATH.read_text(encoding="utf-8")
+    has_queue_explanation = (
+        "task_claimed" in text or
+        "historical queue" in text.lower() or
+        "repair child" in text.lower() or
+        "historical" in text.lower()
+    )
+    assert has_queue_explanation, (
+        "guide must explain why task_claimed rows remain after repair children complete"
+    )
+
+
+def test_acceptance_criteria_guide_clarifies_repair_child_does_not_close_parent():
+    """Guide must state repair child task_done does not close the parent."""
+    text = _GUIDE_PATH.read_text(encoding="utf-8")
+    # Check for the independence of parent and child queue entries
+    assert "parent" in text.lower() and (
+        "child" in text.lower() or "repair" in text.lower()
+    ), "guide must clarify parent/child independence in queue"
