@@ -308,3 +308,236 @@ def test_audit_reads_tasks_delivery_even_with_workspace_copy(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stdout
     assert "all 3 artifacts present" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# CF046: Team-scoped planner closeout tests
+# ---------------------------------------------------------------------------
+
+
+def _write_team_scoped_profile(
+    path: Path,
+    *,
+    handoff_dir: str,
+    workspace_root: str,
+    planner_seat: str = "clawseat-core-planner",
+) -> Path:
+    """Write a profile with a team-scoped planner seat (e.g. clawseat-core-planner)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workspace_root_path = Path(workspace_root)
+    workspace_root_path.mkdir(parents=True, exist_ok=True)
+    lines = [
+        'version = 1',
+        'profile_name = "test-team-profile"',
+        'template_name = "gstack-harness"',
+        'project_name = "test"',
+        f'repo_root = "{REPO}"',
+        f'tasks_root = "{path.parent / "tasks"}"',
+        f'workspace_root = "{workspace_root}"',
+        f'handoff_dir = "{handoff_dir}"',
+        f'project_doc = "{path.parent / "tasks" / "PROJECT.md"}"',
+        f'tasks_doc = "{path.parent / "tasks" / "TASKS.md"}"',
+        f'status_doc = "{path.parent / "tasks" / "STATUS.md"}"',
+        'send_script = "/bin/echo"',
+        'status_script = "/bin/echo"',
+        'patrol_script = "/bin/echo"',
+        'agent_admin = "/bin/echo"',
+        f'heartbeat_receipt = "{path.parent / "workspaces" / "koder" / "HEARTBEAT_RECEIPT.toml"}"',
+        f'seats = ["{planner_seat}", "memory"]',
+        'heartbeat_seats = []',
+        f'active_loop_owner = "{planner_seat}"',
+        f'default_notify_target = "{planner_seat}"',
+        'heartbeat_owner = "koder"',
+        'heartbeat_transport = "tmux"',
+        '',
+        '[seat_roles]',
+        f'"{planner_seat}" = "planner"',
+        '"memory" = "memory"',
+        '',
+        '[dynamic_roster]',
+        'enabled = false',
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for seat in (planner_seat, "memory", "koder"):
+        (path.parent / "workspaces" / seat).mkdir(parents=True, exist_ok=True)
+    tasks_dir = path.parent / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    for fname in ("STATUS.md", "PROJECT.md", "TASKS.md"):
+        (tasks_dir / fname).write_text("# header\n", encoding="utf-8")
+    return path
+
+
+def _write_team_handoff(handoff_dir: Path, task_id: str, planner_seat: str) -> None:
+    """Write the two handoff artifacts needed for a team-scoped planner closeout."""
+    handoff_dir.mkdir(parents=True, exist_ok=True)
+    # .consumed: any specialist delivering to planner (e.g. builder→planner consumed)
+    (handoff_dir / f"{task_id}__builder__{planner_seat}.json.consumed").write_text(
+        "consumed\n", encoding="utf-8"
+    )
+    # receipt: planner delivering to memory
+    (handoff_dir / f"{task_id}__{planner_seat}__memory.json").write_text(
+        "{}", encoding="utf-8"
+    )
+
+
+def _write_team_delivery(delivery_dir: Path, task_id: str) -> Path:
+    delivery = delivery_dir / "DELIVERY.md"
+    delivery.parent.mkdir(parents=True, exist_ok=True)
+    delivery.write_text(
+        f"task_id: {task_id}\nsource: planner\nreply_to: memory\n",
+        encoding="utf-8",
+    )
+    return delivery
+
+
+def _run_team(profile: Path, task_id: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--profile", str(profile), "--task-id", task_id],
+        capture_output=True,
+        text=True,
+        cwd=str(SCRIPT.parent),
+    )
+
+
+def test_team_scoped_planner_all_artifacts_present(tmp_path: Path) -> None:
+    """Team-scoped planner (clawseat-core-planner) closeout must pass with all artifacts."""
+    planner_seat = "clawseat-core-planner"
+    handoff_dir = tmp_path / "handoffs"
+    workspace_root = tmp_path / "workspaces"
+    profile = _write_team_scoped_profile(
+        tmp_path / "profile.toml",
+        handoff_dir=str(handoff_dir),
+        workspace_root=str(workspace_root),
+        planner_seat=planner_seat,
+    )
+    _write_team_handoff(handoff_dir, "TS-A1", planner_seat)
+    _write_team_delivery(tmp_path / "tasks" / planner_seat, "TS-A1")
+
+    result = _run_team(profile, "TS-A1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "all 3 artifacts present" in result.stdout
+
+
+def test_team_scoped_consumed_missing_is_hard_failure(tmp_path: Path) -> None:
+    """Missing .consumed receipt must still fail for team-scoped planner."""
+    planner_seat = "clawseat-core-planner"
+    handoff_dir = tmp_path / "handoffs"
+    workspace_root = tmp_path / "workspaces"
+    profile = _write_team_scoped_profile(
+        tmp_path / "profile.toml",
+        handoff_dir=str(handoff_dir),
+        workspace_root=str(workspace_root),
+        planner_seat=planner_seat,
+    )
+    handoff_dir.mkdir(parents=True)
+    # Only the planner→memory receipt, no .consumed
+    (handoff_dir / f"TS-A2__{planner_seat}__memory.json").write_text("{}", encoding="utf-8")
+    _write_team_delivery(tmp_path / "tasks" / planner_seat, "TS-A2")
+
+    result = _run_team(profile, "TS-A2")
+
+    assert result.returncode != 0
+    assert ".consumed missing" in result.stdout
+
+
+def test_team_scoped_receipt_missing_is_hard_failure(tmp_path: Path) -> None:
+    """Missing planner→memory receipt must still fail for team-scoped planner."""
+    planner_seat = "clawseat-core-planner"
+    handoff_dir = tmp_path / "handoffs"
+    workspace_root = tmp_path / "workspaces"
+    profile = _write_team_scoped_profile(
+        tmp_path / "profile.toml",
+        handoff_dir=str(handoff_dir),
+        workspace_root=str(workspace_root),
+        planner_seat=planner_seat,
+    )
+    handoff_dir.mkdir(parents=True)
+    # Only the consumed, no planner→memory receipt
+    (handoff_dir / f"TS-A3__builder__{planner_seat}.json.consumed").write_text(
+        "consumed\n", encoding="utf-8"
+    )
+    _write_team_delivery(tmp_path / "tasks" / planner_seat, "TS-A3")
+
+    result = _run_team(profile, "TS-A3")
+
+    assert result.returncode != 0
+    assert "receipt missing" in result.stdout
+
+
+def test_team_scoped_delivery_task_id_mismatch_is_hard_failure(tmp_path: Path) -> None:
+    """task_id mismatch in DELIVERY.md must still fail for team-scoped planner."""
+    planner_seat = "clawseat-core-planner"
+    handoff_dir = tmp_path / "handoffs"
+    workspace_root = tmp_path / "workspaces"
+    profile = _write_team_scoped_profile(
+        tmp_path / "profile.toml",
+        handoff_dir=str(handoff_dir),
+        workspace_root=str(workspace_root),
+        planner_seat=planner_seat,
+    )
+    _write_team_handoff(handoff_dir, "TS-A4", planner_seat)
+    _write_team_delivery(tmp_path / "tasks" / planner_seat, "TS-WRONG")  # wrong task_id
+
+    result = _run_team(profile, "TS-A4")
+
+    assert result.returncode != 0
+    assert "mismatch" in result.stdout or "missing" in result.stdout
+
+
+def test_legacy_planner_still_accepted_with_team_scoped_profile(tmp_path: Path) -> None:
+    """Legacy planner seat in seat_roles is still supported.
+
+    Regression: even when planner_seat='planner' in seat_roles, artifacts
+    under the 'planner' workspace must still pass.
+    """
+    handoff_dir = tmp_path / "handoffs"
+    workspace_root = tmp_path / "workspaces"
+    profile = _write_team_scoped_profile(
+        tmp_path / "profile.toml",
+        handoff_dir=str(handoff_dir),
+        workspace_root=str(workspace_root),
+        planner_seat="planner",  # legacy seat name
+    )
+    _write_team_handoff(handoff_dir, "TS-A5", "planner")
+    _write_team_delivery(tmp_path / "tasks" / "planner", "TS-A5")
+
+    result = _run_team(profile, "TS-A5")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "all 3 artifacts present" in result.stdout
+
+
+def test_resolve_planner_seats_team_scoped() -> None:
+    """_resolve_planner_seats returns team-scoped seat before legacy fallback."""
+    module = _load_script_module()
+
+    class FakeProfile:
+        seat_roles = {"clawseat-core-planner": "planner", "memory": "memory"}
+
+    seats = module._resolve_planner_seats(FakeProfile())
+    assert "clawseat-core-planner" in seats
+    assert "planner" in seats  # legacy fallback always present
+    assert seats.index("clawseat-core-planner") < seats.index("planner")
+
+
+def test_resolve_planner_seats_legacy_only() -> None:
+    """_resolve_planner_seats falls back to 'planner' when no seat_roles provided."""
+    module = _load_script_module()
+
+    class FakeProfile:
+        seat_roles = {}
+
+    seats = module._resolve_planner_seats(FakeProfile())
+    assert "planner" in seats
+
+
+def test_resolve_planner_seats_no_attribute() -> None:
+    """_resolve_planner_seats is safe when profile lacks seat_roles attribute."""
+    module = _load_script_module()
+
+    class FakeProfile:
+        pass
+
+    seats = module._resolve_planner_seats(FakeProfile())
+    assert "planner" in seats

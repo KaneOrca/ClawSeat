@@ -49,6 +49,27 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _resolve_planner_seats(profile: object) -> list[str]:
+    """Return ordered list of planner seat names to check.
+
+    Prefers team-scoped planner seats from profile.seat_roles (roles
+    'planner' or 'planner-dispatcher') then appends the legacy 'planner'
+    fallback so both naming conventions are covered.
+    """
+    planner_roles = {"planner", "planner-dispatcher"}
+    seat_roles: dict = getattr(profile, "seat_roles", None) or {}
+    team_planners = [
+        str(seat)
+        for seat, role in seat_roles.items()
+        if str(role).lower() in planner_roles
+    ]
+    # Always append legacy 'planner' so old single-team receipts still pass.
+    # De-duplicate while preserving team-scoped order first.
+    if "planner" not in team_planners:
+        team_planners.append("planner")
+    return team_planners
+
+
 def main() -> int:
     args = parse_args()
     profile = load_profile(_expand_path(args.profile))
@@ -57,24 +78,64 @@ def main() -> int:
         raise SystemExit("profile missing handoff_dir")
 
     task_key = sanitize_name(args.task_id)
+    planner_seats = _resolve_planner_seats(profile)
     errors: list[str] = []
 
-    consumed_matches = list(handoff_dir.glob(f"{task_key}__*__planner.json.consumed"))
+    # Check 1: consumed receipt — any planner seat delivered to
+    consumed_matches: list[Path] = []
+    for seat in planner_seats:
+        consumed_matches.extend(handoff_dir.glob(f"{task_key}__*__{sanitize_name(seat)}.json.consumed"))
     if not consumed_matches:
-        errors.append(f".consumed missing: {handoff_dir / f'{task_key}__*__planner.json.consumed'}")
-
-    receipt_path = handoff_dir / f"{task_key}__planner__memory.json"
-    if not receipt_path.is_file():
-        errors.append(f"planner→memory receipt missing: {receipt_path}")
-
-    delivery_path = Path(profile.delivery_path("planner"))  # type: ignore[attr-defined]
-    actual_task_id = _delivery_task_id(delivery_path)
-    if actual_task_id is None:
-        errors.append(f"planner DELIVERY.md missing: {delivery_path}")
-    elif actual_task_id != args.task_id:
+        seats_tried = ", ".join(planner_seats)
         errors.append(
-            f"planner DELIVERY.md task_id mismatch: expected {args.task_id}, got {actual_task_id}"
+            f".consumed missing: searched {handoff_dir} for"
+            f" {task_key}__*__{{{seats_tried}}}.json.consumed"
         )
+
+    # Check 2: planner→memory receipt — any planner seat sent to memory
+    receipt_path: Path | None = None
+    for seat in planner_seats:
+        candidate = handoff_dir / f"{task_key}__{sanitize_name(seat)}__memory.json"
+        if candidate.is_file():
+            receipt_path = candidate
+            break
+    if receipt_path is None:
+        seats_tried = ", ".join(planner_seats)
+        errors.append(
+            f"planner→memory receipt missing: searched {handoff_dir} for"
+            f" {task_key}__{{{seats_tried}}}__memory.json"
+        )
+
+    # Check 3: planner DELIVERY.md with matching task_id — any planner seat workspace
+    delivery_found = False
+    delivery_error: str | None = None
+    for seat in planner_seats:
+        try:
+            dp = Path(profile.delivery_path(seat))  # type: ignore[attr-defined]
+        except Exception:
+            continue
+        actual_task_id = _delivery_task_id(dp)
+        if actual_task_id is None:
+            # File missing for this seat; try next
+            delivery_error = f"planner DELIVERY.md missing: {dp}"
+            continue
+        if actual_task_id != args.task_id:
+            delivery_error = (
+                f"planner DELIVERY.md task_id mismatch: expected {args.task_id},"
+                f" got {actual_task_id} (in {dp})"
+            )
+            # task_id mismatch is an error for this seat but keep checking others
+            continue
+        delivery_found = True
+        break
+    if not delivery_found:
+        if delivery_error:
+            errors.append(delivery_error)
+        else:
+            seats_tried = ", ".join(planner_seats)
+            errors.append(
+                f"planner DELIVERY.md missing: checked seats {{{seats_tried}}}"
+            )
 
     if errors:
         for line in errors:
