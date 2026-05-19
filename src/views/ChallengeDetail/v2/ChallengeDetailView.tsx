@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Edit3 } from 'lucide-react';
 import { PretextButton } from '../../../components/PretextButton';
 import { LabyrinthPhysic } from '../../../components/text-physics/LabyrinthPhysic';
@@ -15,8 +15,18 @@ export const ChallengeDetailView: React.FC = () => {
   const textareaRef = useObstacle() as React.RefObject<HTMLTextAreaElement>;
   const folioObstacleRef = useObstacle() as React.RefObject<HTMLDivElement>;
   const transcriptionObstacleRef = useObstacle() as React.RefObject<HTMLDivElement>;
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window === 'undefined' ? false : window.innerWidth < 768));
   const folioBounds = { x: 750, y: 50, w: 250, h: 400 };
   const transcriptionBounds = { x: 0, y: 450, w: 700, h: 300 };
+
+  useEffect(() => {
+    const update = () => {
+      setIsMobileLayout(window.innerWidth < 768);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const liveManuscriptText = useMemo(() => {
     const core = (safeStr(challenge.title).toUpperCase() + '. ' + t('challengeDetail.body') + ' ' + t('challengeDetail.marginalia') + ' ').repeat(2);
@@ -31,7 +41,7 @@ export const ChallengeDetailView: React.FC = () => {
       minHeight: '100vh',
       background: tokens.colors.manuscript.bg,
       color: tokens.colors.manuscript.ink,
-      padding: '4rem',
+      padding: isMobileLayout ? '2rem 1rem' : '4rem',
       fontFamily: tokens.fonts.manuscript,
       position: 'relative',
       overflowX: 'hidden'
@@ -58,8 +68,14 @@ export const ChallengeDetailView: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ maxWidth: '1000px', margin: '0 auto', position: 'relative' }}>
-        <div style={{ position: 'relative', minHeight: '800px' }}>
+      <div style={{ maxWidth: '1000px', margin: isMobileLayout ? '0' : '0 auto', position: 'relative' }}>
+        <div style={{
+          position: isMobileLayout ? 'static' : 'relative',
+          minHeight: isMobileLayout ? 'auto' : '800px',
+          display: isMobileLayout ? 'flex' : 'block',
+          flexDirection: 'column',
+          gap: isMobileLayout ? '1.5rem' : 0,
+        }}>
           <LabyrinthPhysic
             text={liveManuscriptText}
             opacity={locale === 'zh-CN' ? 0.2 : 0.18}
@@ -72,11 +88,12 @@ export const ChallengeDetailView: React.FC = () => {
           <div
             ref={folioObstacleRef}
             style={{
-            position: 'absolute',
-            left: folioBounds.x,
-            top: folioBounds.y,
-            width: folioBounds.w,
-            padding: '2rem',
+            position: isMobileLayout ? 'relative' : 'absolute',
+            left: isMobileLayout ? 'auto' : folioBounds.x,
+            top: isMobileLayout ? 'auto' : folioBounds.y,
+            width: isMobileLayout ? '100%' : folioBounds.w,
+            maxWidth: isMobileLayout ? '100%' : undefined,
+            padding: isMobileLayout ? '1.5rem' : '2rem',
             border: '1px solid rgba(0,0,0,0.1)',
             background: tokens.colors.manuscript.bg,
             boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
@@ -97,15 +114,17 @@ export const ChallengeDetailView: React.FC = () => {
           <div
             ref={transcriptionObstacleRef}
             style={{
-            position: 'absolute',
-            left: transcriptionBounds.x,
-            top: transcriptionBounds.y,
-            width: transcriptionBounds.w,
+            position: isMobileLayout ? 'relative' : 'absolute',
+            left: isMobileLayout ? 'auto' : transcriptionBounds.x,
+            top: isMobileLayout ? 'auto' : transcriptionBounds.y,
+            width: isMobileLayout ? '100%' : transcriptionBounds.w,
+            maxWidth: isMobileLayout ? '100%' : undefined,
             zIndex: 10,
             background: 'rgba(253, 252, 240, 0.8)',
             backdropFilter: 'blur(4px)',
-            padding: '2rem',
-            borderLeft: `4px solid ${tokens.colors.manuscript.ink}`
+            padding: isMobileLayout ? '1.5rem' : '2rem',
+            borderLeft: isMobileLayout ? 'none' : `4px solid ${tokens.colors.manuscript.ink}`,
+            borderTop: isMobileLayout ? `4px solid ${tokens.colors.manuscript.ink}` : 'none'
           }}>
             <h3 data-functional-text="true" style={{ fontFamily: tokens.fonts.mono, fontSize: '12px', color: tokens.colors.manuscript.dim, textTransform: 'uppercase', marginBottom: '1rem' }}>{t('challengeDetail.v2.transcription_active')}</h3>
             <textarea

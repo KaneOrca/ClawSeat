@@ -22,6 +22,7 @@ const SCROLL_PREDICT_FACTOR = 1.5;
 const JITTER_AMPLITUDE = 8;
 const FREQ_FACTOR_LOW = 0.6;
 const FREQ_FACTOR_HIGH = 1.4;
+const FLASH_LOG_CAP = 100;
 
 // Aggressive LOD: scale cell size by DPI and viewport width
 function getCellSize(): { w: number; h: number } {
@@ -224,6 +225,16 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
   const mousePushEnabledRef = useRef(mousePushEnabled);
   useEffect(() => { mousePushEnabledRef.current = mousePushEnabled; }, [mousePushEnabled]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      cellSizeRef.current = getCellSize();
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Stable render callback — deps are only refs, never changes identity
   const render = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, time: number) => {
     ctx.clearRect(0, 0, width, height);
@@ -266,7 +277,6 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
     const waveAmplitude = env.waveAmplitude ?? 60;
     if (import.meta.env.DEV && waveAmplitude > 60) {
       const flashLog = (window as any).__arenaFlashLog__ || [];
-      (window as any).__arenaFlashLog__ = flashLog;
       flashLog.push({
         time: Date.now(),
         waveAmplitude,
@@ -274,6 +284,10 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
         source: 'BitmaskPhysic',
         stack: new Error().stack?.split('\n').slice(2, 4).join(' -> ') ?? '',
       });
+      if (flashLog.length > FLASH_LOG_CAP) {
+        flashLog.splice(0, flashLog.length - FLASH_LOG_CAP);
+      }
+      (window as any).__arenaFlashLog__ = flashLog;
     }
     const baseAlpha = env.opacity ?? baseOpacity;
     const transition = env.effects;
@@ -443,7 +457,7 @@ export const BitmaskPhysic: React.FC<BitmaskPhysicProps> = ({
     }
 
     // ── Diagnostic alignment lines ────────────────────────────────────
-    if (env.debugAlignment) {
+    if (import.meta.env.DEV && env.debugAlignment) {
       ctx.lineWidth = 1;
       // Apply same prediction offset as mask sampling
       const diagPredX = (vp.scrollVelX + recoilVelX) * SCROLL_PREDICT_FACTOR;
