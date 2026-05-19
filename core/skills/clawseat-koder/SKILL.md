@@ -2,7 +2,9 @@
 name: clawseat-koder
 description: >
   OpenClaw Koder bridge for translating ClawSeat decision payloads and routing
-  Feishu replies through the approved privacy boundary. Use when sending
+  Feishu replies through the approved privacy boundary. **Optional adapter**
+  (see core/optional-adapters/README.md, S5): needed only when the koder
+  overlay is applied to an OpenClaw frontstage agent. Use when sending
   operator-facing decision summaries, processing Feishu responses, or syncing
   OpenClaw agent messages with ClawSeat memory. Also use when a handoff needs
   Koder-compatible wording or reply parsing. Covers payload translation,

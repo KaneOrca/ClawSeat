@@ -1,4 +1,9 @@
-"""Feishu / Lark messaging helpers — extracted from _common.py."""
+"""Feishu / Lark messaging helpers — extracted from _common.py.
+
+**Optional adapter** — listed in core/optional-adapters/README.md (S5).
+Side-effect free unless invoked; callers (e.g. send_delegation_report) must
+gate their own dispatch when no Feishu binding is configured.
+"""
 from __future__ import annotations
 
 import datetime

@@ -2,6 +2,9 @@
 # heartbeat_beacon.sh <project>
 # Reads ~/.agents/heartbeat/<project>.toml and sends [HEARTBEAT_TICK] via lark-cli.
 # Designed to run from launchd; errors are logged to stderr but do not crash the runner.
+#
+# Optional adapter — listed in core/optional-adapters/README.md (S5).
+# Install the launchd plist only when Feishu is enabled for the project.
 set -euo pipefail
 
 project="${1:?usage: heartbeat_beacon.sh <project>}"

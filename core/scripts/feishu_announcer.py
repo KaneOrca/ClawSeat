@@ -1,5 +1,10 @@
 """feishu_announcer.py — C11 first subscriber on the state.db events bus.
 
+**Optional adapter** — listed in core/optional-adapters/README.md (S5).
+The announcer is only meaningful when at least one project is bound to a
+Feishu group; otherwise --watch short-circuits (see S2) and --once reports
+"no pending events".
+
 Reads events with type in ('task.completed', 'chain.closeout') where
 feishu_sent IS NULL, builds Feishu delegation-report envelopes, and sends
 them via _feishu.send_feishu_user_message. Sets feishu_sent timestamp on
