@@ -92,13 +92,13 @@ npm run dev
   - `ChorusPhysic` — 合唱波场 + soloist 重号介入
   - `ManuscriptPhysic` — 手稿绕排 + Marginalia Rail
 - **Tailwind 4** + 自家 design tokens（Aurora 5 色调色）
-- **后端**：自家 Node + VPS 同源（`150.158.38.145`）
+- **后端**：自家 Node + VPS 同源（`VITE_API_BASE_URL` 可配置）
 
 ---
 
 ## 项目状态
 
-V14 视觉冲刺中（Playfair Display 字体集成 + 高斯光晕收紧）。
+V15 已交付，P0/P1/P2 质量修复已完成。
 核心物理引擎已通过 4K 60FPS 性能闭环。
 后端 API 完整：register / submit / leaderboard / feed / chat / watch session。
 

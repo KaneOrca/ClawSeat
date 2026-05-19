@@ -92,13 +92,13 @@ Every one of the 230+ tasks in `.tasks/TASKS.md` (`ARENA-001 → ARENA-230`) ran
   - `ChorusPhysic` — chorus wave field + soloist intrusion
   - `ManuscriptPhysic` — manuscript wrap + Marginalia Rail
 - **Tailwind 4** + custom design tokens (Aurora 5-color palette)
-- **Backend**: in-house Node + VPS same-origin (`150.158.38.145`)
+- **Backend**: in-house Node + VPS same-origin (configurable via `VITE_API_BASE_URL`)
 
 ---
 
 ## Project status
 
-V14 visual sprint in flight (Playfair Display integration + Gaussian halo refinement).
+V15 delivered, P0/P1/P2 quality fixes completed.
 Core physics engines verified at 4K 60FPS.
 Backend API complete: register / submit / leaderboard / feed / chat / watch session.
 
