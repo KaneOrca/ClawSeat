@@ -103,16 +103,32 @@ launcher_read_active_session_id() {
   active_file="$(launcher_active_session_file "$seat")" || return 1
   [[ -f "$active_file" ]] || return 1
   python3 - "$active_file" <<'PY'
-from pathlib import Path
+import re
 import sys
+from pathlib import Path
+
+# Only return session IDs that look like real Codex UUIDs (019xxxxx-... format)
+# or standard UUIDs. Plain words like "session-123" are stale/corrupt → ignore
+# and clear the file so the next launch starts a fresh session instead of
+# repeatedly trying to resume a non-existent one.
+_VALID_SESSION_RE = re.compile(
+    r'^[0-9a-f]{8,}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
 
 path = Path(sys.argv[1])
 try:
     text = path.read_text(encoding="utf-8", errors="replace").strip()
 except OSError:
     raise SystemExit(1)
-if text:
+if text and _VALID_SESSION_RE.match(text):
     print(text)
+elif text:
+    # Invalid format — clear the file so future launches don't repeat the error
+    try:
+        path.write_text("", encoding="utf-8")
+    except OSError:
+        pass
 PY
 }
 
