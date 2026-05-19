@@ -1,5 +1,10 @@
 # V2 词汇漂移审计 (2026-04-26)
 
+> **Historical (2026-05-19)** — predates OpenClaw / Feishu decoupling work
+> (see [`docs/architecture/openclaw-decoupling-map-20260518.md`](../architecture/openclaw-decoupling-map-20260518.md)).
+> Vocabulary entries treating koder / Feishu / OpenClaw as default runtime
+> describe the optional-adapter path now.
+
 > **目的**: 把 v1 → v2 重构期间未同步的代码、文档、配置漂移点列成总账，等批次 1 完成后统一派单清扫（issue #15）。
 >
 > **范围**: `clawseat-v2` worktree 全仓（不含 `.agent/ops/install-nonint/` 历史归档与 `tests/` 内部用例）。

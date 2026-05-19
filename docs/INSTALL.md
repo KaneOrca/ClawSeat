@@ -2,6 +2,13 @@
 
 > 🇨🇳 [中文版本 / Chinese version](INSTALL.zh-CN.md)
 
+> **Minimum install (no OpenClaw, no Feishu)** — ClawSeat installs and runs as
+> a CLI-only / file-only multi-agent control plane. Phase 4 OpenClaw bindings
+> (Feishu group, koder agent, lark-cli) are **optional**. Skip them when you
+> only want local team orchestration. See
+> [`docs/architecture/openclaw-decoupling-map-20260518.md`](architecture/openclaw-decoupling-map-20260518.md)
+> for the decoupling map.
+
 ## TL;DR
 
 New project? Run:

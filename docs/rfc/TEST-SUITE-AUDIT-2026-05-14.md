@@ -1,5 +1,10 @@
 # Test Suite Audit - 2026-05-14
 
+> **Historical (2026-05-19)** — predates OpenClaw / Feishu decoupling
+> (see [`docs/architecture/openclaw-decoupling-map-20260518.md`](../architecture/openclaw-decoupling-map-20260518.md)).
+> Categories referencing koder / Feishu / OpenClaw fixture coverage describe
+> the optional-adapter path now.
+
 ## Context
 
 The suite grew through several ClawSeat architecture versions, so the first

@@ -1,5 +1,12 @@
 # ClawSeat Architecture
 
+> **2026-05-19** — ClawSeat installs and runs as a standalone team-orchestration
+> layer. OpenClaw, Feishu/Lark, and the koder reverse channel are **optional
+> adapters**, not mandatory dependencies. Sections below that describe them
+> still apply when those adapters are bound, but a vanilla install needs none
+> of them. See [`docs/architecture/openclaw-decoupling-map-20260518.md`](architecture/openclaw-decoupling-map-20260518.md)
+> for the decoupling map and follow-up slices.
+
 ## Goal
 
 ClawSeat is a reusable skill-first multi-agent control plane for running

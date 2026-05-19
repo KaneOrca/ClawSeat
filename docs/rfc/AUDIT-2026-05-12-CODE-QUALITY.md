@@ -1,5 +1,10 @@
 # ClawSeat 代码质量审计 (2026-05-12)
 
+> **Historical (2026-05-19)** — predates OpenClaw / Feishu decoupling
+> (see [`docs/architecture/openclaw-decoupling-map-20260518.md`](../architecture/openclaw-decoupling-map-20260518.md)).
+> Findings naming koder / Feishu / OpenClaw assume mandatory dependency
+> at audit time; those couplings are now optional adapters.
+
 > **目的**: 对 ClawSeat v0.2.1 全仓做一次代码质量、可维护性、死代码、重复冗余、冲突逻辑的系统审计，作为下一阶段集中清理 + 修复 PR 的依据。
 >
 > **范围**: `/Users/ywf/coding/ClawSeat` main 分支（不含 `tests/__pycache__/`、`.gitignore` 已排除项、`adapters/projects/openclaw/` 上游集成层）。

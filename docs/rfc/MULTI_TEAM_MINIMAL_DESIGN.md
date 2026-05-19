@@ -1,5 +1,9 @@
 # MULTI_TEAM_MINIMAL Design Notes
 
+> **Historical (2026-05-19)** — predates OpenClaw / Feishu decoupling
+> (see [`docs/architecture/openclaw-decoupling-map-20260518.md`](../architecture/openclaw-decoupling-map-20260518.md)).
+> Koder / Feishu / OpenClaw mentions describe the optional-adapter path.
+
 Status: draft-agreed context snapshot
 Last updated: 2026-05-14
 

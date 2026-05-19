@@ -1,5 +1,10 @@
 # Skill Catalog
 
+> **2026-05-19** — entries describing seats as "OpenClaw … agent" reflect the
+> historical default-OpenClaw layout. ClawSeat now runs without OpenClaw as
+> the default path; the OpenClaw / Feishu rows describe the optional-adapter
+> tier. See [`docs/architecture/openclaw-decoupling-map-20260518.md`](../../docs/architecture/openclaw-decoupling-map-20260518.md).
+
 Generated foundation catalog for planner routing and skill discovery. Run `python3 core/scripts/rebuild_skill_catalog.py --force --update-md` to refresh this snapshot and the lazy JSON cache at `~/.agents/cache/skill-catalog.json`.
 
 ## Source Notes

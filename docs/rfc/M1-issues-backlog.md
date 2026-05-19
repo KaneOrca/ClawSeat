@@ -1,5 +1,10 @@
 # M1 Issues Backlog
 
+> **Historical (2026-05-19)** — predates OpenClaw / Feishu decoupling
+> (see [`docs/architecture/openclaw-decoupling-map-20260518.md`](../architecture/openclaw-decoupling-map-20260518.md)).
+> Issues mentioning koder / Feishu / OpenClaw describe the optional-adapter
+> path now.
+
 > 所有 v2 实施过程中发现的问题（含 operator 反馈、ancestor 自检发现、install-memory 报告的 ARCH-VIOLATION 等），等 install team 4 seat 齐后**统一派单修复**。
 
 - **Worktree**: `/Users/ywf/coding/.claude/worktrees/clawseat-v2/`

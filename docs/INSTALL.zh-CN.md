@@ -2,6 +2,11 @@
 
 > 🇬🇧 [English version](INSTALL.md)
 
+> **最小安装（不需要 OpenClaw / 飞书）** — ClawSeat 默认按"CLI-only / 文件-only"
+> 安装跑起来。第 4 阶段的 OpenClaw 绑定（飞书群 / koder agent / lark-cli）
+> 是**可选适配器**，本机只想要研发团队编排时全部可以跳过。详见
+> [`docs/architecture/openclaw-decoupling-map-20260518.md`](architecture/openclaw-decoupling-map-20260518.md)。
+
 ## TL;DR（快速开始）
 
 新项目运行：

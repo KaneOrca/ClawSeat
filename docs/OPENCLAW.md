@@ -1,8 +1,12 @@
-# OpenClaw × ClawSeat
+# OpenClaw × ClawSeat（可选适配器）
 
-> ClawSeat 不是一个独立 agent 框架。它是 [OpenClaw](https://github.com/openclaw/openclaw)
-> 的本地研发前台——把 OpenClaw 的 agent 控制面整合进你 Mac 上 workers/memories iTerm 窗口的那一层。
-> 要理解 ClawSeat，先理解 OpenClaw。
+> **2026-05-19 reframe** — ClawSeat 自身是独立的多 seat 控制面，CLI-only / 文件-only
+> 即可安装运行。OpenClaw 是 ClawSeat 支持的可选远程通道适配器之一（飞书 /
+> Lark / 多通道桥接）。本文档原本以"ClawSeat 是 OpenClaw 前台"立论，现在
+> 应作为 **OpenClaw 适配器集成参考** 阅读，而不是 ClawSeat 必读章节。
+> 解耦总图见 [`docs/architecture/openclaw-decoupling-map-20260518.md`](architecture/openclaw-decoupling-map-20260518.md)。
+>
+> 如果你不需要 Feishu / Lark / 远程通道，整个 OpenClaw 集成可以跳过。
 
 ## OpenClaw 是什么
 

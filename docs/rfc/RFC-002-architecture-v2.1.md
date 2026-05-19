@@ -1,5 +1,10 @@
 # RFC-002 — ClawSeat Architecture v2.1
 
+> **Historical (2026-05-19)** — predates the OpenClaw / Feishu decoupling
+> work tracked in [`docs/architecture/openclaw-decoupling-map-20260518.md`](../architecture/openclaw-decoupling-map-20260518.md).
+> References to koder, Feishu, and OpenClaw describe the optional-adapter
+> path; treat as background, not current guidance for a vanilla install.
+
 > **Status**: Draft (2026-04-26, by machine-memory)
 > **Supersedes/Extends**: RFC-001 §1-§3（保留 v2 self-contained project 设计；本 RFC 加 L1-L3 分层 + decision escalation + privacy KB + koder 职责）
 > **Owner**: machine-memory（架构）+ project-memory team（实施）

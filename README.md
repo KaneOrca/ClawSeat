@@ -1,8 +1,14 @@
 # ClawSeat
 
-## OpenClaw × gstack × tmux = 一支住在你 Mac 里的 AI 研发团队
+## 一支住在你 Mac 里的 AI 研发团队
 
 不上云。不订阅。在你的 Mac 上。
+
+> **2026-05-19** — ClawSeat 默认是 CLI-only / 文件-only 的多 seat 编排层。
+> OpenClaw / gstack / tmux 都是可选适配器：tmux 用来开窗口，OpenClaw 接飞书
+> 等远程通道，gstack 提供工程方法论 skill。这三个都不安装也能跑（见
+> [`docs/architecture/openclaw-decoupling-map-20260518.md`](docs/architecture/openclaw-decoupling-map-20260518.md)）。
+> 下面的章节描述启用 OpenClaw / gstack 时的能力，是**可选适配器** reference。
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)](docs/INSTALL.md)
