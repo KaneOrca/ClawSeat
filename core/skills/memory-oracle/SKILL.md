@@ -48,35 +48,41 @@ Memory 被动读取的知识来自各席位 domain KB：
 
 ## KB 触发点 (v0.8)
 
-Memory dispatches a task via `dispatch_task.py` 时，SHOULD 调用
-`clawseat-intake/scripts/decision-log.py append` 记录派工决策到
-当前 project 的 `~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
+Memory 向 v3 multi-team planner 派任务时，必须通过 `agent_admin.py brief queue`
+写入队列。Memory SHOULD 同步调用 `clawseat-intake/scripts/decision-log.py append`
+记录派工决策到当前 project 的
+`~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
 Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Memory 的职责。
 
-## Dispatch Protocol & Absent-Planner Fallback
+## v3 Planner Dispatch Protocol & Absent-Planner Fallback
 
-Canonical task dispatch is the gstack harness helper:
+Canonical v3 memory→planner dispatch is the brief queue helper:
 
 ```bash
-python3 core/skills/gstack-harness/scripts/dispatch_task.py --profile ~/.agents/profiles/<project>-profile-dynamic.toml --source memory --target <seat> --task-id <id> --title "<title>" --objective "<objective>" --test-policy EXTEND --reply-to planner
+python3 core/scripts/agent_admin.py brief queue \
+  --project <project> \
+  --team <team> \
+  --task-id <task_id> \
+  --objective "<one-line objective>" \
+  --seats-required planner
 ```
 
-The real CLI requires `--profile`, one of `--target` or `--target-role`,
-`--task-id`, `--title`, `--objective`, and `--test-policy
-{UPDATE,FREEZE,EXTEND,N/A}`. It writes the handoff record under
-`~/.agents/tasks/<project>/patrol/handoffs/<task_id>__<source>__<target>.json`
-and then notifies the target unless `--no-notify` is used. The profile path is
-not optional: missing `~/.agents/profiles/<project>-profile-dynamic.toml` will
-break dispatch before the task has durable context.
+The queue CLI writes `tasks/<project>/<team>/brief/<task_id>.md`, appends a
+`task_created` event to `tasks.queue.jsonl`, and wakes the owning planner.
+Do not hand-write a brief and then call `dispatch_task.py` for v3
+memory→planner work; that creates split-brain state between handoff receipts
+and the team queue.
 
-`send-and-verify.sh` does not replace `dispatch_task.py`:
+`dispatch_task.py` remains valid for planner→specialist handoffs and legacy v2
+workflows. It is not the v3 memory→planner entry point.
+
+`send-and-verify.sh` does not replace the queue command:
 
 - `send-and-verify.sh` is a wake-up transport for an existing seat. It sends
   text and verifies the tmux input buffer did not strand it.
-- It does not create a handoff record, does not define `task_id`, and does not
+- It does not create a queue event, does not define `task_id`, and does not
   tell the target where to deliver.
-- Use it when planner or patrol is already present and owns the actual
-  `dispatch_task.py` call.
+- Use it only when a durable queued task already exists and the wake hook failed.
 - Do not use it to send work directly from memory to builder when planner or
   the dynamic profile is absent.
 
@@ -86,22 +92,22 @@ Absent-planner fallback:
    not chain orchestration.
 2. Do not hand-write `TODO.md` as a replacement for the canonical handoff.
 3. Escalate to the operator with a concise blocked report: planner unavailable,
-   dispatch blocked, likely causes include missing profile-dynamic.toml,
+   queue wake failed, likely causes include missing profile-dynamic.toml,
    planner crash, or missing tmux session.
 4. If the root cause is
    `FileNotFoundError: <project>-profile-dynamic.toml`, fix the project profile
    first, normally with `bash ~/ClawSeat/scripts/install.sh --project <project>
    --reinstall`, then rerun the dispatch.
 
-Verify Ack 4-step after dispatch:
+Verify queued dispatch:
 
-1. `ls -lat ~/.agents/tasks/<project>/patrol/handoffs/`
-2. `tmux capture-pane -t $(agentctl session-name <seat> --project <project>) -p | tail -30`
-3. `cat ~/.agents/tasks/<project>/<seat>/DELIVERY.md`
-4. `git fetch <remote> <branch> && git log <remote>/<branch> --oneline -5`
+1. `agent_admin.py brief planner-status --project <project>`
+2. Confirm the target team has the new `latest=<task_id> [task_created|task_claimed|task_in_progress]`.
+3. If wake failed, inspect the planner pane and the target team's `tasks.queue.jsonl`.
+4. After queue-drained relay, read planner `DELIVERY.md`, acceptance records, and `review/latest`.
 
-Treat missing handoff, silent target pane, absent delivery, or absent remote
-commit as an unacknowledged dispatch until proven otherwise.
+Treat missing queue state, silent target pane, absent delivery, or missing
+`review/latest` evidence as an unacknowledged task until proven otherwise.
 
 ## Canonical Brief Queue Entry (v3 multi-team, memory 必走步)
 

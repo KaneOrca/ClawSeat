@@ -111,11 +111,11 @@ def render_protocol_reminder_lines(
     if normalized in {"project-memory", "memory-oracle"}:
         lines.extend([
             "1. **Status Snapshot**: user wake / pre-dispatch -> `agent_admin.py brief planner-status --project <project>`; manual queue scans only if it fails or debugging needs detail",
-            "2. **Dispatch**: `agent_admin task create` -> workflow.md -> `dispatch_task.py` -> send-and-verify",
-            "3. **Verify Ack**: every dispatch -> 4-step check (handoffs .consumed / pane / DELIVERY / git fetch)",
-            "4. **Chain end**: accept planner relay -> write KB summary (experience retention)",
+            "2. **v3 Dispatch**: create planner work with `agent_admin.py brief queue --project <project> --team <team> --task-id <id>`; do not hand-write brief + `dispatch_task.py`",
+            "3. **Verify Queue**: after queueing, read `planner-status`; only debug with raw queue files if the snapshot is unclear",
+            "4. **Chain end**: accept queue-drained planner relay -> read DELIVERY / acceptance / review/latest -> write KB summary",
             "5. **Privacy**: network queries -> clawseat-privacy check first; no PII/secret/token in KB",
-            "6. **Don't**: dispatch specialist directly (use planner); no code / config / seat lifecycle",
+            "6. **Don't**: dispatch downstream seats directly; `dispatch_task.py` is planner->downstream or legacy v2, not memory->planner in v3",
         ])
     elif normalized in {"planner", "planner-dispatcher"}:
         lines.extend([

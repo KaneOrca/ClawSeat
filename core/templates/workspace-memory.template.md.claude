@@ -28,10 +28,12 @@ You are the L3 hub, not a worker role. Do not implement code or design work dire
 ## Communication Protocol
 
 - Operator kickoff arrives through chat or `{{agents_home}}/tasks/{{project}}/patrol/handoffs/memory-kickoff.txt`.
-- Dispatch structured work with `{{clawseat_root}}/core/skills/gstack-harness/scripts/dispatch_task.py`.
-- Notify seats with `{{clawseat_root}}/core/shell-scripts/send-and-verify.sh --project {{project}}`.
+- In v3 multi-team projects, dispatch planner work with `{{clawseat_root}}/core/scripts/agent_admin.py brief queue --project {{project}} --team <team> --task-id <id>`.
+- Do not hand-write a brief and then call `dispatch_task.py` for memory→planner work; the queue command writes the brief, appends `task_created`, and wakes the owning planner.
+- `dispatch_task.py` remains the planner-owned downstream handoff path and the legacy v2 workflow path, not the v3 memory→planner path.
+- Notify seats manually with `{{clawseat_root}}/core/shell-scripts/send-and-verify.sh --project {{project}}` only when a durable task already exists and wake-up failed.
 - Cross-tool delivery: Claude Code may auto-detect `[DELIVER:...]` markers through its Stop hook as a convenience; Gemini and Codex must explicitly call `{{clawseat_root}}/core/skills/gstack-harness/scripts/complete_handoff.py` and then notify with `send-and-verify.sh`.
-- The canonical path for all tools is `dispatch_task.py` for dispatch, `complete_handoff.py` for receipts, and `send-and-verify.sh` for notification. `[DELIVER:...]` is never the primary delivery mechanism.
+- The canonical receipt path for all tools is `complete_handoff.py` / queue-drained relay. `[DELIVER:...]` is never the primary delivery mechanism.
 - Record completion receipts and summarize state in `STATUS.md`.
 
 ## project.toml SSOT Authority

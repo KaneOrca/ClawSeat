@@ -57,3 +57,14 @@ def test_workspace_protocol_reminder_is_before_read_first_for_specialist() -> No
     assert "complete_handoff.py" in text
     assert "NOT optional" in text
     assert "Fan-out trigger" in text
+
+
+def test_memory_protocol_reminder_prioritizes_v3_brief_queue() -> None:
+    text = _render("memory-oracle", engineer_id="memory", tool="codex")
+
+    assert "## ⚠ Protocol Reminder" in text
+    assert "`agent_admin.py brief planner-status --project <project>`" in text
+    assert "`agent_admin.py brief queue --project <project> --team <team> --task-id <id>`" in text
+    assert "do not hand-write brief + `dispatch_task.py`" in text
+    assert "dispatch_task.py` is planner->downstream or legacy v2" in text
+    assert "agent_admin task create` -> workflow.md -> `dispatch_task.py`" not in text

@@ -143,6 +143,8 @@ def test_memory_workspace_all_supported_tools_render_tool_specific_contracts() -
         assert title in text
         assert path_label in text
         assert tool_path in text
+        assert "agent_admin.py brief queue" in text
+        assert "not the v3 memory→planner path" in text
         assert "dispatch_task.py" in text
         assert "complete_handoff.py" in text
         assert "send-and-verify.sh" in text
