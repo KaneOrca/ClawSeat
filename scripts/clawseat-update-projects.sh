@@ -107,6 +107,39 @@ is_frozen() {
   return 1
 }
 
+active_workspace_roots() {
+  local project_dir="$1"
+  local workspace_dir="$2"
+  local project_toml="$project_dir/project.toml"
+
+  if [ -f "$project_toml" ]; then
+    "$PYTHON_BIN" - "$project_toml" "$workspace_dir" <<'PY' || true
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore
+
+project_toml = Path(sys.argv[1])
+workspace_dir = Path(sys.argv[2])
+
+try:
+    data = tomllib.loads(project_toml.read_text(encoding="utf-8"))
+except Exception:
+    data = {}
+
+engineers = data.get("engineers") or []
+if isinstance(engineers, list):
+    for engineer in engineers:
+        seat = str(engineer).strip()
+        if seat:
+            print(workspace_dir / seat)
+PY
+  fi
+}
+
 # Resolve escalation auth profile for --apply mode
 if [ "$DRY_RUN" = 0 ] && [ -z "${CLAWSEAT_ENGINEER_PROFILE:-}" ]; then
   for candidate in \
@@ -151,10 +184,21 @@ for proj_dir in "$PROJECTS_DIR"/*/; do
     continue
   fi
 
+  marker_roots=()
+  while IFS= read -r active_root; do
+    [ -n "$active_root" ] && marker_roots+=("$active_root")
+  done < <(active_workspace_roots "$proj_dir" "$ws_dir")
+  if [ "${#marker_roots[@]}" -eq 0 ]; then
+    marker_roots=("$ws_dir")
+  fi
+
   ws_sha=$(
-    find "$ws_dir" -type f \
-      \( -name 'AGENTS.md' -o -name 'CLAUDE.md' -o -name 'GEMINI.md' \) \
-      ! -path '*/.backup-*/*' -print0 \
+    for marker_root in "${marker_roots[@]}"; do
+      [ -d "$marker_root" ] || continue
+      find "$marker_root" -type f \
+        \( -name 'AGENTS.md' -o -name 'CLAUDE.md' -o -name 'GEMINI.md' \) \
+        ! -path '*/.backup-*/*' -print0
+    done \
       | while IFS= read -r -d '' marker_file; do
           grep -oh 'rendered_from_clawseat_sha=[a-f0-9]\+' "$marker_file" 2>/dev/null || true
         done \

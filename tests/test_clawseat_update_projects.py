@@ -39,6 +39,16 @@ def _seed_project(env_home: Path, project: str, rendered_sha: str | None) -> Non
         (ws / "CLAUDE.md").write_text("# fake workspace without marker\n", encoding="utf-8")
 
 
+def _write_project_toml(env_home: Path, project: str, engineers: list[str]) -> None:
+    project_dir = env_home / ".agents" / "projects" / project
+    project_dir.mkdir(parents=True, exist_ok=True)
+    seats = ", ".join(f'"{seat}"' for seat in engineers)
+    (project_dir / "project.toml").write_text(
+        f'version = 1\nname = "{project}"\nengineers = [{seats}]\n',
+        encoding="utf-8",
+    )
+
+
 def test_help_works():
     proc = subprocess.run(["bash", str(SCRIPT), "--help"], capture_output=True, text=True)
     assert proc.returncode == 0
@@ -86,6 +96,34 @@ def test_dry_run_ignores_workspace_backup_markers(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "fresh" in r.stdout
     assert "fake-with-backup" in r.stdout
+
+
+def test_dry_run_ignores_retired_workspace_markers_when_project_toml_lists_active_seats(tmp_path):
+    """Stale retired seat dirs must not keep a project stale after active seats refresh."""
+    head_sha = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    project = "fake-with-retired"
+    _write_project_toml(tmp_path, project, ["memory"])
+    active = tmp_path / ".agents" / "workspaces" / project / "memory"
+    active.mkdir(parents=True, exist_ok=True)
+    (active / "CLAUDE.md").write_text(
+        f"<!-- rendered_from_clawseat_sha={head_sha} -->\n# active\n",
+        encoding="utf-8",
+    )
+    retired = tmp_path / ".agents" / "workspaces" / project / "retired-planner"
+    retired.mkdir(parents=True, exist_ok=True)
+    (retired / "AGENTS.md").write_text(
+        "<!-- rendered_from_clawseat_sha=abc123def4560000000000000000000000000000 -->\n# retired\n",
+        encoding="utf-8",
+    )
+
+    r = _run(tmp_path, "--project", project)
+
+    assert r.returncode == 0, r.stderr
+    assert "fresh" in r.stdout
+    assert project in r.stdout
 
 
 def test_dry_run_reports_unknown_when_marker_missing(tmp_path):
