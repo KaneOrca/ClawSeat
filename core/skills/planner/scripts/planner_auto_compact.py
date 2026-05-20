@@ -29,14 +29,11 @@ if str(CORE_LIB) not in sys.path:
     sys.path.insert(0, str(CORE_LIB))
 
 from profile_loader_v3 import ProfileV3Error, load_profile_v3  # noqa: E402
-from queue_io import read_current_state  # noqa: E402
+from queue_io import queue_state_label, read_current_state  # noqa: E402
 from real_home import real_user_home  # noqa: E402
 
 
 MARKER = "[memory: compact-me]"
-NON_TERMINAL = frozenset({"task_created", "task_claimed", "task_in_progress", "task_waiting_for"})
-
-
 @dataclass(frozen=True)
 class WorkspaceHint:
     project: str = ""
@@ -166,8 +163,9 @@ def _write_snapshot(
     planner_seat: str,
     reason: str,
     queue_path: Path,
+    queue_status: str,
     latest,
-    active: list[object],
+    open_tasks: list[object],
     marker_present: bool,
 ) -> Path:
     root = _runtime_root(project, team)
@@ -194,7 +192,7 @@ def _write_snapshot(
         f"- reason: {reason}",
         f"- marker_present: {str(marker_present).lower()}",
         f"- queue_path: {queue_path}",
-        f"- queue_status: {'drained' if not active else 'active'}",
+        f"- queue_status: {queue_status}",
     ]
     if latest:
         lines.extend(
@@ -210,10 +208,10 @@ def _write_snapshot(
                 f"- review_latest_hash: {_review_latest_hash(project)}",
             ]
         )
-    if active:
+    if open_tasks:
         lines.append("")
-        lines.append("## Active Tasks")
-        for item in active:
+        lines.append("## Open Tasks")
+        for item in open_tasks:
             lines.append(f"- {item.task_id}: {item.status} (seq={item.last_seq})")
     if receipts:
         lines.append("")
@@ -260,13 +258,14 @@ def run(args: argparse.Namespace) -> int:
 
     state = read_current_state(queue)
     latest = _latest_state(state)
-    active = sorted(
-        [ts for ts in state.values() if ts.status in NON_TERMINAL],
+    open_tasks = sorted(
+        [ts for ts in state.values() if ts.status != "task_done"],
         key=lambda ts: ts.last_seq,
     )
+    queue_status = queue_state_label(state)
     marker_present = MARKER in args.text
 
-    if active:
+    if open_tasks:
         if not args.dry_run:
             _write_snapshot(
                 project=project,
@@ -274,11 +273,15 @@ def run(args: argparse.Namespace) -> int:
                 planner_seat=planner_seat,
                 reason="marker_active_queue" if marker_present else "active_queue",
                 queue_path=queue,
+                queue_status=queue_status,
                 latest=latest,
-                active=active,
+                open_tasks=open_tasks,
                 marker_present=marker_present,
             )
-        print(f"COMPACT_SKIP reason=queue_not_drained project={project} team={team} active={len(active)}")
+        print(
+            f"COMPACT_SKIP reason=queue_not_drained project={project} team={team} "
+            f"open={len(open_tasks)} queue_status={queue_status}"
+        )
         return 0
 
     if latest is None:
@@ -311,8 +314,9 @@ def run(args: argparse.Namespace) -> int:
                 planner_seat=planner_seat,
                 reason=reason,
                 queue_path=queue,
+                queue_status=queue_status,
                 latest=latest,
-                active=active,
+                open_tasks=open_tasks,
                 marker_present=marker_present,
             )
 

@@ -158,6 +158,31 @@ class TestTeamQueueIsDrained:
         ]))
         assert _team_queue_is_drained(queue, "T1") is False
 
+    def test_failed_sibling_not_drained(self, tmp_path, monkeypatch):
+        from queue_io import append_event
+
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_profile(tmp_path, project="p", team="t")
+        _write_brief_file(tmp_path, project="p", team="t", task_id="T1")
+        _write_brief_file(tmp_path, project="p", team="t", task_id="T2")
+        queue = _enqueue_task(tmp_path, "p", "t", "T1")
+        _enqueue_task(tmp_path, "p", "t", "T2")
+        append_event(queue, {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "T2"})
+        append_event(queue, {"event_type": "task_in_progress", "actor": "planner@claude", "task_id": "T2"})
+        append_event(queue, {
+            "event_type": "task_failed",
+            "actor": "planner@claude",
+            "task_id": "T2",
+            "verdict": "FAIL",
+            "fail_reason": "mechanical failed",
+        })
+        parser = build_parser()
+        monkeypatch.setattr(brief_mod, "_do_relay_complete_handoff", lambda *a, **kw: None)
+        cmd_done(parser.parse_args([
+            "done", "--project", "p", "--team", "t", "--task-id", "T1", "--actor", "planner@claude",
+        ]))
+        assert _team_queue_is_drained(queue, "T1") is False
+
 
 # ---------------------------------------------------------------------------
 # Integration tests for cmd_done relay hook

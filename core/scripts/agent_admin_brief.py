@@ -38,6 +38,8 @@ for _p in (str(_CORE_LIB), str(_CORE_SCRIPTS)):
 from queue_io import (  # noqa: E402
     QueueError,
     append_event,
+    queue_is_drained,
+    queue_state_label,
     query_pending,
     read_current_state,
 )
@@ -279,9 +281,6 @@ def _send_script_path() -> Path:
 # Queue-drained relay helpers (notify_policy=queue_drained_only)
 # ---------------------------------------------------------------------------
 
-_DRAINED_NON_TERMINAL = frozenset({
-    "task_created", "task_waiting_for", "task_claimed", "task_in_progress"
-})
 _COMPLETE_HANDOFF_SCRIPT = (
     _REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "complete_handoff.py"
 )
@@ -344,17 +343,12 @@ def _team_notify_policy(project: str, team: str) -> str:
 
 
 def _team_queue_is_drained(queue: Path, current_task_id: str) -> bool:
-    """True if no task other than current_task_id is in a non-terminal state."""
+    """True if every task other than current_task_id is task_done."""
     try:
         state = read_current_state(queue)
     except Exception:  # noqa: BLE001
         return False
-    for task_id, ts in state.items():
-        if task_id == current_task_id:
-            continue
-        if ts.status in _DRAINED_NON_TERMINAL:
-            return False
-    return True
+    return queue_is_drained(state, ignore_task_id=current_task_id)
 
 
 def _relay_receipt_exists(project: str, task_id: str, planner_seat: str) -> bool:
@@ -874,23 +868,9 @@ def cmd_show(args: argparse.Namespace) -> int:
 # Planner status snapshot helpers
 # ---------------------------------------------------------------------------
 
-_NON_TERMINAL_STATUSES = frozenset({
-    "task_created", "task_waiting_for", "task_claimed", "task_in_progress"
-})
-
-
 def _queue_state_label(tasks: dict) -> str:
     """Derive a single human-readable queue state label from all tasks."""
-    if not tasks:
-        return "empty"
-    statuses = {ts.status for ts in tasks.values()}
-    if "task_in_progress" in statuses:
-        return "active"
-    if "task_claimed" in statuses:
-        return "claimed"
-    if statuses & {"task_created", "task_waiting_for"}:
-        return "waiting"
-    return "drained"
+    return queue_state_label(tasks)
 
 
 def _latest_task_in_queue(tasks: dict):

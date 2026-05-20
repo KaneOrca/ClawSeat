@@ -179,6 +179,30 @@ class TestQueueStateLabel:
         }
         assert _queue_state_label(tasks) == "active"
 
+    def test_failed_task_reports_blocked(self):
+        from queue_io import TaskState
+        tasks = {
+            "T1": TaskState(task_id="T1", status="task_failed", last_seq=4,
+                            last_event_ts="2026-01-01T00:00:00+00:00", actor="planner@claude"),
+        }
+        assert _queue_state_label(tasks) == "blocked"
+
+    def test_bounced_task_reports_blocked(self):
+        from queue_io import TaskState
+        tasks = {
+            "T1": TaskState(task_id="T1", status="task_bounced", last_seq=4,
+                            last_event_ts="2026-01-01T00:00:00+00:00", actor="planner@claude"),
+        }
+        assert _queue_state_label(tasks) == "blocked"
+
+    def test_reset_task_reports_blocked(self):
+        from queue_io import TaskState
+        tasks = {
+            "T1": TaskState(task_id="T1", status="task_reset", last_seq=4,
+                            last_event_ts="2026-01-01T00:00:00+00:00", actor="operator"),
+        }
+        assert _queue_state_label(tasks) == "blocked"
+
 
 # ---------------------------------------------------------------------------
 # planner_status_snapshot integration tests
@@ -302,6 +326,22 @@ class TestPlannerStatusSnapshot:
         team_b = next(r for r in rows if r["team"] == "team-b")
         assert team_b["queue_state"] == "waiting"
         assert team_b["latest_task_status"] == "task_created"
+
+    def test_failed_task_reports_blocked_state(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_multi_profile(tmp_path, project="p")
+        _seed_queue(tmp_path, "p", "team-a", [
+            {"event_type": "task_created", "actor": "memory", "task_id": "T1",
+             "brief_path": "b/T1.md", "parent_task_id": None, "depends_on": []},
+            {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "T1"},
+            {"event_type": "task_in_progress", "actor": "planner@claude", "task_id": "T1"},
+            {"event_type": "task_failed", "actor": "planner@claude", "task_id": "T1",
+             "verdict": "FAIL", "fail_reason": "mechanical failed"},
+        ])
+        rows = planner_status_snapshot("p")
+        team_a = next(r for r in rows if r["team"] == "team-a")
+        assert team_a["queue_state"] == "blocked"
+        assert team_a["latest_task_status"] == "task_failed"
 
     def test_notify_policy_reported(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))

@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Mapping
 
 
 VALID_EVENT_TYPES = frozenset(
@@ -34,6 +34,12 @@ VALID_EVENT_TYPES = frozenset(
         "task_reset",
     }
 )
+
+QUEUE_ACTIVE_STATUSES = frozenset({"task_in_progress"})
+QUEUE_CLAIMED_STATUSES = frozenset({"task_claimed"})
+QUEUE_WAITING_STATUSES = frozenset({"task_created", "task_waiting_for"})
+QUEUE_BLOCKED_STATUSES = frozenset({"task_failed", "task_bounced", "task_reset"})
+QUEUE_DONE_STATUSES = frozenset({"task_done"})
 
 VALID_TRANSITIONS: dict[str, frozenset[str]] = {
     # source state -> allowed next event_type
@@ -315,6 +321,39 @@ def read_current_state(queue_path: Path | str) -> dict[str, TaskState]:
 def query_pending(queue_path: Path | str) -> list[TaskState]:
     """Tasks currently in task_created state (claimable)."""
     return [ts for ts in read_current_state(queue_path).values() if ts.status == "task_created"]
+
+
+def queue_state_label(tasks: Mapping[str, TaskState]) -> str:
+    """Return the operator-facing state of a collapsed team queue.
+
+    ``drained`` is intentionally narrow: every current task must be
+    ``task_done``. Failed, bounced, and reset tasks still need attention, so
+    they are reported as ``blocked`` instead of looking complete.
+    """
+    if not tasks:
+        return "empty"
+    statuses = {ts.status for ts in tasks.values()}
+    if statuses & QUEUE_ACTIVE_STATUSES:
+        return "active"
+    if statuses & QUEUE_CLAIMED_STATUSES:
+        return "claimed"
+    if statuses & QUEUE_WAITING_STATUSES:
+        return "waiting"
+    if statuses & QUEUE_BLOCKED_STATUSES:
+        return "blocked"
+    if statuses <= QUEUE_DONE_STATUSES:
+        return "drained"
+    return "mixed"
+
+
+def queue_is_drained(tasks: Mapping[str, TaskState], *, ignore_task_id: str = "") -> bool:
+    """True when every non-ignored current task is ``task_done``."""
+    for task_id, task in tasks.items():
+        if ignore_task_id and task_id == ignore_task_id:
+            continue
+        if task.status != "task_done":
+            return False
+    return True
 
 
 def query_claimed_by(queue_path: Path | str, actor: str) -> list[TaskState]:

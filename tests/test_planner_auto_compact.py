@@ -72,6 +72,18 @@ def _write_queue(home: Path, *, final_status: str = "task_done") -> Path:
                 "verdict": "PASS",
             }
         )
+    elif final_status == "task_failed":
+        events.append(
+            {
+                "event_type": "task_failed",
+                "event_ts": "2026-05-20T00:03:00+00:00",
+                "seq": 4,
+                "actor": "team-planner@claude",
+                "task_id": "task-1",
+                "verdict": "FAIL",
+                "fail_reason": "mechanical failed",
+            }
+        )
     queue.write_text("\n".join(json.dumps(e, sort_keys=True) for e in events) + "\n", encoding="utf-8")
     return queue
 
@@ -147,7 +159,7 @@ def test_auto_compact_skips_active_queue_but_writes_snapshot(tmp_path: Path) -> 
     proc = _run(tmp_path, final_status="task_in_progress")
 
     assert proc.returncode == 0, proc.stderr
-    assert "COMPACT_SKIP reason=queue_not_drained project=p team=t active=1" in proc.stdout
+    assert "COMPACT_SKIP reason=queue_not_drained project=p team=t open=1 queue_status=active" in proc.stdout
     assert not (tmp_path / "send.log").exists()
     snapshot = (
         tmp_path
@@ -161,3 +173,25 @@ def test_auto_compact_skips_active_queue_but_writes_snapshot(tmp_path: Path) -> 
         / "latest.md"
     )
     assert "- queue_status: active" in snapshot.read_text(encoding="utf-8")
+
+
+def test_auto_compact_skips_failed_queue_but_writes_blocked_snapshot(tmp_path: Path) -> None:
+    proc = _run(tmp_path, final_status="task_failed")
+
+    assert proc.returncode == 0, proc.stderr
+    assert "COMPACT_SKIP reason=queue_not_drained project=p team=t open=1 queue_status=blocked" in proc.stdout
+    assert not (tmp_path / "send.log").exists()
+    snapshot = (
+        tmp_path
+        / "home"
+        / ".agents"
+        / "tasks"
+        / "p"
+        / "t"
+        / "runtime"
+        / "planner-compact"
+        / "latest.md"
+    )
+    text = snapshot.read_text(encoding="utf-8")
+    assert "- queue_status: blocked" in text
+    assert "- task-1: task_failed (seq=4)" in text
