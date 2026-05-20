@@ -651,13 +651,17 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
     if not isinstance(scaling_policy, dict):
         scaling_policy = {}
 
+    seat_override = overrides.get(seat_id) if isinstance(overrides.get(seat_id), dict) else {}
+    seat_display_name = str(seat_override.get("display_name") or "").strip()
+    seat_label = f"`{seat_display_name}` (`{seat_id}`)" if seat_display_name and seat_display_name != seat_id else f"`{seat_id}`"
+
     lines = [
         "## Team Scope",
         "",
         f"- Profile: `{profile_path}`",
         f"- Project mode: `multi`",
         f"- Your team: `{team_name}`",
-        f"- Your seat: `{seat_id}` (`{current_role or 'role not declared'}`)",
+        f"- Your seat: {seat_label} (`{current_role or 'role not declared'}`)",
         f"- Team type: `{team_type}`",
         f"- Planner mode: `{planner_mode}`",
         f"- Notify policy: `{notify_policy}`",
@@ -702,8 +706,14 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
         ]
         if capabilities:
             details.append("capabilities: " + ", ".join(f"`{item}`" for item in capabilities))
+        managed_dn = str(override.get("display_name") or "").strip()
+        managed_label = (
+            f"`{managed_dn}` (`{managed_seat}`)"
+            if managed_dn and managed_dn != managed_seat
+            else f"`{managed_seat}`"
+        )
         marker = " (you)" if managed_seat == seat_id else ""
-        lines.append(f"- `{managed_seat}`{marker}: " + "; ".join(details))
+        lines.append(f"- {managed_label}{marker}: " + "; ".join(details))
 
     if current_role in {"planner", "planner-dispatcher"} and planner_mode == "quality_campaign":
         patrols = [

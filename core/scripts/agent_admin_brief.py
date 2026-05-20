@@ -1276,6 +1276,8 @@ def _team_planner_meta(profile_data: dict, team_name: str) -> dict | None:
     override = overrides.get(planner) or {} if isinstance(overrides, dict) else {}
     return {
         "planner_seat": planner,
+        "display_name": str(override.get("display_name") or ""),
+        "display_runtime": bool(override.get("display_runtime", False)),
         "tool": str(override.get("tool") or ""),
         "model": str(override.get("model") or "unknown"),
         "provider": str(override.get("provider") or ""),
@@ -1322,6 +1324,8 @@ def planner_status_snapshot(project: str) -> list[dict]:
         rows.append({
             "team": str(team_name),
             "planner_seat": meta["planner_seat"],
+            "display_name": meta["display_name"],
+            "display_runtime": meta["display_runtime"],
             "tool": meta["tool"],
             "model": meta["model"] or "unknown",
             "provider": meta["provider"],
@@ -1372,9 +1376,10 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
         tool_label = row["tool"] or "unknown"
         if row["model"] and row["model"] != "unknown":
             tool_label = f"{tool_label}/{row['model']}"
-        runtime_parts = [p for p in (row.get("provider", ""), row.get("auth_mode", "")) if p]
-        if runtime_parts:
-            tool_label = f"{tool_label}({','.join(runtime_parts)})"
+        if row.get("display_runtime"):
+            runtime_parts = [p for p in (row.get("provider", ""), row.get("auth_mode", "")) if p]
+            if runtime_parts:
+                tool_label = f"{tool_label}({','.join(runtime_parts)})"
         latest_label = (
             f"{row['latest_task_id']} [{row['latest_task_status']}]"
             if row["latest_task_id"]
@@ -1399,8 +1404,11 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             )
             if row.get("attention_reason"):
                 attention_suffix += f": {row['attention_reason']}"
+        dn = row.get("display_name") or ""
+        seat_id = row["planner_seat"]
+        planner_label = f"{dn} ({seat_id})" if dn and dn != seat_id else seat_id
         print(
-            f"{row['team']:30s}  planner={row['planner_seat']}"
+            f"{row['team']:30s}  planner={planner_label}"
             f"  tool={tool_label}"
             f"  queue={row['queue_state']}({row['task_count']})"
             f"  latest={latest_label}"
