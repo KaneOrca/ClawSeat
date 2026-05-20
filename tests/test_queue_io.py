@@ -58,6 +58,30 @@ def test_collapse_to_current_state(qpath):
     assert state["T1"].actor == "planner@claude"
 
 
+def test_read_current_state_accepts_legacy_type_seat_ts_events(qpath):
+    append_event(qpath, {"event_type": "task_created", "actor": "memory", "task_id": "T1", "brief_path": "b/T1.md"})
+    with qpath.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"seq": 2, "type": "task_claimed", "task_id": "T1", "seat": "team-planner", "ts": "1"}) + "\n")
+        fh.write(json.dumps({"seq": 3, "type": "task_in_progress", "task_id": "T1", "seat": "team-planner", "ts": "2"}) + "\n")
+        fh.write(json.dumps({"seq": 4, "type": "task_done", "task_id": "T1", "seat": "team-planner", "verdict": "PASS", "ts": "3"}) + "\n")
+
+    state = read_current_state(qpath)
+
+    assert state["T1"].status == "task_done"
+    assert state["T1"].actor == "team-planner"
+    assert state["T1"].verdict == "PASS"
+    assert read_events(qpath)[-1]["event_type"] == "task_done"
+
+
+def test_append_event_state_machine_sees_legacy_terminal_status(qpath):
+    append_event(qpath, {"event_type": "task_created", "actor": "memory", "task_id": "T1", "brief_path": "b/T1.md"})
+    with qpath.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"seq": 2, "type": "task_done", "task_id": "T1", "seat": "team-planner", "verdict": "PASS", "ts": "3"}) + "\n")
+
+    with pytest.raises(QueueError, match="current=task_done"):
+        append_event(qpath, {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "T1"})
+
+
 def test_actor_format_rejected(qpath):
     with pytest.raises(QueueError, match="actor format"):
         append_event(qpath, {"event_type": "task_created", "actor": "random-bot", "task_id": "T1", "brief_path": "x"})

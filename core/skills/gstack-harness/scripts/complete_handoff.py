@@ -591,7 +591,7 @@ def complete_v3_brief_queue_if_possible(
     if ts.status == "task_done":
         return queue
 
-    if ts.status in ("task_created", "task_waiting_for"):
+    if ts.status in ("task_created", "task_waiting_for", "task_reset"):
         plan = ["task_claimed", "task_in_progress", "task_done"]
     elif ts.status == "task_claimed":
         plan = ["task_in_progress", "task_done"]

@@ -194,8 +194,8 @@ def _read_task_status(path: Path, task_id: str) -> str:
             if not line:
                 continue
             try:
-                event = json.loads(line)
-                if event.get("task_id") == task_id:
+                event = _normalize_event_for_read(json.loads(line))
+                if event and event.get("task_id") == task_id:
                     status = event["event_type"]
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -252,8 +252,33 @@ def append_event(
     return event
 
 
+def _normalize_event_for_read(event: dict) -> dict | None:
+    """Return a canonical read model for valid current and legacy queue events.
+
+    Writers still emit only the canonical schema. Readers tolerate older/manual
+    rows that used ``type``/``seat``/``ts`` so planner-status does not report a
+    false open queue after a task already closed.
+    """
+    if not isinstance(event, dict):
+        return None
+    normalized = dict(event)
+    if "event_type" not in normalized and "type" in normalized:
+        normalized["event_type"] = normalized["type"]
+    if "actor" not in normalized and "seat" in normalized:
+        normalized["actor"] = normalized["seat"]
+    if "event_ts" not in normalized and "ts" in normalized:
+        normalized["event_ts"] = str(normalized["ts"])
+    if not {"seq", "event_type", "task_id"} <= normalized.keys():
+        return None
+    if normalized["event_type"] not in VALID_EVENT_TYPES:
+        return None
+    normalized.setdefault("actor", "operator")
+    normalized.setdefault("event_ts", "")
+    return normalized
+
+
 def read_events(queue_path: Path | str) -> list[dict]:
-    """Return all valid events in seq order. Malformed lines silently skipped."""
+    """Return all readable events in seq order. Malformed lines silently skipped."""
     path = Path(queue_path)
     if not path.exists():
         return []
@@ -264,10 +289,10 @@ def read_events(queue_path: Path | str) -> list[dict]:
             if not line:
                 continue
             try:
-                event = json.loads(line)
+                event = _normalize_event_for_read(json.loads(line))
             except json.JSONDecodeError:
                 continue
-            if "seq" in event and "event_type" in event and "task_id" in event:
+            if event:
                 events.append(event)
     events.sort(key=lambda e: int(e["seq"]))
     return events

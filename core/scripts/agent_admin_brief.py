@@ -1159,6 +1159,106 @@ def _read_session_runtime(project: str, planner_seat: str) -> dict | None:
         return None
 
 
+def _project_toml_path(project: str) -> Path:
+    return real_user_home() / ".agents" / "projects" / project / "project.toml"
+
+
+def _load_project_toml(project: str) -> dict:
+    path = _project_toml_path(project)
+    if not path.exists():
+        return {}
+    try:
+        with path.open("rb") as fh:
+            data = _toml_load_safe(fh)
+    except Exception:  # noqa: BLE001
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _status_profile_data(project: str) -> dict:
+    """Return planner-status data with project.toml roster/overrides as SSOT."""
+    profile_data: dict = {}
+    profile_file = _profile_path(project)
+    if profile_file.exists():
+        try:
+            with profile_file.open("rb") as fh:
+                loaded = _toml_load_safe(fh)
+            if isinstance(loaded, dict):
+                profile_data = loaded
+        except Exception:  # noqa: BLE001
+            profile_data = {}
+
+    project_data = _load_project_toml(project)
+    active_seats = [
+        str(item).strip()
+        for item in (project_data.get("engineers") or [])
+        if str(item).strip()
+    ]
+    if not active_seats:
+        return profile_data
+    active = set(active_seats)
+
+    merged = dict(profile_data)
+    merged["seats"] = active_seats
+
+    profile_overrides = profile_data.get("seat_overrides") or {}
+    if not isinstance(profile_overrides, dict):
+        profile_overrides = {}
+    project_overrides = project_data.get("seat_overrides") or {}
+    if not isinstance(project_overrides, dict):
+        project_overrides = {}
+    overrides: dict[str, dict] = {}
+    for seat in active_seats:
+        base = profile_overrides.get(seat) if isinstance(profile_overrides.get(seat), dict) else {}
+        project_override = (
+            project_overrides.get(seat) if isinstance(project_overrides.get(seat), dict) else {}
+        )
+        overrides[seat] = {**base, **project_override}
+    merged["seat_overrides"] = overrides
+
+    profile_roles = profile_data.get("seat_roles") or {}
+    if not isinstance(profile_roles, dict):
+        profile_roles = {}
+    roles: dict[str, str] = {}
+    for seat in active_seats:
+        override = overrides.get(seat) or {}
+        role = str(override.get("role") or profile_roles.get(seat) or "").strip()
+        if seat == "memory":
+            role = "project-memory"
+        elif not role and str(override.get("team") or "").strip():
+            role = "planner"
+        roles[seat] = role
+    merged["seat_roles"] = roles
+
+    profile_teams = profile_data.get("teams") or {}
+    if not isinstance(profile_teams, dict):
+        profile_teams = {}
+    teams: dict[str, dict] = {}
+    for team_name, team_cfg in profile_teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        seats = [str(item) for item in (team_cfg.get("seats") or []) if str(item) in active]
+        if seats:
+            teams[str(team_name)] = {**team_cfg, "seats": seats}
+
+    for seat in active_seats:
+        override = overrides.get(seat) or {}
+        team = str(override.get("team") or "").strip()
+        if not team:
+            continue
+        cfg = dict(teams.get(team) or {})
+        seats = [str(item) for item in (cfg.get("seats") or [])]
+        if seat not in seats:
+            seats.append(seat)
+        cfg.setdefault("team_type", "subteam")
+        cfg.setdefault("notify_policy", "queue_drained_only")
+        cfg.setdefault("planner_self_contained", bool(override.get("planner_self_contained")))
+        cfg["seats"] = seats
+        teams[team] = cfg
+    merged["teams"] = teams
+    return merged
+
+
 def _team_planner_meta(profile_data: dict, team_name: str) -> dict | None:
     """Return planner seat + runtime metadata for a team, or None if no planner."""
     teams = profile_data.get("teams") or {}
@@ -1191,13 +1291,8 @@ def planner_status_snapshot(project: str) -> list[dict]:
     Reads profile + queue state only; no tmux or session inspection.
     Returns a list of dicts, one per team that has a planner seat.
     """
-    profile_file = _profile_path(project)
-    if not profile_file.exists():
-        return []
-    try:
-        with profile_file.open("rb") as fh:
-            profile_data = _toml_load_safe(fh)
-    except Exception:  # noqa: BLE001
+    profile_data = _status_profile_data(project)
+    if not profile_data:
         return []
     teams = profile_data.get("teams") or {}
     if not isinstance(teams, dict):
@@ -1392,7 +1487,7 @@ def cmd_done(args: argparse.Namespace) -> int:
         return 3
 
     plan: list[str]
-    if ts.status in ("task_created", "task_waiting_for"):
+    if ts.status in ("task_created", "task_waiting_for", "task_reset"):
         plan = ["task_claimed", "task_in_progress", "task_done"]
     elif ts.status == "task_claimed":
         plan = ["task_in_progress", "task_done"]

@@ -82,6 +82,40 @@ provider = "minimax"
     return profile
 
 
+def _write_project_toml_with_active_roster(home: Path, *, project: str = "p") -> Path:
+    project_dir = home / ".agents" / "projects" / project
+    project_dir.mkdir(parents=True, exist_ok=True)
+    path = project_dir / "project.toml"
+    path.write_text(
+        f"""version = 1
+name = "{project}"
+repo_root = "/tmp/repo"
+engineers = ["memory", "team-a-planner", "team-c-dispatcher"]
+
+[seat_overrides.memory]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+
+[seat_overrides.team-a-planner]
+tool = "claude"
+auth_mode = "api"
+provider = "baidu-glm"
+role = "planner-dispatcher"
+team = "team-a"
+
+[seat_overrides.team-c-dispatcher]
+tool = "codex"
+auth_mode = "oauth"
+provider = "openai"
+role = "planner-dispatcher"
+team = "team-c"
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _queue_path(home: Path, project: str, team: str) -> Path:
     return home / ".agents" / "tasks" / project / team / "tasks.queue.jsonl"
 
@@ -555,6 +589,21 @@ tool = "claude"
         # model absent → explicit "unknown" placeholder, never empty string
         assert row["model"] == "unknown"
         assert row["tool"] == "claude"
+
+    def test_project_toml_roster_and_overrides_are_status_ssot(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_multi_profile(tmp_path, project="p")
+        _write_project_toml_with_active_roster(tmp_path, project="p")
+
+        rows = planner_status_snapshot("p")
+        by_team = {row["team"]: row for row in rows}
+
+        assert set(by_team) == {"team-a", "team-c"}
+        assert by_team["team-a"]["planner_seat"] == "team-a-planner"
+        assert by_team["team-a"]["provider"] == "baidu-glm"
+        assert by_team["team-a"]["auth_mode"] == "api"
+        assert by_team["team-c"]["tool"] == "codex"
+        assert by_team["team-c"]["provider"] == "openai"
 
     def test_json_output_includes_provider_auth_model(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))

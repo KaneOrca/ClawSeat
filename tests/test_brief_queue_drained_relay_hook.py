@@ -212,6 +212,38 @@ class TestCmdDoneRelayHook:
         assert relay_calls[0] == ("p", "t", "T1", "t-planner")
         assert "RELAY_OK" in out.out
 
+    def test_reset_task_can_be_done_and_relayed(self, tmp_path, monkeypatch, capsys):
+        from queue_io import append_event
+
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_profile(tmp_path, project="p", team="t", notify_policy="queue_drained_only")
+        _write_brief_file(tmp_path, project="p", team="t", task_id="T1")
+        queue = _enqueue_task(tmp_path, "p", "t", "T1")
+        append_event(queue, {
+            "event_type": "task_reset",
+            "actor": "memory",
+            "task_id": "T1",
+            "reset_reason": "acceptance criteria repaired",
+        })
+
+        relay_calls: list[tuple] = []
+        monkeypatch.setattr(
+            brief_mod, "_do_relay_complete_handoff",
+            lambda project, team, task_id, planner_seat: relay_calls.append((project, team, task_id, planner_seat)),
+        )
+
+        parser = build_parser()
+        rc = cmd_done(parser.parse_args([
+            "done", "--project", "p", "--team", "t", "--task-id", "T1", "--actor", "planner@claude",
+        ]))
+        out = capsys.readouterr()
+        state = read_current_state(queue)
+
+        assert rc == 0
+        assert state["T1"].status == "task_done"
+        assert relay_calls == [("p", "t", "T1", "t-planner")]
+        assert "RELAY_OK" in out.out
+
     def test_undrained_queue_suppresses_relay(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
         _write_profile(tmp_path, project="p", team="t", notify_policy="queue_drained_only")
