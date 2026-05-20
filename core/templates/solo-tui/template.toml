@@ -1,0 +1,46 @@
+version = 1
+template_name = "solo-tui"
+description = "One human-facing solo TUI agent for product testing, prompt relay, root-cause scouting, and lightweight direct fixes"
+
+[defaults]
+window_mode = "tabs-1up"
+monitor_max_panes = 1
+open_detail_windows = false
+workspace_tools = [
+  "TOOLS/memory.md",
+]
+
+[[engineers]]
+id = "solo"
+display_name = "Solo TUI"
+aliases = ["user-proxy", "product-tester", "root-cause-scout"]
+role = "solo-tui"
+monitor = true
+human_facing = true
+active_loop_owner = false
+dispatch_authority = false
+patrol_authority = false
+unblock_authority = true
+escalation_authority = true
+remind_active_loop_owner = false
+review_authority = false
+design_authority = false
+tool = "claude"
+auth_mode = "oauth"
+provider = "anthropic"
+model = "sonnet"
+effort = "auto"
+skills = [
+  "{CLAWSEAT_ROOT}/core/skills/solo-tui/SKILL.md",
+  "{CLAWSEAT_ROOT}/core/skills/tmux-basics/SKILL.md",
+]
+role_details = [
+  "human-facing user proxy for natural-language relay and product trial runs",
+  "turns user speech into concise AI programming prompts with goal, context, boundary, acceptance, and delivery",
+  "does not monitor or poll unless the user explicitly asks for monitoring, patrol, inspection, or root-cause investigation",
+  "tests products as a real user first; inspects logs, events, SDK traces, and artifacts only when evidence is needed",
+  "can roleplay script writer, director, musician, ordinary user, or demanding reviewer when testing creative products",
+  "when another agent must reply, the current message must include the exact reply path: chat, file, inbox, script, and target session if applicable",
+  "directly fixes framework, template, or automation defects in its own scope; forwards product work only after useful context or root-cause evidence exists",
+  "does not own project memory, planner fan-out, canonical queue state, or long-lived SDK protocol",
+]
