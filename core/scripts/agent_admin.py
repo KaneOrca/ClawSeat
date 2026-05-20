@@ -90,6 +90,8 @@ from agent_admin_task import update_status as task_update_status
 from agent_admin_brief import cmd_queue as brief_queue
 from agent_admin_brief import cmd_list as brief_list
 from agent_admin_brief import cmd_claim as brief_claim
+from agent_admin_brief import cmd_reset as brief_reset
+from agent_admin_brief import cmd_requeue as brief_requeue
 from agent_admin_brief import cmd_start as brief_start
 from agent_admin_brief import cmd_show as brief_show
 from agent_admin_brief import cmd_done as brief_done
@@ -1250,6 +1252,14 @@ def cmd_brief_claim(args: argparse.Namespace) -> int:
     return brief_claim(args)
 
 
+def cmd_brief_reset(args: argparse.Namespace) -> int:
+    return brief_reset(args)
+
+
+def cmd_brief_requeue(args: argparse.Namespace) -> int:
+    return brief_requeue(args)
+
+
 def cmd_brief_start(args: argparse.Namespace) -> int:
     return brief_start(args)
 
@@ -1404,6 +1414,8 @@ PARSER_HOOKS = ParserHooks(
     cmd_brief_queue=cmd_brief_queue,
     cmd_brief_list=cmd_brief_list,
     cmd_brief_claim=cmd_brief_claim,
+    cmd_brief_reset=cmd_brief_reset,
+    cmd_brief_requeue=cmd_brief_requeue,
     cmd_brief_start=cmd_brief_start,
     cmd_brief_show=cmd_brief_show,
     cmd_brief_done=cmd_brief_done,

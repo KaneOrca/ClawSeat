@@ -83,6 +83,8 @@ class ParserHooks:
     cmd_brief_queue: Callable[[Any], int]
     cmd_brief_list: Callable[[Any], int]
     cmd_brief_claim: Callable[[Any], int]
+    cmd_brief_reset: Callable[[Any], int]
+    cmd_brief_requeue: Callable[[Any], int]
     cmd_brief_start: Callable[[Any], int]
     cmd_brief_show: Callable[[Any], int]
     cmd_brief_done: Callable[[Any], int]
@@ -830,6 +832,49 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         help="Format: <role>@<tool>, e.g. planner@claude",
     )
     brief_claim.set_defaults(func=hooks.cmd_brief_claim)
+
+    brief_reset = brief_sub.add_parser(
+        "reset",
+        help="Append task_reset for a recoverable brief task.",
+    )
+    brief_reset.add_argument("--project", required=True)
+    brief_reset.add_argument("--team", required=True)
+    brief_reset.add_argument("--task-id", required=True, dest="task_id")
+    brief_reset.add_argument(
+        "--actor",
+        default="memory",
+        help="Actor for task_reset (default: memory).",
+    )
+    brief_reset.add_argument(
+        "--reason",
+        required=True,
+        help="Short reset reason for the queue event.",
+    )
+    brief_reset.set_defaults(func=hooks.cmd_brief_reset)
+
+    brief_requeue = brief_sub.add_parser(
+        "requeue",
+        help="Recover a blocked/reset task with its existing brief, then wake planner.",
+    )
+    brief_requeue.add_argument("--project", required=True)
+    brief_requeue.add_argument("--team", required=True)
+    brief_requeue.add_argument("--task-id", required=True, dest="task_id")
+    brief_requeue.add_argument(
+        "--actor",
+        default="memory",
+        help="Actor for recovery events (default: memory).",
+    )
+    brief_requeue.add_argument(
+        "--reason",
+        default="requeue after brief repair",
+        help="Reset reason if the task is currently waiting_for.",
+    )
+    brief_requeue.add_argument(
+        "--no-wake",
+        action="store_true",
+        help="Recover the queue event without waking the team planner.",
+    )
+    brief_requeue.set_defaults(func=hooks.cmd_brief_requeue)
 
     brief_start = brief_sub.add_parser(
         "start",

@@ -397,6 +397,9 @@ class TestPlannerStatusSnapshot:
         assert team_a["attention_task_id"] == "T1"
         assert team_a["attention_task_status"] == "task_reset"
         assert team_a["attention_reason"] == "acceptance criteria repaired"
+        assert team_a["attention_next_step"] == (
+            "agent_admin.py brief requeue --project p --team team-a --task-id T1"
+        )
 
     def test_notify_policy_reported(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))

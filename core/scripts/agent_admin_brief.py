@@ -8,6 +8,8 @@ Subcommands:
   queue    Write brief file + append task_created event
   list     Show pending tasks for a team
   claim    Planner claims a pending task
+  reset    Mark a task reset so it can be recovered
+  requeue  Recover a blocked/reset task with its existing brief
   show     Show current state of a task_id
 
 Phase 1 minimal scope: standalone CLI. Phase 2 integrates into agent_admin.py
@@ -781,7 +783,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
     # Fix #A (post-review retest): allow retry from task_waiting_for state.
     # State machine permits task_waiting_for → task_claimed when deps now met,
     # or task_waiting_for → task_waiting_for if still blocked.
-    if ts.status not in ("task_created", "task_waiting_for"):
+    if ts.status not in ("task_created", "task_waiting_for", "task_reset"):
         print(
             f"task_id {args.task_id!r} is in state {ts.status!r}, not claimable",
             file=sys.stderr,
@@ -845,6 +847,158 @@ def cmd_claim(args: argparse.Namespace) -> int:
         return 1
     print(f"claimed {args.task_id} (seq {result['seq']})")
     print(f"  brief: {ts.brief_path}")
+    return 0
+
+
+def _task_brief_path(ts) -> Path | None:
+    if not ts.brief_path:
+        return None
+    brief_path = Path(ts.brief_path)
+    if not brief_path.is_absolute():
+        brief_path = _agents_root() / brief_path
+    return brief_path
+
+
+def _task_acceptance_block_reason(ts) -> str | None:
+    brief_path = _task_brief_path(ts)
+    if brief_path is None:
+        return "task has no brief_path"
+    if not brief_path.exists():
+        return f"brief missing: {brief_path}"
+    return _brief_acceptance_block_reason(
+        brief_path.read_text(encoding="utf-8"),
+        str(brief_path),
+    )
+
+
+def cmd_reset(args: argparse.Namespace) -> int:
+    """Append task_reset for a recoverable brief task."""
+    try:
+        _validate_cli_inputs(args.project, args.team, args.task_id)
+    except InputValidationError as exc:
+        print(f"input validation failed: {exc}", file=sys.stderr)
+        return 2
+
+    queue = _queue_path(args.project, args.team)
+    state = read_current_state(queue)
+    ts = state.get(args.task_id)
+    if ts is None:
+        print(f"task_id {args.task_id!r} not in queue", file=sys.stderr)
+        return 2
+    if ts.status == "task_reset":
+        print(f"task {args.task_id} already reset")
+        return 0
+
+    event = {
+        "event_type": "task_reset",
+        "actor": args.actor,
+        "task_id": args.task_id,
+        "reset_reason": args.reason,
+    }
+    try:
+        result = append_event(queue, event)
+    except QueueError as exc:
+        print(
+            f"reset append failed: {exc}; "
+            "only created/claimed/in_progress/waiting tasks can be reset",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"reset {args.task_id} (seq {result['seq']})")
+    print(
+        "next: agent_admin.py brief requeue "
+        f"--project {args.project} --team {args.team} --task-id {args.task_id}"
+    )
+    return 0
+
+
+def cmd_requeue(args: argparse.Namespace) -> int:
+    """Recover a blocked/reset task by appending a fresh task_created event.
+
+    The command does not rewrite the brief. It validates that the existing
+    brief is claimable, then uses the queue state machine to recover the same
+    task id from task_waiting_for/task_reset/task_failed/task_bounced.
+    """
+    try:
+        _validate_cli_inputs(args.project, args.team, args.task_id)
+    except InputValidationError as exc:
+        print(f"input validation failed: {exc}", file=sys.stderr)
+        return 2
+
+    queue = _queue_path(args.project, args.team)
+    state = read_current_state(queue)
+    ts = state.get(args.task_id)
+    if ts is None:
+        print(f"task_id {args.task_id!r} not in queue", file=sys.stderr)
+        return 2
+
+    if ts.status == "task_created":
+        print(f"task {args.task_id} already claimable")
+        if args.no_wake:
+            print("WAKE_SKIPPED (--no-wake)")
+            return 0
+        try:
+            target = _wake_team_planner(args.project, args.team, args.task_id)
+        except WakeHookError as exc:
+            target = exc.target or "<unresolved>"
+            print(f"HOOK_WAKE_FAILED target={target} reason={exc}", file=sys.stderr)
+            return 3
+        print(f"WAKE_OK target={target}")
+        return 0
+
+    recoverable = {"task_waiting_for", "task_reset", "task_failed", "task_bounced"}
+    if ts.status not in recoverable:
+        print(
+            f"task_id {args.task_id!r} is in state {ts.status!r}, not requeueable",
+            file=sys.stderr,
+        )
+        return 2
+
+    acceptance_block = _task_acceptance_block_reason(ts)
+    if acceptance_block:
+        print(f"REQUEUE_BLOCKED reason=acceptance_criteria detail={acceptance_block}")
+        return 3
+
+    if ts.status == "task_waiting_for":
+        reset_event = {
+            "event_type": "task_reset",
+            "actor": args.actor,
+            "task_id": args.task_id,
+            "reset_reason": args.reason,
+        }
+        try:
+            append_event(queue, reset_event)
+        except QueueError as exc:
+            print(f"reset append failed: {exc}", file=sys.stderr)
+            return 1
+        state = read_current_state(queue)
+        ts = state[args.task_id]
+
+    create_event = {
+        "event_type": "task_created",
+        "actor": args.actor,
+        "task_id": args.task_id,
+        "brief_path": ts.brief_path,
+        "parent_task_id": ts.parent_task_id,
+        "depends_on": ts.depends_on,
+    }
+    try:
+        result = append_event(queue, create_event)
+    except QueueError as exc:
+        print(f"requeue append failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"requeued {args.task_id} (seq {result['seq']})")
+    if args.no_wake:
+        print("WAKE_SKIPPED (--no-wake)")
+        return 0
+    try:
+        target = _wake_team_planner(args.project, args.team, args.task_id)
+    except WakeHookError as exc:
+        target = exc.target or "<unresolved>"
+        print(f"HOOK_WAKE_FAILED target={target} reason={exc}", file=sys.stderr)
+        return 3
+    print(f"WAKE_OK target={target}")
     return 0
 
 
@@ -979,6 +1133,22 @@ def _task_attention_reason(task) -> str:
     if task.status == "task_in_progress":
         return f"in_progress_by={task.actor}"
     return ""
+
+
+def _task_next_step(project: str, team: str, task) -> str | None:
+    if task is None:
+        return None
+    requeue = (
+        "agent_admin.py brief requeue "
+        f"--project {project} --team {team} --task-id {task.task_id}"
+    )
+    if task.status == "task_reset":
+        return requeue
+    if task.status == "task_waiting_for":
+        if task.waiting_for == "acceptance_criteria":
+            return f"fix brief acceptance_criteria, then {requeue}"
+        return f"wait for {task.waiting_for or 'upstream'}, then {requeue}"
+    return None
 
 
 def _attention_task(tasks: dict):
@@ -1458,6 +1628,7 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "attention_task_id": attention.task_id if attention else None,
             "attention_task_status": attention.status if attention else None,
             "attention_reason": _task_attention_reason(attention) if attention else None,
+            "attention_next_step": _task_next_step(project, str(team_name), attention),
             "profile_drift": profile_drift,
             "session_tool": session_rt["tool"] if session_rt else None,
             "session_auth_mode": session_rt["auth_mode"] if session_rt else None,
@@ -1499,10 +1670,9 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
         tool_label = row["tool"] or "unknown"
         if row["model"] and row["model"] != "unknown":
             tool_label = f"{tool_label}/{row['model']}"
-        if row.get("display_runtime"):
-            runtime_parts = [p for p in (row.get("provider", ""), row.get("auth_mode", "")) if p]
-            if runtime_parts:
-                tool_label = f"{tool_label}({','.join(runtime_parts)})"
+        runtime_parts = [p for p in (row.get("provider", ""), row.get("auth_mode", "")) if p]
+        if runtime_parts:
+            tool_label = f"{tool_label}({','.join(runtime_parts)})"
         latest_label = (
             f"{row['latest_task_id']} [{row['latest_task_status']}]"
             if row["latest_task_id"]
@@ -1527,6 +1697,8 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             )
             if row.get("attention_reason"):
                 attention_suffix += f": {row['attention_reason']}"
+            if row.get("attention_next_step"):
+                attention_suffix += f"; next={row['attention_next_step']}"
         dn = row.get("display_name") or ""
         seat_id = row["planner_seat"]
         planner_label = f"{dn} ({seat_id})" if dn and dn != seat_id else seat_id
@@ -1708,6 +1880,28 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--actor", required=True,
                    help="Format: <role>@<tool>, e.g. planner@claude")
     c.set_defaults(func=cmd_claim)
+
+    r = sub.add_parser("reset", help="Append task_reset for a recoverable task")
+    r.add_argument("--project", required=True)
+    r.add_argument("--team", required=True)
+    r.add_argument("--task-id", required=True, dest="task_id")
+    r.add_argument("--actor", default="memory",
+                   help="Actor for task_reset (default: memory)")
+    r.add_argument("--reason", required=True,
+                   help="Short reset reason for the queue event.")
+    r.set_defaults(func=cmd_reset)
+
+    rq = sub.add_parser("requeue", help="Recover a blocked/reset task and wake planner")
+    rq.add_argument("--project", required=True)
+    rq.add_argument("--team", required=True)
+    rq.add_argument("--task-id", required=True, dest="task_id")
+    rq.add_argument("--actor", default="memory",
+                    help="Actor for recovery events (default: memory)")
+    rq.add_argument("--reason", default="requeue after brief repair",
+                    help="Reset reason if the task is currently waiting_for.")
+    rq.add_argument("--no-wake", action="store_true",
+                    help="Recover the queue event without waking the team planner.")
+    rq.set_defaults(func=cmd_requeue)
 
     st = sub.add_parser("start", help="Mark a claimed task_in_progress")
     st.add_argument("--project", required=True)
