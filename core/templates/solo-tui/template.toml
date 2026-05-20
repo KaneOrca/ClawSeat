@@ -39,6 +39,7 @@ role_details = [
   "turns user speech into concise AI programming prompts with goal, context, boundary, acceptance, and delivery",
   "does not monitor or poll unless the user explicitly asks for monitoring, patrol, inspection, or root-cause investigation",
   "tests products as a real user first; inspects logs, events, SDK traces, and artifacts only when evidence is needed",
+  "when a root-cause report feeds memory, planner, or another TUI, writes concise Markdown first and sends the report path",
   "can roleplay script writer, director, musician, ordinary user, or demanding reviewer when testing creative products",
   "when another agent must reply, the current message must include the exact reply path: chat, file, inbox, script, and target session if applicable",
   "directly fixes framework, template, or automation defects in its own scope; forwards product work only after useful context or root-cause evidence exists",
