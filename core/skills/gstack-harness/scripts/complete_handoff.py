@@ -961,6 +961,37 @@ def _resolve_generic_planner_source(profile: object, source: str) -> str:
     )
 
 
+def _resolve_generic_planner_target(profile: object, target: str) -> str:
+    """Normalize or reject a generic planner target in multi-team projects."""
+    if target not in _GENERIC_PLANNER_SOURCES:
+        return target
+
+    seat_roles: dict[str, str] = getattr(profile, "seat_roles", {}) or {}
+    exact_planner_seats = [
+        seat for seat, role in seat_roles.items()
+        if role in _PLANNER_ROLES_FOR_GUARD and seat not in _GENERIC_PLANNER_SOURCES
+    ]
+
+    if not exact_planner_seats:
+        return target
+
+    if len(exact_planner_seats) == 1:
+        exact = exact_planner_seats[0]
+        print(
+            f"info: normalized generic --target {target!r} to exact planner seat {exact!r}",
+            file=sys.stderr,
+        )
+        return exact
+
+    seats_list = ", ".join(sorted(exact_planner_seats))
+    project = getattr(profile, "project_name", "?")
+    raise SystemExit(
+        f"error: generic --target {target!r} is ambiguous in multi-team project "
+        f"{project!r}; use exact planner seat or route chain-end relay to memory. "
+        f"Exact planner seats: {seats_list}"
+    )
+
+
 def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
@@ -975,6 +1006,7 @@ def main() -> int:
         raise SystemExit("user_summary must not be empty")
     # MP012: normalize or reject generic planner source before any receipt I/O.
     args.source = _resolve_generic_planner_source(profile, args.source)
+    args.target = _resolve_generic_planner_target(profile, args.target)
     if (
         not args.enforce_planner_self_closeout
         and args.source in {"planner", "planner-dispatcher"}

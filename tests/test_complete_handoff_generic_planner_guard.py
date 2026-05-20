@@ -288,6 +288,34 @@ materialized_seats = ["memory", "team-a-planner", "team-b-planner"]
                 f"error must list {seat!r}; got: {combined!r}"
             )
 
+    def test_multi_team_generic_planner_target_is_rejected(self, tmp_path):
+        """--target planner in multi-team project must be rejected with exact seat list."""
+        profile = _write_multi_planner_profile(tmp_path)
+        proc = _run(
+            profile,
+            source="cartooner-product-glm-planner",
+            target="planner",
+        )
+
+        assert proc.returncode != 0, (
+            f"--target planner with multiple planner seats must fail; got rc={proc.returncode}"
+        )
+        combined = proc.stderr + proc.stdout
+        assert "generic --target 'planner' is ambiguous" in combined, (
+            f"error must mention generic target ambiguity; got: {combined!r}"
+        )
+        assert "route chain-end relay to memory" in combined, (
+            f"error must point chain-end relays at memory; got: {combined!r}"
+        )
+        for seat in (
+            "cartooner-product-glm-planner",
+            "cartooner-ui-polish-planner",
+            "cartooner-product2-planner",
+        ):
+            assert seat in combined, (
+                f"error must list {seat!r}; got: {combined!r}"
+            )
+
     # ---------------------------------------------------------------------------
     # Tests: single exact planner → normalise
     # ---------------------------------------------------------------------------
@@ -315,6 +343,19 @@ materialized_seats = ["memory", "team-a-planner", "team-b-planner"]
         # The stderr info line should contain the exact seat id
         assert "solo-planner" in proc.stderr, (
             f"info message must name exact seat 'solo-planner'; stderr: {proc.stderr!r}"
+        )
+
+    def test_single_exact_planner_target_is_normalised(self, tmp_path):
+        """--target planner with exactly one non-generic planner seat is normalised."""
+        profile = _write_single_exact_planner_profile(tmp_path)
+        proc = _run(profile, source="memory", target="planner")
+
+        combined = proc.stderr + proc.stdout
+        assert "ambiguous" not in combined.lower(), (
+            f"single exact planner target must not be rejected; got: {combined!r}"
+        )
+        assert "normalized generic --target 'planner' to exact planner seat 'solo-planner'" in combined, (
+            f"target normalization info expected; got: {combined!r}"
         )
 
     # ---------------------------------------------------------------------------
