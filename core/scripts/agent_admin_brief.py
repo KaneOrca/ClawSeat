@@ -832,6 +832,48 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_start(args: argparse.Namespace) -> int:
+    """Mark a claimed brief task as in progress."""
+    try:
+        _validate_cli_inputs(args.project, args.team, args.task_id)
+    except InputValidationError as exc:
+        print(f"input validation failed: {exc}", file=sys.stderr)
+        return 2
+
+    queue = _queue_path(args.project, args.team)
+    state = read_current_state(queue)
+    ts = state.get(args.task_id)
+    if ts is None:
+        print(f"task_id {args.task_id!r} not in queue", file=sys.stderr)
+        return 2
+
+    if ts.status == "task_in_progress":
+        print(f"task {args.task_id} already in_progress")
+        return 0
+    if ts.status == "task_done":
+        print(f"task {args.task_id} already done")
+        return 0
+    if ts.status != "task_claimed":
+        print(
+            f"task_id {args.task_id!r} is in state {ts.status!r}, not startable",
+            file=sys.stderr,
+        )
+        return 2
+
+    event = {
+        "event_type": "task_in_progress",
+        "actor": args.actor,
+        "task_id": args.task_id,
+    }
+    try:
+        result = append_event(queue, event)
+    except QueueError as exc:
+        print(f"start append failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"started {args.task_id} (seq {result['seq']})")
+    return 0
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     try:
         _validate_cli_inputs(args.project, args.team, args.task_id)
@@ -1334,6 +1376,14 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--actor", required=True,
                    help="Format: <role>@<tool>, e.g. planner@claude")
     c.set_defaults(func=cmd_claim)
+
+    st = sub.add_parser("start", help="Mark a claimed task_in_progress")
+    st.add_argument("--project", required=True)
+    st.add_argument("--team", required=True)
+    st.add_argument("--task-id", required=True, dest="task_id")
+    st.add_argument("--actor", required=True,
+                    help="Format: <role>@<tool>, e.g. planner@claude")
+    st.set_defaults(func=cmd_start)
 
     s = sub.add_parser("show", help="Show current state of a task_id")
     s.add_argument("--project", required=True)

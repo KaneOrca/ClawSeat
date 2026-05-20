@@ -83,6 +83,7 @@ class ParserHooks:
     cmd_brief_queue: Callable[[Any], int]
     cmd_brief_list: Callable[[Any], int]
     cmd_brief_claim: Callable[[Any], int]
+    cmd_brief_start: Callable[[Any], int]
     cmd_brief_show: Callable[[Any], int]
     cmd_brief_done: Callable[[Any], int]
     cmd_brief_planner_status: Callable[[Any], int]
@@ -824,6 +825,20 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         help="Format: <role>@<tool>, e.g. planner@claude",
     )
     brief_claim.set_defaults(func=hooks.cmd_brief_claim)
+
+    brief_start = brief_sub.add_parser(
+        "start",
+        help="Mark a claimed brief task as task_in_progress.",
+    )
+    brief_start.add_argument("--project", required=True)
+    brief_start.add_argument("--team", required=True)
+    brief_start.add_argument("--task-id", required=True, dest="task_id")
+    brief_start.add_argument(
+        "--actor",
+        required=True,
+        help="Format: <role>@<tool>, e.g. planner@claude",
+    )
+    brief_start.set_defaults(func=hooks.cmd_brief_start)
 
     brief_show = brief_sub.add_parser(
         "show",
