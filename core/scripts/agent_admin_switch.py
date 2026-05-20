@@ -167,6 +167,22 @@ class SwitchHandlers:
         self.hooks.apply_template(session, self.hooks.load_project(session.project))
         return session
 
+    def _registry_secret_file(self, provider_name: str) -> str:
+        """Return provider registry secret_file for provider_name, or empty string.
+
+        Prefers the registry's flat per-provider path over the generated
+        per-engineer nested path from secret_file_for().  Silently falls back
+        when the registry or provider is unavailable.
+        """
+        try:
+            from providers import get_provider as _gp
+            p = _gp(provider_name, home=self.operator_home())
+            if p is not None and getattr(p, "secret_file", ""):
+                return str(p.secret_file)
+        except Exception:  # noqa: BLE001
+            pass
+        return ""
+
     def build_switched_session(
         self,
         old_session: Any,
@@ -178,11 +194,17 @@ class SwitchHandlers:
     ) -> Any:
         engineer_id = old_session.engineer_id
         identity = self.hooks.identity_name(tool, auth_mode, provider, engineer_id, project.name)
-        secret_file = (
-            str(self.hooks.secret_file_for(tool, provider, engineer_id))
-            if auth_mode in AUTH_MODES_REQUIRING_SECRET_FILE
-            else ""
-        )
+        if auth_mode in AUTH_MODES_REQUIRING_SECRET_FILE:
+            # Prefer the provider registry's flat per-provider secret path so that
+            # seats sharing a provider (e.g. baidu-glm) use the one file that
+            # the operator actually populated.  Fall back to the generated
+            # per-engineer nested path only when the registry has no entry.
+            secret_file = (
+                self._registry_secret_file(provider)
+                or str(self.hooks.secret_file_for(tool, provider, engineer_id))
+            )
+        else:
+            secret_file = ""
         session = self.hooks.session_record_cls(
             engineer_id=engineer_id,
             project=project.name,

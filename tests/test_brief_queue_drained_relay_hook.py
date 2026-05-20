@@ -527,3 +527,68 @@ pd-builder = "builder"
         assert source == "pd-planner"
         assert source != "planner"
         assert source != "planner-dispatcher"
+
+
+# ---------------------------------------------------------------------------
+# MP017: _do_relay_complete_handoff subprocess args (relay schema repair)
+# ---------------------------------------------------------------------------
+
+
+class TestDoRelaySubprocessArgs:
+    """Verify that _do_relay_complete_handoff passes the required schema args.
+
+    MP017 fixes:
+    - --user-summary must be present (satisfies lineage schema, avoids deprecation)
+    - --no-notify must be present (relay must not try to wake a stopped session)
+
+    MP021 note: _find_relay_python() is mocked to sys.executable here so the
+    tests don't see extra subprocess.run calls from the interpreter-probing logic.
+    """
+
+    def _fake_completed_process(self):
+        import subprocess
+        r = subprocess.CompletedProcess(args=[], returncode=0)
+        r.stdout = "completed ok"
+        r.stderr = ""
+        return r
+
+    def _relay_cmd(self, tmp_path, monkeypatch) -> list[str]:
+        """Run _do_relay_complete_handoff with mocked subprocess; return captured cmd."""
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_profile(tmp_path, project="p", team="t", planner="p-planner")
+
+        captured_args: list[list[str]] = []
+
+        def fake_subprocess_run(cmd, **kwargs):
+            captured_args.append(list(cmd))
+            return self._fake_completed_process()
+
+        import subprocess
+        monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+        # Patch _find_relay_python so no extra subprocess probes fire
+        import sys as _sys
+        monkeypatch.setattr(brief_mod, "_find_relay_python", lambda: _sys.executable)
+
+        brief_mod._do_relay_complete_handoff("p", "t", "T1", "p-planner")
+        assert len(captured_args) == 1, f"expected 1 subprocess call, got {len(captured_args)}"
+        return captured_args[0]
+
+    def test_no_notify_in_relay_subprocess_args(self, tmp_path, monkeypatch):
+        """--no-notify must be passed so relay succeeds when memory is stopped."""
+        cmd = self._relay_cmd(tmp_path, monkeypatch)
+        assert "--no-notify" in cmd, f"--no-notify missing from relay args: {cmd}"
+
+    def test_user_summary_in_relay_subprocess_args(self, tmp_path, monkeypatch):
+        """--user-summary must be passed to satisfy the lineage schema."""
+        cmd = self._relay_cmd(tmp_path, monkeypatch)
+        assert "--user-summary" in cmd, f"--user-summary missing from relay args: {cmd}"
+        idx = cmd.index("--user-summary")
+        assert idx + 1 < len(cmd) and cmd[idx + 1], "user-summary value must be non-empty"
+
+    def test_relay_does_not_pass_notify(self, tmp_path, monkeypatch):
+        """Relay must not pass --notify (default-ON would cause session_dead on stopped memory)."""
+        cmd = self._relay_cmd(tmp_path, monkeypatch)
+        assert "--notify" not in cmd or "--no-notify" in cmd, (
+            "--notify passed without --no-notify; would fail on stopped memory session"
+        )

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -121,6 +122,70 @@ def check_script_deps() -> list[str]:
         except ImportError:
             missing.append("tomli")
     return missing
+
+
+# Ordered probe list for find_clawseat_python() — Homebrew-managed interpreters
+# that reliably ship with the required packages on macOS.
+_CLAWSEAT_PYTHON_FALLBACK_CANDIDATES: list[str] = [
+    "/opt/homebrew/opt/python@3.12/bin/python3.12",
+    "/opt/homebrew/opt/python@3.11/bin/python3.11",
+    "/opt/homebrew/bin/python3",
+]
+
+
+def _can_import_pytest(exe: str) -> bool:
+    """Return True if *exe* can import pytest."""
+    try:
+        r = subprocess.run(
+            [exe, "-c", "import pytest"],
+            capture_output=True,
+            timeout=5,
+        )
+        return r.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def _exe_is_clawseat_ready(exe: str) -> bool:
+    """Return True if *exe* has tomllib/tomli AND pytest installed."""
+    # check_script_deps tests the current process; here we probe a specific exe
+    for mod_group in [["tomllib", "tomli"], ["pytest"]]:
+        found = False
+        for mod in mod_group:
+            try:
+                r = subprocess.run(
+                    [exe, "-c", f"import {mod}"],
+                    capture_output=True,
+                    timeout=5,
+                )
+                if r.returncode == 0:
+                    found = True
+                    break
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                pass
+        if not found:
+            return False
+    return True
+
+
+def find_clawseat_python() -> str:
+    """Return a Python interpreter ready to run ClawSeat acceptance tests.
+
+    Requires: tomllib/tomli (TOML parsing) + pytest (test runner).
+    Checks sys.executable first, then probes _CLAWSEAT_PYTHON_FALLBACK_CANDIDATES.
+    Falls back to sys.executable when no better interpreter is found so callers
+    always receive a usable path (they can separately report missing deps).
+
+    Policy: mechanical acceptance commands must use this path rather than bare
+    ``python3`` / ``/usr/bin/python3`` so they are deterministic across Claude/
+    Codex/Gemini isolated shells that may not have pytest installed.
+    """
+    if _exe_is_clawseat_ready(sys.executable):
+        return sys.executable
+    for candidate in _CLAWSEAT_PYTHON_FALLBACK_CANDIDATES:
+        if candidate != sys.executable and _exe_is_clawseat_ready(candidate):
+            return candidate
+    return sys.executable
 
 
 def _default_path() -> str:

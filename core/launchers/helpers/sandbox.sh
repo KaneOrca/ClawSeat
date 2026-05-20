@@ -324,6 +324,8 @@ agents_root = Path(sys.argv[2])
 seat_id = sys.argv[3]
 runtime_claude_root = Path(sys.argv[4])
 sys.path.insert(0, str(repo_root / "core" / "scripts"))
+sys.path.insert(0, str(repo_root / "core" / "lib"))
+sys.path.insert(0, str(repo_root))  # allows 'from core.lib.X import ...' package imports
 
 from seat_claude_template import copy_seat_claude_template_to_runtime
 

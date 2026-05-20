@@ -5,11 +5,20 @@ import json
 import shutil
 import sys as _sys, pathlib as _pl
 _sct_scripts = str(_pl.Path(__file__).resolve().parent)
-if _sct_scripts not in _sys.path: _sys.path.insert(0, _sct_scripts)
+_sct_lib = str(_pl.Path(__file__).resolve().parent.parent / "lib")
+for _p in (_sct_scripts, _sct_lib):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
 from _toml_compat import loads_safe as _toml_loads, load_safe as _toml_load
 from pathlib import Path
 
-from core.lib.real_home import real_user_home
+# Import real_user_home via the flat-module path (core/lib on sys.path)
+# so this module works both as a CLI and when imported from an inline
+# Python block that only adds core/scripts to sys.path (e.g. sandbox.sh).
+try:
+    from real_home import real_user_home  # flat import: core/lib on sys.path
+except ImportError:
+    from core.lib.real_home import real_user_home  # package import fallback
 
 try:
     from seat_skill_mapping import skill_names_for_seat

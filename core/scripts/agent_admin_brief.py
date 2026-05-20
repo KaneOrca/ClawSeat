@@ -222,6 +222,45 @@ _COMPLETE_HANDOFF_SCRIPT = (
     _REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "complete_handoff.py"
 )
 
+# Ordered list of known-good Python paths probed when sys.executable lacks toml deps.
+_RELAY_PYTHON_FALLBACK_CANDIDATES: list[str] = [
+    "/opt/homebrew/opt/python@3.12/bin/python3.12",
+    "/opt/homebrew/opt/python@3.11/bin/python3.11",
+    "/opt/homebrew/bin/python3",
+]
+
+
+def _can_import_toml_exe(exe: str) -> bool:
+    """Return True if *exe* can import tomllib (stdlib 3.11+) or tomli (backport)."""
+    for mod in ("tomllib", "tomli"):
+        try:
+            r = subprocess.run(
+                [exe, "-c", f"import {mod}"],
+                capture_output=True,
+                timeout=5,
+            )
+            if r.returncode == 0:
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+    return False
+
+
+def _find_relay_python() -> str:
+    """Return a Python interpreter with tomllib/tomli available.
+
+    Checks sys.executable first; if it lacks the required TOML module (happens
+    with system Python 3.9 on macOS that predates tomllib), probes known
+    Homebrew paths.  Falls back to sys.executable when nothing better is found
+    so the caller still gets *some* interpreter.
+    """
+    if _can_import_toml_exe(sys.executable):
+        return sys.executable
+    for candidate in _RELAY_PYTHON_FALLBACK_CANDIDATES:
+        if candidate != sys.executable and _can_import_toml_exe(candidate):
+            return candidate
+    return sys.executable
+
 
 def _team_notify_policy(project: str, team: str) -> str:
     """Read notify_policy for a team from the active profile. Returns '' on failure."""
@@ -283,7 +322,7 @@ def _do_relay_complete_handoff(
     )
     result = subprocess.run(
         [
-            sys.executable, str(_COMPLETE_HANDOFF_SCRIPT),
+            _find_relay_python(), str(_COMPLETE_HANDOFF_SCRIPT),
             "--profile", profile,
             "--source", planner_seat,
             "--target", "memory",
@@ -292,6 +331,8 @@ def _do_relay_complete_handoff(
             "--verdict", "APPROVED",
             "--title", f"Queue drained: {project}/{team}",
             "--summary", summary,
+            "--user-summary", summary,  # required by lineage schema; avoids deprecation warning
+            "--no-notify",              # relay writes receipt only; caller sends wake separately
         ],
         capture_output=True,
         text=True,
@@ -751,6 +792,140 @@ def _latest_task_in_queue(tasks: dict):
     return max(tasks.values(), key=lambda ts: ts.last_seq)
 
 
+def _project_local_toml(project: str) -> dict:
+    """Read project-local.toml for a project; returns {} on failure."""
+    path = real_user_home() / ".agents" / "tasks" / project / "project-local.toml"
+    if not path.exists():
+        return {}
+    try:
+        with path.open("rb") as fh:
+            return _toml_load_safe(fh)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def review_latest_worktree_path(project: str, override: str = "") -> Path:
+    """Return the canonical per-project review/latest worktree path.
+
+    SSOT order:
+    1. Explicit override (project-local.toml key review_latest_worktree)
+    2. Computed: ~/.agents/worktrees/<project>/review-latest
+
+    Each project gets its own scoped path; never a shared global path.
+    """
+    if override:
+        return Path(override).expanduser()
+    return real_user_home() / ".agents" / "worktrees" / project / "review-latest"
+
+
+def launcher_review_worktree_path(project: str, override: str = "") -> Path:
+    """Return the per-project desktop-launcher worktree path (memory-owned, detached).
+
+    SSOT order:
+    1. Explicit override (project-local.toml key launcher_review_worktree)
+    2. Computed: ~/.<project>-launcher-review  (mirrors existing naming convention)
+
+    Memory maintains this worktree; it is kept detached so it does not consume the
+    review/latest branch ref and does not conflict with the planner-owned worktree.
+    """
+    if override:
+        return Path(override).expanduser()
+    return real_user_home() / f".{project}-launcher-review"
+
+
+def _git_worktree_status(wt_path: Path) -> dict:
+    """Return a status dict for a git worktree path without mutating anything."""
+    result: dict = {
+        "path": str(wt_path),
+        "exists": wt_path.exists(),
+        "status": "missing",
+        "branch": None,
+        "commit": None,
+    }
+    if not wt_path.exists():
+        return result
+    try:
+        r_branch = subprocess.run(
+            ["git", "-C", str(wt_path), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        r_hash = subprocess.run(
+            ["git", "-C", str(wt_path), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r_branch.returncode != 0:
+            result["status"] = "not-a-git-repo"
+            return result
+        branch = r_branch.stdout.strip()
+        commit = r_hash.stdout.strip() if r_hash.returncode == 0 else None
+        result["branch"] = branch
+        result["commit"] = commit
+        if branch == "review/latest":
+            result["status"] = "ok"
+        elif branch == "HEAD":  # detached worktree
+            r_ref = subprocess.run(
+                ["git", "-C", str(wt_path), "rev-parse", "--short", "review/latest"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r_ref.returncode == 0 and r_ref.stdout.strip() == commit:
+                result["status"] = "ok-detached"
+            else:
+                result["status"] = "stale-detached"
+        else:
+            result["status"] = "wrong-branch"
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        result["status"] = "error"
+    return result
+
+
+def check_review_latest_worktree(project: str) -> dict:
+    """Return diagnostic snapshot of a project's review/latest worktree state.
+
+    Checks:
+    - review_worktree: planner/merge-owner owns; holds review/latest branch ref
+    - launcher_worktree: memory owns; detached HEAD for desktop launcher
+
+    Role contract (enforced here as labels, not code gates):
+    - Planner/merge-owner: merges feature branches into review_worktree
+    - Memory: merges review/latest → main after operator confirmation;
+              keeps launcher_worktree synced to review/latest
+    - Builder: never merges review/latest or main
+    """
+    local = _project_local_toml(project)
+    wt_override = str(local.get("review_latest_worktree") or "")
+    launcher_override = str(local.get("launcher_review_worktree") or "")
+    wt_path = review_latest_worktree_path(project, wt_override)
+    launcher_path = launcher_review_worktree_path(project, launcher_override)
+    return {
+        "project": project,
+        "review_worktree": _git_worktree_status(wt_path),
+        "launcher_worktree": _git_worktree_status(launcher_path),
+        "review_worktree_configured": bool(wt_override),
+        "launcher_worktree_configured": bool(launcher_override),
+    }
+
+
+def _read_session_runtime(project: str, planner_seat: str) -> dict | None:
+    """Read tool/auth_mode/provider from the planner's session.toml, or None."""
+    session_file = (
+        real_user_home() / ".agents" / "sessions" / project / planner_seat / "session.toml"
+    )
+    if not session_file.exists():
+        return None
+    try:
+        with session_file.open("rb") as fh:
+            data = _toml_load_safe(fh)
+        if not isinstance(data, dict) or not data.get("tool"):
+            return None
+        return {
+            "tool": str(data.get("tool") or ""),
+            "auth_mode": str(data.get("auth_mode") or ""),
+            "provider": str(data.get("provider") or ""),
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _team_planner_meta(profile_data: dict, team_name: str) -> dict | None:
     """Return planner seat + runtime metadata for a team, or None if no planner."""
     teams = profile_data.get("teams") or {}
@@ -807,6 +982,14 @@ def planner_status_snapshot(project: str) -> list[dict]:
         except Exception:  # noqa: BLE001
             tasks = {}
         latest = _latest_task_in_queue(tasks)
+        session_rt = _read_session_runtime(project, meta["planner_seat"])
+        profile_drift = False
+        if session_rt and meta["tool"]:
+            profile_drift = (
+                (session_rt["tool"] and session_rt["tool"] != meta["tool"])
+                or (session_rt["auth_mode"] and session_rt["auth_mode"] != meta["auth_mode"])
+                or (session_rt["provider"] and session_rt["provider"] != meta["provider"])
+            )
         rows.append({
             "team": str(team_name),
             "planner_seat": meta["planner_seat"],
@@ -821,6 +1004,10 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "latest_task_id": latest.task_id if latest else None,
             "latest_task_status": latest.status if latest else None,
             "latest_task_ts": latest.last_event_ts if latest else None,
+            "profile_drift": profile_drift,
+            "session_tool": session_rt["tool"] if session_rt else None,
+            "session_auth_mode": session_rt["auth_mode"] if session_rt else None,
+            "session_provider": session_rt["provider"] if session_rt else None,
         })
     return rows
 
@@ -859,12 +1046,33 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             if row["latest_task_id"]
             else "no tasks"
         )
+        drift_suffix = ""
+        if row.get("profile_drift"):
+            session_tool = row.get("session_tool") or "?"
+            session_auth = row.get("session_auth_mode") or "?"
+            session_prov = row.get("session_provider") or "?"
+            drift_suffix = f"  [DRIFT: session={session_tool}({session_prov},{session_auth})]"
         print(
             f"{row['team']:30s}  planner={row['planner_seat']}"
             f"  tool={tool_label}"
             f"  queue={row['queue_state']}({row['task_count']})"
             f"  latest={latest_label}"
+            f"{drift_suffix}"
         )
+    # Review worktree status — project-level, shown once after all team rows
+    if not getattr(args, "json", False):
+        try:
+            wt = check_review_latest_worktree(args.project)
+            rv = wt["review_worktree"]
+            lv = wt["launcher_worktree"]
+            rv_label = f"{rv['status']}@{rv['commit']}" if rv.get("commit") else rv["status"]
+            lv_label = f"{lv['status']}@{lv['commit']}" if lv.get("commit") else lv["status"]
+            print(
+                f"review/latest  worktree={rv_label}({rv['path']})"
+                f"  launcher={lv_label}({lv['path']})"
+            )
+        except Exception:  # noqa: BLE001
+            pass
     return 0
 
 
