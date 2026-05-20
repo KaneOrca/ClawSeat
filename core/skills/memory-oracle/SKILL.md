@@ -1,13 +1,6 @@
 ---
 name: memory-oracle
-description: >
-  Federated memory oracle for synthesizing machine facts, project knowledge,
-  and cross-seat conclusions from durable KB files. Use when a workflow needs
-  remembered facts, orphan knowledge recovery, project-history synthesis, or
-  evidence-backed answers from ~/.agents/memory. Also use when memory must
-  reconcile findings across seats. Covers KB search, structured synthesis, and
-  memory write/read guidance. Do NOT use for live implementation, dispatch
-  ownership, Feishu messaging, or guessing facts without stored evidence.
+description: "Federated memory oracle: synthesizes facts from ~/.agents/memory KB. Use for remembered facts, project-history synthesis, cross-seat evidence. Don't use for implementation, dispatch, or guessed facts."
 ---
 
 # Memory Oracle (v0.8 — Federated KB Synthesizer)
