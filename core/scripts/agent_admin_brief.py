@@ -470,7 +470,7 @@ def _wake_team_planner(project: str, team: str, task_id: str) -> str:
 
     message = (
         f"[QUEUE-WAKE] {project}/{team} {task_id}; "
-        "run brief claim, then plan workflow."
+        "claim the brief, write/update workflow, then execute it to closeout or report blocker."
     )
     result = subprocess.run(
         ["bash", str(send_script), "--project", project, target, message],

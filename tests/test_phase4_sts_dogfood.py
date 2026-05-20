@@ -328,6 +328,8 @@ def test_brief_queue_wakes_team_planner(env_home, tmp_path):
     sent = wake_log.read_text(encoding="utf-8")
     assert "--project sts-dogfood core-planner" in sent
     assert "[QUEUE-WAKE] sts-dogfood/core STS-CORE-002" in sent
+    assert "execute it to closeout or report blocker" in sent
+    assert "then plan workflow" not in sent
 
 
 def test_brief_queue_reports_wake_failure_without_losing_task(env_home, tmp_path):
