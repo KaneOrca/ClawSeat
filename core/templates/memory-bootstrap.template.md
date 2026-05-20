@@ -272,7 +272,7 @@ for seat in [${PENDING_SEATS_HUMAN}]:
 4. 如果当前拉起的是 planner seat，跑：
    ```bash
    python3 core/skills/planner/scripts/install_planner_hook.py \
-     --workspace ${AGENT_HOME}/.agents/workspaces/${PROJECT_NAME}/planner \
+     --workspace ${AGENT_HOME}/.agents/workspaces/${PROJECT_NAME}/${seat} \
      --clawseat-root ${CLAWSEAT_ROOT}
    ```
 5. 等 canonical session 真起来：
