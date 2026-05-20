@@ -177,6 +177,8 @@ def test_role_skill_section_lines_contains_hot_contract_and_reference(tmp_path: 
     assert "complete_handoff.py --source <exact current seat>" in joined
     assert "source=<exact planner seat>" in joined
     assert "review/latest" in joined
+    hot_rules = [line for line in lines if line.startswith("- ")]
+    assert len(hot_rules) == 8
 
 
 # ── integration with the real repo's core/skills ──────────────────────
@@ -213,7 +215,7 @@ def test_real_repo_role_skill_section_for_patrol_includes_contract_marker() -> N
     joined = "\n".join(lines)
     assert "## Role SKILL hot contract (canonical)" in joined
     assert "core/skills/patrol/SKILL.md" in joined
-    assert "Queue/files/receipts are source of truth" in joined
+    assert "Source of truth: queue files" in joined
     # Detailed patrol-only prose stays in the cold SKILL reference.
     assert "不写新 tests" not in joined
 
@@ -226,15 +228,12 @@ def test_real_repo_role_skill_section_for_planner_includes_contract_marker() -> 
     assert "dispatch_task.py" in joined
     assert "complete_handoff.py --source <exact current seat>" in joined
     assert "source=<exact planner seat>" in joined
-    assert "Operator Language Matching" in joined
     assert "review/latest" in joined
-    assert "project-local validation worktree" in joined
-    assert "Builders never merge" in joined
+    assert "builders never merge it or `main`" in joined
     assert "explicit user confirmation" in joined
-    assert "desktop launch scripts" in joined
-    assert "shared global worktree" in joined
-    assert "stale tmp worktree" in joined
-    assert "force-push" in joined
+    assert "failed, bounced, or reset queues are blocked" in joined
+    hot_rules = [line for line in lines if line.startswith("- ")]
+    assert len(hot_rules) == 8
     assert "## Workflow Authoring" not in joined
     stale_generic = "complete_handoff.py --source " + "planner"
     assert stale_generic not in joined

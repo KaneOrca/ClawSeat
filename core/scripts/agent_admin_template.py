@@ -185,26 +185,20 @@ def _role_skill_section_lines(
         "",
         (
             f"Loaded from `core/skills/{role_name}/SKILL.md` — this is the "
-            "authoritative role contract for this seat. This generated "
-            "workspace keeps only the compact hot contract below; read the "
-            "full Role SKILL when detailed workflow rules are needed."
+            "authoritative role contract for this seat. Runtime hooks and "
+            "queue files own detailed protocol state; this workspace keeps "
+            "only the eight hot rules below. Read the full Role SKILL when "
+            "details are needed."
         ),
         "",
-        f"- Exact current seat id: `{current_seat}`.",
-        "- Queue/files/receipts are source of truth: brief/TODO, workflow, DELIVERY, and handoff receipts beat chat text.",
-        "- Dispatch uses the canonical queue/brief path and `dispatch_task.py`; route by exact `owner_seat` when multiple owners exist.",
-        "- Acceptance fields are memory-owned and immutable; planner owns fan-in, acceptance execution, and verdict formation.",
-        "- Closeout uses `complete_handoff.py --source <exact current seat> --target <target> ...` for the durable receipt; `send-and-verify.sh` is wake-up only.",
-        "- In v3 multi-team planner closeout, use `source=<exact planner seat>`; do not rely on a generic planner source.",
-        "- Review/latest integration: each ClawSeat project owns one project-local validation worktree for `review/latest`; never share that worktree across projects.",
-        "- Builders never merge `review/latest` or `main`; planner or workflow-named merge-owner integrates accepted changes only into that project's own `review/latest` worktree.",
-        "- Memory is the final main-integration boundary: only after explicit user confirmation may memory merge from that project `review/latest` worktree to `main`.",
-        "- Memory closeout records user confirmation, `review/latest` hash, and main merge hash or blocker.",
-        "- Memory owns desktop launch scripts so user review opens this project's `review/latest` worktree, not `main`, a shared global worktree, or a stale tmp worktree.",
-        "- Planner closeout reports the `review/latest` worktree path plus hash, or blocker/conflict files. On conflict: stop and report; no force-push and no `main` changes.",
-        "- Memory relay follows project notify policy: queue-drained or authority blockers for multi-team delivery; never per-task memory wake unless policy says so.",
-        "- Safety/privacy boundaries stay hot: do not touch secrets, auth/provider policy, seat lifecycle, or unrelated user changes without authority.",
-        "- Operator Language Matching: match the last operator language while preserving commands, paths, task IDs, and `owner_seat` literals.",
+        f"- Seat identity: exact current seat id is `{current_seat}`; never answer as a generic role when an exact seat id is required.",
+        "- Source of truth: queue files, brief/TODO, workflow, DELIVERY, receipts, profile, and WORKSPACE_CONTRACT beat chat prose.",
+        "- Dispatch boundary: use the canonical queue/brief path or `dispatch_task.py`; when multiple owners exist, route by exact `owner_seat`.",
+        "- Acceptance boundary: memory owns acceptance criteria; planner owns fan-in, acceptance execution, and verdict formation.",
+        "- Closeout boundary: durable closeout uses `complete_handoff.py --source <exact current seat>`; planner closeout uses `source=<exact planner seat>`; `send-and-verify.sh` only wakes.",
+        "- Queue policy: `drained` means all current tasks are `task_done`; failed, bounced, or reset queues are blocked, not complete.",
+        "- Integration boundary: accepted work lands in this project's `review/latest`; builders never merge it or `main`; memory merges `review/latest` to `main` only after explicit user confirmation.",
+        "- Safety boundary: do not touch secrets, auth/provider policy, seat lifecycle, unrelated user changes, or language style without authority.",
     ]
 
 
