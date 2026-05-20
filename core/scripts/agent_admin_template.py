@@ -252,7 +252,7 @@ class TemplateHandlers:
 
     def _render_claude_settings(self, session: Any, engineer: Any = None) -> str:
         import json
-        from _toml_compat import load_safe as _toml_load
+        from _toml_compat import load_safe as _toml_load_safe
         from agent_admin_config import CLAUDE_API_PROVIDER_CONFIGS
 
         settings: dict[str, object] = {"workspace_label": session.engineer_id}
@@ -272,7 +272,7 @@ class TemplateHandlers:
                 tpl_path = REPO_ROOT / "core" / "templates" / template_name / "template.toml"
                 if tpl_path.exists():
                     with open(tpl_path, "rb") as f:
-                        tpl = _toml_load(f)
+                        tpl = _toml_load_safe(f)
                     for eng in tpl.get("engineers", []):
                         if eng.get("id") == session.engineer_id:
                             if not model:

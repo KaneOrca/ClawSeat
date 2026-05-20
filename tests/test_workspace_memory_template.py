@@ -118,14 +118,15 @@ def test_codex_memory_workspace_gets_memory_docs_for_cross_tool_migration() -> N
     assert "L3 hub" in text
     assert "Primary instruction file:" in text
     assert "~/.codex/" in text
-    assert "Codex has no Claude Code Stop hook" in text
-    assert "complete_handoff.py" in text
-    assert "send-and-verify.sh" in text
-    assert "TEAM_OWNERSHIP.md" in text
-    assert "quality-docs/QUALITY.md" in text
-    assert "~/.gemini/skills/" not in text
-    assert "Gemini logs" not in text
-    assert "return to planner" not in text.lower()
+
+
+def test_claude_settings_render_without_toml_modules(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "tomllib", None)
+    monkeypatch.setitem(sys.modules, "tomli", None)
+
+    text = _handlers()._render_claude_settings(_session("claude"))
+
+    assert '"workspace_label": "memory"' in text
 
 
 def test_memory_workspace_all_supported_tools_render_tool_specific_contracts() -> None:

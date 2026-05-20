@@ -11,12 +11,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _toml_compat import load_safe as _toml_load_safe
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from core.lib.real_home import real_user_home
-from _toml_compat import load_safe as _toml_load
 
 HOME = real_user_home()
 AGENTS_ROOT = HOME / ".agents"
@@ -46,7 +47,7 @@ def _read_session_toml(project: str, seat: str) -> dict:
     if not path.exists():
         return {}
     with open(path, "rb") as f:
-        return _toml_load(f)
+        return _toml_load_safe(f)
 
 
 def _check_env_file_has_key(path: Path, key: str) -> bool:
