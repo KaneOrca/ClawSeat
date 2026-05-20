@@ -11,12 +11,14 @@ policy small and runtime-owned:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,6 +86,18 @@ def _load_json(path: Path) -> dict[str, object]:
 def _write_json(path: Path, data: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+@contextmanager
+def _state_lock(root: Path):
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / "state.lock"
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _first_existing(paths: list[Path]) -> str:
@@ -276,60 +290,61 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     root = _runtime_root(project, team)
-    state_path = root / "state.json"
-    compact_state = _load_json(state_path)
-    last_seq = int(compact_state.get("last_compacted_queue_seq") or 0)
-    marker_hash = _short_hash(args.text) if marker_present else ""
-    if latest.last_seq <= last_seq:
+    with _state_lock(root):
+        state_path = root / "state.json"
+        compact_state = _load_json(state_path)
+        last_seq = int(compact_state.get("last_compacted_queue_seq") or 0)
+        marker_hash = _short_hash(args.text) if marker_present else ""
+        if latest.last_seq <= last_seq:
+            print(
+                "COMPACT_SKIP "
+                f"reason=already_compacted project={project} team={team} seq={latest.last_seq}"
+            )
+            return 0
+
+        reason = "marker" if marker_present else "queue_drained"
+        snapshot = root / "latest.md"
+        if not args.dry_run:
+            snapshot = _write_snapshot(
+                project=project,
+                team=team,
+                planner_seat=planner_seat,
+                reason=reason,
+                queue_path=queue,
+                latest=latest,
+                active=active,
+                marker_present=marker_present,
+            )
+
+        send_script_raw = args.send_script or os.environ.get("CLAWSEAT_PLANNER_COMPACT_SEND_SCRIPT", "")
+        send_script = Path(send_script_raw) if send_script_raw else REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
+        if not send_script.exists():
+            print(f"COMPACT_SKIP reason=send_script_missing path={send_script}")
+            return 0
+
+        try:
+            _send_compact(project, planner_seat, send_script, dry_run=args.dry_run)
+        except Exception as exc:  # noqa: BLE001
+            print(f"COMPACT_FAILED project={project} team={team} task_id={latest.task_id} detail={exc}")
+            return 1
+
+        compact_state.update(
+            {
+                "last_compacted_at": _utc_now(),
+                "last_compacted_task_id": latest.task_id,
+                "last_compacted_queue_seq": latest.last_seq,
+                "last_marker_hash": marker_hash,
+                "snapshot": str(snapshot),
+            }
+        )
+        if not args.dry_run:
+            _write_json(state_path, compact_state)
+        prefix = "COMPACT_DRY_RUN " if args.dry_run else "COMPACT_SENT "
         print(
-            "COMPACT_SKIP "
-            f"reason=already_compacted project={project} team={team} seq={latest.last_seq}"
+            prefix
+            + f"project={project} team={team} seat={planner_seat} "
+            + f"task_id={latest.task_id} seq={latest.last_seq} snapshot={snapshot}"
         )
-        return 0
-
-    reason = "marker" if marker_present else "queue_drained"
-    snapshot = root / "latest.md"
-    if not args.dry_run:
-        snapshot = _write_snapshot(
-            project=project,
-            team=team,
-            planner_seat=planner_seat,
-            reason=reason,
-            queue_path=queue,
-            latest=latest,
-            active=active,
-            marker_present=marker_present,
-        )
-
-    send_script_raw = args.send_script or os.environ.get("CLAWSEAT_PLANNER_COMPACT_SEND_SCRIPT", "")
-    send_script = Path(send_script_raw) if send_script_raw else REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
-    if not send_script.exists():
-        print(f"COMPACT_SKIP reason=send_script_missing path={send_script}")
-        return 0
-
-    try:
-        _send_compact(project, planner_seat, send_script, dry_run=args.dry_run)
-    except Exception as exc:  # noqa: BLE001
-        print(f"COMPACT_FAILED project={project} team={team} task_id={latest.task_id} detail={exc}")
-        return 1
-
-    compact_state.update(
-        {
-            "last_compacted_at": _utc_now(),
-            "last_compacted_task_id": latest.task_id,
-            "last_compacted_queue_seq": latest.last_seq,
-            "last_marker_hash": marker_hash,
-            "snapshot": str(snapshot),
-        }
-    )
-    if not args.dry_run:
-        _write_json(state_path, compact_state)
-    prefix = "COMPACT_DRY_RUN " if args.dry_run else "COMPACT_SENT "
-    print(
-        prefix
-        + f"project={project} team={team} seat={planner_seat} "
-        + f"task_id={latest.task_id} seq={latest.last_seq} snapshot={snapshot}"
-    )
     return 0
 
 
