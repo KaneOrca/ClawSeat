@@ -1088,6 +1088,106 @@ def _git_worktree_status(wt_path: Path) -> dict:
     return result
 
 
+def _check_workspace_dirty(project: str) -> bool:
+    """Return True if the review/latest worktree has uncommitted changes."""
+    try:
+        local = _project_local_toml(project)
+        wt_override = str(local.get("review_latest_worktree") or "")
+        wt_path = review_latest_worktree_path(project, wt_override)
+        if not wt_path.exists():
+            return False
+        r = subprocess.run(
+            ["git", "-C", str(wt_path), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return bool(r.stdout.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
+def _check_review_latest_clean(project: str) -> bool:
+    """Return True if HEAD is an ancestor of review/latest (planner work merged)."""
+    try:
+        local = _project_local_toml(project)
+        wt_override = str(local.get("review_latest_worktree") or "")
+        wt_path = review_latest_worktree_path(project, wt_override)
+        if not wt_path.exists():
+            return False
+        r = subprocess.run(
+            ["git", "-C", str(wt_path), "merge-base", "--is-ancestor", "HEAD", "review/latest"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
+def _check_review_latest_commit(project: str) -> str | None:
+    """Return the short commit hash of review/latest, or None."""
+    try:
+        local = _project_local_toml(project)
+        wt_override = str(local.get("review_latest_worktree") or "")
+        wt_path = review_latest_worktree_path(project, wt_override)
+        if not wt_path.exists():
+            return None
+        r = subprocess.run(
+            ["git", "-C", str(wt_path), "rev-parse", "--short", "review/latest"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip() if r.returncode == 0 else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+
+def _compute_dispatch_readiness(
+    queue_depth: int,
+    latest_status: str | None,
+    latest_verdict: str | None,
+    review_latest_clean: bool,
+    workspace_dirty: bool,
+    session_status: str,
+    profile_drift: bool,
+) -> tuple[str, str]:
+    """Compute dispatch_readiness and reason string per CF006 spec."""
+    if session_status != "alive" or profile_drift:
+        return "unknown", f"session={session_status}, profile_drift={profile_drift}"
+
+    busy = queue_depth > 0 and latest_status not in ("task_done", "task_failed", None)
+    if busy:
+        return "busy", f"queue_depth={queue_depth}, latest_status={latest_status}"
+
+    hot = queue_depth > 0 or latest_status not in ("task_done", "task_failed", None)
+    if hot:
+        return "hot", f"queue_depth={queue_depth}, latest_status={latest_status}"
+
+    # queue is drained from here (queue_depth == 0 and latest done/failed)
+    clean = (
+        latest_verdict == "PASS"
+        and review_latest_clean
+        and not workspace_dirty
+    )
+    if clean:
+        parts = ["drained", "latest task PASS"]
+        if review_latest_clean:
+            parts.append("commit on review/latest")
+        if not workspace_dirty:
+            parts.append("workspace clean")
+        return "clean", ", ".join(parts)
+
+    if latest_status == "task_done" and not review_latest_clean:
+        return "idle_unmerged", "drained, latest task PASS, but not merged to review/latest"
+
+    # fallback: drained but not clean (dirty workspace, verdict not PASS, etc.)
+    parts = ["drained"]
+    if latest_verdict:
+        parts.append(f"verdict={latest_verdict}")
+    if not review_latest_clean:
+        parts.append("not on review/latest")
+    if workspace_dirty:
+        parts.append("workspace dirty")
+    return "idle_unmerged", ", ".join(parts)
+
+
 def check_review_latest_worktree(project: str) -> dict:
     """Return diagnostic snapshot of a project's review/latest worktree state.
 
@@ -1321,6 +1421,22 @@ def planner_status_snapshot(project: str) -> list[dict]:
                 or (session_rt["auth_mode"] and session_rt["auth_mode"] != meta["auth_mode"])
                 or (session_rt["provider"] and session_rt["provider"] != meta["provider"])
             )
+        # Compute open task count for queue_depth
+        open_statuses = {"task_created", "task_waiting_for", "task_claimed", "task_in_progress"}
+        queue_depth = sum(1 for ts in tasks.values() if ts.status in open_statuses)
+        session_status = session_rt["session_status"] if session_rt else "unknown"
+        workspace_dirty = _check_workspace_dirty(project)
+        review_latest_clean = _check_review_latest_clean(project)
+        review_latest_commit = _check_review_latest_commit(project)
+        readiness, readiness_reason = _compute_dispatch_readiness(
+            queue_depth=queue_depth,
+            latest_status=latest.status if latest else None,
+            latest_verdict=latest.verdict if latest else None,
+            review_latest_clean=review_latest_clean,
+            workspace_dirty=workspace_dirty,
+            session_status=session_status,
+            profile_drift=profile_drift,
+        )
         rows.append({
             "team": str(team_name),
             "planner_seat": meta["planner_seat"],
@@ -1334,8 +1450,10 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "team_type": meta["team_type"],
             "queue_state": _queue_state_label(tasks),
             "task_count": len(tasks),
+            "queue_depth": queue_depth,
             "latest_task_id": latest.task_id if latest else None,
             "latest_task_status": latest.status if latest else None,
+            "latest_task_verdict": latest.verdict if latest else None,
             "latest_task_ts": latest.last_event_ts if latest else None,
             "attention_task_id": attention.task_id if attention else None,
             "attention_task_status": attention.status if attention else None,
@@ -1345,7 +1463,12 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "session_auth_mode": session_rt["auth_mode"] if session_rt else None,
             "session_provider": session_rt["provider"] if session_rt else None,
             "session_name": session_rt["session_name"] if session_rt else None,
-            "session_status": session_rt["session_status"] if session_rt else "unknown",
+            "session_status": session_status,
+            "workspace_dirty": workspace_dirty,
+            "review_latest_clean": review_latest_clean,
+            "review_latest_commit": review_latest_commit,
+            "dispatch_readiness": readiness,
+            "dispatch_readiness_reason": readiness_reason,
         })
     return rows
 
@@ -1415,6 +1538,16 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             f"{attention_suffix}"
             f"{drift_suffix}"
             f"{live_suffix}"
+        )
+        readiness = row.get("dispatch_readiness", "unknown")
+        readiness_reason = row.get("dispatch_readiness_reason", "")
+        dirty_flag = "dirty" if row.get("workspace_dirty") else "clean"
+        merged_flag = "merged" if row.get("review_latest_clean") else "unmerged"
+        print(
+            f"{'':30s}  dispatch_readiness={readiness}"
+            f"  workspace={dirty_flag}"
+            f"  review/latest={merged_flag}"
+            f"  [{readiness_reason}]"
         )
     # Review worktree status — project-level, shown once after all team rows
     if not getattr(args, "json", False):
