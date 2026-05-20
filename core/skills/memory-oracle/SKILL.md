@@ -67,14 +67,10 @@ python3 core/scripts/agent_admin.py brief queue \
   --seats-required planner
 ```
 
-The queue CLI writes `tasks/<project>/<team>/brief/<task_id>.md`, appends a
-`task_created` event to `tasks.queue.jsonl`, and wakes the owning planner.
-Do not hand-write a brief and then call `dispatch_task.py` for v3
-memory→planner work; that creates split-brain state between handoff receipts
-and the team queue.
-
-`dispatch_task.py` remains valid for planner→specialist handoffs and legacy v2
-workflows. It is not the v3 memory→planner entry point.
+The queue CLI writes the brief, appends `task_created`, and wakes the owning
+planner. `dispatch_task.py` remains valid for planner-owned downstream handoffs
+and legacy v2 workflows; runtime rejects v3 memory→planner use because it
+creates split-brain state between handoff receipts and the team queue.
 
 `send-and-verify.sh` does not replace the queue command:
 

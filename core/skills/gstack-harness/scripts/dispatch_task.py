@@ -55,6 +55,47 @@ def _is_task_already_queued(todo_path: Path, task_id: str) -> bool:
     ))
 
 
+def _profile_is_v3_multi_team(profile: object) -> bool:
+    """Return True for v3 multi-team profiles.
+
+    Kept local to dispatch_task.py so the legacy harness loader does not need
+    to grow a new public schema field just to enforce this guard.
+    """
+    try:
+        text = Path(getattr(profile, "profile_path")).read_text(encoding="utf-8")
+    except Exception:
+        return False
+    return "\n[teams]\n" in text or 'team_structure = "multi"' in text
+
+
+def _reject_v3_memory_to_planner_dispatch(
+    *,
+    profile: object,
+    source: str,
+    target: str,
+    source_role: str,
+    target_role: str,
+) -> bool:
+    """Block the split-brain legacy path: memory -> planner via dispatch_task.
+
+    In v3 multi-team projects, memory creates planner work by appending to the
+    team's queue. dispatch_task.py writes handoff/TODO state instead, which the
+    v3 planner-status path does not treat as queued planner work.
+    """
+    source_is_memory = source == "memory" or source_role in {"memory", "project-memory"}
+    if not (source_is_memory and target_role == "planner" and _profile_is_v3_multi_team(profile)):
+        return False
+    print(
+        "error: v3 memory->planner dispatch must use agent_admin.py brief queue; "
+        "dispatch_task.py is for planner-owned downstream handoffs or legacy v2.\n"
+        f"hint: python3 {getattr(profile, 'agent_admin', 'core/scripts/agent_admin.py')} "
+        f"brief queue --project {getattr(profile, 'project_name', '<project>')} "
+        "--team <team> --task-id <id> --objective '<objective>'",
+        file=sys.stderr,
+    )
+    return True
+
+
 
 # ── Intent → gstack skill mapping ──────────────────────────────────────
 #
@@ -883,6 +924,14 @@ def main() -> int:
         return 2
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
+    if _reject_v3_memory_to_planner_dispatch(
+        profile=profile,
+        source=args.source,
+        target=args.target,
+        source_role=source_role,
+        target_role=target_role,
+    ):
+        return 2
     if target_role == "builder" and not args.finding_id:
         outstanding_task = _builder_outstanding_task(todo_path)
         if outstanding_task and outstanding_task != args.task_id:

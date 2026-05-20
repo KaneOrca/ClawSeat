@@ -14,7 +14,7 @@ def test_memory_skill_documents_dispatch_protocol_and_absent_planner_fallback() 
     assert "dispatch protocol" in lowered
     assert "agent_admin.py brief queue" in text
     assert "memory→planner" in text
-    assert "Do not hand-write a brief and then call `dispatch_task.py`" in text
+    assert "runtime rejects v3 memory→planner use" in text
     assert "dispatch_task.py" in text
     assert "send-and-verify" in text
     assert "absent-planner" in lowered
