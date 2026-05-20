@@ -89,7 +89,43 @@ def test_dispatch_task_rejects_v3_memory_to_planner_split_brain(tmp_path: Path) 
     )
 
     assert result.returncode == 2
-    assert "v3 memory->planner dispatch must use agent_admin.py brief queue" in result.stderr
+    assert "v3 planner-target dispatch must use agent_admin.py brief queue" in result.stderr
     assert "brief queue --project test-project" in result.stderr
     assert not planner_todo.exists()
 
+
+def test_dispatch_task_rejects_v3_generic_planner_source_to_planner(tmp_path: Path) -> None:
+    profile, planner_todo = _v3_profile(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "dispatch_task.py"),
+            "--profile",
+            str(profile),
+            "--source",
+            "planner",
+            "--target",
+            "product-planner",
+            "--task-id",
+            "cu018-solo-tui-auto-grid-20260520",
+            "--title",
+            "Solo TUI auto grid",
+            "--objective",
+            "Open newly created solo TUI sessions in the PTY grid.",
+            "--test-policy",
+            "EXTEND",
+            "--reply-to",
+            "planner",
+            "--no-notify",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(SCRIPTS),
+    )
+
+    assert result.returncode == 2
+    assert "v3 planner-target dispatch must use agent_admin.py brief queue" in result.stderr
+    assert "generic planner aliases" in result.stderr
+    assert "brief queue --project test-project" in result.stderr
+    assert not planner_todo.exists()

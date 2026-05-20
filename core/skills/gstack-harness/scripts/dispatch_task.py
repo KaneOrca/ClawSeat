@@ -68,7 +68,7 @@ def _profile_is_v3_multi_team(profile: object) -> bool:
     return "\n[teams]\n" in text or 'team_structure = "multi"' in text
 
 
-def _reject_v3_memory_to_planner_dispatch(
+def _reject_v3_planner_target_dispatch(
     *,
     profile: object,
     source: str,
@@ -76,17 +76,18 @@ def _reject_v3_memory_to_planner_dispatch(
     source_role: str,
     target_role: str,
 ) -> bool:
-    """Block the split-brain legacy path: memory -> planner via dispatch_task.
+    """Block v3 planner work that bypasses the brief queue.
 
     In v3 multi-team projects, memory creates planner work by appending to the
     team's queue. dispatch_task.py writes handoff/TODO state instead, which the
     v3 planner-status path does not treat as queued planner work.
     """
-    source_is_memory = source == "memory" or source_role in {"memory", "project-memory"}
-    if not (source_is_memory and target_role == "planner" and _profile_is_v3_multi_team(profile)):
+    planner_roles = {"planner", "planner-dispatcher"}
+    if not (_profile_is_v3_multi_team(profile) and target_role in planner_roles):
         return False
     print(
-        "error: v3 memory->planner dispatch must use agent_admin.py brief queue; "
+        "error: v3 planner-target dispatch must use agent_admin.py brief queue; "
+        "this blocks memory->planner split-brain and generic planner aliases. "
         "dispatch_task.py is for planner-owned downstream handoffs or legacy v2.\n"
         f"hint: python3 {getattr(profile, 'agent_admin', 'core/scripts/agent_admin.py')} "
         f"brief queue --project {getattr(profile, 'project_name', '<project>')} "
@@ -924,7 +925,7 @@ def main() -> int:
         return 2
     source_role = normalize_role(profile.seat_roles.get(args.source, ""))
     target_role = normalize_role(profile.seat_roles.get(args.target, ""))
-    if _reject_v3_memory_to_planner_dispatch(
+    if _reject_v3_planner_target_dispatch(
         profile=profile,
         source=args.source,
         target=args.target,
