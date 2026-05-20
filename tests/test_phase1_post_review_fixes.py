@@ -403,11 +403,13 @@ def test_brief_done_advances_created_task_to_pass(tmp_path, monkeypatch):
 
     monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     parser = build_parser()
+    brief = tmp_path / "ready.md"
+    _write_ready_brief_content(brief, task_id="Tdone")
     assert (
         cmd_queue(
             parser.parse_args(
                 ["queue", "--project", "p", "--team", "t", "--task-id", "Tdone",
-                 "--objective", "done"]
+                 "--objective", "done", "--brief-content-file", str(brief), "--no-wake"]
             )
         )
         == 0

@@ -225,18 +225,55 @@ def _write_fake_wake_script(tmp_path: Path, *, exit_code: int = 0) -> tuple[Path
     return script, log_path
 
 
+def _write_ready_brief(
+    path: Path,
+    *,
+    project: str,
+    team: str,
+    task_id: str,
+    seats_required: str = "builder",
+) -> None:
+    path.write_text(
+        f"""---
+task_id: {task_id}
+project: {project}
+team: {team}
+objective: "ready brief"
+seats_required: [{seats_required}]
+acceptance_criteria:
+  mechanical:
+    - "true"
+  reviewer: []
+  operator: []
+---
+
+# Brief
+""",
+        encoding="utf-8",
+    )
+
+
 def test_canonical_brief_queue_list_claim_show(env_home, tmp_path):
     """Audit fix 3: exercise brief via canonical agent_admin entrypoint, not
     bypassing into agent_admin_brief.cmd_queue() directly. Doesn't claim to be
     end-to-end with live planner; just validates CLI plumbing."""
     project = "sts-dogfood"
     team = "core"
+    brief = tmp_path / "sts-core-001.md"
+    _write_ready_brief(
+        brief,
+        project=project,
+        team=team,
+        task_id="STS-CORE-001",
+        seats_required="builder, reviewer",
+    )
 
     r1 = _run_agent_admin(env_home, "brief", "queue",
                            "--project", project, "--team", team,
                            "--task-id", "STS-CORE-001",
                            "--objective", "Implement EffectExpression DSL v1.0 prototype",
                            "--seats-required", "builder", "reviewer",
+                           "--brief-content-file", str(brief),
                            "--no-wake")
     assert r1.returncode == 0, f"queue failed: {r1.stderr}"
     assert "queued task STS-CORE-001" in r1.stdout
@@ -268,6 +305,8 @@ def test_brief_queue_wakes_team_planner(env_home, tmp_path):
     team = "core"
     _write_queue_wake_profile(env_home, project=project, team=team)
     send_script, wake_log = _write_fake_wake_script(tmp_path)
+    brief = tmp_path / "sts-core-002.md"
+    _write_ready_brief(brief, project=project, team=team, task_id="STS-CORE-002")
 
     r = _run_agent_admin(
         env_home,
@@ -276,6 +315,7 @@ def test_brief_queue_wakes_team_planner(env_home, tmp_path):
         "--task-id", "STS-CORE-002",
         "--objective", "Wake the planner after queue append",
         "--seats-required", "builder",
+        "--brief-content-file", str(brief),
         extra_env={
             "CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT": str(send_script),
             "WAKE_LOG": str(wake_log),
@@ -296,6 +336,8 @@ def test_brief_queue_reports_wake_failure_without_losing_task(env_home, tmp_path
     task_id = "STS-CORE-003"
     _write_queue_wake_profile(env_home, project=project, team=team)
     send_script, wake_log = _write_fake_wake_script(tmp_path, exit_code=42)
+    brief = tmp_path / "sts-core-003.md"
+    _write_ready_brief(brief, project=project, team=team, task_id=task_id)
 
     r = _run_agent_admin(
         env_home,
@@ -304,6 +346,7 @@ def test_brief_queue_reports_wake_failure_without_losing_task(env_home, tmp_path
         "--task-id", task_id,
         "--objective", "Keep durable task when wake fails",
         "--seats-required", "builder",
+        "--brief-content-file", str(brief),
         extra_env={
             "CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT": str(send_script),
             "WAKE_LOG": str(wake_log),

@@ -188,6 +188,70 @@ def _validate_external_brief_content(
         )
 
 
+def _brief_frontmatter(brief_text: str, source_path: str) -> dict:
+    if not brief_text.startswith("---\n"):
+        raise InputValidationError(
+            f"{source_path}: brief content must start with '---' frontmatter"
+        )
+    end = brief_text.find("\n---\n", 4)
+    if end == -1:
+        end = brief_text.find("\n---", 4)
+    if end == -1:
+        raise InputValidationError(f"{source_path}: unterminated frontmatter")
+    try:
+        data = yaml.safe_load(brief_text[4:end])
+    except Exception as exc:  # noqa: BLE001
+        raise InputValidationError(f"{source_path}: frontmatter parse error: {exc}")
+    if not isinstance(data, dict):
+        raise InputValidationError(f"{source_path}: frontmatter must be a mapping")
+    return data
+
+
+def _criterion_text(item: object) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        fields = [
+            item.get("command"),
+            item.get("description"),
+            item.get("summary"),
+            item.get("question"),
+        ]
+        return " ".join(str(v) for v in fields if v is not None)
+    return str(item)
+
+
+def _brief_acceptance_block_reason(brief_text: str, source_path: str = "<brief>") -> str | None:
+    """Return a block reason when a brief is not ready for planner wake/claim."""
+    try:
+        data = _brief_frontmatter(brief_text, source_path)
+    except InputValidationError as exc:
+        return str(exc)
+    ac = data.get("acceptance_criteria") or {}
+    mech = ac.get("mechanical")
+    if not isinstance(mech, list) or not mech:
+        return "acceptance_criteria.mechanical is empty"
+
+    placeholder_patterns = (
+        "todo:",
+        "todo",
+        "replace with",
+        "placeholder",
+        "待 memory 补全",
+        "待补全",
+        "<待",
+    )
+    for route in ("mechanical", "reviewer", "operator"):
+        items = ac.get(route) or []
+        if not isinstance(items, list):
+            return f"acceptance_criteria.{route} must be a list"
+        for item in items:
+            text = _criterion_text(item).strip().lower()
+            if any(pattern in text for pattern in placeholder_patterns):
+                return f"acceptance_criteria.{route} contains placeholder text"
+    return None
+
+
 def _agents_root() -> Path:
     return real_user_home() / ".agents"
 
@@ -588,6 +652,8 @@ def cmd_queue(args: argparse.Namespace) -> int:
             "-->\n"
         )
 
+    acceptance_block = _brief_acceptance_block_reason(brief_text, str(brief))
+
     # Fix #5: write to temp file, atomic rename ONLY after append succeeds.
     # If append fails, we unlink the temp file and leave any pre-existing brief alone.
     tmp_fd, tmp_name = tempfile.mkstemp(
@@ -625,6 +691,23 @@ def cmd_queue(args: argparse.Namespace) -> int:
     print(f"  brief: {brief}")
     print(f"  queue: {queue}")
     print(f"  seq:   {result['seq']}")
+    if acceptance_block:
+        wait_event = {
+            "event_type": "task_waiting_for",
+            "actor": "memory",
+            "task_id": task_id,
+            "waiting_for": "acceptance_criteria",
+        }
+        try:
+            append_event(queue, wait_event)
+        except QueueError as exc:
+            print(f"waiting_for append failed: {exc}", file=sys.stderr)
+            return 1
+        if args.no_wake:
+            print("WAKE_SKIPPED (--no-wake)")
+            return 0
+        print(f"WAKE_DEFERRED reason=acceptance_criteria detail={acceptance_block}")
+        return 0
     if args.no_wake:
         print("WAKE_SKIPPED (--no-wake)")
         return 0
@@ -694,6 +777,31 @@ def cmd_claim(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+
+    brief_path = Path(ts.brief_path)
+    if not brief_path.is_absolute():
+        brief_path = _agents_root() / brief_path
+    if brief_path.exists():
+        acceptance_block = _brief_acceptance_block_reason(
+            brief_path.read_text(encoding="utf-8"),
+            str(brief_path),
+        )
+    else:
+        acceptance_block = f"brief missing: {brief_path}"
+    if acceptance_block:
+        event = {
+            "event_type": "task_waiting_for",
+            "actor": args.actor,
+            "task_id": args.task_id,
+            "waiting_for": "acceptance_criteria",
+        }
+        try:
+            append_event(queue, event)
+        except QueueError as exc:
+            print(f"waiting_for append failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"task {args.task_id} blocked on acceptance_criteria: {acceptance_block}")
+        return 3
 
     # Post-retest #5: check depends_on across ALL teams in the project.
     # Local queue checked first; if absent, fall through to cross-team scan.
@@ -1096,6 +1204,23 @@ def cmd_done(args: argparse.Namespace) -> int:
     if ts is None:
         print(f"task_id {args.task_id!r} not in queue", file=sys.stderr)
         return 2
+
+    brief_path = Path(ts.brief_path)
+    if not brief_path.is_absolute():
+        brief_path = _agents_root() / brief_path
+    if brief_path.exists():
+        acceptance_block = _brief_acceptance_block_reason(
+            brief_path.read_text(encoding="utf-8"),
+            str(brief_path),
+        )
+    else:
+        acceptance_block = f"brief missing: {brief_path}"
+    if acceptance_block:
+        print(
+            f"task {args.task_id} blocked on acceptance_criteria: {acceptance_block}",
+            file=sys.stderr,
+        )
+        return 3
 
     actor = args.actor
     if ts.status == "task_done":

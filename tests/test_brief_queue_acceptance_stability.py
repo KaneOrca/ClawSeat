@@ -73,10 +73,6 @@ def _write_fake_wake_script(tmp_path: Path) -> tuple[Path, Path]:
     return script, log_path
 
 
-@pytest.mark.xfail(
-    reason="WAKE_DEFERRED for skeleton briefs not yet implemented in cmd_queue",
-    strict=False,
-)
 def test_generated_todo_brief_defers_wake_and_blocks_claim(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     send_script, wake_log = _write_fake_wake_script(tmp_path)
@@ -106,6 +102,46 @@ def test_generated_todo_brief_defers_wake_and_blocks_claim(tmp_path, monkeypatch
     state = read_current_state(queue)["Ttodo"]
     assert state.status == "task_waiting_for"
     assert state.waiting_for == "acceptance_criteria"
+
+
+def test_placeholder_brief_content_defers_wake_and_blocks_claim(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    send_script, wake_log = _write_fake_wake_script(tmp_path)
+    monkeypatch.setenv("CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT", str(send_script))
+    monkeypatch.setenv("WAKE_LOG", str(wake_log))
+    project = "p"
+    team = "t"
+    task_id = "Tplaceholder"
+    _write_profile(tmp_path, project=project, team=team)
+    brief = tmp_path / "placeholder.md"
+    _write_brief(
+        brief,
+        project=project,
+        team=team,
+        task_id=task_id,
+        mechanical="TODO: replace with a real mechanical command before dispatch",
+    )
+    parser = build_parser()
+
+    rc = cmd_queue(parser.parse_args([
+        "queue", "--project", project, "--team", team, "--task-id", task_id,
+        "--objective", "Queue a placeholder criteria brief",
+        "--brief-content-file", str(brief),
+    ]))
+    out = capsys.readouterr()
+
+    assert rc == 0
+    assert "WAKE_DEFERRED reason=acceptance_criteria" in out.out
+    assert not wake_log.exists()
+
+    claim_rc = cmd_claim(parser.parse_args([
+        "claim", "--project", project, "--team", team, "--task-id", task_id,
+        "--actor", "planner@claude",
+    ]))
+    claim_out = capsys.readouterr()
+
+    assert claim_rc == 3
+    assert "blocked on acceptance_criteria" in claim_out.out
 
 
 def test_no_wake_remains_explicit_even_when_criteria_incomplete(tmp_path, monkeypatch, capsys):
