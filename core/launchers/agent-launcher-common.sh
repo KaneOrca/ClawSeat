@@ -3,17 +3,23 @@
 set -euo pipefail
 
 launcher_state_store_path() {
-  local launcher_home default_store
+  local launcher_home default_store desktop_store
   launcher_home="${REAL_HOME:-$HOME}"
   if [[ -n "${LAUNCHER_STATE_STORE:-}" ]]; then
     printf '%s\n' "$LAUNCHER_STATE_STORE"
-  elif [[ -f "$launcher_home/Desktop/.agent-launcher-state.json" ]]; then
-    printf '%s\n' "$launcher_home/Desktop/.agent-launcher-state.json"
-  else
-    default_store="$launcher_home/.config/clawseat/launcher-state.json"
-    mkdir -p "$(dirname "$default_store")"
-    printf '%s\n' "$default_store"
+    return
   fi
+  desktop_store="$launcher_home/Desktop/.agent-launcher-state.json"
+  # Prefer legacy Desktop path only when it exists AND is writable.
+  # An unwritable Desktop file (macOS TCC/permission denial) falls through to
+  # the XDG config default so the launcher is not killed by a permission error.
+  if [[ -f "$desktop_store" && -w "$desktop_store" ]]; then
+    printf '%s\n' "$desktop_store"
+    return
+  fi
+  default_store="$launcher_home/.config/clawseat/launcher-state.json"
+  mkdir -p "$(dirname "$default_store")"
+  printf '%s\n' "$default_store"
 }
 
 launcher_remember_recent_dir() {
@@ -48,8 +54,12 @@ recent = [
 recent.insert(0, path)
 data["recent_dirs"] = recent[:12]
 
-with open(store_path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, ensure_ascii=False, indent=2)
+# Best-effort write: permission failure must not abort a seat launch.
+try:
+    with open(store_path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=2)
+except OSError:
+    pass
 PY
 }
 
