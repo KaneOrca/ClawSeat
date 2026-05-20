@@ -23,9 +23,18 @@ def test_reviewer_skill_declares_canonical_verdict_set() -> None:
 def test_planner_skill_relay_primary_uses_complete_handoff() -> None:
     text = Path("core/skills/planner/SKILL.md").read_text(encoding="utf-8")
 
-    assert "complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify" in text
+    assert "complete_handoff.py --source <exact planner seat> --target memory --task-id <id> --status completed --verdict <V> --notify" in text
+    stale_generic = "complete_handoff.py --source " + "planner --target memory"
+    assert stale_generic not in text
     assert "send-and-verify.sh --project <p> memory" not in text
     assert "wake-up only" in text
+    assert "Review/latest Integration" in text
+    assert "project-local validation worktree" in text
+    assert "Builders never merge `review/latest` or `main`" in text
+    assert "explicit user confirmation" in text
+    assert "Memory closeout records user confirmation" in text
+    assert "desktop launch scripts" in text
+    assert "stale tmp worktree" in text
 
     for verdict in (
         "APPROVED",

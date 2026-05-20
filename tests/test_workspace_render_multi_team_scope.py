@@ -304,6 +304,36 @@ memory = "project-memory"
     assert "TEAM_OWNERSHIP.md" not in text
 
 
+def test_workspace_contract_carries_review_latest_integration_boundary() -> None:
+    session = SimpleNamespace(
+        engineer_id="cartooner-front-planner",
+        tool="codex",
+        workspace="/tmp/agents/workspaces/cartooner/cartooner-front-planner",
+    )
+    project = SimpleNamespace(
+        name="cartooner",
+        engineers=["cartooner-front-planner"],
+        repo_root="/repo/cartooner",
+        template_name="",
+        seat_overrides={},
+    )
+    engineer = SimpleNamespace(role="planner", role_details=[], aliases=[])
+
+    payload = workspace.workspace_contract_payload(session, project, engineer)
+    contract = workspace.render_workspace_contract_text(session, project, engineer)
+    rules = payload["review_latest_integration"]
+
+    assert any("project-local validation worktree" in rule for rule in rules)
+    assert any("never share it across projects" in rule for rule in rules)
+    assert any("Builders never merge review/latest or main" in rule for rule in rules)
+    assert any("explicit user confirmation" in rule for rule in rules)
+    assert any("desktop launch scripts" in rule for rule in rules)
+    assert any("stale tmp worktree" in rule for rule in rules)
+    assert "review_latest_integration = [" in contract
+    assert "project-local validation worktree" in contract
+    assert "shared global worktree" in contract
+
+
 def test_quality_docs_planner_workspace_uses_campaign_mode(
     tmp_path: Path,
     monkeypatch,

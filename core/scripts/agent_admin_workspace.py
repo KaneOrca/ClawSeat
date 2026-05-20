@@ -1384,6 +1384,16 @@ def workspace_contract_payload(
         stripped = line.strip()
         if stripped.startswith(("Seats:", "Boundary:")):
             project_seat_map.append(stripped)
+    review_latest_integration = [
+        "Each ClawSeat project owns one project-local validation worktree for review/latest; never share it across projects.",
+        "Builders never merge review/latest or main.",
+        "Planner or workflow-named merge-owner integrates accepted changes only into that project's own review/latest worktree.",
+        "Planner closeout reports the review/latest worktree path plus hash, or blocker/conflict files.",
+        "Memory may merge from that project review/latest worktree to main only after explicit user confirmation.",
+        "Memory closeout records user confirmation, review/latest hash, and main merge hash or blocker.",
+        "Memory owns desktop launch scripts so user review opens this project's review/latest worktree, not main, a shared global worktree, or a stale tmp worktree.",
+        "On conflict: stop and report; no force-push and no main changes.",
+    ]
     return {
         "engineer_id": session.engineer_id,
         "project": project.name,
@@ -1406,6 +1416,7 @@ def workspace_contract_payload(
             )
             if line.startswith("- ")
         ],
+        "review_latest_integration": review_latest_integration,
         "source_paths": source_paths,
     }
 
@@ -1451,6 +1462,7 @@ def render_workspace_contract_text(
         f"project_seat_map = {q_array([str(item) for item in payload['project_seat_map']])}",
         f"seat_boundary = {q_array([str(item) for item in payload['seat_boundary']])}",
         f"communication_protocol = {q_array([str(item) for item in payload['communication_protocol']])}",
+        f"review_latest_integration = {q_array([str(item) for item in payload['review_latest_integration']])}",
         f"source_paths = {q_array([str(item) for item in payload['source_paths']])}",
         "",
     ]

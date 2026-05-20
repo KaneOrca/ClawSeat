@@ -87,10 +87,10 @@ or `complete_handoff.py`, planner MUST within the same turn:
 1. Read `~/.agents/tasks/<project>/<seat>/DELIVERY.md` in full.
 2. Form verdict: `APPROVED` / `APPROVED_WITH_NITS` / `CHANGES_REQUESTED` / `BLOCKED` / `DECISION_NEEDED`.
 3. Update `~/.agents/tasks/<project>/planner/DELIVERY.md` with `task_id`,
-   `source: planner`, `target: memory`, `status`, `verdict`, commit hash,
+   `source: <exact planner seat>`, `target: memory`, `status`, `verdict`, commit hash,
    branch, sweep count, and a one-line summary extracted from builder DELIVERY.
 4. In single-team, legacy, or direct planner-entry route, relay to memory with:
-   `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <V> --notify`
+   `complete_handoff.py --source <exact planner seat> --target memory --task-id <id> --status completed --verdict <V> --notify`
    Use the canonical verdict from step 2. `send-and-verify.sh` is wake-up only and may follow the durable receipt when a separate nudge is needed; it is not the primary relay path.
 5. In multi-team delivery route, do not relay per task; mark/verify `task_done`, continue the team queue, and relay memory only when the queue is drained or blocked by memory/user authority.
 Why: if planner forms a verdict but idles waiting for user input, memory does
@@ -100,7 +100,17 @@ Exception: workflow.md tasks with `notify_on_done: [memory]` already trigger
 canonical relay; still update `planner/DELIVERY.md` as authoritative status. Planner self-closeout protocol: see [`core/references/planner-self-closeout-protocol.md`](../../references/planner-self-closeout-protocol.md).
 
 ### Chain End Relay to Memory (双入口都适用)
-After all specialists are approved and planner forms the verdict, legacy/single-team and planner-entry route must relay to memory with `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only. Multi-team delivery route uses `queue_drained_only`: no per-task memory relay; when the queue is empty, send a compact drained summary for memory final acceptance/commit. Quality-docs route uses `never_notify_memory`: update QUALITY.md/findings only.
+After all specialists are approved and planner forms the verdict, legacy/single-team and planner-entry route must relay to memory with `complete_handoff.py --source <exact planner seat> --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only. Multi-team delivery route uses `queue_drained_only`: no per-task memory relay; when the queue is empty, send a compact drained summary for memory final acceptance/commit. Quality-docs route uses `never_notify_memory`: update QUALITY.md/findings only.
+## Review/latest Integration
+
+- Each ClawSeat project owns one project-local validation worktree for `review/latest`; never share it across projects.
+- Builders never merge `review/latest` or `main`; planners also never merge directly to `main`.
+- Planner or workflow-named merge-owner integrates accepted changes only into that project's own `review/latest` worktree.
+- Planner closeout reports the `review/latest` worktree path plus hash, or blocker/conflict files.
+- Memory is the final main-integration boundary: only after explicit user confirmation may memory merge from that project `review/latest` worktree to `main`.
+- Memory closeout records user confirmation, `review/latest` hash, and main merge hash or blocker.
+- Memory owns desktop launch scripts so user review opens this project's `review/latest` worktree, not `main`, a shared global worktree, or a stale tmp worktree.
+- On conflict: stop and report; do not force-push and do not modify `main`.
 ## Memory-driven Compaction Request
 
 Planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and

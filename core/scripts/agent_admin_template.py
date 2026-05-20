@@ -97,7 +97,7 @@ def _load_role_skill_content(
       2. seat_skill_mapping.role_skill_for_seat(seat_id) — handles suffixed
          ids like `builder-1 -> builder` and `memory -> memory-oracle`.
     YAML frontmatter (leading `---` block) is stripped so the embedded
-    content slots cleanly under a `## Role SKILL (canonical)` header.
+    content can be referenced from a compact role skill hot contract.
     """
     def _read_skill(role_name: str) -> tuple[str, str] | None:
         skill_file = Path(repo_root) / "core" / "skills" / role_name / "SKILL.md"
@@ -170,26 +170,41 @@ def _role_skill_section_lines(
     role_hint: str | None = None,
     template_name: str | None = None,
 ) -> list[str]:
-    """Render the `## Role SKILL (canonical)` block, or [] when no skill."""
+    """Render the compact role skill hot contract, or [] when no skill."""
     role_hint = _resolve_cartooner_role_hint(seat_id, role_hint, template_name)
     info = _load_role_skill_content(repo_root, seat_id, role_hint)
     if not info:
         return []
-    role_name, body = info
+    role_name, _body = info
+    current_seat = (seat_id or "<current seat>").strip() or "<current seat>"
     return [
         "",
         "---",
         "",
-        "## Role SKILL (canonical)",
+        "## Role SKILL hot contract (canonical)",
         "",
         (
             f"Loaded from `core/skills/{role_name}/SKILL.md` — this is the "
-            "authoritative role contract for this seat. Treat any conflict "
-            "with the stub above as the SKILL winning; stub metadata exists "
-            "only to anchor the workspace to the rendered engineer profile."
+            "authoritative role contract for this seat. This generated "
+            "workspace keeps only the compact hot contract below; read the "
+            "full Role SKILL when detailed workflow rules are needed."
         ),
         "",
-        body.rstrip(),
+        f"- Exact current seat id: `{current_seat}`.",
+        "- Queue/files/receipts are source of truth: brief/TODO, workflow, DELIVERY, and handoff receipts beat chat text.",
+        "- Dispatch uses the canonical queue/brief path and `dispatch_task.py`; route by exact `owner_seat` when multiple owners exist.",
+        "- Acceptance fields are memory-owned and immutable; planner owns fan-in, acceptance execution, and verdict formation.",
+        "- Closeout uses `complete_handoff.py --source <exact current seat> --target <target> ...` for the durable receipt; `send-and-verify.sh` is wake-up only.",
+        "- In v3 multi-team planner closeout, use `source=<exact planner seat>`; do not rely on a generic planner source.",
+        "- Review/latest integration: each ClawSeat project owns one project-local validation worktree for `review/latest`; never share that worktree across projects.",
+        "- Builders never merge `review/latest` or `main`; planner or workflow-named merge-owner integrates accepted changes only into that project's own `review/latest` worktree.",
+        "- Memory is the final main-integration boundary: only after explicit user confirmation may memory merge from that project `review/latest` worktree to `main`.",
+        "- Memory closeout records user confirmation, `review/latest` hash, and main merge hash or blocker.",
+        "- Memory owns desktop launch scripts so user review opens this project's `review/latest` worktree, not `main`, a shared global worktree, or a stale tmp worktree.",
+        "- Planner closeout reports the `review/latest` worktree path plus hash, or blocker/conflict files. On conflict: stop and report; no force-push and no `main` changes.",
+        "- Memory relay follows project notify policy: queue-drained or authority blockers for multi-team delivery; never per-task memory wake unless policy says so.",
+        "- Safety/privacy boundaries stay hot: do not touch secrets, auth/provider policy, seat lifecycle, or unrelated user changes without authority.",
+        "- Operator Language Matching: match the last operator language while preserving commands, paths, task IDs, and `owner_seat` literals.",
     ]
 
 
