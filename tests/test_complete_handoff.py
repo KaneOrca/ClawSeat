@@ -5,12 +5,19 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 _SCRIPTS = _REPO / "core" / "skills" / "gstack-harness" / "scripts"
 _DISPATCH = _SCRIPTS / "dispatch_task.py"
 _COMPLETE = _SCRIPTS / "complete_handoff.py"
+
+sys.path.insert(0, str(_REPO / "core" / "lib"))
+sys.path.insert(0, str(_SCRIPTS))
+
+from complete_handoff import complete_v3_brief_queue_if_possible  # noqa: E402
+from queue_io import append_event, read_current_state  # noqa: E402
 
 
 def _run(*cmd: str, cwd: Path | str | None = None) -> subprocess.CompletedProcess[str]:
@@ -226,6 +233,59 @@ def test_completion_accepts_required_closure_fields_when_available(tmp_path: Pat
     assert receipt["branch_tip"] == expected_tip
     assert receipt["pr_number"] == "101"
     assert receipt["ci_conclusion"] == "success"
+
+
+def test_completion_syncs_matching_v3_brief_queue(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    queue = tasks_root / "team-a" / "tasks.queue.jsonl"
+    profile_path = tmp_path / "profile.toml"
+    profile_path.write_text(
+        f"""profile_name = "p-profile"
+project_name = "p"
+tasks_root = "{tasks_root}"
+
+[teams]
+team-a = {{ seats = ["team-a-planner"] }}
+
+[seat_overrides.team-a-planner]
+tool = "claude"
+""",
+        encoding="utf-8",
+    )
+    append_event(
+        queue,
+        {
+            "event_type": "task_created",
+            "actor": "memory",
+            "task_id": "T1",
+            "brief_path": "tasks/p/team-a/brief/T1.md",
+            "parent_task_id": None,
+            "depends_on": [],
+        },
+    )
+    append_event(
+        queue,
+        {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "T1"},
+    )
+    profile = SimpleNamespace(
+        profile_path=profile_path,
+        tasks_root=tasks_root,
+        seat_overrides={"team-a-planner": {"tool": "claude"}},
+    )
+
+    synced = complete_v3_brief_queue_if_possible(
+        profile,
+        seat="team-a-planner",
+        task_id="T1",
+        status="completed",
+        verdict="PASS",
+        summary="done",
+    )
+
+    assert synced == queue
+    state = read_current_state(queue)
+    assert state["T1"].status == "task_done"
+    assert state["T1"].verdict == "PASS"
 
 
 def test_completion_without_branch_fields_fails_when_expected_base_present(tmp_path: Path) -> None:

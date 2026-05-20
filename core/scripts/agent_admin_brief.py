@@ -1013,8 +1013,27 @@ def check_review_latest_worktree(project: str) -> dict:
     }
 
 
+def _tmux_session_status(session_name: str) -> str:
+    """Return alive/dead/unknown for a tmux session name."""
+    if not session_name:
+        return "unknown"
+    env = dict(os.environ)
+    env.pop("TMUX", None)
+    try:
+        result = subprocess.run(
+            ["tmux", "has-session", "-t", f"={session_name}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return "unknown"
+    return "alive" if result.returncode == 0 else "dead"
+
+
 def _read_session_runtime(project: str, planner_seat: str) -> dict | None:
-    """Read tool/auth_mode/provider from the planner's session.toml, or None."""
+    """Read runtime metadata and tmux liveness from session.toml, or None."""
     session_file = (
         real_user_home() / ".agents" / "sessions" / project / planner_seat / "session.toml"
     )
@@ -1025,10 +1044,13 @@ def _read_session_runtime(project: str, planner_seat: str) -> dict | None:
             data = _toml_load_safe(fh)
         if not isinstance(data, dict) or not data.get("tool"):
             return None
+        session_name = str(data.get("session") or "")
         return {
             "tool": str(data.get("tool") or ""),
             "auth_mode": str(data.get("auth_mode") or ""),
             "provider": str(data.get("provider") or ""),
+            "session_name": session_name,
+            "session_status": _tmux_session_status(session_name),
         }
     except Exception:  # noqa: BLE001
         return None
@@ -1116,6 +1138,8 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "session_tool": session_rt["tool"] if session_rt else None,
             "session_auth_mode": session_rt["auth_mode"] if session_rt else None,
             "session_provider": session_rt["provider"] if session_rt else None,
+            "session_name": session_rt["session_name"] if session_rt else None,
+            "session_status": session_rt["session_status"] if session_rt else "unknown",
         })
     return rows
 
@@ -1160,12 +1184,18 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             session_auth = row.get("session_auth_mode") or "?"
             session_prov = row.get("session_provider") or "?"
             drift_suffix = f"  [DRIFT: session={session_tool}({session_prov},{session_auth})]"
+        live_suffix = ""
+        if row.get("session_status") == "dead":
+            live_suffix = f"  [DEAD: session={row.get('session_name') or '?'}]"
+        elif row.get("session_status") == "alive":
+            live_suffix = "  [LIVE]"
         print(
             f"{row['team']:30s}  planner={row['planner_seat']}"
             f"  tool={tool_label}"
             f"  queue={row['queue_state']}({row['task_count']})"
             f"  latest={latest_label}"
             f"{drift_suffix}"
+            f"{live_suffix}"
         )
     # Review worktree status — project-level, shown once after all team rows
     if not getattr(args, "json", False):

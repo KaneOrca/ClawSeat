@@ -94,6 +94,33 @@ def _seed_queue(home: Path, project: str, team: str, events: list[dict]) -> Path
     return q
 
 
+def _write_session_runtime(
+    home: Path,
+    *,
+    project: str,
+    seat: str,
+    session: str,
+    tool: str = "claude",
+    auth_mode: str = "oauth_token",
+    provider: str = "anthropic",
+) -> Path:
+    session_dir = home / ".agents" / "sessions" / project / seat
+    session_dir.mkdir(parents=True, exist_ok=True)
+    path = session_dir / "session.toml"
+    path.write_text(
+        f"""version = 1
+project = "{project}"
+engineer_id = "{seat}"
+tool = "{tool}"
+auth_mode = "{auth_mode}"
+provider = "{provider}"
+session = "{session}"
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Unit tests for helpers
 # ---------------------------------------------------------------------------
@@ -218,6 +245,35 @@ class TestPlannerStatusSnapshot:
         rows = planner_status_snapshot("p")
         team_a = next(r for r in rows if r["team"] == "team-a")
         assert team_a["queue_state"] == "drained"
+
+    def test_session_liveness_reports_dead_planner(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_multi_profile(tmp_path, project="p")
+        _write_session_runtime(
+            tmp_path,
+            project="p",
+            seat="team-a-planner",
+            session="p-team-a-planner-claude",
+        )
+        _seed_queue(tmp_path, "p", "team-a", [
+            {"event_type": "task_created", "actor": "memory", "task_id": "T1",
+             "brief_path": "b/T1.md", "parent_task_id": None, "depends_on": []},
+            {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "T1"},
+            {"event_type": "task_in_progress", "actor": "planner@claude", "task_id": "T1"},
+            {"event_type": "task_done", "actor": "planner@claude", "task_id": "T1", "verdict": "PASS"},
+        ])
+
+        class Result:
+            returncode = 1
+            stdout = ""
+            stderr = ""
+
+        monkeypatch.setattr(brief_mod.subprocess, "run", lambda *a, **kw: Result())
+
+        rows = planner_status_snapshot("p")
+        team_a = next(r for r in rows if r["team"] == "team-a")
+        assert team_a["session_name"] == "p-team-a-planner-claude"
+        assert team_a["session_status"] == "dead"
         assert team_a["task_count"] == 1
         assert team_a["latest_task_id"] == "T1"
         assert team_a["latest_task_status"] == "task_done"

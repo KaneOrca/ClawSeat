@@ -12,6 +12,11 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+    import tomli as tomllib  # type: ignore
+
 # Add core/lib to path so seat_resolver can be imported
 _scripts_dir = Path(__file__).parent.resolve()
 _core_lib = _scripts_dir.parent.parent.parent / "lib"
@@ -45,6 +50,11 @@ from _common import (
 )
 
 from seat_resolver import resolve_seat_from_profile
+from queue_io import (  # noqa: E402
+    QueueError as V3QueueError,
+    append_event as append_v3_queue_event,
+    read_current_state as read_v3_current_state,
+)
 
 
 def _do_prune(text: str, task_id: str) -> str:
@@ -510,6 +520,98 @@ def complete_source_queue_if_possible(
             file=sys.stderr,
         )
         return primary
+
+
+def _v3_team_for_seat(profile: object, seat: str) -> str | None:
+    """Return the v3 team that owns a seat, if the profile declares one."""
+    profile_path = getattr(profile, "profile_path", None)
+    if profile_path is None:
+        return None
+    try:
+        data = tomllib.loads(Path(profile_path).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - best-effort compatibility path
+        return None
+    teams = data.get("teams")
+    if not isinstance(teams, dict):
+        return None
+    for team_name, team_cfg in teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        seats = [str(item) for item in (team_cfg.get("seats") or [])]
+        if seat in seats:
+            return str(team_name)
+    return None
+
+
+def _v3_queue_actor_for_seat(profile: object, seat: str) -> str:
+    overrides = getattr(profile, "seat_overrides", {}) or {}
+    override = overrides.get(seat) or {} if isinstance(overrides, dict) else {}
+    tool = str(override.get("tool") or "").strip().lower()
+    if tool in {"claude", "codex", "gemini"}:
+        return f"planner@{tool}"
+    return "operator"
+
+
+def complete_v3_brief_queue_if_possible(
+    profile: object,
+    *,
+    seat: str,
+    task_id: str,
+    status: str,
+    verdict: str | None,
+    summary: str,
+) -> Path | None:
+    """Mirror a planner completion receipt into its v3 team queue when possible.
+
+    Some seats still close out by calling complete_handoff.py directly. That is
+    a valid durable receipt, but without this bridge planner-status keeps
+    showing task_claimed. This only appends missing state-machine events for the
+    seat's own v3 team queue; it never creates tasks or changes another team.
+    """
+    if str(status or "").strip() != "completed":
+        return None
+    if verdict and str(verdict).strip() not in {"PASS", "APPROVED"}:
+        return None
+
+    team = _v3_team_for_seat(profile, seat)
+    if not team:
+        return None
+    tasks_root = getattr(profile, "tasks_root", None)
+    if tasks_root is None:
+        return None
+    queue = Path(tasks_root) / team / "tasks.queue.jsonl"
+    if not queue.exists():
+        return None
+
+    state = read_v3_current_state(queue)
+    ts = state.get(task_id)
+    if ts is None:
+        return None
+    if ts.status == "task_done":
+        return queue
+
+    if ts.status in ("task_created", "task_waiting_for"):
+        plan = ["task_claimed", "task_in_progress", "task_done"]
+    elif ts.status == "task_claimed":
+        plan = ["task_in_progress", "task_done"]
+    elif ts.status == "task_in_progress":
+        plan = ["task_done"]
+    else:
+        return None
+
+    actor = _v3_queue_actor_for_seat(profile, seat)
+    for event_type in plan:
+        event = {
+            "event_type": event_type,
+            "actor": actor,
+            "task_id": task_id,
+        }
+        if event_type == "task_done":
+            event["verdict"] = "PASS"
+            if summary:
+                event["summary"] = summary
+        append_v3_queue_event(queue, event)
+    return queue
 
 
 def build_frontstage_objective(
@@ -1246,9 +1348,26 @@ def main() -> int:
         task_id=args.task_id,
         summary=summary,
     )
+    try:
+        source_v3_queue_path = complete_v3_brief_queue_if_possible(
+            profile,
+            seat=args.source,
+            task_id=args.task_id,
+            status=args.status,
+            verdict=args.verdict,
+            summary=summary,
+        )
+    except (V3QueueError, OSError) as exc:
+        source_v3_queue_path = None
+        print(
+            f"warn: v3 brief queue completion sync failed for {args.task_id}: {exc}",
+            file=sys.stderr,
+        )
     receipt["delivery_path"] = str(delivery_path)
     receipt["delivered_at"] = utc_now_iso()
     receipt["source_todo_path"] = str(source_todo_path)
+    if source_v3_queue_path is not None:
+        receipt["source_v3_queue_path"] = str(source_v3_queue_path)
     receipt["used_fallback_delivery"] = used_fallback_delivery
     receipt["verdict"] = args.verdict
     receipt["frontstage_disposition"] = args.frontstage_disposition
