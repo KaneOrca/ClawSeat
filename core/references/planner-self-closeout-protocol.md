@@ -34,12 +34,12 @@ commit, sweep count, and the one-line summary extracted from builder DELIVERY.
 Each ClawSeat project owns one project-local validation worktree for
 `review/latest`; never share it across projects. Builders never merge
 `review/latest` or `main`, and planners never merge directly to `main`.
-Planner or the workflow-named merge-owner integrates accepted changes only into
-that project's own `review/latest` worktree.
+Planner closeout reports branch/commit evidence, tests, and blocker/conflict
+files; it does not merge `review/latest`.
 
-Planner closeout must report the `review/latest` worktree path plus hash, or
-blocker/conflict files. On conflict: stop and report; do not force-push and do
-not modify `main`.
+Memory integrates accepted planner deliveries into that project's own
+`review/latest` worktree. On conflict: stop and report; do not force-push and
+do not modify `main`.
 
 Memory is the final main-integration boundary: only after explicit user
 confirmation may memory merge from that project `review/latest` worktree to

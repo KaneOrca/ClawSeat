@@ -1388,8 +1388,8 @@ def workspace_contract_payload(
     review_latest_integration = [
         "Each ClawSeat project owns one project-local validation worktree for review/latest; never share it across projects.",
         "Builders never merge review/latest or main.",
-        "Planner or workflow-named merge-owner integrates accepted changes only into that project's own review/latest worktree.",
-        "Planner closeout reports the review/latest worktree path plus hash, or blocker/conflict files.",
+        "Planner delivers branch/commit evidence, tests, and blockers; it does not merge review/latest.",
+        "Memory integrates accepted planner deliveries into that project's own review/latest worktree.",
         "Memory may merge from that project review/latest worktree to main only after explicit user confirmation.",
         "Memory closeout records user confirmation, review/latest hash, and main merge hash or blocker.",
         "Memory owns desktop launch scripts so user review opens this project's review/latest worktree, not main, a shared global worktree, or a stale tmp worktree.",

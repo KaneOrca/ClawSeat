@@ -197,7 +197,7 @@ def _role_skill_section_lines(
         "- Acceptance boundary: memory owns acceptance criteria; planner owns fan-in, acceptance execution, and verdict formation.",
         "- Closeout boundary: durable closeout uses `complete_handoff.py --source <exact current seat>`; planner closeout uses `source=<exact planner seat>`; `send-and-verify.sh` only wakes.",
         "- Queue policy: `drained` means all current tasks are `task_done`; failed, bounced, or reset queues are blocked, not complete.",
-        "- Integration boundary: accepted work lands in this project's `review/latest`; builders never merge it or `main`; memory merges `review/latest` to `main` only after explicit user confirmation.",
+        "- Integration boundary: planner delivers branch/commit evidence; memory integrates accepted work into this project's `review/latest`; builders never merge it or `main`; memory merges `review/latest` to `main` only after explicit user confirmation.",
         "- Safety boundary: do not touch secrets, auth/provider policy, seat lifecycle, unrelated user changes, or language style without authority.",
     ]
 

@@ -4,8 +4,9 @@ Each ClawSeat project owns exactly one scoped review/latest worktree path.
 The path must contain the project name and must not be a shared global path.
 
 Role contract (tested as labels, not code gates):
-- Planner/merge-owner: integrates feature branches into review_worktree
-- Memory: merges review/latest → main after operator confirmation;
+- Planner: delivers branch/commit/test evidence and does not merge review/latest
+- Memory: integrates accepted deliveries into review_worktree;
+          merges review/latest → main after operator confirmation;
           keeps launcher_worktree synced; maintains desktop launch script
 - Builder: does NOT merge review/latest or main
 

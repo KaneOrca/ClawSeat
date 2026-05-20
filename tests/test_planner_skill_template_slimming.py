@@ -42,6 +42,8 @@ def test_planner_skill_keeps_review_latest_integration_hot() -> None:
     assert "never share it across projects" in PLANNER_SKILL
     assert "Builders never merge `review/latest` or `main`" in PLANNER_SKILL
     assert "planners also never merge directly to `main`" in PLANNER_SKILL
+    assert "Planner closeout reports branch/commit evidence" in PLANNER_SKILL
+    assert "Memory integrates accepted planner deliveries" in PLANNER_SKILL
     assert "explicit user confirmation" in PLANNER_SKILL
     assert "Memory closeout records user confirmation" in PLANNER_SKILL
     assert "desktop launch scripts" in PLANNER_SKILL

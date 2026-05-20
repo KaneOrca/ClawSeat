@@ -1012,12 +1012,13 @@ def check_review_latest_worktree(project: str) -> dict:
     """Return diagnostic snapshot of a project's review/latest worktree state.
 
     Checks:
-    - review_worktree: planner/merge-owner owns; holds review/latest branch ref
+    - review_worktree: memory owns; holds review/latest branch ref
     - launcher_worktree: memory owns; detached HEAD for desktop launcher
 
     Role contract (enforced here as labels, not code gates):
-    - Planner/merge-owner: merges feature branches into review_worktree
-    - Memory: merges review/latest → main after operator confirmation;
+    - Planner: delivers branch/commit/test evidence; does not merge review/latest
+    - Memory: integrates accepted deliveries into review_worktree;
+              merges review/latest → main after operator confirmation;
               keeps launcher_worktree synced to review/latest
     - Builder: never merges review/latest or main
     """

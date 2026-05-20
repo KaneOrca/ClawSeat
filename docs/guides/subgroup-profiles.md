@@ -58,7 +58,7 @@ Default: **dev-minimal**.
 All four profiles inherit the same workflow invariants:
 
 - **Validation branch**: `local review/latest` is the operator validation snapshot.
-  Builder delivers a branch/commit; planner merges accepted work to local `review/latest`.
+  Builder/planner delivers branch/commit evidence; memory merges accepted work to local `review/latest`.
   Operator validates `review/latest` before authorizing memory/main integration.
 - **No push / no PR by default**: Remote push and PR creation are opt-in only.
   Builders and planners do not push unless operator explicitly requests it.
@@ -193,7 +193,7 @@ The generated `TEAM_OWNERSHIP.md` will name the chosen profile.
 ## Planner Authority (all profiles)
 
 - Planner owns: workflow authoring, builder dispatch, code review (when hot), acceptance, closeout.
-- Builder delivers to planner; planner merges to `review/latest` after acceptance.
+- Builder delivers to planner; planner reports accepted branch/commit evidence to memory.
 - Builder never merges into `review/latest` directly.
 - Planner assigns disjoint write scopes to builders in dev-standard.
 

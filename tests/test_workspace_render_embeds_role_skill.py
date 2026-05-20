@@ -229,6 +229,8 @@ def test_real_repo_role_skill_section_for_planner_includes_contract_marker() -> 
     assert "complete_handoff.py --source <exact current seat>" in joined
     assert "source=<exact planner seat>" in joined
     assert "review/latest" in joined
+    assert "planner delivers branch/commit evidence" in joined
+    assert "memory integrates accepted work" in joined
     assert "builders never merge it or `main`" in joined
     assert "explicit user confirmation" in joined
     assert "failed, bounced, or reset queues are blocked" in joined

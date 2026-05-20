@@ -326,11 +326,15 @@ def test_workspace_contract_carries_review_latest_integration_boundary() -> None
     assert any("project-local validation worktree" in rule for rule in rules)
     assert any("never share it across projects" in rule for rule in rules)
     assert any("Builders never merge review/latest or main" in rule for rule in rules)
+    assert any("Planner delivers branch/commit evidence" in rule for rule in rules)
+    assert any("Memory integrates accepted planner deliveries" in rule for rule in rules)
     assert any("explicit user confirmation" in rule for rule in rules)
     assert any("desktop launch scripts" in rule for rule in rules)
     assert any("stale tmp worktree" in rule for rule in rules)
     assert "review_latest_integration = [" in contract
     assert "project-local validation worktree" in contract
+    assert "does not merge review/latest" in contract
+    assert "Memory integrates accepted planner deliveries" in contract
     assert "shared global worktree" in contract
 
 
