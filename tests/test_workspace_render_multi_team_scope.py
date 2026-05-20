@@ -147,6 +147,51 @@ def test_multi_team_planner_workspace_shows_team_scope(
     assert "Reviewer gate: `cartooner-front-reviewer`" in text
 
 
+def test_multi_team_workspace_uses_project_toml_roster_and_overrides(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    _write_multi_profile(home)
+    project_dir = home / ".agents" / "projects" / "cartooner"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "project.toml").write_text(
+        """
+version = 1
+name = "cartooner"
+repo_root = "/repo/cartooner"
+engineers = ["memory", "cartooner-front-planner"]
+
+[seat_overrides.memory]
+tool = "claude"
+auth_mode = "api"
+provider = "minimax"
+
+[seat_overrides.cartooner-front-planner]
+tool = "codex"
+auth_mode = "oauth"
+provider = "openai"
+role = "planner-dispatcher"
+team = "cartooner-front"
+purpose = "Project-local active planner"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+    session = SimpleNamespace(engineer_id="cartooner-front-planner")
+    project = SimpleNamespace(name="cartooner", engineers=[], repo_root="/repo/cartooner")
+    engineer = SimpleNamespace(role="planner")
+
+    text = "\n".join(workspace.render_project_seat_map_lines(session, project, engineer))
+
+    assert "tool=codex, auth_mode=oauth, provider=openai" in text
+    assert "Project-local active planner" in text
+    assert "quality-docs" not in text
+    assert "provider=anthropic" not in text
+
+
 def test_multi_team_planner_protocol_uses_memory_not_legacy_koder(
     tmp_path: Path,
     monkeypatch,

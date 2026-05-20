@@ -323,7 +323,89 @@ def _load_dynamic_profile_data(project_name: str) -> tuple[Path, dict[str, Any]]
         return None
     if not isinstance(data, dict):
         return None
+    data = _merge_project_toml_ssot(project_name, data)
     return profile_path, data
+
+
+def _merge_project_toml_ssot(project_name: str, profile_data: dict[str, Any]) -> dict[str, Any]:
+    """Overlay project.toml roster/runtime choices onto dynamic profile metadata."""
+    project_toml = _ws_effective_home() / ".agents" / "projects" / project_name / "project.toml"
+    if not project_toml.exists():
+        return profile_data
+    try:
+        with project_toml.open("rb") as fh:
+            project_data = _toml_load(fh)
+    except Exception:
+        return profile_data
+    if not isinstance(project_data, dict):
+        return profile_data
+
+    active_seats = [
+        str(item).strip()
+        for item in (project_data.get("engineers") or [])
+        if str(item).strip()
+    ]
+    if not active_seats:
+        return profile_data
+    active = set(active_seats)
+
+    merged: dict[str, Any] = dict(profile_data)
+    merged["seats"] = active_seats
+
+    profile_overrides = profile_data.get("seat_overrides") or {}
+    if not isinstance(profile_overrides, dict):
+        profile_overrides = {}
+    project_overrides = project_data.get("seat_overrides") or {}
+    if not isinstance(project_overrides, dict):
+        project_overrides = {}
+    overrides: dict[str, dict[str, Any]] = {}
+    for seat in active_seats:
+        base = profile_overrides.get(seat) if isinstance(profile_overrides.get(seat), dict) else {}
+        project_override = (
+            project_overrides.get(seat) if isinstance(project_overrides.get(seat), dict) else {}
+        )
+        overrides[seat] = {**base, **project_override}
+    merged["seat_overrides"] = overrides
+
+    profile_roles = profile_data.get("seat_roles") or {}
+    if not isinstance(profile_roles, dict):
+        profile_roles = {}
+    roles: dict[str, str] = {}
+    for seat in active_seats:
+        override = overrides.get(seat) or {}
+        role = str(override.get("role") or profile_roles.get(seat) or "").strip()
+        if seat == "memory":
+            role = "project-memory"
+        elif not role and str(override.get("team") or "").strip():
+            role = "planner"
+        roles[seat] = role
+    merged["seat_roles"] = roles
+
+    profile_teams = profile_data.get("teams") or {}
+    if not isinstance(profile_teams, dict):
+        profile_teams = {}
+    teams: dict[str, dict[str, Any]] = {}
+    for team_name, team_cfg in profile_teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        seats = [str(item) for item in (team_cfg.get("seats") or []) if str(item) in active]
+        if seats:
+            teams[str(team_name)] = {**team_cfg, "seats": seats}
+    for seat in active_seats:
+        override = overrides.get(seat) or {}
+        team = str(override.get("team") or "").strip()
+        if not team:
+            continue
+        cfg = dict(teams.get(team) or {})
+        seats = [str(item) for item in (cfg.get("seats") or [])]
+        if seat not in seats:
+            seats.append(seat)
+        cfg.setdefault("team_type", "subteam")
+        cfg.setdefault("notify_policy", "queue_drained_only")
+        cfg["seats"] = seats
+        teams[team] = cfg
+    merged["teams"] = teams
+    return merged
 
 
 def _role_for_profile_seat(profile_data: dict[str, Any], seat_id: str) -> str:
