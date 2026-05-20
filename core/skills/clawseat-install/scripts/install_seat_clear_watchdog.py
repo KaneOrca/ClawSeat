@@ -51,18 +51,19 @@ def install_launchd(
     load: bool = True,
 ) -> tuple[Path, bool]:
     plist_path = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
-    if plist_path.exists():
+    expected = render_plist(python_bin=python_bin, clawseat_root=clawseat_root, home=home, interval=interval)
+    if plist_path.exists() and plist_path.read_text(encoding="utf-8") == expected:
         print(f"unchanged: {plist_path}")
         return plist_path, False
     plist_path.parent.mkdir(parents=True, exist_ok=True)
     (home / ".agents" / "logs").mkdir(parents=True, exist_ok=True)
-    plist_path.write_text(
-        render_plist(python_bin=python_bin, clawseat_root=clawseat_root, home=home, interval=interval),
-        encoding="utf-8",
-    )
-    print(f"installed: {plist_path}")
+    existed = plist_path.exists()
+    plist_path.write_text(expected, encoding="utf-8")
+    print(f"{'updated' if existed else 'installed'}: {plist_path}")
     if load:
         launchctl = os.environ.get("LAUNCHCTL_BIN", "launchctl")
+        if existed:
+            subprocess.run([launchctl, "unload", str(plist_path)], check=False, text=True, capture_output=True)
         result = subprocess.run([launchctl, "load", str(plist_path)], check=False, text=True, capture_output=True)
         if result.returncode == 0:
             print(f"loaded: {LABEL}")
