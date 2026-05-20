@@ -313,6 +313,13 @@ print_tmux_block() {
     return
   fi
 
+  # Unset TMUX / TMUX_PANE so all tmux calls below use the default server socket,
+  # not the socket inherited from the calling Claude Code or tmux pane.
+  # This mirrors send-and-verify.sh's "env -u TMUX" pattern and is the root
+  # cause of "session_alive = no" when the diagnostic is run from inside a
+  # planner pane whose TMUX env points to a different socket than the launcher.
+  unset TMUX TMUX_PANE
+
   local err clients capture rc
   err="$(mktemp)"
   if tmux has-session -t "=$SESSION_NAME" 2>"$err"; then

@@ -304,3 +304,51 @@ def test_diagnostic_curls_provider_endpoint(tmp_path: Path) -> None:
     curl_text = curl_log.read_text(encoding="utf-8")
     assert "https://unit.test/v1/models" in curl_text
     assert "Authorization: Bearer test-key" in curl_text
+
+
+def test_diagnostic_session_alive_with_wrong_tmux_socket_inherited(tmp_path: Path) -> None:
+    """MP036 regression: session_alive must be correct even when the calling process
+    has TMUX set to a non-existent socket (e.g. when run from inside a planner pane).
+
+    Root cause: seat-diagnostic.sh called bare `tmux has-session` which inherits the
+    TMUX env var from the caller.  When the caller is a Claude Code planner running in
+    a different tmux socket than the "default" server used by agent-launcher.sh, the
+    check fails with "error connecting to <planner-socket>" even though the session
+    lives on the default server.
+
+    Fix: `unset TMUX TMUX_PANE` at the top of print_tmux_block() mirrors the
+    `env -u TMUX` pattern used by send-and-verify.sh.
+    """
+    good_python = _find_good_python()
+    home = tmp_path / "home"
+    bin_dir = tmp_path / "bin"
+    _write_project(home)
+    _write_session(home)
+    _write_stubs(bin_dir, good_python=good_python)
+
+    # Inject a fake TMUX socket path that does NOT exist — simulates the planner's env.
+    fake_tmux_socket = str(tmp_path / "fake-planner-tmux-socket")
+    env = os.environ.copy()
+    env["AGENT_HOME"] = str(home)
+    env["HOME"] = str(home)
+    env["AGENTS_ROOT"] = str(home / ".agents")
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["TMUX"] = fake_tmux_socket  # <-- inject wrong socket
+
+    result = subprocess.run(
+        ["bash", str(_SCRIPT), "demo", "builder"],
+        cwd=_REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, f"diagnostic must not crash: {result.stderr}"
+    # With the fix (unset TMUX TMUX_PANE), the tmux stub in bin_dir is found
+    # and session_alive = yes is reported correctly despite the wrong inherited TMUX.
+    # Without the fix, tmux would try to connect to fake_tmux_socket and fail.
+    assert "session_alive = yes" in result.stdout, (
+        f"session_alive must be 'yes' even with wrong TMUX socket inherited.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
