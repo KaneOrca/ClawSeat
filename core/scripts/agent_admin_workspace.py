@@ -110,11 +110,12 @@ def render_protocol_reminder_lines(
         return _render_protocol_reminder_cartooner(seat_id)
     if normalized in {"project-memory", "memory-oracle"}:
         lines.extend([
-            "1. **Dispatch**: `agent_admin task create` -> workflow.md -> `dispatch_task.py` -> send-and-verify",
-            "2. **Verify Ack**: every dispatch -> 4-step check (handoffs .consumed / pane / DELIVERY / git fetch)",
-            "3. **Chain end**: accept planner relay -> write KB summary (experience retention)",
-            "4. **Privacy**: network queries -> clawseat-privacy check first; no PII/secret/token in KB",
-            "5. **Don't**: dispatch specialist directly (use planner); no code / config / seat lifecycle",
+            "1. **Status Snapshot**: user wake / pre-dispatch -> `agent_admin.py brief planner-status --project <project>`; manual queue scans only if it fails or debugging needs detail",
+            "2. **Dispatch**: `agent_admin task create` -> workflow.md -> `dispatch_task.py` -> send-and-verify",
+            "3. **Verify Ack**: every dispatch -> 4-step check (handoffs .consumed / pane / DELIVERY / git fetch)",
+            "4. **Chain end**: accept planner relay -> write KB summary (experience retention)",
+            "5. **Privacy**: network queries -> clawseat-privacy check first; no PII/secret/token in KB",
+            "6. **Don't**: dispatch specialist directly (use planner); no code / config / seat lifecycle",
         ])
     elif normalized in {"planner", "planner-dispatcher"}:
         lines.extend([

@@ -22,6 +22,9 @@ def test_workspace_protocol_reminder_content_is_role_specific() -> None:
     assert "Verify Ack" in memory
     assert "Chain end" in memory
     assert "experience retention" in memory
+    assert "agent_admin.py brief planner-status --project <project>" in memory
+    assert "manual queue scans only if it fails or debugging needs detail" in memory
+    assert "readiness-sync" not in memory
     assert "NOT optional" not in memory
 
     assert "Strict fan-in" in planner
