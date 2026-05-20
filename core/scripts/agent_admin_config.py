@@ -99,6 +99,30 @@ def unresolved_tool_bins() -> list[str]:
     return sorted(name for name, src in _TOOL_BIN_SOURCES.items() if src == "bare")
 
 
+def check_script_deps() -> list[str]:
+    """Return list of missing Python pip-package names required by ClawSeat scripts.
+
+    These packages must be importable for agent_admin_brief, complete_handoff,
+    and related scripts to function. Empty return means all deps are present.
+    Call before claiming seat readiness; if non-empty, the seat should report
+    BLOCKED rather than summarising queue state from partial reads.
+    """
+    missing: list[str] = []
+    try:
+        import yaml  # noqa: F401
+    except ImportError:
+        missing.append("PyYAML")
+    # tomllib is stdlib in Python 3.11+; tomli is the backport for 3.9/3.10
+    try:
+        import tomllib  # noqa: F401
+    except ImportError:
+        try:
+            import tomli  # noqa: F401
+        except ImportError:
+            missing.append("tomli")
+    return missing
+
+
 def _default_path() -> str:
     override = os.environ.get("CLAWSEAT_DEFAULT_PATH")
     if override:
@@ -575,8 +599,33 @@ def supported_providers(tool: str, auth_mode: str) -> tuple[str, ...]:
     return SUPPORTED_RUNTIME_MATRIX.get(tool, {}).get(auth_mode, ())
 
 
+def _is_claude_api_registry_provider(provider: str) -> bool:
+    """Check whether a provider name is registered in the local provider registry
+    with tool=claude.  Used as a fallback by is_supported_runtime_combo so that
+    operators can use saved API providers (e.g. baidu-glm, newapi-local-claude)
+    without having to hardcode them in the static SUPPORTED_RUNTIME_MATRIX.
+
+    Fails silently (returns False) if the registry is unavailable, so the
+    static matrix path is always the primary gate.
+    """
+    try:
+        from providers import get_provider  # noqa: PLC0415
+        p = get_provider(provider)
+        return p is not None and str(getattr(p, "tool", "") or "") == "claude"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def is_supported_runtime_combo(tool: str, auth_mode: str, provider: str) -> bool:
-    return provider in supported_providers(tool, auth_mode)
+    if provider in supported_providers(tool, auth_mode):
+        return True
+    # For claude/api, also accept providers registered in the local provider
+    # registry with tool=claude.  This allows operators to register custom
+    # API providers (baidu-glm, newapi-local-claude, etc.) without requiring
+    # a framework update for every new Claude-compatible endpoint.
+    if tool == "claude" and auth_mode == "api":
+        return _is_claude_api_registry_provider(provider)
+    return False
 
 
 def supported_runtime_summary_lines() -> list[str]:

@@ -92,6 +92,7 @@ from agent_admin_brief import cmd_list as brief_list
 from agent_admin_brief import cmd_claim as brief_claim
 from agent_admin_brief import cmd_show as brief_show
 from agent_admin_brief import cmd_done as brief_done
+from agent_admin_brief import cmd_planner_status as brief_planner_status
 from liveness_gate import query_seat_liveness
 
 # v3 acceptance executor (Phase 2, spec §4.7)
@@ -1256,6 +1257,10 @@ def cmd_brief_done(args: argparse.Namespace) -> int:
     return brief_done(args)
 
 
+def cmd_brief_planner_status(args: argparse.Namespace) -> int:
+    return brief_planner_status(args)
+
+
 def cmd_acceptance_run(args: argparse.Namespace) -> int:
     baseline_raw = getattr(args, "baseline_criteria", None) or ""
     baseline_indices: set[int] = set()
@@ -1396,6 +1401,7 @@ PARSER_HOOKS = ParserHooks(
     cmd_brief_claim=cmd_brief_claim,
     cmd_brief_show=cmd_brief_show,
     cmd_brief_done=cmd_brief_done,
+    cmd_brief_planner_status=cmd_brief_planner_status,
     cmd_acceptance_run=cmd_acceptance_run,
     cmd_tui=cmd_tui,
     cmd_project_koder_bind=cmd_project_koder_bind,

@@ -123,7 +123,7 @@ def render_protocol_reminder_lines(
             "3. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
             "4. **Post-DELIVERY closeout**: read DELIVERY -> verdict -> planner/DELIVERY.md; in multi-team delivery mode notify memory only when queue is drained",
             "5. **Fan-out**: 2+ disjoint sub-goals -> workflow.md mode: parallel_subagents",
-            "6. **Compact not Clear**: emit [COMPACT-REQUESTED] to preserve workflow.md state",
+            "6. **Compact not Clear**: relay `[memory: compact-me]` to memory; never emit `[CLEAR-REQUESTED]`",
         ])
     elif normalized in {"builder", "reviewer"}:
         lines.extend([
@@ -632,39 +632,54 @@ def render_multi_team_scope_lines(session: Any, project: Any) -> list[str]:
         else:
             lines.append("- No patrol seats are declared; ask memory for roster repair.")
     elif current_role in {"planner", "planner-dispatcher"}:
-        lines.extend(["", "## Dev Planner Dispatch Rules", ""])
-        lines.extend(
-            [
-                "- Research the task, define verification/checklist first, then dispatch implementation to the exact owning builder seat.",
-                "- Prefer writing or naming acceptance tests before builder implementation; builder must not weaken planner acceptance tests.",
-                "- When builder delivery fails, send concrete rework to that builder until acceptance passes or the rework threshold is hit.",
-                "- After task PASS, append `task_done`, claim/continue the next queued task, and do not notify memory per task.",
-                "- Notify memory only when this team queue is drained or an exception needs memory/operator authority.",
-            ]
-        )
-        lines.extend(["", "## Builder Assignment Rules", ""])
-        if builders:
-            lines.append(
-                "- Available builders in this team: "
-                + ", ".join(f"`{builder}`" for builder in builders)
+        max_builders = int(scaling_policy.get("max_builders", -1))
+        planner_self_contained = bool(team_cfg.get("planner_self_contained", False))
+        is_planner_only = planner_self_contained or max_builders == 0
+        if is_planner_only:
+            lines.extend(["", "## Planner-Only Mode", ""])
+            lines.extend(
+                [
+                    "- Self-contained: research, implement, tests, self-review, `task_done`, and queue-drained relay all owned by this planner.",
+                    "- Do not dispatch builder work; this team has no builder seat.",
+                    "- Escalate to memory only for roster changes, permission decisions, or operator authority blockers.",
+                    "- After task PASS, append `task_done`, claim/continue the next queued task, and do not notify memory per task.",
+                    "- Notify memory only when this team queue is drained or an exception needs memory/operator authority.",
+                ]
             )
         else:
-            lines.append("- No builder is declared for this team; bounce implementation work to memory.")
-        if reviewer_seats:
-            lines.append("- Reviewer gate: " + ", ".join(f"`{seat}`" for seat in reviewer_seats))
-        elif len(builders) > 1:
-            lines.append("- Reviewer gate missing for multiple builders; block and ask memory for roster repair.")
-        else:
-            lines.append("- Reviewer fallback: planner reviews only because this team has one builder.")
-        lines.extend(
-            [
-                "- With multiple builders, never dispatch to bare role `builder`; choose an exact `owner_seat`.",
-                "- Assign by declared `capabilities`, `purpose`, and `ownership_paths` first; then by disjoint files/tests.",
-                "- Keep the same file or tightly coupled module on one builder unless the workflow declares a merge owner.",
-                "- Run parallel builder waves only when write scopes are disjoint and fan-in is explicit before review.",
-                "- If a fourth builder would be useful, stop and ask memory to propose a new subteam.",
-            ]
-        )
+            lines.extend(["", "## Dev Planner Dispatch Rules", ""])
+            lines.extend(
+                [
+                    "- Research the task, define verification/checklist first, then dispatch implementation to the exact owning builder seat.",
+                    "- Prefer writing or naming acceptance tests before builder implementation; builder must not weaken planner acceptance tests.",
+                    "- When builder delivery fails, send concrete rework to that builder until acceptance passes or the rework threshold is hit.",
+                    "- After task PASS, append `task_done`, claim/continue the next queued task, and do not notify memory per task.",
+                    "- Notify memory only when this team queue is drained or an exception needs memory/operator authority.",
+                ]
+            )
+            lines.extend(["", "## Builder Assignment Rules", ""])
+            if builders:
+                lines.append(
+                    "- Available builders in this team: "
+                    + ", ".join(f"`{builder}`" for builder in builders)
+                )
+            else:
+                lines.append("- No builder is declared for this team; bounce implementation work to memory.")
+            if reviewer_seats:
+                lines.append("- Reviewer gate: " + ", ".join(f"`{seat}`" for seat in reviewer_seats))
+            elif len(builders) > 1:
+                lines.append("- Reviewer gate missing for multiple builders; block and ask memory for roster repair.")
+            else:
+                lines.append("- Reviewer fallback: planner reviews only because this team has one builder.")
+            lines.extend(
+                [
+                    "- With multiple builders, never dispatch to bare role `builder`; choose an exact `owner_seat`.",
+                    "- Assign by declared `capabilities`, `purpose`, and `ownership_paths` first; then by disjoint files/tests.",
+                    "- Keep the same file or tightly coupled module on one builder unless the workflow declares a merge owner.",
+                    "- Run parallel builder waves only when write scopes are disjoint and fan-in is explicit before review.",
+                    "- If a fourth builder would be useful, stop and ask memory to propose a new subteam.",
+                ]
+            )
     return lines
 
 

@@ -30,8 +30,10 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORE_LIB = _REPO_ROOT / "core" / "lib"
-if str(_CORE_LIB) not in sys.path:
-    sys.path.insert(0, str(_CORE_LIB))
+_CORE_SCRIPTS = _REPO_ROOT / "core" / "scripts"
+for _p in (str(_CORE_LIB), str(_CORE_SCRIPTS)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from queue_io import (  # noqa: E402
     QueueError,
@@ -39,8 +41,10 @@ from queue_io import (  # noqa: E402
     query_pending,
     read_current_state,
 )
+from _toml_compat import load_safe as _toml_load_safe  # noqa: E402
 from profile_loader_v3 import ProfileV3Error, load_profile_v3  # noqa: E402
 from real_home import real_user_home  # noqa: E402
+import agent_admin_config as _cfg  # noqa: E402
 
 try:
     import yaml  # type: ignore
@@ -79,6 +83,39 @@ class WakeHookError(RuntimeError):
     def __init__(self, reason: str, *, target: str = "") -> None:
         super().__init__(reason)
         self.target = target
+
+
+# ---------------------------------------------------------------------------
+# Warden bridge — operator-overlay test channel
+#
+# Warden is the human operator (not a second memory seat).  In normal
+# operation memory communicates through the standard chat surface; the inbox
+# file below is a fallback durable path for smoke-test scenarios where direct
+# chat is unavailable (e.g. tmux session not yet started, seat offline).
+# It is NOT a permanent seat-to-seat protocol; do not reference it in hot
+# prompts or generated workspace prose.
+# ---------------------------------------------------------------------------
+
+WARDEN_INBOX_FILENAME = "warden-inbox.md"
+
+
+def warden_inbox_path(project: str) -> Path:
+    """Return the operator-overlay inbox path for the project."""
+    return real_user_home() / ".agents" / "tasks" / project / WARDEN_INBOX_FILENAME
+
+
+def write_warden_blocked(project: str, task_id: str, message: str) -> None:
+    """Append a BLOCKED report to the operator-overlay inbox.
+
+    Used in smoke-test / offline scenarios when memory cannot proceed and
+    normal chat is unavailable.  Each call appends a timestamped entry.
+    """
+    path = warden_inbox_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    entry = f"\n## BLOCKED {ts} task={task_id}\n\n{message}\n"
+    with path.open("a") as fh:
+        fh.write(entry)
 
 
 def _validate_identifier(value: str, kind: str) -> None:
@@ -174,6 +211,134 @@ def _send_script_path() -> Path:
     return _REPO_ROOT / "core" / "shell-scripts" / "send-and-verify.sh"
 
 
+# ---------------------------------------------------------------------------
+# Queue-drained relay helpers (notify_policy=queue_drained_only)
+# ---------------------------------------------------------------------------
+
+_DRAINED_NON_TERMINAL = frozenset({
+    "task_created", "task_waiting_for", "task_claimed", "task_in_progress"
+})
+_COMPLETE_HANDOFF_SCRIPT = (
+    _REPO_ROOT / "core" / "skills" / "gstack-harness" / "scripts" / "complete_handoff.py"
+)
+
+
+def _team_notify_policy(project: str, team: str) -> str:
+    """Read notify_policy for a team from the active profile. Returns '' on failure."""
+    profile_file = _profile_path(project)
+    if not profile_file.exists():
+        return ""
+    try:
+        with profile_file.open("rb") as fh:
+            data = _toml_load_safe(fh)
+    except Exception:  # noqa: BLE001
+        return ""
+    teams = data.get("teams") or {}
+    team_cfg = teams.get(team) if isinstance(teams, dict) else None
+    if not isinstance(team_cfg, dict):
+        return ""
+    return str(team_cfg.get("notify_policy") or "").strip()
+
+
+def _team_queue_is_drained(queue: Path, current_task_id: str) -> bool:
+    """True if no task other than current_task_id is in a non-terminal state."""
+    try:
+        state = read_current_state(queue)
+    except Exception:  # noqa: BLE001
+        return False
+    for task_id, ts in state.items():
+        if task_id == current_task_id:
+            continue
+        if ts.status in _DRAINED_NON_TERMINAL:
+            return False
+    return True
+
+
+def _relay_receipt_exists(project: str, task_id: str, planner_seat: str) -> bool:
+    """Check if a prior durable relay receipt exists (idempotency guard)."""
+    receipt = (
+        _agents_root() / "tasks" / project / "patrol" / "handoffs"
+        / f"{task_id}__{planner_seat}__memory.json"
+    )
+    return receipt.exists()
+
+
+def _do_relay_complete_handoff(
+    project: str, team: str, task_id: str, planner_seat: str
+) -> None:
+    """Invoke complete_handoff.py to relay queue-drained notification to memory.
+
+    This function is module-level so tests can monkeypatch it without invoking
+    real tmux, real sessions, or live profile resolution.
+    """
+    if not _COMPLETE_HANDOFF_SCRIPT.exists():
+        raise WakeHookError(
+            f"complete_handoff not found: {_COMPLETE_HANDOFF_SCRIPT}",
+            target="memory",
+        )
+    profile = str(_profile_path(project))
+    summary = (
+        f"Queue drained for team {team!r} after task_done {task_id!r}. "
+        "Planner completed all pending work in this team queue."
+    )
+    result = subprocess.run(
+        [
+            sys.executable, str(_COMPLETE_HANDOFF_SCRIPT),
+            "--profile", profile,
+            "--source", planner_seat,
+            "--target", "memory",
+            "--task-id", task_id,
+            "--status", "completed",
+            "--verdict", "APPROVED",
+            "--title", f"Queue drained: {project}/{team}",
+            "--summary", summary,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = _one_line_detail(result.stderr or result.stdout or f"exit {result.returncode}")
+        raise WakeHookError(f"complete_handoff relay failed: {detail}", target="memory")
+
+
+def _maybe_relay_queue_drained(
+    project: str, team: str, task_id: str, actor: str
+) -> None:
+    """After task_done, relay to memory if queue is drained and notify_policy allows.
+
+    Skips silently when:
+    - notify_policy is not queue_drained_only (includes never_notify_memory);
+    - another task in the queue is not yet terminal;
+    - planner seat cannot be resolved from profile;
+    - a relay receipt already exists (idempotent rerun).
+
+    Prints RELAY_OK on success, RELAY_SKIP on skip, RELAY_FAILED on error.
+    """
+    policy = _team_notify_policy(project, team)
+    if policy != "queue_drained_only":
+        return
+
+    queue = _queue_path(project, team)
+    if not _team_queue_is_drained(queue, task_id):
+        return
+
+    try:
+        planner_seat = _planner_seat_for_team(project, team)
+    except WakeHookError as exc:
+        print(f"RELAY_SKIP cannot resolve planner: {exc}", file=sys.stderr)
+        return
+
+    if _relay_receipt_exists(project, task_id, planner_seat):
+        print(f"RELAY_SKIP receipt already exists for {task_id}")
+        return
+
+    try:
+        _do_relay_complete_handoff(project, team, task_id, planner_seat)
+        print(f"RELAY_OK queue-drained relay to memory complete (task_done {task_id!r})")
+    except WakeHookError as exc:
+        print(f"RELAY_FAILED {exc}", file=sys.stderr)
+
+
 def _one_line_detail(text: str, *, limit: int = 240) -> str:
     compact = " ".join(str(text or "").split())
     if len(compact) > limit:
@@ -189,7 +354,8 @@ def _planner_seat_for_team(project: str, team: str) -> str:
     except ProfileV3Error as exc:
         raise WakeHookError(f"profile resolution failed: {exc}") from exc
 
-    planners = [seat for seat in seats if profile.seat_roles.get(seat) == "planner"]
+    _PLANNER_ROLES = frozenset({"planner", "planner-dispatcher"})
+    planners = [seat for seat in seats if profile.seat_roles.get(seat) in _PLANNER_ROLES]
     if not planners:
         raise WakeHookError(f"team {team!r} has no planner seat")
     if len(planners) > 1:
@@ -555,6 +721,153 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Planner status snapshot helpers
+# ---------------------------------------------------------------------------
+
+_NON_TERMINAL_STATUSES = frozenset({
+    "task_created", "task_waiting_for", "task_claimed", "task_in_progress"
+})
+
+
+def _queue_state_label(tasks: dict) -> str:
+    """Derive a single human-readable queue state label from all tasks."""
+    if not tasks:
+        return "empty"
+    statuses = {ts.status for ts in tasks.values()}
+    if "task_in_progress" in statuses:
+        return "active"
+    if "task_claimed" in statuses:
+        return "claimed"
+    if statuses & {"task_created", "task_waiting_for"}:
+        return "waiting"
+    return "drained"
+
+
+def _latest_task_in_queue(tasks: dict):
+    """Return the TaskState with the highest last_seq, or None."""
+    if not tasks:
+        return None
+    return max(tasks.values(), key=lambda ts: ts.last_seq)
+
+
+def _team_planner_meta(profile_data: dict, team_name: str) -> dict | None:
+    """Return planner seat + runtime metadata for a team, or None if no planner."""
+    teams = profile_data.get("teams") or {}
+    team_cfg = teams.get(team_name) if isinstance(teams, dict) else None
+    if not isinstance(team_cfg, dict):
+        return None
+    team_seats = [str(s) for s in (team_cfg.get("seats") or [])]
+    seat_roles = profile_data.get("seat_roles") or {}
+    overrides = profile_data.get("seat_overrides") or {}
+    planner_roles = {"planner", "planner-dispatcher"}
+    planners = [s for s in team_seats if str((seat_roles or {}).get(s, "")) in planner_roles]
+    if not planners:
+        return None
+    planner = planners[0]
+    override = overrides.get(planner) or {} if isinstance(overrides, dict) else {}
+    return {
+        "planner_seat": planner,
+        "tool": str(override.get("tool") or ""),
+        "model": str(override.get("model") or "unknown"),
+        "provider": str(override.get("provider") or ""),
+        "auth_mode": str(override.get("auth_mode") or ""),
+        "notify_policy": str(team_cfg.get("notify_policy") or ""),
+        "team_type": str(team_cfg.get("team_type") or "subteam"),
+    }
+
+
+def planner_status_snapshot(project: str) -> list[dict]:
+    """Return a status snapshot for every planner team in the project.
+
+    Reads profile + queue state only; no tmux or session inspection.
+    Returns a list of dicts, one per team that has a planner seat.
+    """
+    profile_file = _profile_path(project)
+    if not profile_file.exists():
+        return []
+    try:
+        with profile_file.open("rb") as fh:
+            profile_data = _toml_load_safe(fh)
+    except Exception:  # noqa: BLE001
+        return []
+    teams = profile_data.get("teams") or {}
+    if not isinstance(teams, dict):
+        return []
+    rows: list[dict] = []
+    for team_name, team_cfg in teams.items():
+        if not isinstance(team_cfg, dict):
+            continue
+        meta = _team_planner_meta(profile_data, str(team_name))
+        if meta is None:
+            continue
+        queue = _queue_path(project, str(team_name))
+        try:
+            tasks = read_current_state(queue) if queue.exists() else {}
+        except Exception:  # noqa: BLE001
+            tasks = {}
+        latest = _latest_task_in_queue(tasks)
+        rows.append({
+            "team": str(team_name),
+            "planner_seat": meta["planner_seat"],
+            "tool": meta["tool"],
+            "model": meta["model"] or "unknown",
+            "provider": meta["provider"],
+            "auth_mode": meta["auth_mode"],
+            "notify_policy": meta["notify_policy"],
+            "team_type": meta["team_type"],
+            "queue_state": _queue_state_label(tasks),
+            "task_count": len(tasks),
+            "latest_task_id": latest.task_id if latest else None,
+            "latest_task_status": latest.status if latest else None,
+            "latest_task_ts": latest.last_event_ts if latest else None,
+        })
+    return rows
+
+
+def cmd_planner_status(args: argparse.Namespace) -> int:
+    """Print a planner/queue status snapshot for all teams in a project."""
+    try:
+        _validate_identifier(args.project, "project")
+    except InputValidationError as exc:
+        print(f"input validation failed: {exc}", file=sys.stderr)
+        return 2
+    missing_deps = _cfg.check_script_deps()
+    if missing_deps:
+        dep_str = ", ".join(missing_deps)
+        print(
+            f"[PREFLIGHT_WARN] missing script deps: {dep_str}"
+            f" — install with: pip3 install {' '.join(missing_deps)}",
+            file=sys.stderr,
+        )
+    rows = planner_status_snapshot(args.project)
+    if not rows:
+        print(f"no planner teams found for project {args.project!r}")
+        return 0
+    if getattr(args, "json", False):
+        print(json.dumps(rows, indent=2))
+        return 0
+    for row in rows:
+        tool_label = row["tool"] or "unknown"
+        if row["model"] and row["model"] != "unknown":
+            tool_label = f"{tool_label}/{row['model']}"
+        runtime_parts = [p for p in (row.get("provider", ""), row.get("auth_mode", "")) if p]
+        if runtime_parts:
+            tool_label = f"{tool_label}({','.join(runtime_parts)})"
+        latest_label = (
+            f"{row['latest_task_id']} [{row['latest_task_status']}]"
+            if row["latest_task_id"]
+            else "no tasks"
+        )
+        print(
+            f"{row['team']:30s}  planner={row['planner_seat']}"
+            f"  tool={tool_label}"
+            f"  queue={row['queue_state']}({row['task_count']})"
+            f"  latest={latest_label}"
+        )
+    return 0
+
+
 def cmd_done(args: argparse.Namespace) -> int:
     """Mark a brief task as done by appending the official queue events.
 
@@ -580,6 +893,10 @@ def cmd_done(args: argparse.Namespace) -> int:
     if ts.status == "task_done":
         if ts.verdict == "PASS":
             print(f"task {args.task_id} already done")
+            try:
+                _maybe_relay_queue_drained(args.project, args.team, args.task_id, args.actor)
+            except Exception as exc:  # noqa: BLE001
+                print(f"RELAY_ERROR unexpected: {exc}", file=sys.stderr)
             return 0
         print(
             f"task_id {args.task_id!r} is done with verdict {ts.verdict!r}, not PASS",
@@ -626,6 +943,10 @@ def cmd_done(args: argparse.Namespace) -> int:
 
     seq = last_result["seq"] if last_result else "?"
     print(f"done {args.task_id} (seq {seq}, verdict PASS)")
+    try:
+        _maybe_relay_queue_drained(args.project, args.team, args.task_id, actor)
+    except Exception as exc:  # noqa: BLE001
+        print(f"RELAY_ERROR unexpected: {exc}", file=sys.stderr)
     return 0
 
 
@@ -686,6 +1007,14 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--verdict", default="PASS", choices=["PASS"],
                    help="Only PASS is accepted for task_done.")
     d.set_defaults(func=cmd_done)
+
+    ps = sub.add_parser(
+        "planner-status",
+        help="Print a status snapshot for all planner teams in a project",
+    )
+    ps.add_argument("--project", required=True)
+    ps.add_argument("--json", action="store_true", help="Emit JSON instead of plain text")
+    ps.set_defaults(func=cmd_planner_status)
 
     return p
 

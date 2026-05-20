@@ -33,6 +33,28 @@ from migrate_profile import build_lines  # noqa: E402
 
 # ── Test suite layering ─────────────────────────────────────────────────
 
+# Files that require Python 3.11+ (tomllib, slots=True, X | Y type union syntax).
+# Silently skip collection on older runtimes rather than failing the whole suite.
+if sys.version_info < (3, 11):
+    collect_ignore_glob = [
+        "test_install_qa_gaps.py",
+        "test_launch_permissions.py",
+        "test_memory_extract_links.py",
+        "test_migrate_seat_auth.py",
+        "test_multi_team_intake.py",
+        "test_multi_team_minimal_seed.py",
+        "test_openclaw_migrated_skills_registered.py",
+        "test_patrol_codex_rewake.py",
+        "test_patrol_stale_handoff_detect.py",
+        "test_patrol_stale_handoff_rewake.py",
+        "test_preflight.py",
+        "test_preflight_gstack_severity.py",
+        "test_preflight_profile_aware.py",
+        "test_sandbox_home_symlink.py",
+        "test_seat_clear_watchdog.py",
+        "test_token_watermark.py",
+    ]
+
 HOST_TEST_FILES = {
     "test_feishu_enabled_switch.py",
     "test_heartbeat.py",

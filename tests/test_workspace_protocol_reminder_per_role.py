@@ -26,7 +26,8 @@ def test_workspace_protocol_reminder_content_is_role_specific() -> None:
 
     assert "Strict fan-in" in planner
     assert "relay memory" in planner
-    assert "[COMPACT-REQUESTED]" in planner
+    assert "[memory: compact-me]" in planner
+    assert "never emit `[CLEAR-REQUESTED]`" in planner
 
     for specialist in (builder, patrol):
         assert "Closeout MANDATORY two-step" in specialist

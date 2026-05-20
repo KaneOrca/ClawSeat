@@ -85,6 +85,7 @@ class ParserHooks:
     cmd_brief_claim: Callable[[Any], int]
     cmd_brief_show: Callable[[Any], int]
     cmd_brief_done: Callable[[Any], int]
+    cmd_brief_planner_status: Callable[[Any], int]
     # v3 acceptance executor (Phase 2, spec §4.7)
     cmd_acceptance_run: Callable[[Any], int]
 
@@ -852,6 +853,16 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         help="Only PASS is accepted for task_done.",
     )
     brief_done.set_defaults(func=hooks.cmd_brief_done)
+
+    brief_planner_status = brief_sub.add_parser(
+        "planner-status",
+        help="Print a status snapshot for all planner teams in a project.",
+    )
+    brief_planner_status.add_argument("--project", required=True)
+    brief_planner_status.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of plain text"
+    )
+    brief_planner_status.set_defaults(func=hooks.cmd_brief_planner_status)
 
     # v3 acceptance executor (Phase 2, spec §4.7)
     acceptance = sub.add_parser(

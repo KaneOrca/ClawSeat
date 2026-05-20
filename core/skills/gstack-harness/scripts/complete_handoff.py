@@ -910,6 +910,57 @@ def _validate_completion_receipt(
             receipt["head_contains_commit"] = False
 
 
+_GENERIC_PLANNER_SOURCES = frozenset({"planner", "planner-dispatcher"})
+_PLANNER_ROLES_FOR_GUARD = frozenset({"planner", "planner-dispatcher"})
+
+
+def _resolve_generic_planner_source(profile: object, source: str) -> str:
+    """Normalize or reject a generic planner source in multi-team projects.
+
+    Called before any receipt I/O so the generic-source problem is caught
+    early with a clear diagnostic rather than producing ambiguous receipt paths
+    like <task_id>__planner__memory.json.
+
+    Behaviour:
+    - source is not generic planner → return unchanged (exact planner source passes through).
+    - exactly one non-generic planner seat found in seat_roles → normalize
+      to that exact planner seat with an info message.
+    - multiple non-generic planner seats → raise SystemExit with list of
+      exact planner seats; manual caller must pick the right one.
+    - zero non-generic planner seats (legacy single-team profile where the
+      seat is literally named 'planner') → return unchanged; existing
+      self-closeout guard handles the legacy case.
+    """
+    if source not in _GENERIC_PLANNER_SOURCES:
+        return source
+
+    seat_roles: dict[str, str] = getattr(profile, "seat_roles", {}) or {}
+    exact_planner_seats = [
+        seat for seat, role in seat_roles.items()
+        if role in _PLANNER_ROLES_FOR_GUARD and seat not in _GENERIC_PLANNER_SOURCES
+    ]
+
+    if not exact_planner_seats:
+        # Legacy single-team: seat is literally named "planner". Return unchanged.
+        return source
+
+    if len(exact_planner_seats) == 1:
+        exact = exact_planner_seats[0]
+        print(
+            f"info: normalized generic --source {source!r} to exact planner seat {exact!r}",
+            file=sys.stderr,
+        )
+        return exact
+
+    # Multiple exact planner seats: ambiguous in multi-team project.
+    seats_list = ", ".join(sorted(exact_planner_seats))
+    project = getattr(profile, "project_name", "?")
+    raise SystemExit(
+        f"error: generic --source {source!r} is ambiguous in multi-team project "
+        f"{project!r}; use exact planner seat, e.g. one of: {seats_list}"
+    )
+
+
 def main() -> int:
     args = parse_args()
     do_notify = resolve_notify(args)
@@ -922,6 +973,8 @@ def main() -> int:
         )
     if args.user_summary is not None and not args.user_summary.strip():
         raise SystemExit("user_summary must not be empty")
+    # MP012: normalize or reject generic planner source before any receipt I/O.
+    args.source = _resolve_generic_planner_source(profile, args.source)
     if (
         not args.enforce_planner_self_closeout
         and args.source in {"planner", "planner-dispatcher"}

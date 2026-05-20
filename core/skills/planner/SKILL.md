@@ -79,24 +79,6 @@ Before task N+1 to worker W, `/clear` only when all gates pass: task N has consu
 ## Strict Fan-in: verify specialist .consumed receipts (mandatory)
 Before any multi-specialist verdict, verify every dispatched specialist produced `handoffs/<task_id>__<seat>__planner.json.consumed`; Inline `DELIVERY.md` read does NOT substitute for consumed receipts. Missing receipt means OO step 1 (`complete_handoff.py`) was skipped => `BLOCKED`, relay reason to memory before retry/re-dispatch. Exceptions: planner self-loop steps and explicit `test_policy=N/A` steps with no handoff JSON. Receipt schema: [`core/skills/gstack-harness/references/handoff-receipt-schema.md`](../gstack-harness/references/handoff-receipt-schema.md).
 
-### SUPERSEDED claims
-
-Closure relays that classify a CH/BT/CW finding as `SUPERSEDED` must include a
-finding-id → commit-hash mapping table. Findings without a cited commit hash for
-the fix are reclassified as `STILL-OPEN`.
-
-| finding_id | commit_hash | verified_by |
-|------------|-------------|-------------|
-| CH-C1 | 41f9aed | grep file:line at HEAD |
-
-### Core UX gate
-
-`core_ux=true` and `core_ux: true` are the canonical dispatch flags for this route; `core_ux_swallow_blocked` marks a bounced PASS.
-
-For any core_ux relay, `SWALLOW PASS DENIED` if the closure tries to accept a PASS without surfacing `core_ux_gate`; Planner must bounce or escalate instead of silently normalizing the PASS away.
-
-`core_ux_gate` is part of the contract for core_ux closeouts and must be visible in the final relay record when the PASS is accepted.
-
 ## Post-DELIVERY Relay to Memory
 
 Upon receiving a builder/specialist DELIVERY notification via `send-and-verify`
@@ -121,24 +103,22 @@ canonical relay; still update `planner/DELIVERY.md` as authoritative status. Pla
 After all specialists are approved and planner forms the verdict, legacy/single-team and planner-entry route must relay to memory with `complete_handoff.py --source planner --target memory --task-id <id> --status completed --verdict <APPROVED|APPROVED_WITH_NITS|CHANGES_REQUESTED|BLOCKED|DECISION_NEEDED> --notify`. Include operator intent, implementation summary, and key decisions for experience retention. `send-and-verify.sh` remains wake-up only. Multi-team delivery route uses `queue_drained_only`: no per-task memory relay; when the queue is empty, send a compact drained summary for memory final acceptance/commit. Quality-docs route uses `never_notify_memory`: update QUALITY.md/findings only.
 ## Memory-driven Compaction Request
 
-planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and
-cross-step decisions can be lost. When planner relays to memory, append
-`[memory: compact-me]` to the relay string when any of these are true:
+Planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and
+cross-step decisions can be lost. Context marker mechanics live in
+`core/references/context-management-protocol.md`; planner-specific policy lives
+in `core/skills/planner/references/planner-context-policy.md`.
+
+When planner relays to memory, append `[memory: compact-me]` to the relay string
+when any of these are true:
 
 - `iter > 5` within a workflow step.
 - Context feels heavy after multiple fan-out / fan-in steps.
 - Planner has closed enough waves that memory should re-check compaction.
 
 Memory treats `[memory: compact-me]` as the primary planner compaction request,
-applies its idle gate, and sends `/compact` back to planner with
-`send-and-verify.sh` when safe. Watchdog remains a backup path for non-planner
-seats only.
-Legacy COMPACT wording is deprecated; planner now uses `[memory: compact-me]`.
-## Context Management
-See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true. Planner uses `[memory: compact-me]` for memory-driven compaction requests. Exactly one marker as final line.
-**Note**: planner must NOT emit [CLEAR-REQUESTED]. `[CLEAR-REQUESTED] FORBIDDEN` for planner. Compact summaries must preserve active task ids, dispatch decisions, blockers, owner assignments, and pending reviews.
-## Operator Language Matching
-Detect operator language from the last 3 messages: >70% Chinese means Chinese, >70% English means English, mixed means Chinese. Keep technical terms, commands, and paths literal.
+applies its idle gate, and sends `/compact` back to planner when safe. Watchdog
+remains a backup path for non-planner seats only. Legacy COMPACT wording is
+deprecated; planner now uses `[memory: compact-me]`.
 
 
 ## DF Dispatch Hardening Note
