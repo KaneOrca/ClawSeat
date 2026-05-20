@@ -570,7 +570,8 @@ def complete_v3_brief_queue_if_possible(
     """
     if str(status or "").strip() != "completed":
         return None
-    if verdict and str(verdict).strip() not in {"PASS", "APPROVED"}:
+    success_verdicts = {"PASS", "APPROVED", "INVESTIGATED", "DONE", "COMPLETED"}
+    if verdict and str(verdict).strip().upper() not in success_verdicts:
         return None
 
     team = _v3_team_for_seat(profile, seat)

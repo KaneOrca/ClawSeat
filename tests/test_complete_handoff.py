@@ -288,6 +288,57 @@ tool = "claude"
     assert state["T1"].verdict == "PASS"
 
 
+def test_completion_syncs_investigation_verdict_to_v3_queue(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    queue = tasks_root / "team-a" / "tasks.queue.jsonl"
+    profile_path = tmp_path / "profile.toml"
+    profile_path.write_text(
+        f"""profile_name = "p-profile"
+project_name = "p"
+tasks_root = "{tasks_root}"
+
+[teams]
+team-a = {{ seats = ["team-a-planner"] }}
+
+[seat_overrides.team-a-planner]
+tool = "claude"
+""",
+        encoding="utf-8",
+    )
+    append_event(
+        queue,
+        {
+            "event_type": "task_created",
+            "actor": "memory",
+            "task_id": "T2",
+            "brief_path": "tasks/p/team-a/brief/T2.md",
+            "parent_task_id": None,
+            "depends_on": [],
+        },
+    )
+    append_event(
+        queue,
+        {"event_type": "task_claimed", "actor": "planner@claude", "task_id": "T2"},
+    )
+    profile = SimpleNamespace(
+        profile_path=profile_path,
+        tasks_root=tasks_root,
+        seat_overrides={"team-a-planner": {"tool": "claude"}},
+    )
+
+    synced = complete_v3_brief_queue_if_possible(
+        profile,
+        seat="team-a-planner",
+        task_id="T2",
+        status="completed",
+        verdict="INVESTIGATED",
+        summary="investigated",
+    )
+
+    assert synced == queue
+    assert read_current_state(queue)["T2"].status == "task_done"
+
+
 def test_completion_without_branch_fields_fails_when_expected_base_present(tmp_path: Path) -> None:
     repo = _init_git_repo(tmp_path)
     profile, handoffs, _ = _write_profile(tmp_path, repo)
