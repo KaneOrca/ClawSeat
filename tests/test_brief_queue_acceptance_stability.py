@@ -159,6 +159,57 @@ def test_no_wake_remains_explicit_even_when_criteria_incomplete(tmp_path, monkey
     assert "WAKE_DEFERRED" not in out.out
 
 
+def test_queue_rejects_second_unrelated_open_task_by_default(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    parser = build_parser()
+
+    assert cmd_queue(parser.parse_args([
+        "queue", "--project", "p", "--team", "t", "--task-id", "Topen",
+        "--objective", "First open task", "--no-wake",
+    ])) == 0
+
+    brief = tmp_path / "ready.md"
+    _write_brief(brief, project="p", team="t", task_id="Tnext")
+    rc = cmd_queue(parser.parse_args([
+        "queue", "--project", "p", "--team", "t", "--task-id", "Tnext",
+        "--objective", "Second unrelated task",
+        "--brief-content-file", str(brief),
+        "--no-wake",
+    ]))
+    out = capsys.readouterr()
+
+    assert rc == 4
+    assert "queue has open task" in out.err
+    queue = tmp_path / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    state = read_current_state(queue)
+    assert set(state) == {"Topen"}
+
+
+def test_queue_allows_explicit_open_task_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    parser = build_parser()
+
+    assert cmd_queue(parser.parse_args([
+        "queue", "--project", "p", "--team", "t", "--task-id", "Topen",
+        "--objective", "First open task", "--no-wake",
+    ])) == 0
+
+    brief = tmp_path / "ready.md"
+    _write_brief(brief, project="p", team="t", task_id="Tnext")
+    rc = cmd_queue(parser.parse_args([
+        "queue", "--project", "p", "--team", "t", "--task-id", "Tnext",
+        "--objective", "Second task with explicit override",
+        "--brief-content-file", str(brief),
+        "--allow-open",
+        "--no-wake",
+    ]))
+
+    assert rc == 0
+    queue = tmp_path / ".agents" / "tasks" / "p" / "t" / "tasks.queue.jsonl"
+    state = read_current_state(queue)
+    assert {"Topen", "Tnext"} <= set(state)
+
+
 def test_complete_criteria_still_wakes_team_planner(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     project = "p"

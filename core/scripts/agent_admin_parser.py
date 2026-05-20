@@ -801,6 +801,11 @@ def build_parser(hooks: ParserHooks) -> argparse.ArgumentParser:
         action="store_true",
         help="Append the queue event without waking the team planner.",
     )
+    brief_queue.add_argument(
+        "--allow-open",
+        action="store_true",
+        help="Explicitly allow queueing while this team has another open task.",
+    )
     brief_queue.set_defaults(func=hooks.cmd_brief_queue)
 
     brief_list = brief_sub.add_parser(

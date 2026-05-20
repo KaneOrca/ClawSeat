@@ -87,6 +87,7 @@ class TaskState:
     verdict: str | None = None
     fail_reason: str | None = None
     bounce_reason: str | None = None
+    reset_reason: str | None = None
     reset_count: int = 0
 
 
@@ -313,6 +314,7 @@ def read_current_state(queue_path: Path | str) -> dict[str, TaskState]:
             ts.bounce_reason = event.get("bounce_reason")
         elif et == "task_reset":
             ts.reset_count += 1
+            ts.reset_reason = event.get("reset_reason")
 
         state[task_id] = ts
     return state

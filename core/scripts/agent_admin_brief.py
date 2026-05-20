@@ -564,6 +564,23 @@ def cmd_queue(args: argparse.Namespace) -> int:
     team = args.team
     task_id = args.task_id
 
+    queue = _queue_path(project, team)
+    try:
+        current_state = read_current_state(queue) if queue.exists() else {}
+    except Exception as exc:  # noqa: BLE001
+        print(f"queue state read failed: {exc}", file=sys.stderr)
+        return 1
+    open_blockers = _blocking_open_tasks(current_state, args.depends_on or [], task_id)
+    if open_blockers and not getattr(args, "allow_open", False):
+        blocker = max(open_blockers, key=lambda ts: ts.last_seq)
+        print(
+            "queue has open task; refusing parallel team dispatch "
+            f"(task_id={blocker.task_id}, status={blocker.status}). "
+            "Finish/drain it first or pass --allow-open for an explicit exception.",
+            file=sys.stderr,
+        )
+        return 4
+
     brief = _brief_path(project, team, task_id)
     brief.parent.mkdir(parents=True, exist_ok=True)
 
@@ -661,7 +678,6 @@ def cmd_queue(args: argparse.Namespace) -> int:
         tmp_path.unlink(missing_ok=True)
         raise
 
-    queue = _queue_path(project, team)
     event = {
         "event_type": "task_created",
         "actor": "memory",
@@ -915,6 +931,70 @@ def _queue_state_label(tasks: dict) -> str:
     return queue_state_label(tasks)
 
 
+_QUEUE_OPEN_STATUSES = frozenset(
+    {"task_created", "task_waiting_for", "task_claimed", "task_in_progress"}
+)
+_ATTENTION_STATUS_ORDER = {
+    "task_in_progress": 0,
+    "task_claimed": 1,
+    "task_created": 2,
+    "task_waiting_for": 3,
+    "task_failed": 4,
+    "task_bounced": 5,
+    "task_reset": 6,
+}
+
+
+def _blocking_open_tasks(
+    tasks: dict,
+    depends_on: list[str],
+    current_task_id: str = "",
+) -> list:
+    """Open same-team tasks that would create parallel planner pressure."""
+    deps = set(depends_on or [])
+    return [
+        ts
+        for ts in tasks.values()
+        if (
+            ts.status in _QUEUE_OPEN_STATUSES
+            and ts.task_id not in deps
+            and ts.task_id != current_task_id
+        )
+    ]
+
+
+def _task_attention_reason(task) -> str:
+    if task.status == "task_waiting_for":
+        return f"waiting_for={task.waiting_for or 'unknown'}"
+    if task.status == "task_failed":
+        return task.fail_reason or task.verdict or "failed"
+    if task.status == "task_bounced":
+        return task.bounce_reason or "bounced"
+    if task.status == "task_reset":
+        return task.reset_reason or f"reset_count={task.reset_count}"
+    if task.status == "task_created":
+        return "unclaimed"
+    if task.status == "task_claimed":
+        return f"claimed_by={task.actor}"
+    if task.status == "task_in_progress":
+        return f"in_progress_by={task.actor}"
+    return ""
+
+
+def _attention_task(tasks: dict):
+    """Return the most useful non-done task for planner-status output."""
+    candidates = [ts for ts in tasks.values() if ts.status != "task_done"]
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda ts: (
+            _ATTENTION_STATUS_ORDER.get(ts.status, 99),
+            -ts.last_seq,
+        ),
+    )
+
+
 def _latest_task_in_queue(tasks: dict):
     """Return the TaskState with the highest last_seq, or None."""
     if not tasks:
@@ -1135,6 +1215,7 @@ def planner_status_snapshot(project: str) -> list[dict]:
         except Exception:  # noqa: BLE001
             tasks = {}
         latest = _latest_task_in_queue(tasks)
+        attention = _attention_task(tasks)
         session_rt = _read_session_runtime(project, meta["planner_seat"])
         profile_drift = False
         if session_rt and meta["tool"]:
@@ -1157,6 +1238,9 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "latest_task_id": latest.task_id if latest else None,
             "latest_task_status": latest.status if latest else None,
             "latest_task_ts": latest.last_event_ts if latest else None,
+            "attention_task_id": attention.task_id if attention else None,
+            "attention_task_status": attention.status if attention else None,
+            "attention_reason": _task_attention_reason(attention) if attention else None,
             "profile_drift": profile_drift,
             "session_tool": session_rt["tool"] if session_rt else None,
             "session_auth_mode": session_rt["auth_mode"] if session_rt else None,
@@ -1212,11 +1296,20 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             live_suffix = f"  [DEAD: session={row.get('session_name') or '?'}]"
         elif row.get("session_status") == "alive":
             live_suffix = "  [LIVE]"
+        attention_suffix = ""
+        if row.get("attention_task_id"):
+            attention_suffix = (
+                f"  attention={row['attention_task_id']}"
+                f"[{row['attention_task_status']}]"
+            )
+            if row.get("attention_reason"):
+                attention_suffix += f": {row['attention_reason']}"
         print(
             f"{row['team']:30s}  planner={row['planner_seat']}"
             f"  tool={tool_label}"
             f"  queue={row['queue_state']}({row['task_count']})"
             f"  latest={latest_label}"
+            f"{attention_suffix}"
             f"{drift_suffix}"
             f"{live_suffix}"
         )
@@ -1362,6 +1455,8 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--force", action="store_true", help="Overwrite existing brief.")
     q.add_argument("--no-wake", action="store_true",
                    help="Append the queue event without waking the team planner.")
+    q.add_argument("--allow-open", action="store_true",
+                   help="Explicitly allow queueing while this team has another open task.")
     q.set_defaults(func=cmd_queue)
 
     l = sub.add_parser("list", help="List tasks for a team (default: pending only)")

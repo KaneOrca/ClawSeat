@@ -314,6 +314,9 @@ class TestPlannerStatusSnapshot:
         team_a = next(r for r in rows if r["team"] == "team-a")
         assert team_a["queue_state"] == "claimed"
         assert team_a["latest_task_status"] == "task_claimed"
+        assert team_a["attention_task_id"] == "T1"
+        assert team_a["attention_task_status"] == "task_claimed"
+        assert team_a["attention_reason"] == "claimed_by=planner@claude"
 
     def test_waiting_task_reports_waiting(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
@@ -342,6 +345,24 @@ class TestPlannerStatusSnapshot:
         team_a = next(r for r in rows if r["team"] == "team-a")
         assert team_a["queue_state"] == "blocked"
         assert team_a["latest_task_status"] == "task_failed"
+        assert team_a["attention_task_id"] == "T1"
+        assert team_a["attention_reason"] == "mechanical failed"
+
+    def test_reset_task_reports_attention_reason(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+        _write_multi_profile(tmp_path, project="p")
+        _seed_queue(tmp_path, "p", "team-a", [
+            {"event_type": "task_created", "actor": "memory", "task_id": "T1",
+             "brief_path": "b/T1.md", "parent_task_id": None, "depends_on": []},
+            {"event_type": "task_reset", "actor": "operator", "task_id": "T1",
+             "reset_reason": "acceptance criteria repaired"},
+        ])
+        rows = planner_status_snapshot("p")
+        team_a = next(r for r in rows if r["team"] == "team-a")
+        assert team_a["queue_state"] == "blocked"
+        assert team_a["attention_task_id"] == "T1"
+        assert team_a["attention_task_status"] == "task_reset"
+        assert team_a["attention_reason"] == "acceptance criteria repaired"
 
     def test_notify_policy_reported(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
@@ -378,6 +399,7 @@ class TestCmdPlannerStatus:
         assert "team-a" in out.out
         assert "team-a-planner" in out.out
         assert "waiting" in out.out
+        assert "attention=T1[task_created]: unclaimed" in out.out
 
     def test_json_output_is_parseable_list(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
