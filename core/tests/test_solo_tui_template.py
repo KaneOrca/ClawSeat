@@ -70,6 +70,8 @@ def test_solo_tui_workspace_rules_are_lightweight():
     assert "goal + context + boundary + anti-goal + acceptance + delivery" in reminder
     assert "queue/state tracking" in reminder
     assert "Inspiration Browser" in reminder
+    assert "Patrol review" in reminder
+    assert "review/latest" in reminder
     assert "complete_handoff.py" not in reminder
     assert "agent_admin.py brief planner-status" not in reminder
 
@@ -79,6 +81,8 @@ def test_solo_tui_workspace_rules_are_lightweight():
     assert "do not monitor or poll by default" in boundary
     assert "project memory, planner, queue owner" in boundary
     assert "Inspiration Browser" in boundary
+    assert "delivered-but-unintegrated" in boundary
+    assert "review/latest" in boundary
 
     protocol = "\n".join(
         render_communication_protocol_lines(engineer, "demo", seat_id="solo")

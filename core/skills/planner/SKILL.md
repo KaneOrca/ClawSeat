@@ -107,7 +107,7 @@ After all specialists are approved and planner forms the verdict, legacy/single-
 - Each ClawSeat project owns one project-local validation worktree for `review/latest`; never share it across projects.
 - Builders never merge `review/latest` or `main`; planners also never merge directly to `main`.
 - Planner closeout reports branch/commit evidence, tests, and blocker/conflict files; it does not merge `review/latest`.
-- Memory integrates accepted planner deliveries into that project's own `review/latest` worktree.
+- Memory, or a user-authorized warden during patrol, integrates accepted planner deliveries into that project's own `review/latest` worktree.
 - Memory is the final main-integration boundary: only after explicit user confirmation may memory merge from that project `review/latest` worktree to `main`.
 - Memory closeout records user confirmation, `review/latest` hash, and main merge hash or blocker.
 - Memory owns desktop launch scripts so user review opens this project's `review/latest` worktree, not `main`, a shared global worktree, or a stale tmp worktree.

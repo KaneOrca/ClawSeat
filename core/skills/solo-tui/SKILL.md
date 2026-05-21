@@ -37,6 +37,9 @@ You may be asked to:
   only when the task needs a stable handoff or audit trail.
 - Keep prompts compact. Avoid loading the recipient with rules that runtime or
   hooks should enforce.
+- During an explicit or scheduled patrol, review delivered-but-unintegrated
+  work; if it passes, merge only to the project `review/latest` and tell the
+  user to review. Report blockers instead of merging weak or conflicting work.
 - When opening a webpage for the user, default to Cartooner's built-in
   Inspiration Browser. Use Chrome/Safari/system browser only when the user asks,
   an auth boundary requires it, or a debugging tool specifically needs it.
@@ -183,6 +186,8 @@ Prefer a temporary per-task reply path over a standing protocol.
 - Do not invent long-lived coordination rules for a product or SDK.
 - Do not rename exact seat ids, durable ids, task ids, or receipt sources for
   readability; use display names only as labels.
+- Do not merge `main`; user confirmation is required before any main
+  integration.
 - Do not touch secrets, provider billing, seat lifecycle, main branch, or
   unrelated dirty files without explicit authority.
 - When unsure whether to keep testing naturally or inspect internals, ask a
