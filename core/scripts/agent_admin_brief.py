@@ -599,6 +599,26 @@ def cmd_queue(args: argparse.Namespace) -> int:
         )
         return 4
 
+    latest = _latest_task_in_queue(current_state)
+    if (
+        latest
+        and latest.status == "task_done"
+        and latest.verdict == "PASS"
+        and latest.task_id not in (args.depends_on or [])
+        and not getattr(args, "allow_unintegrated", False)
+    ):
+        integration = _latest_delivery_integration(project, latest.task_id)
+        if integration.get("status") == "needs_integration":
+            print(
+                "latest PASS delivery still needs review/latest integration; "
+                f"refusing new dispatch (latest_task_id={latest.task_id}, "
+                f"reason={integration.get('reason') or 'unknown'}). "
+                "Integrate it first, add an explicit --depends-on edge, or pass "
+                "--allow-unintegrated for an intentional exception.",
+                file=sys.stderr,
+            )
+            return 4
+
     brief = _brief_path(project, team, task_id)
     brief.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1338,6 +1358,134 @@ def _check_review_latest_commit(project: str) -> str | None:
         return None
 
 
+def _commit_in_review_latest(project: str, commit: str) -> bool | None:
+    """Return whether commit is reachable from review/latest, or None if unknown."""
+    commit = (commit or "").strip()
+    if not commit:
+        return None
+    try:
+        local = _project_local_toml(project)
+        wt_override = str(local.get("review_latest_worktree") or "")
+        wt_path = review_latest_worktree_path(project, wt_override)
+        if not wt_path.exists():
+            return None
+        r = subprocess.run(
+            ["git", "-C", str(wt_path), "merge-base", "--is-ancestor", commit, "review/latest"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0:
+            return True
+        if r.returncode == 1:
+            return False
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+
+def _reported_commit_from_receipt(receipt: dict) -> str | None:
+    for key in ("builder_commit", "commit", "branch_tip", "reported_commit"):
+        value = receipt.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _latest_delivery_integration(project: str, task_id: str | None) -> dict:
+    """Inspect durable handoff receipts for the latest PASS task.
+
+    review/latest worktree cleanliness alone only says the validation branch is
+    tidy; it does not prove the latest planner delivery was integrated. Receipts
+    are the durable source for PASS_NEEDS_INTEGRATION and lineage status.
+    """
+    result = {
+        "status": "clean",
+        "reason": "",
+        "receipt_path": None,
+        "reported_commit": None,
+    }
+    if not task_id:
+        return result
+
+    handoffs = real_user_home() / ".agents" / "tasks" / project / "patrol" / "handoffs"
+    if not handoffs.exists():
+        return result
+
+    candidates = sorted(
+        handoffs.glob(f"{task_id}__*.json"),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    needs_candidate: dict | None = None
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        reported_commit = _reported_commit_from_receipt(data)
+        integration = str(data.get("integration") or "").strip()
+        lineage_status = str(data.get("lineage_status") or "").strip()
+        head_contains = data.get("head_contains_commit")
+        receipt_path = str(path)
+
+        if integration == "PASS_NEEDS_INTEGRATION":
+            commit_check = _commit_in_review_latest(project, reported_commit or "")
+            if reported_commit and commit_check is True:
+                return {
+                    "status": "clean",
+                    "reason": f"receipt reported commit {reported_commit} now reaches review/latest",
+                    "receipt_path": receipt_path,
+                    "reported_commit": reported_commit,
+                }
+            if needs_candidate is None:
+                needs_candidate = {
+                    "status": "needs_integration",
+                    "reason": "PASS_NEEDS_INTEGRATION receipt",
+                    "receipt_path": receipt_path,
+                    "reported_commit": reported_commit,
+                }
+            continue
+
+        if lineage_status == "divergent" or head_contains is False:
+            commit_check = _commit_in_review_latest(project, reported_commit or "")
+            if reported_commit and commit_check is True:
+                return {
+                    "status": "clean",
+                    "reason": f"receipt reported commit {reported_commit} now reaches review/latest",
+                    "receipt_path": receipt_path,
+                    "reported_commit": reported_commit,
+                }
+            if needs_candidate is None:
+                needs_candidate = {
+                    "status": "needs_integration",
+                    "reason": f"lineage_status={lineage_status or 'unknown'}",
+                    "receipt_path": receipt_path,
+                    "reported_commit": reported_commit,
+                }
+            continue
+
+        if reported_commit:
+            commit_check = _commit_in_review_latest(project, reported_commit)
+            if commit_check is False:
+                return {
+                    "status": "needs_integration",
+                    "reason": f"reported commit {reported_commit} not on review/latest",
+                    "receipt_path": receipt_path,
+                    "reported_commit": reported_commit,
+                }
+            if commit_check is True:
+                return {
+                    "status": "clean",
+                    "reason": f"reported commit {reported_commit} reaches review/latest",
+                    "receipt_path": receipt_path,
+                    "reported_commit": reported_commit,
+                }
+    if needs_candidate is not None:
+        return needs_candidate
+    return result
+
+
 def _compute_dispatch_readiness(
     queue_depth: int,
     latest_status: str | None,
@@ -1346,6 +1494,8 @@ def _compute_dispatch_readiness(
     workspace_dirty: bool,
     session_status: str,
     profile_drift: bool,
+    integration_status: str = "clean",
+    integration_reason: str = "",
 ) -> tuple[str, str]:
     """Compute dispatch_readiness and reason string per CF006 spec."""
     if session_status != "alive" or profile_drift:
@@ -1364,6 +1514,7 @@ def _compute_dispatch_readiness(
         latest_verdict == "PASS"
         and review_latest_clean
         and not workspace_dirty
+        and integration_status != "needs_integration"
     )
     if clean:
         parts = ["drained", "latest task PASS"]
@@ -1372,6 +1523,10 @@ def _compute_dispatch_readiness(
         if not workspace_dirty:
             parts.append("workspace clean")
         return "clean", ", ".join(parts)
+
+    if latest_status == "task_done" and integration_status == "needs_integration":
+        suffix = f": {integration_reason}" if integration_reason else ""
+        return "idle_unmerged", f"drained, latest task PASS, but delivery needs review/latest integration{suffix}"
 
     if latest_status == "task_done" and not review_latest_clean:
         return "idle_unmerged", "drained, latest task PASS, but not merged to review/latest"
@@ -1627,6 +1782,10 @@ def planner_status_snapshot(project: str) -> list[dict]:
         workspace_dirty = _check_workspace_dirty(project)
         review_latest_clean = _check_review_latest_clean(project)
         review_latest_commit = _check_review_latest_commit(project)
+        integration = _latest_delivery_integration(
+            project,
+            latest.task_id if latest and latest.status == "task_done" and latest.verdict == "PASS" else None,
+        )
         readiness, readiness_reason = _compute_dispatch_readiness(
             queue_depth=queue_depth,
             latest_status=latest.status if latest else None,
@@ -1635,6 +1794,8 @@ def planner_status_snapshot(project: str) -> list[dict]:
             workspace_dirty=workspace_dirty,
             session_status=session_status,
             profile_drift=profile_drift,
+            integration_status=str(integration.get("status") or "clean"),
+            integration_reason=str(integration.get("reason") or ""),
         )
         rows.append({
             "team": str(team_name),
@@ -1667,6 +1828,10 @@ def planner_status_snapshot(project: str) -> list[dict]:
             "workspace_dirty": workspace_dirty,
             "review_latest_clean": review_latest_clean,
             "review_latest_commit": review_latest_commit,
+            "integration_status": integration.get("status"),
+            "integration_reason": integration.get("reason"),
+            "integration_receipt_path": integration.get("receipt_path"),
+            "integration_reported_commit": integration.get("reported_commit"),
             "dispatch_readiness": readiness,
             "dispatch_readiness_reason": readiness_reason,
         })
@@ -1744,10 +1909,14 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
         readiness_reason = row.get("dispatch_readiness_reason", "")
         dirty_flag = "dirty" if row.get("workspace_dirty") else "clean"
         merged_flag = "merged" if row.get("review_latest_clean") else "unmerged"
+        integration_suffix = ""
+        if row.get("integration_status") == "needs_integration":
+            integration_suffix = "  integration=needs_integration"
         print(
             f"{'':30s}  dispatch_readiness={readiness}"
             f"  workspace={dirty_flag}"
             f"  review/latest={merged_flag}"
+            f"{integration_suffix}"
             f"  [{readiness_reason}]"
         )
     # Review worktree status — project-level, shown once after all team rows
@@ -1901,6 +2070,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Append the queue event without waking the team planner.")
     q.add_argument("--allow-open", action="store_true",
                    help="Explicitly allow queueing while this team has another open task.")
+    q.add_argument("--allow-unintegrated", action="store_true",
+                   help="Explicitly allow queueing after a PASS delivery still needs review/latest integration.")
     q.set_defaults(func=cmd_queue)
 
     l = sub.add_parser("list", help="List tasks for a team (default: pending only)")
