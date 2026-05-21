@@ -216,6 +216,7 @@ def test_real_repo_role_skill_section_for_patrol_includes_contract_marker() -> N
     assert "## Role SKILL hot contract (canonical)" in joined
     assert "core/skills/patrol/SKILL.md" in joined
     assert "Source of truth: queue files" in joined
+    assert "tmux/watchdog captures are observations" in joined
     # Detailed patrol-only prose stays in the cold SKILL reference.
     assert "不写新 tests" not in joined
 

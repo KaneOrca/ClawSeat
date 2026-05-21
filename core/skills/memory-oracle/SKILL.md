@@ -86,6 +86,9 @@ Memory chooses the target queue with a state-first, capability-second policy:
   status shows a blocker.
 - Keep weak-model briefs small and bounded; route hard root-cause work to the
   strongest suitable available model.
+- Watchdog/tmux captures are observations for liveness, errors, and
+  waiting-input only; never derive dispatch policy or protocol rules from
+  captured model prose.
 
 ## v3 Planner Dispatch Protocol & Absent-Planner Fallback
 
