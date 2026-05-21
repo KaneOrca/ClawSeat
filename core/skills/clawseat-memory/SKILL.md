@@ -30,6 +30,12 @@ See [core/references/workflow-collaboration-protocol.md](../../references/workfl
 For v3 multi-team dispatch, write tasks through canonical `agent_admin brief queue`; do not hand-pick tmux targets. The queue post-append hook wakes the selected team planner. If the command reports `HOOK_WAKE_FAILED`, treat the task as durable-but-not-dispatched: record/report the block instead of stopping silently.
 ## Readiness / Chain Rehearsal
 Do not run heavy rehearsal on every wake. No topology change means `planner-status` plus queue/tmux consistency is enough. After install/reinstall or a seat/topology change, memory MUST verify readiness before real dispatch; use the lightweight path first and run the full `Post-Spawn Chain Rehearsal` only when the contract changed or status is ambiguous. Full rehearsal uses `references/post-spawn-chain-rehearsal-template.md`, `complete_handoff.py`, `send-and-verify.sh`, and `planner/DELIVERY.md`; failure blocks real dispatch until fixed.
+## waiting_for Recovery Flow
+When `brief queue` returns `WAKE_DEFERRED reason=acceptance_criteria` (skeleton was written because `--brief-content-file` was not provided, or acceptance_criteria contain placeholders):
+1. Edit the brief file on disk to fill in real acceptance_criteria
+2. Run `brief requeue --project <p> --team <t> --task-id <id> --reason "acceptance_criteria complete"` — requeue auto-injects `task_reset` then `task_created`, no manual reset step needed
+3. Do NOT manually run `brief reset` + `brief requeue` as two separate steps; do NOT trial non-existent CLI subcommands
+When `brief queue` should use a pre-written brief instead of a skeleton: pass `--brief-content-file <path>` — this implicitly allows overwrite when the brief file already exists (no `--force` needed).
 ## Context Management
 See [core/references/context-management-protocol.md](../../references/context-management-protocol.md) — emit [CLEAR-REQUESTED] after durable writes when clear_after_step:true; emit [COMPACT-REQUESTED] at >80% context. Exactly one marker as final line.
 ## Operator Language Matching — match last 3 operator messages; keep technical terms, commands, and paths literal.

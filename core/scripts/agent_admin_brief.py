@@ -603,8 +603,11 @@ def cmd_queue(args: argparse.Namespace) -> int:
     brief.parent.mkdir(parents=True, exist_ok=True)
 
     # Pre-check overwrite policy BEFORE writing anything (Fix #5)
+    # CF007: --brief-content-file implicitly allows overwrite (user is
+    # explicitly providing the content, so skeleton-overwrite protection
+    # does not apply). --force alone still generates a skeleton.
     brief_pre_exists = brief.exists()
-    if brief_pre_exists and not args.force:
+    if brief_pre_exists and not args.force and not args.brief_content_file:
         print(f"refusing to overwrite existing brief: {brief}", file=sys.stderr)
         return 2
 
@@ -1875,8 +1878,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.add_argument("--parent-task-id", default=None, dest="parent_task_id")
     q.add_argument("--brief-content-file", default=None, dest="brief_content_file",
-                   help="Optional path to pre-written brief markdown (overrides skeleton).")
-    q.add_argument("--force", action="store_true", help="Overwrite existing brief.")
+                   help="Path to pre-written brief markdown. Implicitly allows overwrite "
+                        "when the brief file already exists (no --force needed). "
+                        "Without this flag, --force generates a skeleton.")
+    q.add_argument("--force", action="store_true",
+                   help="Overwrite existing brief with skeleton. "
+                        "When combined with --brief-content-file, uses the provided "
+                        "content instead of generating a skeleton.")
     q.add_argument("--no-wake", action="store_true",
                    help="Append the queue event without waking the team planner.")
     q.add_argument("--allow-open", action="store_true",
