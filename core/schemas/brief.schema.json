@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "clawseat://schemas/brief.schema.json",
   "title": "ClawSeat brief (v3 §4.2)",
-  "description": "Memory-authored task brief that planner pulls from tasks.queue.jsonl and converts to workflow.md.",
+  "description": "Memory-queued task brief that planner pulls from tasks.queue.jsonl and converts to workflow.md. Product intent may be authored by operator/warden and preserved by memory.",
   "type": "object",
   "required": [
     "task_id",

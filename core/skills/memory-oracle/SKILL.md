@@ -1,6 +1,6 @@
 ---
 name: memory-oracle
-description: "Federated memory oracle: synthesizes facts from ~/.agents/memory KB. Use for remembered facts, project-history synthesis, cross-seat evidence. Don't use for implementation, dispatch, or guessed facts."
+description: "Federated memory oracle: synthesizes facts from ~/.agents/memory KB and preserves operator/warden brief intent during project-memory handoffs. Use when remembered facts, project-history synthesis, cross-seat evidence, queue-state context, or closeout recall are needed. Do not use for implementation, direct specialist work, or guessed facts."
 ---
 
 # Memory Oracle (v0.8 — Federated KB Synthesizer)
@@ -53,6 +53,24 @@ Memory 向 v3 multi-team planner 派任务时，必须通过 `agent_admin.py bri
 记录派工决策到当前 project 的
 `~/.agents/memory/projects/<project>/decision/`（Memory 的孤儿知识层）。
 Planner 写自己的 `~/.agents/memory/projects/<project>/planner/`，不是 Memory 的职责。
+
+## Brief Fidelity Boundary
+
+Memory owns patrol, durable memory, queue/state tracking, acceptance
+consumption, and `review/latest` integration tracking. It does not own
+reinterpretation of product intent when an operator/warden supplies a brief or
+root-cause report.
+
+- Preserve supplied `Goal`, `Context`, `Boundary`, `Anti-goal`, and
+  `Acceptance` when queueing work; add only task id, team, seats, dependencies,
+  and mechanical routing metadata.
+- Do not weaken user-visible outcomes into a convenient implementation. If the
+  brief says "inside the project sidebar", "a separate overlay entry" is not an
+  equivalent interpretation unless the brief allows it.
+- If product intent is ambiguous and no compact brief exists, ask for one or
+  ask the operator/warden to clarify the user-visible outcome and anti-goals.
+- During closeout, compare planner delivery against the supplied outcome and
+  anti-goal, not just queue PASS and test output.
 
 ## v3 Planner Dispatch Protocol & Absent-Planner Fallback
 
@@ -107,7 +125,7 @@ Treat missing queue state, silent target pane, absent delivery, or missing
 
 ## Canonical Brief Queue Entry (v3 multi-team, memory 必走步)
 
-Memory writes briefs into the per-team queue. Planner pulls via 60s poll +
+Memory queues briefs into the per-team queue. Planner pulls via 60s poll +
 SessionStart hook. No workflow.md authored by memory — planner writes it
 from the claimed brief (spec §5.1, §5.2).
 
@@ -135,7 +153,8 @@ Why: queue + event stream is the v3 canonical state (spec §4.3). Memory does
 NOT write `workflow.md`; planner authors it after `agent_admin brief claim`.
 Memory's ownership boundary:
 
-- **WRITES** `brief.acceptance_criteria` (mechanical / reviewer / operator)
+- **QUEUES/PRESERVES** operator/warden-authored product intent and writes
+  routing metadata plus `brief.acceptance_criteria`
 - **CONSUMES** planner's chain-end relay + acceptance receipts
 - **NEVER RUNS** `agent_admin acceptance run` directly — that is planner's job
   between final workflow step and chain-end relay (planner SKILL.md

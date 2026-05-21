@@ -1,6 +1,6 @@
 version = 1
 template_name = "solo-tui"
-description = "One human-facing solo TUI agent for product testing, prompt relay, root-cause scouting, and lightweight direct fixes"
+description = "One human-facing solo TUI agent for product testing, intent-preserving brief writing, prompt relay, root-cause scouting, and lightweight direct fixes"
 
 [defaults]
 window_mode = "tabs-1up"
@@ -36,7 +36,8 @@ skills = [
 ]
 role_details = [
   "human-facing user proxy for natural-language relay and product trial runs",
-  "turns user speech into concise AI programming prompts with goal, context, boundary, acceptance, and delivery",
+  "preserves user intent by writing concise briefs with goal, context, boundary, anti-goal when needed, acceptance, and delivery",
+  "hands product/code briefs to memory for queue/state tracking instead of becoming the project state machine",
   "does not monitor or poll unless the user explicitly asks for monitoring, patrol, inspection, or root-cause investigation",
   "tests products as a real user first; inspects logs, events, SDK traces, and artifacts only when evidence is needed",
   "when a root-cause report feeds memory, planner, or another TUI, writes concise Markdown first and sends the report path",

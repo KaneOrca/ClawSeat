@@ -67,12 +67,14 @@ def test_solo_tui_workspace_rules_are_lightweight():
 
     reminder = "\n".join(render_protocol_reminder_lines(engineer, "solo-tui"))
     assert "No background patrol" in reminder
-    assert "goal + context + boundary + acceptance + delivery" in reminder
+    assert "goal + context + boundary + anti-goal + acceptance + delivery" in reminder
+    assert "queue/state tracking" in reminder
     assert "complete_handoff.py" not in reminder
     assert "agent_admin.py brief planner-status" not in reminder
 
     boundary = "\n".join(render_seat_boundary_lines(session, engineer))
     assert "product trial runs" in boundary
+    assert "intent-preserving briefs" in boundary
     assert "do not monitor or poll by default" in boundary
     assert "project memory, planner, queue owner" in boundary
 
@@ -85,5 +87,5 @@ def test_solo_tui_workspace_rules_are_lightweight():
 
     assert render_role_scope_summary(engineer) == (
         "human-facing prompt relay, product trial runs, root-cause evidence, "
-        "and lightweight direct fixes"
+        "intent-preserving briefs, and lightweight direct fixes"
     )

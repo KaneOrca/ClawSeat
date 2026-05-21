@@ -22,7 +22,7 @@ matching `core/schemas/brief.schema.json`. Key fields:
 
 | field | who reads | who writes | planner action |
 |---|---|---|---|
-| objective / out_of_scope / constraints | planner | memory | translate to workflow.md narrative |
+| objective / body / out_of_scope / constraints | planner | memory or operator/warden via memory | preserve as the workflow intent contract |
 | seats_required | planner | memory | use to validate liveness; SWALLOW only matching roles |
 | depends_on | queue_io helper + planner | memory | enforced by `brief claim`; planner inspects to surface stalls |
 | sub_tasks | planner | memory | expand into `parallel_subagents` step if mode allows |
@@ -51,6 +51,13 @@ author: planner@<tool>                # mandatory, must match brief claim actor
 Note: workflow.md does NOT duplicate `acceptance_criteria`. The executor
 reads acceptance directly from `brief.acceptance_criteria` to keep memory
 as the single source of truth.
+
+Intent fidelity rule: planner may choose the implementation plan, but must not
+weaken the user-visible outcome or anti-goal in the brief. If the brief says a
+feature must live inside a specific surface, a link, icon, or separate overlay
+is not equivalent unless the brief explicitly allows that substitution. If the
+brief is too ambiguous or appears infeasible, emit/bounce for memory authority
+instead of silently implementing a weaker interpretation.
 
 ## 4. Route acceptance after step completion
 

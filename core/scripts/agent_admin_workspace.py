@@ -111,28 +111,28 @@ def render_protocol_reminder_lines(
     if normalized in {"project-memory", "memory-oracle"}:
         lines.extend([
             "1. **Status Snapshot**: user wake / pre-dispatch -> `agent_admin.py brief planner-status --project <project>`; manual queue scans only if it fails or debugging needs detail",
-            "2. **v3 Dispatch**: memory→planner uses `agent_admin.py brief queue`; downstream/legacy handoff uses `dispatch_task.py`",
-            "3. **Verify Queue**: after queueing, read `planner-status`; only debug with raw queue files if the snapshot is unclear",
-            "4. **Chain end**: accept queue-drained planner relay -> read DELIVERY / acceptance / review/latest -> write KB summary",
-            "5. **Privacy**: network queries -> clawseat-privacy check first; no PII/secret/token in KB",
-            "6. **Don't**: direct downstream dispatch, code/config/seat lifecycle; runtime blocks v3 memory→planner split-brain dispatch",
+            "2. **Brief Fidelity**: preserve operator/warden Goal/Context/Boundary/Anti-goal/Acceptance; do not weaken product intent",
+            "3. **v3 Dispatch**: memory→planner uses `agent_admin.py brief queue`; downstream/legacy handoff uses `dispatch_task.py`",
+            "4. **Verify Queue**: after queueing, read `planner-status`; only debug with raw queue files if the snapshot is unclear",
+            "5. **Chain end**: accept queue-drained planner relay -> read DELIVERY / acceptance / review/latest -> write KB summary",
+            "6. **Don't**: direct downstream dispatch, code/config/seat lifecycle, or network/outbound without privacy guard; runtime blocks v3 memory→planner split-brain dispatch",
         ])
     elif normalized in {"planner", "planner-dispatcher"}:
         lines.extend([
-            "1. **/clear before dispatch**: G1 closure / G2 context-relatedness / G3 idle; 三 gate 全过即发，先 /clear 再 dispatch；见 `core/skills/planner/SKILL.md:57`。",
-            "2. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",
-            "3. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
-            "4. **Post-DELIVERY closeout**: read DELIVERY -> verdict -> planner/DELIVERY.md; in multi-team delivery mode notify memory only when queue is drained",
-            "5. **Fan-out**: 2+ disjoint sub-goals -> workflow.md mode: parallel_subagents",
+            "1. **Intent Fidelity**: preserve brief outcome / constraints / anti-goal / acceptance; bounce instead of implementing a weaker reading",
+            "2. **/clear before dispatch**: G1 closure / G2 context-relatedness / G3 idle; 三 gate 全过即发，先 /clear 再 dispatch；见 `core/skills/planner/SKILL.md:57`。",
+            "3. **Dispatch specialist**: dispatch_task.py -> handoff.json + send-and-verify wake target",
+            "4. **Strict fan-in**: before relay memory, verify every specialist .consumed receipt; missing -> verdict=BLOCKED",
+            "5. **Post-DELIVERY closeout**: read DELIVERY -> verdict -> planner/DELIVERY.md; in multi-team delivery mode notify memory only when queue is drained",
             "6. **Compact not Clear**: relay `[memory: compact-me]` to memory; never emit `[CLEAR-REQUESTED]`",
         ])
     elif normalized in {"solo-tui", "user-proxy", "warden"}:
         lines.extend([
             "1. **No background patrol**: do not monitor, poll, or inspect internals unless the user explicitly asks.",
-            "2. **Prompt relay**: translate user speech into goal + context + boundary + acceptance + delivery.",
+            "2. **Brief authoring**: preserve user intent as goal + context + boundary + anti-goal + acceptance + delivery.",
             "3. **Problem reports**: investigate root cause before forwarding a vague issue to another agent.",
             "4. **Product testing**: behave like a real user first; inspect logs/events/artifacts only when evidence is needed.",
-            "5. **Temporary replies**: if a peer must reply, include the exact reply path, script, file, or session in this message.",
+            "5. **Memory relay**: hand product/code briefs to memory for queue/state tracking; do not become the state machine.",
             "6. **Direct fixes**: fix framework/template/automation defects in your scope; do not become memory or planner by default.",
         ])
     elif normalized in {"builder", "reviewer"}:
@@ -265,7 +265,7 @@ def render_role_scope_summary(engineer: Any) -> str:
     if role == "frontstage-supervisor":
         return "intake framing, seat launch, patrol, unblock, and escalation"
     if role == "solo-tui":
-        return "human-facing prompt relay, product trial runs, root-cause evidence, and lightweight direct fixes"
+        return "human-facing prompt relay, product trial runs, root-cause evidence, intent-preserving briefs, and lightweight direct fixes"
     if role == "planner-dispatcher":
         return "task initialization, research coordination, execution planning, next-hop routing, and durable consumption of completions"
     if role == "builder":
@@ -852,10 +852,11 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
     if engineer.role == "solo-tui":
         lines.extend(
             [
-                f"- `{seat_name}` owns human-facing prompt relay, product trial runs, root-cause evidence packets, and lightweight direct fixes.",
+                f"- `{seat_name}` owns human-facing prompt relay, product trial runs, root-cause evidence packets, intent-preserving briefs, and lightweight direct fixes.",
                 "- do not monitor or poll by default; inspect panes, queues, logs, events, or artifacts only when the user asks",
                 "- do not become project memory, planner, queue owner, or canonical dispatch authority unless the user explicitly changes the role",
-                "- when relaying work, keep the request short and include goal, context, boundary, acceptance, and delivery",
+                "- when relaying work, keep the request short and include goal, context, boundary, anti-goal when needed, acceptance, and delivery",
+                "- for product/code work, hand the brief to memory for queue/state tracking instead of taking over the task chain",
                 "- when a reply is needed, include the exact temporary reply path in the message: chat, file, inbox, script, and target session if applicable",
                 "- test products as a real user first; use internal evidence only to diagnose or verify",
                 "- directly fix framework, template, or automation defects in this seat's owned scope; avoid forwarding vague issues",

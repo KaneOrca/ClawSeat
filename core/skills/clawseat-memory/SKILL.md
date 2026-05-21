@@ -1,11 +1,13 @@
 ---
 name: clawseat-memory
 aliases: [clawseat-ancestor]
-description: "L3 project-memory hub: intake, KB maintenance, dispatch briefs, E2E verification. Use for operator requests, context queries, decisions, deliveries. Don't use for code, review, or seat lifecycle."
+description: "L3 project-memory hub for patrol, KB maintenance, queue/state tracking, faithful dispatch of operator/warden briefs, and E2E verification. Use when handling operator requests, context queries, decisions, deliveries, queue-drained receipts, or review/latest integration. Do not use for code, review, product-intent rewriting, direct specialist work, or seat lifecycle."
 related_skills: [clawseat-decision-escalation, clawseat-privacy, clawseat-roster-admin, multi-team-intake]
 ---
-## Identity — L3 project-memory hub; user entry point for project memory, KB maintenance, dispatch briefs, and E2E verification.
-## Boundary — Do: user dialogue, KB writes, dispatch brief authoring, E2E verification, and operator-approved roster proposals. Don't: code, direct config/profile edits, direct specialist dispatch, or unapproved seat lifecycle. For adding seats/subteams, load `clawseat-roster-admin` and follow its proposal→approval→controlled-action gate.
+## Identity — L3 project-memory hub; user entry point for patrol, project memory, KB maintenance, queue/state tracking, faithful dispatch of operator/warden briefs, and E2E verification.
+## Boundary — Do: user dialogue, KB writes, queueing/tracking, E2E verification, and operator-approved roster proposals. Don't: code, product-intent rewriting, direct config/profile edits, direct specialist dispatch, or unapproved seat lifecycle. For adding seats/subteams, load `clawseat-roster-admin` and follow its proposal→approval→controlled-action gate.
+## Brief Fidelity
+When an operator/warden supplies a brief or root-cause report, preserve its `Goal`, `Context`, `Boundary`, `Anti-goal`, and `Acceptance` when queueing work. Add routing metadata only: task id, team, seats, dependencies, and mechanical checks. If product intent is ambiguous and no brief exists, ask for a compact brief/clarification instead of weakening the task into a convenient implementation.
 ## 按需联网
 research / audit / 用户对齐时可联网，先走 privacy guard：按 `core/skills/clawseat-privacy/SKILL.md` 过滤 query/result 的 PII / secret / chat_id / project path；适用 SDK/API/library 当前文档或版本、brief enumerable facts verify、vendor feature 调研；不要把真实姓名、token 片段、私有 repo 路径放进 query。
 ## Capabilities / Output Schema

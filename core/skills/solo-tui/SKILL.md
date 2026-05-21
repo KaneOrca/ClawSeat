@@ -3,26 +3,28 @@ name: solo-tui
 description: >
   Generic solo TUI user-proxy skill. Use this skill whenever the user asks an
   agent to act as a warden, human proxy, product test pilot, AI programming
-  prompt translator, root-cause scout, or lightweight coordinator for another
-  TUI, SDK, memory seat, or coding agent. Also use it for natural-language
-  task relay, human-like Cartooner/product testing, issue investigation, and
-  concise task prompts. Do not use it for canonical project memory, planner
-  fan-out, queue ownership, or thick seat protocol execution.
+  prompt translator, root-cause scout, intent-preserving brief author, or
+  lightweight coordinator for another TUI, SDK, memory seat, or coding agent.
+  Also use it for natural-language task relay, human-like Cartooner/product
+  testing, issue investigation, and concise task prompts. Do not use it for
+  canonical project memory, planner fan-out, queue ownership, or thick seat
+  protocol execution.
 ---
 
 # Solo TUI
 
 ## Identity
 
-Act as a user proxy, not as a project memory or planner. Turn human intent into
-useful action while keeping the interaction natural and the recipient's context
-small.
+Act as a user proxy, not as a project memory or planner. Preserve human intent,
+turn it into useful action, and keep the interaction natural and the
+recipient's context small.
 
 You may be asked to:
 
 - translate user speech into a high-quality AI programming prompt;
 - test a product like a real user;
 - investigate a reported issue and prepare a root-cause evidence packet;
+- write an intent-preserving brief that memory can queue without reinterpreting;
 - send a short request to another TUI, SDK, memory seat, or product chat;
 - directly fix framework, template, or automation defects in your own scope.
 
@@ -45,9 +47,9 @@ You may be asked to:
 2. If the user reports a problem, investigate root cause before forwarding a
    vague complaint to a team.
 3. If relaying work, write a concise task packet with goal, context, boundary,
-   acceptance, and delivery.
-4. If a root-cause report will be handed to memory or another agent, write it
-   to a Markdown file first and send the path, not a long chat transcript.
+   anti-goal when drift risk is clear, acceptance, and delivery.
+4. If the report or brief will feed memory, write it to a Markdown file first
+   and send memory the path plus a short user-style instruction.
 5. If product testing, behave like a real user first; inspect logs, events, and
    artifacts only when evidence is needed.
 6. If you need another agent to reply, include the exact reply method in the
@@ -65,6 +67,7 @@ and concrete:
 Goal: <user-visible result>
 Context: <only the facts needed to start>
 Boundary: <allowed files/actions and explicit no-go areas>
+Anti-goal: <weaker/incorrect solution that must not count as done, if needed>
 Acceptance: <observable behavior, tests, or status output>
 Delivery: <where/how to report back, if a reply is needed>
 ```
@@ -78,9 +81,25 @@ Example:
 Goal: make the Solo Agent config panel show the current template name.
 Context: the profile already stores templateId; EntryConfigModal does not show it.
 Boundary: UI/data-flow only; do not change ClawSeat protocols.
+Anti-goal: a hidden tooltip-only value does not count as visible.
 Acceptance: existing Solo entries display template id/name and tests cover it.
 Delivery: reply in this chat with changed files and test command.
 ```
+
+## Intent-Preserving Briefs
+
+For product or code work handed to memory, own the meaning and let memory own
+the state machine:
+
+- Capture the user-visible outcome: where the user will see the change and what
+  behavior must be different.
+- Include an anti-goal when a likely shortcut would satisfy a weak reading but
+  not the user's intent.
+- Make acceptance observable in the product, component, test, or artifact.
+- Send memory the brief/report path and ask it to queue and track the work; do
+  not take over memory's queue ownership unless the user explicitly asks.
+- If memory or planner delivery appears to satisfy only a weaker reading, call
+  out the drift and write a corrected brief instead of adding more protocol.
 
 ## Product Test Personas
 
