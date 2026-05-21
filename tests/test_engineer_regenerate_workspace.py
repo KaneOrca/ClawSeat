@@ -150,7 +150,7 @@ def test_regenerate_all_skips_uninitialized_project_seats(tmp_path: Path, capsys
     assert hooks.apply_template.call_count == 1
 
 
-def test_regenerate_all_uses_dynamic_profile_active_roster(
+def test_regenerate_all_uses_project_roster_with_dynamic_profile_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -160,18 +160,25 @@ def test_regenerate_all_uses_dynamic_profile_active_roster(
     profile_path.write_text(
         """
 template_name = "clawseat-minimal"
-seats = ["memory", "cartooner-product-solo-planner"]
+seats = ["memory", "cartooner-product2-planner", "cartooner-product-solo-planner"]
 
 [mode]
 team_structure = "multi"
 project_memory = "memory"
 
 [teams]
+cartooner-product2 = { seats = ["cartooner-product2-planner"] }
 cartooner-product-solo = { seats = ["cartooner-product-solo-planner"] }
 
 [seat_roles]
 memory = "project-memory"
+cartooner-product2-planner = "planner"
 cartooner-product-solo-planner = "planner"
+
+[seat_overrides.cartooner-product2-planner]
+role = "planner-dispatcher"
+team = "cartooner-product2"
+dispatch_authority = true
 
 [seat_overrides.cartooner-product-solo-planner]
 role = "planner-dispatcher"
@@ -184,7 +191,7 @@ dispatch_authority = true
     handlers, hooks, _session = _handlers(tmp_path)
     hooks.load_project.return_value = SimpleNamespace(
         name="install",
-        engineers=["memory"],
+        engineers=["memory", "cartooner-product2-planner"],
         monitor_engineers=["memory"],
         template_name="old-template",
         seat_overrides={"memory": {"role": "project-memory"}},
@@ -203,6 +210,13 @@ dispatch_authority = true
             session="install-cartooner-product-solo-planner-claude",
             tool="claude",
             workspace=str(tmp_path / "workspace" / "cartooner-product-solo-planner"),
+        ),
+        "cartooner-product2-planner": SimpleNamespace(
+            engineer_id="cartooner-product2-planner",
+            project="install",
+            session="install-cartooner-product2-planner-claude",
+            tool="claude",
+            workspace=str(tmp_path / "workspace" / "cartooner-product2-planner"),
         ),
     }
     hooks.resolve_engineer_session.side_effect = lambda engineer_id, *, project_name=None: sessions[engineer_id]
@@ -226,10 +240,11 @@ dispatch_authority = true
     assert rc == 0
     assert hooks.resolve_engineer_session.call_count == 2
     assert (Path(sessions["memory"].workspace) / "AGENTS.md").exists()
-    assert (Path(sessions["cartooner-product-solo-planner"].workspace) / "AGENTS.md").exists()
-    assert all(project.engineers == ["memory", "cartooner-product-solo-planner"] for project in render_projects)
+    assert (Path(sessions["cartooner-product2-planner"].workspace) / "AGENTS.md").exists()
+    assert not (Path(sessions["cartooner-product-solo-planner"].workspace) / "AGENTS.md").exists()
+    assert all(project.engineers == ["memory", "cartooner-product2-planner"] for project in render_projects)
     assert all(project.template_name == "clawseat-minimal" for project in render_projects)
     assert all(
-        project.seat_overrides["cartooner-product-solo-planner"]["team"] == "cartooner-product-solo"
+        project.seat_overrides["cartooner-product2-planner"]["team"] == "cartooner-product2"
         for project in render_projects
     )

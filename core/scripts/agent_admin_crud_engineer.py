@@ -18,8 +18,6 @@ from agent_admin_crud_base import (
     require_caller_authority,
 )
 from seat_roles import normalize_seat_role
-from _toml_compat import load_safe as _toml_load_safe
-from real_home import real_user_home
 
 
 _OPERATOR_CUSTOM_START = "<!-- OPERATOR-CUSTOM-START -->"
@@ -66,10 +64,6 @@ def preserve_operator_custom_block(existing: str, rendered: str) -> tuple[str, b
     return _inject_operator_custom_block(rendered, custom_text, line_no), True
 
 
-def _dynamic_profile_path(project_name: str) -> Path:
-    return real_user_home() / ".agents" / "profiles" / f"{project_name}-profile-dynamic.toml"
-
-
 def _dedupe(values: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -83,19 +77,21 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 def _dynamic_profile_context(project: Any) -> tuple[list[str], dict[str, dict[str, object]], str] | None:
-    path = _dynamic_profile_path(str(project.name))
-    if not path.exists():
-        return None
     try:
-        with path.open("rb") as fh:
-            data = _toml_load_safe(fh)
-    except Exception as exc:
-        print(f"warn: dynamic profile ignored for workspace refresh: {path}: {exc}", file=sys.stderr)
-        return None
+        from agent_admin_workspace import _load_dynamic_profile_data  # noqa: PLC0415
 
-    seats = [str(seat) for seat in data.get("seats") or []]
+        loaded = _load_dynamic_profile_data(str(project.name))
+    except Exception as exc:
+        print(f"warn: dynamic profile ignored for workspace refresh: {exc}", file=sys.stderr)
+        return None
+    if loaded is None:
+        return None
+    _path, data = loaded
+
+    project_seats = [str(seat) for seat in getattr(project, "engineers", []) or []]
+    seats = list(project_seats)
     teams = data.get("teams") or {}
-    if isinstance(teams, dict):
+    if not seats and isinstance(teams, dict):
         for team_cfg in teams.values():
             if isinstance(team_cfg, dict):
                 seats.extend(str(seat) for seat in team_cfg.get("seats") or [])
