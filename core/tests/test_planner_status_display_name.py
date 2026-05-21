@@ -3,7 +3,8 @@
 When seat_overrides includes display_name, planner_status_snapshot returns it
 and cmd_planner_status formats the planner label as "display_name (seat_id)".
 
-display_runtime controls whether provider/auth info appears in tool label.
+provider/auth info now always appears in the tool label for runtime diagnosis;
+display_runtime remains exposed in the JSON snapshot for compatibility.
 """
 
 from __future__ import annotations
@@ -162,16 +163,15 @@ class TestCmdPlannerStatusDisplayName:
         out = _run_cmd(tmp_path)
         assert "planner=UI-Claude (ui-planner)" in out
 
-    def test_runtime_hidden_when_display_runtime_false(self, tmp_path):
-        """display_runtime=false: provider/auth not shown in tool label."""
+    def test_runtime_shown_when_display_runtime_false(self, tmp_path):
+        """display_runtime=false: provider/auth still shown in tool label."""
         _write_profile_with_dn(tmp_path, planner="ui-planner", team="t",
                                 display_name="UI-Claude", display_runtime=False)
         out = _run_cmd(tmp_path)
-        # tool label should be just "claude" with no "(anthropic,oauth_token)"
         tool_part = [p for p in out.split("  ") if p.startswith("tool=")]
         assert tool_part, f"tool= not found in: {out!r}"
-        assert "anthropic" not in tool_part[0]
-        assert "oauth_token" not in tool_part[0]
+        assert "anthropic" in tool_part[0]
+        assert "oauth_token" in tool_part[0]
 
     def test_runtime_shown_when_display_runtime_true(self, tmp_path):
         """display_runtime=true: provider/auth appear in tool label."""
@@ -183,11 +183,11 @@ class TestCmdPlannerStatusDisplayName:
         assert "anthropic" in tool_part[0]
         assert "oauth_token" in tool_part[0]
 
-    def test_no_runtime_without_display_name_and_display_runtime_false(self, tmp_path):
-        """No display_name + no display_runtime: runtime fragment absent."""
+    def test_runtime_shown_without_display_name_and_display_runtime_false(self, tmp_path):
+        """No display_name + no display_runtime: runtime fragment still present."""
         _write_profile_no_dn(tmp_path, planner="ui-planner", team="t")
         out = _run_cmd(tmp_path)
         tool_part = [p for p in out.split("  ") if p.startswith("tool=")]
         assert tool_part
-        # display_runtime defaults False so runtime not shown
-        assert "anthropic" not in tool_part[0]
+        assert "anthropic" in tool_part[0]
+        assert "oauth_token" in tool_part[0]

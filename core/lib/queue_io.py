@@ -252,7 +252,7 @@ def append_event(
     return event
 
 
-def _normalize_event_for_read(event: dict) -> dict | None:
+def _normalize_event_for_read(event: dict, *, fallback_seq: int | None = None) -> dict | None:
     """Return a canonical read model for valid current and legacy queue events.
 
     Writers still emit only the canonical schema. Readers tolerate older/manual
@@ -262,13 +262,29 @@ def _normalize_event_for_read(event: dict) -> dict | None:
     if not isinstance(event, dict):
         return None
     normalized = dict(event)
-    if "event_type" not in normalized and "type" in normalized:
-        normalized["event_type"] = normalized["type"]
+    if "event_type" not in normalized:
+        if "type" in normalized:
+            normalized["event_type"] = normalized["type"]
+        elif "event" in normalized:
+            normalized["event_type"] = normalized["event"]
+    if normalized.get("event_type") == "task_blocked":
+        # Legacy/manual closeout rows used task_blocked. The canonical queue
+        # model has no task_blocked event; task_bounced is the closest blocked
+        # terminal state and keeps the task out of the claimable queue.
+        normalized["event_type"] = "task_bounced"
+        if "bounce_reason" not in normalized and "reason" in normalized:
+            normalized["bounce_reason"] = normalized["reason"]
     if "actor" not in normalized and "seat" in normalized:
         normalized["actor"] = normalized["seat"]
     if "event_ts" not in normalized and "ts" in normalized:
         normalized["event_ts"] = str(normalized["ts"])
+    if "seq" not in normalized and fallback_seq is not None:
+        normalized["seq"] = fallback_seq
     if not {"seq", "event_type", "task_id"} <= normalized.keys():
+        return None
+    try:
+        normalized["seq"] = int(normalized["seq"])
+    except (TypeError, ValueError):
         return None
     if normalized["event_type"] not in VALID_EVENT_TYPES:
         return None
@@ -278,23 +294,28 @@ def _normalize_event_for_read(event: dict) -> dict | None:
 
 
 def read_events(queue_path: Path | str) -> list[dict]:
-    """Return all readable events in seq order. Malformed lines silently skipped."""
+    """Return all readable events in append order. Malformed lines silently skipped.
+
+    Canonical writers append monotonically increasing ``seq`` values, but older
+    manual closeout rows may omit seq or even reuse/decrease it. For current
+    state, append order is the durable event order; seq remains a display/debug
+    field after read normalization.
+    """
     path = Path(queue_path)
     if not path.exists():
         return []
     events: list[dict] = []
     with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
+        for line_no, line in enumerate(fh, start=1):
             line = line.strip()
             if not line:
                 continue
             try:
-                event = _normalize_event_for_read(json.loads(line))
+                event = _normalize_event_for_read(json.loads(line), fallback_seq=line_no)
             except json.JSONDecodeError:
                 continue
             if event:
                 events.append(event)
-    events.sort(key=lambda e: int(e["seq"]))
     return events
 
 
@@ -334,9 +355,9 @@ def read_current_state(queue_path: Path | str) -> dict[str, TaskState]:
             ts.verdict = event.get("verdict", "PASS")
         elif et == "task_failed":
             ts.verdict = event.get("verdict", "FAIL")
-            ts.fail_reason = event.get("fail_reason")
+            ts.fail_reason = event.get("fail_reason") or event.get("reason")
         elif et == "task_bounced":
-            ts.bounce_reason = event.get("bounce_reason")
+            ts.bounce_reason = event.get("bounce_reason") or event.get("reason")
         elif et == "task_reset":
             ts.reset_count += 1
             ts.reset_reason = event.get("reset_reason")
