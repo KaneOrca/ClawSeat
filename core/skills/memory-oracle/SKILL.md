@@ -73,6 +73,20 @@ root-cause report.
 - During closeout, compare planner delivery against the supplied outcome and
   anti-goal, not just queue PASS and test output.
 
+## Planner Selection Boundary
+
+Memory chooses the target queue with a state-first, capability-second policy:
+
+- Before queueing, read `planner-status`.
+- Prefer a context-hot planner whose previous accepted work is already integrated.
+- If no planner is context-hot, choose an idle clean planner with suitable model
+  capability; avoid `idle_unmerged` unless the operator/warden accepts it.
+- Treat `TEAM_OWNERSHIP.md`, project `purpose`, and capabilities as routing
+  hints, not hard locks. A warden/operator brief that names a team wins unless
+  status shows a blocker.
+- Keep weak-model briefs small and bounded; route hard root-cause work to the
+  strongest suitable available model.
+
 ## v3 Planner Dispatch Protocol & Absent-Planner Fallback
 
 Canonical v3 memory→planner dispatch is the brief queue helper:
@@ -86,7 +100,7 @@ python3 core/scripts/agent_admin.py brief queue \
   --seats-required planner
 ```
 
-The queue CLI writes the brief, appends `task_created`, and wakes the owning
+The queue CLI writes the brief, appends `task_created`, and wakes the selected
 planner. `dispatch_task.py` remains valid for planner-owned downstream handoffs
 and legacy v2 workflows; runtime rejects v3 memory→planner use because it
 creates split-brain state between handoff receipts and the team queue.
@@ -139,11 +153,9 @@ python3 core/scripts/agent_admin.py brief queue \
   --seats-required builder reviewer \
   --depends-on <upstream_task_ids…>
 
-# 2. Edit brief frontmatter to fill in acceptance_criteria
-#    (mechanical / reviewer / operator) — schema requires at least one route item;
-#    pure review/operator tasks do not need fake mechanical commands.
-#    THIS is the only place memory authors acceptance — planner copies it
-#    verbatim and MUST NOT modify (planner SKILL.md §Workflow Authoring).
+# 2. Preserve supplied acceptance criteria. Add or normalize only route metadata
+#    (mechanical / reviewer / operator) when needed; pure review/operator tasks
+#    do not need fake mechanical commands.
 $EDITOR ~/.agents/tasks/<p>/<t>/brief/<task_id>.md
 
 # 3. No explicit wake-up needed — planner's SessionStart hook + 60s poll
@@ -156,7 +168,7 @@ NOT write `workflow.md`; planner authors it after `agent_admin brief claim`.
 Memory's ownership boundary:
 
 - **QUEUES/PRESERVES** operator/warden-authored product intent and writes
-  routing metadata plus `brief.acceptance_criteria`
+  routing metadata; it does not rewrite supplied acceptance
 - **CONSUMES** planner's chain-end relay + acceptance receipts
 - **NEVER RUNS** `agent_admin acceptance run` directly — that is planner's job
   between final workflow step and chain-end relay (planner SKILL.md
@@ -200,13 +212,20 @@ For single-team v2 workflows only, memory may use the legacy workflow entry:
 禁止短路: do not send builder work directly, do not skip planner, and do not
 replace workflow.md with ad hoc pane text. v3 multi-team work uses `brief queue`.
 
-## Post-Spawn Chain Rehearsal (必做)
+## Readiness / Chain Rehearsal
 
-memory MUST initiate a chain rehearsal brief in these situations:
+Do not run heavy rehearsal on every wake. No topology change means
+`planner-status` plus queue/tmux consistency is enough.
+
+Memory MUST verify readiness before real dispatch in these situations:
 
 1. After install.sh / reinstall, once Phase-A kickoff is received and the
    project seats are confirmed live.
 2. When a seat is restarted and a new instance joins the chain.
+3. When teams/seats/topology changed since the previous successful check.
+
+Use the lightweight path first. Run full Post-Spawn Chain Rehearsal only when
+the contract changed or status is ambiguous.
 
 **Template**: see `references/post-spawn-chain-rehearsal-template.md`
 
@@ -287,7 +306,10 @@ Memory loads two companion skills:
   goal-drift recall.
 
 Koder loads `clawseat-intake` but not `memory-report-mode`; planner does
-not load either for high-context operator work. Spec authority: memory authors/verifies task SPEC.md via `core/scripts/spec_admin.py`; full protocol in [`references/spec-authority.md`](references/spec-authority.md).
+not load either for high-context operator work. Brief/spec authority: when an
+operator/warden-authored brief exists, memory preserves it and adds only queue
+metadata. If no compact brief exists, memory asks for one instead of inventing
+product intent via `spec_admin.py`.
 
 ## Decision Payload Output
 

@@ -268,6 +268,7 @@ def test_render_team_ownership_markdown_captures_quality_docs_and_lightweight_re
 
     assert "# p Team Ownership" in doc
     assert "project.toml` / approved YAML remain runtime authority" in doc
+    assert "team ownership is a routing hint, not a hard lock" in doc
     assert "## quality-docs" in doc
     assert "autonomous continuous QA" in doc
     assert "quality-docs-patrol-chaos" in doc
@@ -278,6 +279,7 @@ def test_render_team_ownership_markdown_captures_quality_docs_and_lightweight_re
     assert "Notify policy: `queue_drained_only`" in doc
     assert "Quality gate doc: `quality-docs/QUALITY.md`" in doc
     assert "Planner owns review because this lightweight subteam has no dedicated reviewer" in doc
+    assert "Declared paths guide routing but do not override planner-status" in doc
 
 
 def test_validator_rejects_duplicate_same_role_without_instance(tmp_path: Path) -> None:

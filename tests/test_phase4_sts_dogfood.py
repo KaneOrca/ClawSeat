@@ -158,6 +158,7 @@ def test_install_multi_writes_team_ownership_sidecar(env_home):
 
     assert f"# {project} Team Ownership" in text
     assert "## core" in text
+    assert "state-first and capability-second" in text
     assert "core-builder-runtime" in text
     assert "capabilities: `python`, `cli`" in text
     assert "ownership:" not in proc.stderr.lower()

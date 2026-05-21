@@ -113,9 +113,10 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
         "",
         "Generated from the approved v3 team config and dynamic profile.",
         "This file is descriptive only; `project.toml` / approved YAML remain runtime authority.",
+        "Dispatch is state-first and capability-second; team ownership is a routing hint, not a hard lock.",
         "",
         "## project-memory",
-        "Mission: project-level memory, intake, stable team ownership, dispatch briefs, and cross-team coordination.",
+        "Mission: project-level memory, intake, stable team context, queue metadata, and cross-team coordination.",
         "Ownership paths:",
         "- project-wide context and routing metadata",
         "Seats:",
@@ -158,7 +159,7 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
                 "Mission: autonomous continuous QA, human-path simulation, chaos/risk testing, evidence, and QA docs."
             )
         else:
-            lines.append("Mission: own planning and delivery for the declared module/layer boundary.")
+            lines.append("Mission: provide domain context for planning and delivery within the declared module/layer boundary.")
         lines.append(f"Team type: `{team_type}`")
         if autonomous:
             lines.append("Autonomy: `true`; planner owns campaign design and patrol scheduling.")
@@ -201,7 +202,7 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
         else:
             lines.extend(
                 [
-                    "- Does not own paths outside the declared ownership paths unless memory updates this doc.",
+                    "- Declared paths guide routing but do not override planner-status, model capability, or a warden/operator brief.",
                     "- Per-task builder assignment belongs in that task's `workflow.md`, not in this document.",
                 ]
             )

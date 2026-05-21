@@ -82,6 +82,9 @@ def test_memory_workspace_claude_renders_l3_hub_without_worker_vocab() -> None:
     assert "TEAM_OWNERSHIP.md" in text
     assert "quality-docs/QUALITY.md" in text
     assert "queue is drained" in text
+    assert "Planner Selection" in text
+    assert "context-hot" in text
+    assert "routing hints, not hard locks" in text
     assert "seat_overrides" in text
     assert "specialist" not in text.lower()
     assert "return to planner" not in text.lower()
@@ -96,6 +99,7 @@ def test_memory_workspace_gemini_renders_tool_specific_paths() -> None:
     assert "/run-bash-in-repo" in text
     assert "TEAM_OWNERSHIP.md" in text
     assert "quality-docs/QUALITY.md" in text
+    assert "Planner Selection" in text
     assert "~/.agents/skills/" not in text
 
 

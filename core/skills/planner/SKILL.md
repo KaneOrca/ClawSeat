@@ -112,12 +112,15 @@ After all specialists are approved and planner forms the verdict, legacy/single-
 - Memory closeout records user confirmation, `review/latest` hash, and main merge hash or blocker.
 - Memory owns desktop launch scripts so user review opens this project's `review/latest` worktree, not `main`, a shared global worktree, or a stale tmp worktree.
 - On conflict: stop and report; do not force-push and do not modify `main`.
-## Memory-driven Compaction Request
+## Context Management
+
+### Memory-driven Compaction Request
 
 Planner MUST NOT emit `[CLEAR-REQUESTED]` because workflow.md state and
 cross-step decisions can be lost. Context marker mechanics live in
 `core/references/context-management-protocol.md`; planner-specific policy lives
 in `core/skills/planner/references/planner-context-policy.md`.
+FORBIDDEN: planner must not request clear; use `[memory: compact-me]` instead.
 
 When planner relays to memory, append `[memory: compact-me]` to the relay string
 when any of these are true:
