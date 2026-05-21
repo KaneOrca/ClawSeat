@@ -268,7 +268,8 @@ def test_render_team_ownership_markdown_captures_quality_docs_and_lightweight_re
 
     assert "# p Team Ownership" in doc
     assert "project.toml` / approved YAML remain runtime authority" in doc
-    assert "team ownership is a routing hint, not a hard lock" in doc
+    assert "status-gate-first and capability-second" in doc
+    assert "team ownership is only a same-tier tie-breaker" in doc
     assert "## quality-docs" in doc
     assert "autonomous continuous QA" in doc
     assert "quality-docs-patrol-chaos" in doc

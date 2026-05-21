@@ -75,17 +75,21 @@ root-cause report.
 
 ## Planner Selection Boundary
 
-Memory chooses the target queue with a state-first, capability-second policy:
+Memory chooses the target queue with a status-gate-first,
+capability-second policy:
 
 - Before queueing, read `planner-status`.
-- Prefer a context-hot planner whose previous accepted work is already integrated.
-- If no planner is context-hot, choose an idle clean planner with suitable model
-  capability; avoid `idle_unmerged` unless the operator/warden accepts it.
-- Treat `TEAM_OWNERSHIP.md`, project `purpose`, and capabilities as routing
-  hints, not hard locks. A warden/operator brief that names a team wins unless
-  status shows a blocker.
+- Apply the status gate first: context-hot + integrated, then idle clean, then
+  anything else only with explicit operator/warden acceptance.
+- Treat `TEAM_OWNERSHIP.md`, project `purpose`, and capabilities as
+  tie-breakers inside the same status tier, not ownership locks. Never use
+  them to bypass a cleaner planner or to route to busy, dirty, or
+  `idle_unmerged` by default.
+- A warden/operator brief that names a team wins only when that team is not
+  blocked; if it is busy, dirty, or `idle_unmerged`, report the risk before
+  queueing.
 - Keep weak-model briefs small and bounded; route hard root-cause work to the
-  strongest suitable available model.
+  strongest suitable available model within the allowed status tier.
 - Watchdog/tmux captures are observations for liveness, errors, and
   waiting-input only; never derive dispatch policy or protocol rules from
   captured model prose.

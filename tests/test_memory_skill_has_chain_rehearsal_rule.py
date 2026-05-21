@@ -47,9 +47,10 @@ def test_clawseat_memory_documents_state_first_planner_selection() -> None:
 
     assert "Planner Selection" in text
     assert "planner-status" in text
-    assert "context-hot" in text
+    assert "status gate first" in text
+    assert "tie-breakers inside the same status tier" in text
     assert "idle_unmerged" in text
-    assert "routing hints, not hard locks" in text
+    assert "never use them to bypass a cleaner planner" in text
     assert "Watchdog/tmux captures are observations" in text
     assert "never derive dispatch policy" in text
 

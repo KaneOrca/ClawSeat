@@ -113,7 +113,7 @@ def render_team_ownership_markdown(project: str, profile_data: dict[str, object]
         "",
         "Generated from the approved v3 team config and dynamic profile.",
         "This file is descriptive only; `project.toml` / approved YAML remain runtime authority.",
-        "Dispatch is state-first and capability-second; team ownership is a routing hint, not a hard lock.",
+        "Dispatch is status-gate-first and capability-second; team ownership is only a same-tier tie-breaker, not a hard lock.",
         "",
         "## project-memory",
         "Mission: project-level memory, intake, stable team context, queue metadata, and cross-team coordination.",

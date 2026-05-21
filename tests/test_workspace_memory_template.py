@@ -83,8 +83,9 @@ def test_memory_workspace_claude_renders_l3_hub_without_worker_vocab() -> None:
     assert "quality-docs/QUALITY.md" in text
     assert "queue is drained" in text
     assert "Planner Selection" in text
-    assert "context-hot" in text
-    assert "routing hints, not hard locks" in text
+    assert "status gate first" in text
+    assert "tie-breakers inside the same status tier" in text
+    assert "busy, dirty, or `idle_unmerged`" in text
     assert "watchdog/tmux captures as observations" in text
     assert "never derive dispatch policy" in text
     assert "seat_overrides" in text
@@ -102,6 +103,8 @@ def test_memory_workspace_gemini_renders_tool_specific_paths() -> None:
     assert "TEAM_OWNERSHIP.md" in text
     assert "quality-docs/QUALITY.md" in text
     assert "Planner Selection" in text
+    assert "status gate first" in text
+    assert "tie-breakers inside the same status tier" in text
     assert "watchdog/tmux captures as observations" in text
     assert "~/.agents/skills/" not in text
 
@@ -131,6 +134,8 @@ def test_codex_memory_workspace_gets_memory_docs_for_cross_tool_migration() -> N
     assert "CLAUDE.md" in rendered
     assert "GEMINI.md" in rendered
     assert "Project Memory Seat - Codex" in text
+    assert "status gate first" in text
+    assert "tie-breakers inside the same status tier" in text
     assert "watchdog/tmux captures as observations" in text
     assert "L3 hub" in text
     assert "Primary instruction file:" in text
