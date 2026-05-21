@@ -1240,6 +1240,8 @@ def _git_worktree_status(wt_path: Path) -> dict:
         "status": "missing",
         "branch": None,
         "commit": None,
+        "dirty": False,
+        "dirty_count": 0,
     }
     if not wt_path.exists():
         return result
@@ -1259,6 +1261,14 @@ def _git_worktree_status(wt_path: Path) -> dict:
         commit = r_hash.stdout.strip() if r_hash.returncode == 0 else None
         result["branch"] = branch
         result["commit"] = commit
+        r_dirty = subprocess.run(
+            ["git", "-C", str(wt_path), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r_dirty.returncode == 0:
+            dirty_lines = [line for line in r_dirty.stdout.splitlines() if line.strip()]
+            result["dirty"] = bool(dirty_lines)
+            result["dirty_count"] = len(dirty_lines)
         if branch == "review/latest":
             result["status"] = "ok"
         elif branch == "HEAD":  # detached worktree
@@ -1746,8 +1756,10 @@ def cmd_planner_status(args: argparse.Namespace) -> int:
             wt = check_review_latest_worktree(args.project)
             rv = wt["review_worktree"]
             lv = wt["launcher_worktree"]
-            rv_label = f"{rv['status']}@{rv['commit']}" if rv.get("commit") else rv["status"]
-            lv_label = f"{lv['status']}@{lv['commit']}" if lv.get("commit") else lv["status"]
+            rv_status = f"{rv['status']}+dirty" if rv.get("dirty") else rv["status"]
+            lv_status = f"{lv['status']}+dirty" if lv.get("dirty") else lv["status"]
+            rv_label = f"{rv_status}@{rv['commit']}" if rv.get("commit") else rv_status
+            lv_label = f"{lv_status}@{lv['commit']}" if lv.get("commit") else lv_status
             print(
                 f"review/latest  worktree={rv_label}({rv['path']})"
                 f"  launcher={lv_label}({lv['path']})"

@@ -129,6 +129,9 @@ class TestGitWorktreeStatus:
             elif "--short" in cmd and "HEAD" in cmd:
                 r.returncode = 0
                 r.stdout = "abc1234"
+            elif "status" in cmd:
+                r.returncode = 0
+                r.stdout = ""
             else:
                 r.returncode = 1
                 r.stdout = ""
@@ -140,6 +143,8 @@ class TestGitWorktreeStatus:
         assert result["status"] == "ok"
         assert result["branch"] == "review/latest"
         assert result["commit"] == "abc1234"
+        assert result["dirty"] is False
+        assert result["dirty_count"] == 0
 
     def test_wrong_branch_flagged(self, tmp_path):
         fake_wt = tmp_path / "wt"
@@ -150,6 +155,9 @@ class TestGitWorktreeStatus:
             if "--abbrev-ref" in cmd:
                 r.returncode = 0
                 r.stdout = "main"
+            elif "status" in cmd:
+                r.returncode = 0
+                r.stdout = ""
             else:
                 r.returncode = 0
                 r.stdout = "000dead"
@@ -170,6 +178,9 @@ class TestGitWorktreeStatus:
             if "--abbrev-ref" in cmd:
                 r.returncode = 0
                 r.stdout = "HEAD"  # detached
+            elif "status" in cmd:
+                r.returncode = 0
+                r.stdout = ""
             elif "--short" in cmd:
                 r.returncode = 0
                 r.stdout = commit  # both HEAD and review/latest resolve to same hash
@@ -182,6 +193,7 @@ class TestGitWorktreeStatus:
             result = brief_mod._git_worktree_status(fake_wt)
 
         assert result["status"] == "ok-detached"
+        assert result["dirty"] is False
 
     def test_detached_and_stale_returns_stale_detached(self, tmp_path):
         fake_wt = tmp_path / "wt"
@@ -195,6 +207,9 @@ class TestGitWorktreeStatus:
             if "--abbrev-ref" in cmd:
                 r.returncode = 0
                 r.stdout = "HEAD"
+            elif "status" in cmd:
+                r.returncode = 0
+                r.stdout = ""
             elif "--short" in cmd and call_count[0] <= 2:
                 r.returncode = 0
                 r.stdout = "old1111"  # HEAD is old
@@ -207,6 +222,33 @@ class TestGitWorktreeStatus:
             result = brief_mod._git_worktree_status(fake_wt)
 
         assert result["status"] == "stale-detached"
+
+    def test_dirty_worktree_is_reported_without_changing_branch_status(self, tmp_path):
+        fake_wt = tmp_path / "wt"
+        fake_wt.mkdir()
+
+        def fake_run(cmd, **kwargs):
+            r = MagicMock()
+            if "--abbrev-ref" in cmd:
+                r.returncode = 0
+                r.stdout = "HEAD"
+            elif "status" in cmd:
+                r.returncode = 0
+                r.stdout = " M tracked.py\n?? scratch.log\n"
+            elif "--short" in cmd:
+                r.returncode = 0
+                r.stdout = "abc1234"
+            else:
+                r.returncode = 0
+                r.stdout = "abc1234"
+            return r
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            result = brief_mod._git_worktree_status(fake_wt)
+
+        assert result["status"] == "ok-detached"
+        assert result["dirty"] is True
+        assert result["dirty_count"] == 2
 
     def test_git_timeout_returns_error(self, tmp_path):
         fake_wt = tmp_path / "wt"
