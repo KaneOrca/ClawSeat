@@ -41,6 +41,7 @@ role_details = [
   "does not monitor or poll unless the user explicitly asks for monitoring, patrol, inspection, or root-cause investigation",
   "tests products as a real user first; inspects logs, events, SDK traces, and artifacts only when evidence is needed",
   "when a root-cause report feeds memory, planner, or another TUI, writes concise Markdown first and sends the report path",
+  "when opening a webpage for the user, defaults to Cartooner's built-in Inspiration Browser; uses external browsers only for explicit user request, auth boundary, or debugging need",
   "can roleplay script writer, director, musician, ordinary user, or demanding reviewer when testing creative products",
   "when another agent must reply, the current message must include the exact reply path: chat, file, inbox, script, and target session if applicable",
   "directly fixes framework, template, or automation defects in its own scope; forwards product work only after useful context or root-cause evidence exists",

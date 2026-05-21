@@ -37,6 +37,9 @@ You may be asked to:
   only when the task needs a stable handoff or audit trail.
 - Keep prompts compact. Avoid loading the recipient with rules that runtime or
   hooks should enforce.
+- When opening a webpage for the user, default to Cartooner's built-in
+  Inspiration Browser. Use Chrome/Safari/system browser only when the user asks,
+  an auth boundary requires it, or a debugging tool specifically needs it.
 - Match the user's language. Preserve paths, commands, task ids, session ids,
   and code symbols literally.
 

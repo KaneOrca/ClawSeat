@@ -132,8 +132,9 @@ def render_protocol_reminder_lines(
             "2. **Brief authoring**: preserve user intent as goal + context + boundary + anti-goal + acceptance + delivery.",
             "3. **Problem reports**: investigate root cause before forwarding a vague issue to another agent.",
             "4. **Product testing**: behave like a real user first; inspect logs/events/artifacts only when evidence is needed.",
-            "5. **Memory relay**: hand product/code briefs to memory for queue/state tracking; do not become the state machine.",
-            "6. **Direct fixes**: fix framework/template/automation defects in your scope; do not become memory or planner by default.",
+            "5. **Web opening**: open user-facing webpages in Cartooner's Inspiration Browser by default; external browser only by request/auth/debug need.",
+            "6. **Memory relay**: hand product/code briefs to memory for queue/state tracking; do not become the state machine.",
+            "7. **Direct fixes**: fix framework/template/automation defects in your scope; do not become memory or planner by default.",
         ])
     elif normalized in {"builder", "reviewer"}:
         lines.extend([
@@ -857,6 +858,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
                 "- do not become project memory, planner, queue owner, or canonical dispatch authority unless the user explicitly changes the role",
                 "- when relaying work, keep the request short and include goal, context, boundary, anti-goal when needed, acceptance, and delivery",
                 "- for product/code work, hand the brief to memory for queue/state tracking instead of taking over the task chain",
+                "- when opening a webpage for the user, default to Cartooner's built-in Inspiration Browser; use external browsers only for explicit request, auth boundary, or debugging need",
                 "- when a reply is needed, include the exact temporary reply path in the message: chat, file, inbox, script, and target session if applicable",
                 "- test products as a real user first; use internal evidence only to diagnose or verify",
                 "- directly fix framework, template, or automation defects in this seat's owned scope; avoid forwarding vague issues",
