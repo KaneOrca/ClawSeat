@@ -15,6 +15,7 @@ ROLE_SKILL_ALIASES: Final[dict[str, str]] = {
     "memory-oracle": "memory-oracle",
     "solo-tui": "solo-tui",
     "user-proxy": "solo-tui",
+    "spec-owner": "solo-tui",
     "product-tester": "solo-tui",
     "root-cause-scout": "solo-tui",
     "warden": "solo-tui",

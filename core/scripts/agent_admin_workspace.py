@@ -73,7 +73,7 @@ def render_authority_lines(engineer: Any) -> list[str]:
         return []
     capabilities: list[str] = []
     if getattr(engineer, "human_facing", False):
-        capabilities.append("human-facing intake and user communication")
+        capabilities.append("human-facing intake and professional user communication")
     if getattr(engineer, "active_loop_owner", False):
         capabilities.append("active loop ownership")
     if getattr(engineer, "dispatch_authority", False):
@@ -129,9 +129,9 @@ def render_protocol_reminder_lines(
     elif normalized in {"solo-tui", "user-proxy", "warden"}:
         lines.extend([
             "1. **No background patrol**: do not monitor, poll, or inspect internals unless the user explicitly asks.",
-            "2. **Brief authoring**: preserve user intent as goal + context + boundary + anti-goal + acceptance + delivery.",
+            "2. **Spec authoring**: act as a professional architecture/code advisor; preserve user intent as goal + context + boundary + anti-goal + acceptance + delivery.",
             "3. **Problem reports**: investigate root cause before forwarding a vague issue to another agent.",
-            "4. **Product testing**: behave like a real user first; inspect logs/events/artifacts only when evidence is needed.",
+            "4. **Product testing**: use product-test personas only when validation needs them; inspect logs/events/artifacts when evidence is needed.",
             "5. **Patrol review**: when explicitly/scheduled to patrol, review delivered-but-unintegrated work; merge PASS only to project review/latest and notify user.",
             "6. **Web opening**: open user-facing webpages in Cartooner's Inspiration Browser by default; external browser only by request/auth/debug need.",
             "7. **Memory relay**: hand product/code briefs to memory for queue/state tracking; do not become the state machine.",
@@ -267,7 +267,7 @@ def render_role_scope_summary(engineer: Any) -> str:
     if role == "frontstage-supervisor":
         return "intake framing, seat launch, patrol, unblock, and escalation"
     if role == "solo-tui":
-        return "human-facing prompt relay, product trial runs, root-cause evidence, intent-preserving briefs, and lightweight direct fixes"
+        return "professional intent analysis, root-cause evidence, AI-friendly specs, product validation, and lightweight direct fixes"
     if role == "planner-dispatcher":
         return "task initialization, research coordination, execution planning, next-hop routing, and durable consumption of completions"
     if role == "builder":
@@ -854,7 +854,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
     if engineer.role == "solo-tui":
         lines.extend(
             [
-                f"- `{seat_name}` owns human-facing prompt relay, product trial runs, root-cause evidence packets, intent-preserving briefs, and lightweight direct fixes.",
+                f"- `{seat_name}` owns professional intent analysis, root-cause evidence packets, AI-friendly specs, product validation, and lightweight direct fixes.",
                 "- do not monitor or poll by default; inspect panes, queues, logs, events, or artifacts only when the user asks",
                 "- do not become project memory, planner, queue owner, or canonical dispatch authority unless the user explicitly changes the role",
                 "- when relaying work, keep the request short and include goal, context, boundary, anti-goal when needed, acceptance, and delivery",
@@ -862,7 +862,7 @@ def render_seat_boundary_lines(session: Any, engineer: Any) -> list[str]:
                 "- during explicit or scheduled patrol, review delivered-but-unintegrated work; merge passing work only to this project's review/latest and notify the user",
                 "- when opening a webpage for the user, default to Cartooner's built-in Inspiration Browser; use external browsers only for explicit request, auth boundary, or debugging need",
                 "- when a reply is needed, include the exact temporary reply path in the message: chat, file, inbox, script, and target session if applicable",
-                "- test products as a real user first; use internal evidence only to diagnose or verify",
+                "- use product-test personas only when validation needs them; use internal evidence to diagnose or verify",
                 "- directly fix framework, template, or automation defects in this seat's owned scope; avoid forwarding vague issues",
             ]
         )
@@ -954,7 +954,7 @@ def render_communication_protocol_lines(
             "- default to natural language; do not wrap product or SDK testing in internal protocol",
             "- if another TUI, SDK, memory seat, or product chat must reply, state the temporary reply path in the same message",
             "- acceptable reply paths include this chat, an absolute file path, an inbox path, or a provided send script plus exact target session",
-            "- use scripts such as peer-send only when the task needs TUI transport; otherwise send the user-style request directly",
+            "- use scripts such as peer-send only when the task needs TUI transport; otherwise send the concise professional request directly",
             "- do not assume a standing backchannel; repeat the reply method whenever a reply matters",
             "- treat logs, events, queues, and delivery files as diagnostic evidence, not as the default interaction surface",
         ]
