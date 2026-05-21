@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import is_dataclass, replace
 import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from agent_admin_config import validate_runtime_combo
@@ -16,6 +18,8 @@ from agent_admin_crud_base import (
     require_caller_authority,
 )
 from seat_roles import normalize_seat_role
+from _toml_compat import load_safe as _toml_load_safe
+from real_home import real_user_home
 
 
 _OPERATOR_CUSTOM_START = "<!-- OPERATOR-CUSTOM-START -->"
@@ -60,6 +64,88 @@ def preserve_operator_custom_block(existing: str, rendered: str) -> tuple[str, b
         return rendered, False
     custom_text, line_no = block
     return _inject_operator_custom_block(rendered, custom_text, line_no), True
+
+
+def _dynamic_profile_path(project_name: str) -> Path:
+    return real_user_home() / ".agents" / "profiles" / f"{project_name}-profile-dynamic.toml"
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        item = str(value or "").strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _dynamic_profile_context(project: Any) -> tuple[list[str], dict[str, dict[str, object]], str] | None:
+    path = _dynamic_profile_path(str(project.name))
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as fh:
+            data = _toml_load_safe(fh)
+    except Exception as exc:
+        print(f"warn: dynamic profile ignored for workspace refresh: {path}: {exc}", file=sys.stderr)
+        return None
+
+    seats = [str(seat) for seat in data.get("seats") or []]
+    teams = data.get("teams") or {}
+    if isinstance(teams, dict):
+        for team_cfg in teams.values():
+            if isinstance(team_cfg, dict):
+                seats.extend(str(seat) for seat in team_cfg.get("seats") or [])
+    mode = data.get("mode") or {}
+    if isinstance(mode, dict):
+        memory_seat = str(mode.get("project_memory") or "").strip()
+        if memory_seat:
+            seats.append(memory_seat)
+
+    overrides_raw = data.get("seat_overrides") or {}
+    overrides: dict[str, dict[str, object]] = {}
+    if isinstance(overrides_raw, dict):
+        for seat_id, values in overrides_raw.items():
+            if isinstance(values, dict):
+                overrides[str(seat_id)] = dict(values)
+
+    template_name = str(data.get("template_name") or "").strip()
+    return _dedupe(seats), overrides, template_name
+
+
+def _project_with_dynamic_profile(project: Any) -> Any:
+    context = _dynamic_profile_context(project)
+    if context is None:
+        return project
+    seats, profile_overrides, profile_template_name = context
+    if not seats:
+        return project
+
+    merged_overrides = {
+        **dict(getattr(project, "seat_overrides", None) or {}),
+        **profile_overrides,
+    }
+    updates = {
+        "engineers": seats,
+        "monitor_engineers": [
+            seat
+            for seat in getattr(project, "monitor_engineers", []) or []
+            if seat in set(seats)
+        ],
+        "seat_overrides": merged_overrides,
+    }
+    if profile_template_name:
+        updates["template_name"] = profile_template_name
+
+    if is_dataclass(project):
+        return replace(project, **updates)
+    clone = SimpleNamespace(**vars(project))
+    for key, value in updates.items():
+        setattr(clone, key, value)
+    return clone
 
 
 class EngineerCrud:
@@ -437,7 +523,7 @@ class EngineerCrud:
 
     def engineer_regenerate_workspace(self, args: Any) -> int:
         self._require_escalation_authority("engineer regenerate-workspace")
-        project = self.hooks.load_project(args.project)
+        project = _project_with_dynamic_profile(self.hooks.load_project(args.project))
         assume_yes = bool(getattr(args, "yes", False))
         if getattr(args, "all_seats", False):
             if getattr(args, "engineer", None):
