@@ -63,7 +63,8 @@ root-cause report.
 
 - Preserve supplied `Goal`, `Context`, `Boundary`, `Anti-goal`, and
   `Acceptance` when queueing work; add only task id, team, seats, dependencies,
-  and mechanical routing metadata.
+  and acceptance routing metadata. Add mechanical checks only when there is a
+  real deterministic command.
 - Do not weaken user-visible outcomes into a convenient implementation. If the
   brief says "inside the project sidebar", "a separate overlay entry" is not an
   equivalent interpretation unless the brief allows it.
@@ -139,7 +140,8 @@ python3 core/scripts/agent_admin.py brief queue \
   --depends-on <upstream_task_ids…>
 
 # 2. Edit brief frontmatter to fill in acceptance_criteria
-#    (mechanical / reviewer / operator) — schema requires non-empty mechanical.
+#    (mechanical / reviewer / operator) — schema requires at least one route item;
+#    pure review/operator tasks do not need fake mechanical commands.
 #    THIS is the only place memory authors acceptance — planner copies it
 #    verbatim and MUST NOT modify (planner SKILL.md §Workflow Authoring).
 $EDITOR ~/.agents/tasks/<p>/<t>/brief/<task_id>.md

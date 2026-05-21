@@ -178,17 +178,28 @@ def _validate_external_brief_content(
                 f"{source_path}: brief.{field_name}={actual!r} mismatches CLI {field_name}={expected!r}"
             )
 
-    # Schema minItems sanity (cheap fallback even without jsonschema)
+    # Schema sanity (cheap fallback even without jsonschema)
     seats = data.get("seats_required")
     if not isinstance(seats, list) or not seats:
         raise InputValidationError(
             f"{source_path}: brief.seats_required must have minItems 1"
         )
     ac = data.get("acceptance_criteria") or {}
-    mech = ac.get("mechanical")
-    if not isinstance(mech, list) or not mech:
+    if not isinstance(ac, dict):
         raise InputValidationError(
-            f"{source_path}: brief.acceptance_criteria.mechanical must have minItems 1"
+            f"{source_path}: brief.acceptance_criteria must be a mapping"
+        )
+    has_any_route_item = False
+    for route in ("mechanical", "reviewer", "operator"):
+        items = ac.get(route) or []
+        if not isinstance(items, list):
+            raise InputValidationError(
+                f"{source_path}: brief.acceptance_criteria.{route} must be a list"
+            )
+        has_any_route_item = has_any_route_item or bool(items)
+    if not has_any_route_item:
+        raise InputValidationError(
+            f"{source_path}: brief.acceptance_criteria must include at least one route item"
         )
 
 
@@ -232,9 +243,16 @@ def _brief_acceptance_block_reason(brief_text: str, source_path: str = "<brief>"
     except InputValidationError as exc:
         return str(exc)
     ac = data.get("acceptance_criteria") or {}
-    mech = ac.get("mechanical")
-    if not isinstance(mech, list) or not mech:
-        return "acceptance_criteria.mechanical is empty"
+    if not isinstance(ac, dict):
+        return "acceptance_criteria must be a mapping"
+    has_any_route_item = False
+    for route in ("mechanical", "reviewer", "operator"):
+        items = ac.get(route) or []
+        if not isinstance(items, list):
+            return f"acceptance_criteria.{route} must be a list"
+        has_any_route_item = has_any_route_item or bool(items)
+    if not has_any_route_item:
+        return "acceptance_criteria has no route items"
 
     placeholder_patterns = (
         "todo:",
@@ -247,8 +265,6 @@ def _brief_acceptance_block_reason(brief_text: str, source_path: str = "<brief>"
     )
     for route in ("mechanical", "reviewer", "operator"):
         items = ac.get(route) or []
-        if not isinstance(items, list):
-            return f"acceptance_criteria.{route} must be a list"
         for item in items:
             text = _criterion_text(item).strip().lower()
             if any(pattern in text for pattern in placeholder_patterns):

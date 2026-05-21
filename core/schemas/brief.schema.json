@@ -70,7 +70,20 @@
     },
     "acceptance_criteria": {
       "type": "object",
-      "required": ["mechanical"],
+      "anyOf": [
+        {
+          "required": ["mechanical"],
+          "properties": {"mechanical": {"minItems": 1}}
+        },
+        {
+          "required": ["reviewer"],
+          "properties": {"reviewer": {"minItems": 1}}
+        },
+        {
+          "required": ["operator"],
+          "properties": {"operator": {"minItems": 1}}
+        }
+      ],
       "properties": {
         "mechanical": {
           "type": "array",
@@ -96,8 +109,7 @@
               }
             ]
           },
-          "minItems": 1,
-          "description": "Mechanical commands the acceptance executor physically runs. Each item must be a machine-deterministic shell command. For non-blocking baseline evidence (full-suite probes where pre-existing failures exist), use diagnostic:true in the criterion dict or --baseline-criteria N at acceptance-run time. Human natural-language qualifiers are not enforceable and must not appear in hard mechanical commands."
+          "description": "Optional mechanical commands the acceptance executor physically runs. Each item must be a machine-deterministic shell command. Pure review/operator tasks may omit mechanical or leave it empty. For non-blocking baseline evidence (full-suite probes where pre-existing failures exist), use diagnostic:true in the criterion dict or --baseline-criteria N at acceptance-run time. Human natural-language qualifiers are not enforceable and must not appear in hard mechanical commands."
         },
         "reviewer": {
           "type": "array",

@@ -8,8 +8,9 @@ and batches operator questions for the human operator.
 
 ### mechanical — machine-deterministic shell commands
 
-Each mechanical criterion must be a command the acceptance executor can run and
-get a binary pass/fail from the exit code alone. No human interpretation.
+Use mechanical criteria only when there is a command the acceptance executor can
+run and get a binary pass/fail from the exit code alone. Pure review/operator
+tasks do not need a fake mechanical command.
 
 ```yaml
 acceptance_criteria:

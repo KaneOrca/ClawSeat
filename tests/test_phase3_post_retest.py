@@ -103,7 +103,7 @@ def _make_brief(tmp_path: Path, frontmatter: str, task_id: str = "T1",
     return p
 
 
-def test_retest2_empty_mechanical_fails(tmp_path, monkeypatch):
+def test_retest2_empty_acceptance_fails(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
     from acceptance_executor import AcceptanceError, run_acceptance
 
@@ -116,7 +116,7 @@ seats_required: [builder]
 acceptance_criteria:
   mechanical: []
 """)
-    with pytest.raises(AcceptanceError, match="mechanical"):
+    with pytest.raises(AcceptanceError, match="acceptance_criteria"):
         run_acceptance(project="p", team="t", task_id="T1")
 
 

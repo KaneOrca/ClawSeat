@@ -137,14 +137,21 @@ def criterion_is_shell_runnable(criterion: Any) -> bool:
     return is_shell_runnable_command(command)
 
 
+def acceptance_has_any_route_item(acceptance: dict[str, Any]) -> bool:
+    for route in ("mechanical", "reviewer", "operator"):
+        items = acceptance.get(route) or []
+        if isinstance(items, list) and items:
+            return True
+    return False
+
+
 def brief_acceptance_ready(brief: dict[str, Any]) -> tuple[bool, str]:
     acceptance = brief.get("acceptance_criteria")
     if not isinstance(acceptance, dict):
         return False, "brief.acceptance_criteria missing"
 
-    mechanical = acceptance.get("mechanical")
-    if not isinstance(mechanical, list) or not mechanical:
-        return False, "brief.acceptance_criteria.mechanical empty"
+    if not acceptance_has_any_route_item(acceptance):
+        return False, "brief.acceptance_criteria has no route items"
 
     for route in ("mechanical", "reviewer", "operator"):
         items = acceptance.get(route) or []
@@ -158,7 +165,8 @@ def brief_acceptance_ready(brief: dict[str, Any]) -> tuple[bool, str]:
             if is_placeholder_text(text) or is_placeholder_text(command):
                 return False, f"brief.acceptance_criteria.{route} contains placeholder text"
 
-    if not any(criterion_is_shell_runnable(item) for item in mechanical):
+    mechanical = acceptance.get("mechanical") or []
+    if mechanical and not any(criterion_is_shell_runnable(item) for item in mechanical):
         return False, "brief.acceptance_criteria.mechanical has no shell-runnable command"
 
     return True, "ok"

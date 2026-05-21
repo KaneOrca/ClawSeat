@@ -37,6 +37,26 @@ acceptance_criteria:
     )
 
 
+def _write_reviewer_only_brief(path: Path, *, project: str, team: str, task_id: str) -> None:
+    path.write_text(
+        f"""---
+task_id: {task_id}
+project: {project}
+team: {team}
+objective: "read-only review"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical: []
+  reviewer:
+    - "Delivery records inspected files and recommendation."
+---
+
+# Brief
+""",
+        encoding="utf-8",
+    )
+
+
 def _write_profile(home: Path, *, project: str, team: str, planner: str = "t-planner") -> None:
     profiles = home / ".agents" / "profiles"
     profiles.mkdir(parents=True, exist_ok=True)
@@ -233,6 +253,38 @@ def test_complete_criteria_still_wakes_team_planner(tmp_path, monkeypatch, capsy
     assert rc == 0
     assert "WAKE_OK target=t-planner" in out.out
     assert "--project p t-planner" in wake_log.read_text(encoding="utf-8")
+
+
+def test_reviewer_only_criteria_wakes_and_claims_without_fake_mechanical(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAWSEAT_REAL_HOME", str(tmp_path))
+    project = "p"
+    team = "t"
+    task_id = "Treviewonly"
+    _write_profile(tmp_path, project=project, team=team)
+    send_script, wake_log = _write_fake_wake_script(tmp_path)
+    monkeypatch.setenv("CLAWSEAT_BRIEF_WAKE_SEND_SCRIPT", str(send_script))
+    monkeypatch.setenv("WAKE_LOG", str(wake_log))
+    brief = tmp_path / "review-only.md"
+    _write_reviewer_only_brief(brief, project=project, team=team, task_id=task_id)
+    parser = build_parser()
+
+    rc = cmd_queue(parser.parse_args([
+        "queue", "--project", project, "--team", team, "--task-id", task_id,
+        "--objective", "Queue a reviewer-only criteria brief",
+        "--brief-content-file", str(brief),
+    ]))
+    out = capsys.readouterr()
+
+    assert rc == 0
+    assert "WAKE_OK target=t-planner" in out.out
+    assert "--project p t-planner" in wake_log.read_text(encoding="utf-8")
+
+    claim_rc = cmd_claim(parser.parse_args([
+        "claim", "--project", project, "--team", team, "--task-id", task_id,
+        "--actor", "planner@claude",
+    ]))
+
+    assert claim_rc == 0
 
 
 def test_narrative_mechanical_item_does_not_execute_as_shell_127(tmp_path, monkeypatch):

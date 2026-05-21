@@ -152,10 +152,8 @@ acceptance_criteria:
     assert aggregate_verdict(results) == "PENDING"
 
 
-def test_empty_mechanical_now_fails_schema(env_home, tmp_path):
-    """Post-retest #2: empty mechanical no longer vacuously PASSes.
-    Schema enforces minItems:1; executor raises AcceptanceError early.
-    """
+def test_empty_acceptance_now_fails_schema(env_home, tmp_path):
+    """Empty acceptance still cannot vacuously PASS."""
     _write_brief(env_home, "p", "t", "T7", """
 task_id: T7
 project: p
@@ -165,8 +163,27 @@ seats_required: [builder]
 acceptance_criteria:
   mechanical: []
 """)
-    with pytest.raises(AcceptanceError, match="mechanical"):
+    with pytest.raises(AcceptanceError, match="acceptance_criteria"):
         run_acceptance(project="p", team="t", task_id="T7")
+
+
+def test_reviewer_only_acceptance_is_allowed_and_pending(env_home, tmp_path):
+    _write_brief(env_home, "p", "t", "T7R", """
+task_id: T7R
+project: p
+team: t
+objective: "read-only review"
+seats_required: [builder]
+acceptance_criteria:
+  mechanical: []
+  reviewer:
+    - "Delivery records inspected files and recommendation."
+""")
+    results = run_acceptance(project="p", team="t", task_id="T7R")
+    assert results["mechanical"].verdict == "PASS"
+    assert results["mechanical"].items == []
+    assert results["reviewer"].verdict == "PENDING"
+    assert aggregate_verdict(results) == "PENDING"
 
 
 def test_missing_brief_raises(env_home, tmp_path):

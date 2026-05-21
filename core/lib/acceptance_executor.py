@@ -104,8 +104,9 @@ def _stringify_datetimes(value):
 def _validate_brief_schema(brief: dict, brief_path: Path) -> None:
     """Post-retest #2 + Round 4 #D: validate brief against brief.schema.json.
 
-    Schema enforces minItems:1 for seats_required and acceptance_criteria.mechanical,
-    so empty acceptance can no longer vacuously PASS.
+    Schema enforces minItems:1 for seats_required and requires at least one
+    acceptance route item. Pure review/operator briefs may omit mechanical;
+    empty acceptance can no longer vacuously PASS.
 
     Uses jsonschema when installed; falls back to lightweight required-field +
     minItems check sufficient for known v3 invariants.
@@ -125,10 +126,21 @@ def _validate_brief_schema(brief: dict, brief_path: Path) -> None:
                 f"{brief_path}: brief.seats_required must have minItems 1"
             )
         ac = brief.get("acceptance_criteria") or {}
-        mech = ac.get("mechanical")
-        if not isinstance(mech, list) or not mech:
+        if not isinstance(ac, dict):
             raise AcceptanceError(
-                f"{brief_path}: brief.acceptance_criteria.mechanical must have minItems 1"
+                f"{brief_path}: brief.acceptance_criteria must be a mapping"
+            )
+        has_any_route_item = False
+        for route in ("mechanical", "reviewer", "operator"):
+            items = ac.get(route) or []
+            if not isinstance(items, list):
+                raise AcceptanceError(
+                    f"{brief_path}: brief.acceptance_criteria.{route} must be a list"
+                )
+            has_any_route_item = has_any_route_item or bool(items)
+        if not has_any_route_item:
+            raise AcceptanceError(
+                f"{brief_path}: brief.acceptance_criteria must include at least one route item"
             )
         return
 
@@ -325,25 +337,10 @@ def run_mechanical(
     mech = pre_split_mech
     result = RouteResult(route="mechanical", verdict="PASS")
 
-    # Post-retest #2: empty mechanical (after route splitting) is FAIL if the
-    # ORIGINAL brief had no mechanical work at all. If the original had work
-    # but route overrides moved it all to other routes, also FAIL — at least
-    # one mechanical item must remain (schema minItems:1).
+    # Pure review/operator briefs legitimately have no mechanical route. The
+    # schema already blocks truly empty acceptance; an empty mechanical section
+    # here means "no shell work", not failure.
     if not mech:
-        original = (brief.get("acceptance_criteria") or {}).get("mechanical") or []
-        if not original:
-            result.verdict = "FAIL"
-            return result
-        # All original items were route-shifted; still must record FAIL
-        # because spec demands at least one truly mechanical criterion.
-        result.verdict = "FAIL"
-        result.items.append(
-            ItemResult(
-                criterion="<no items remain in mechanical after route overrides>",
-                result="fail",
-                command="route_split",
-            )
-        )
         return result
 
     acceptance_dir.mkdir(parents=True, exist_ok=True)
