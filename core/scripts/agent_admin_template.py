@@ -81,6 +81,18 @@ def _insert_after_first_metadata_block(text: str, lines: list[str]) -> str:
     return text.rstrip() + "\n\n" + insert
 
 
+def _instruction_pointer_doc(session: Any, primary_doc: str) -> str:
+    return "\n".join(
+        [
+            f"# {session.engineer_id}",
+            "",
+            f"This workspace's canonical instruction file is `{primary_doc}`.",
+            f"If your harness auto-loaded this file, read `{primary_doc}` before acting.",
+            "",
+        ]
+    )
+
+
 def _load_role_skill_content(
     repo_root: Path,
     seat_id: str,
@@ -482,12 +494,11 @@ class TemplateHandlers:
                 "WORKSPACE.md": "\n".join(workspace_notes_lines) + "\n",
             },
             "claude": {
-                "AGENTS.md": "\n".join(claude_lines) + "\n",
                 # Claude Code reads CLAUDE.md in the project root as the
-                # primary system-prompt file; AGENTS.md is only a fallback
-                # (and version-dependent). Emitting both means the seat
-                # sees its role contract regardless of which one Claude
-                # Code picks up on this version.
+                # primary system-prompt file. AGENTS.md is a compact pointer
+                # for other harnesses so the full role contract is not injected
+                # twice.
+                "AGENTS.md": _instruction_pointer_doc(session, "CLAUDE.md"),
                 "CLAUDE.md": "\n".join(claude_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
@@ -499,10 +510,9 @@ class TemplateHandlers:
                 ".claude/settings.local.json": self._render_claude_settings(session, engineer),
             },
             "gemini": {
-                "AGENTS.md": "\n".join(gemini_lines) + "\n",
-                # Gemini CLI similarly prefers GEMINI.md; write both so
-                # the role SKILL is picked up regardless of the CLI
-                # version's auto-discovery rules.
+                # Gemini CLI prefers GEMINI.md. AGENTS.md remains as a compact
+                # pointer for non-Gemini harnesses.
+                "AGENTS.md": _instruction_pointer_doc(session, "GEMINI.md"),
                 "GEMINI.md": "\n".join(gemini_lines) + "\n",
                 "WORKSPACE_CONTRACT.toml": self.hooks.render_workspace_contract_text(
                     session,
@@ -554,9 +564,18 @@ class TemplateHandlers:
                 )
                 if role_skill:
                     memory_doc = memory_doc.rstrip() + "\n" + role_skill + "\n"
-            rendered["AGENTS.md"] = memory_doc
-            rendered["CLAUDE.md"] = memory_doc
-            rendered["GEMINI.md"] = memory_doc
+            primary_doc_by_tool = {
+                "codex": "AGENTS.md",
+                "claude": "CLAUDE.md",
+                "gemini": "GEMINI.md",
+            }
+            primary_doc = primary_doc_by_tool.get(tool, "AGENTS.md")
+            for doc_name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+                rendered[doc_name] = (
+                    memory_doc
+                    if doc_name == primary_doc
+                    else _instruction_pointer_doc(session, primary_doc)
+                )
         metadata_header = _workspace_metadata_header(str(getattr(project, "template_name", "") or ""))
         for workspace_doc in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
             if workspace_doc in rendered:

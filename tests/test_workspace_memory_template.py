@@ -108,6 +108,15 @@ def test_memory_workspace_claude_renders_claude_skill_paths() -> None:
     assert "~/.gemini/skills/" not in text
 
 
+def test_non_primary_memory_instruction_files_are_compact_pointers() -> None:
+    rendered = _handlers().render_template_text("claude", _session("claude"), _project())
+
+    assert "L3 hub" in rendered["CLAUDE.md"]
+    assert "canonical instruction file is `CLAUDE.md`" in rendered["AGENTS.md"]
+    assert "L3 hub" not in rendered["AGENTS.md"]
+    assert len(rendered["AGENTS.md"]) < 500
+
+
 def test_codex_memory_workspace_gets_memory_docs_for_cross_tool_migration() -> None:
     rendered = _handlers().render_template_text("codex", _session("codex"), _project())
     text = rendered["AGENTS.md"]
